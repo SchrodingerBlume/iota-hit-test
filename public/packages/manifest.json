@@ -1,0 +1,96 @@
+{
+  "iotaHit": "0.1.0",
+  "packages": [
+    {
+      "namespace": "local",
+      "name": "iota-hit",
+      "version": "0.1.0",
+      "file": "local-iota-hit-0.1.0.tar.gz",
+      "size": 628867
+    },
+    {
+      "namespace": "local",
+      "name": "omni-gb7714",
+      "version": "0.1.0",
+      "file": "local-omni-gb7714-0.1.0.tar.gz",
+      "size": 301490
+    },
+    {
+      "namespace": "preview",
+      "name": "glossy",
+      "version": "0.9.2",
+      "file": "preview-glossy-0.9.2.tar.gz",
+      "size": 20621
+    },
+    {
+      "namespace": "preview",
+      "name": "lovelace",
+      "version": "0.3.1",
+      "file": "preview-lovelace-0.3.1.tar.gz",
+      "size": 4445
+    },
+    {
+      "namespace": "preview",
+      "name": "algorithmic",
+      "version": "1.0.7",
+      "file": "preview-algorithmic-1.0.7.tar.gz",
+      "size": 7913
+    },
+    {
+      "namespace": "preview",
+      "name": "quan",
+      "version": "0.2.2",
+      "file": "preview-quan-0.2.2.tar.gz",
+      "size": 11902
+    },
+    {
+      "namespace": "preview",
+      "name": "auto-pinyin",
+      "version": "0.1.0",
+      "file": "preview-auto-pinyin-0.1.0.tar.gz",
+      "size": 160796
+    },
+    {
+      "namespace": "preview",
+      "name": "zhconv",
+      "version": "0.3.1",
+      "file": "preview-zhconv-0.3.1.tar.gz",
+      "size": 792807
+    },
+    {
+      "namespace": "preview",
+      "name": "auto-bihua",
+      "version": "0.2.0",
+      "file": "preview-auto-bihua-0.2.0.tar.gz",
+      "size": 646666
+    },
+    {
+      "namespace": "preview",
+      "name": "glotter",
+      "version": "0.1.0",
+      "file": "preview-glotter-0.1.0.tar.gz",
+      "size": 840557
+    },
+    {
+      "namespace": "preview",
+      "name": "jurlstify",
+      "version": "0.3.1",
+      "file": "preview-jurlstify-0.3.1.tar.gz",
+      "size": 7839
+    },
+    {
+      "namespace": "preview",
+      "name": "mitex",
+      "version": "0.2.7",
+      "file": "preview-mitex-0.2.7.tar.gz",
+      "size": 111365
+    },
+    {
+      "namespace": "preview",
+      "name": "valkyrie",
+      "version": "0.2.2",
+      "file": "preview-valkyrie-0.2.2.tar.gz",
+      "size": 10016
+    }
+  ]
+}

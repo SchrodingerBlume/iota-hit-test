@@ -1,0 +1,41 @@
+{
+  "name": "iota4web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test:compile": "node scripts/test-compile.mjs",
+    "fonts": "bash scripts/fetch-fonts.sh && node scripts/font-manifest.mjs",
+    "packages": "node scripts/bundle-packages.mjs",
+    "wasm": "bash scripts/build-wasm.sh",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@myriaddreamin/typst-ts-renderer": "file:./vendor/typst-ts-renderer",
+    "@myriaddreamin/typst-ts-web-compiler": "file:./vendor/typst-ts-web-compiler",
+    "@myriaddreamin/typst.ts": "^0.8.0-rc3",
+    "@tiptap/core": "^3.31.3",
+    "@tiptap/extension-placeholder": "^3.31.3",
+    "@tiptap/extension-subscript": "^3.31.3",
+    "@tiptap/extension-superscript": "^3.31.3",
+    "@tiptap/extension-table": "^3.31.3",
+    "@tiptap/pm": "^3.31.3",
+    "@tiptap/react": "^3.31.3",
+    "@tiptap/starter-kit": "^3.31.3",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "tar": "^7.5.22",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
+  }
+}

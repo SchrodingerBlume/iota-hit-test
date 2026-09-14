@@ -1,0 +1,15 @@
+{
+  "name": "@myriaddreamin/typst-ts-renderer",
+  "type": "module",
+  "description": "Render Typst documents in Web environment. (built from typst.ts main — see COMMIT)",
+  "version": "0.8.0-rc3",
+  "license": "Apache-2.0",
+  "main": "./wasm-pack-shim.mjs",
+  "module": "./wasm-pack-shim.mjs",
+  "types": "./typst_ts_renderer.d.ts",
+  "exports": {
+    ".": { "types": "./typst_ts_renderer.d.ts", "default": "./wasm-pack-shim.mjs" },
+    "./pkg/*": "./*",
+    "./*": "./*"
+  }
+}

@@ -1,0 +1,196 @@
+/// <reference lib="webworker" />
+// 编译 worker：wasm 编译器、字体、包全住在这里，主线程只发源码收结果。
+// 大文件（wasm 30 MB、字体 49 MB）走 Cache API，第二次进站不再下载。
+import { createTypstCompiler, MemoryAccessModel, loadFonts, initOptions, type TypstCompiler } from '@myriaddreamin/typst.ts';
+import * as compilerWrapper from '@myriaddreamin/typst-ts-web-compiler';
+import type { ToWorker, FromWorker, Diagnostic, Progress } from './protocol';
+
+const { withAccessModel, withPackageRegistry } = initOptions;
+
+const CACHE = 'iota4web-assets-v1';
+const post = (m: FromWorker, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(m, transfer);
+
+interface PackageSpec { namespace: string; name: string; version: string }
+interface PackageCtx { untar(data: Uint8Array, cb: (path: string, data: Uint8Array, mtime: number) => void): void }
+
+/** 包一律来自站内 public/packages/*.tar.gz，manifest 列的全部预取进内存 */
+class StaticPackageRegistry {
+  private blobs = new Map<string, Uint8Array>();
+  private dirs = new Map<string, string>();
+  constructor(private am: MemoryAccessModel) {}
+  add(spec: PackageSpec, data: Uint8Array) { this.blobs.set(this.key(spec), data); }
+  private key(s: PackageSpec) { return `${s.namespace}/${s.name}/${s.version}`; }
+  resolve(spec: PackageSpec, ctx: PackageCtx): string | undefined {
+    const key = this.key(spec);
+    const hit = this.dirs.get(key);
+    if (hit) return hit;
+    const data = this.blobs.get(key);
+    if (!data) { console.error('[iota4web] 缺包', key); return undefined; }
+    const dir = `/@memory/packages/${key}`;
+    ctx.untar(data, (p, d, mtime) => this.am.insertFile(`${dir}/${p}`, d, new Date(mtime)));
+    this.dirs.set(key, dir);
+    return dir;
+  }
+}
+
+/** 带进度、走 Cache API 的下载 */
+async function fetchCached(url: string, onBytes?: (n: number) => void): Promise<Uint8Array> {
+  let cache: Cache | undefined;
+  try { cache = await caches.open(CACHE); } catch { cache = undefined; }
+  const cached = cache && (await cache.match(url));
+  if (cached) {
+    const buf = new Uint8Array(await cached.arrayBuffer());
+    onBytes?.(buf.length);
+    return buf;
+  }
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`下载失败 ${url}: ${res.status}`);
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  if (res.body) {
+    const reader = res.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      total += value.length;
+      onBytes?.(value.length);
+    }
+  } else {
+    const buf = new Uint8Array(await res.arrayBuffer());
+    chunks.push(buf); total = buf.length; onBytes?.(buf.length);
+  }
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  if (cache) { try { await cache.put(url, new Response(out, { headers: { 'Content-Type': 'application/octet-stream' } })); } catch { /* 配额不够就算了 */ } }
+  return out;
+}
+
+/** 有的服务器（Vite 开发服务器就是）把 .tar.gz 当 Content-Encoding: gzip 发，浏览器
+ *  透明解压后到手的是裸 tar；untar 只认 gzip，那就再压回去 */
+async function ensureGzip(buf: Uint8Array): Promise<Uint8Array> {
+  if (buf.length >= 2 && buf[0] === 0x1f && buf[1] === 0x8b) return buf;
+  const stream = new Blob([buf as BlobPart]).stream().pipeThrough(new CompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+let compiler: TypstCompiler | undefined;
+const mappedImages = new Map<string, number>();
+
+async function init(base: string) {
+  const t0 = performance.now();
+  const progress: Progress = { phase: '准备', loaded: 0, total: 0 };
+  const report = (detail?: string) => post({ type: 'progress', progress: { ...progress, detail } });
+
+  const [fontManifest, pkgManifest] = await Promise.all([
+    fetch(`${base}fonts/manifest.json`).then((r) => r.json()),
+    fetch(`${base}packages/manifest.json`).then((r) => r.json()),
+  ]);
+  const fonts: { file: string; size: number; lazy: boolean; info: unknown }[] = fontManifest.fonts;
+  const packages: { namespace: string; name: string; version: string; file: string; size: number }[] = pkgManifest.packages;
+
+  const wasmUrl = new URL('../../vendor/typst-ts-web-compiler/typst_ts_web_compiler_bg.wasm', import.meta.url).href;
+  const wasmSize = 30_200_000; // 进度条用的估计值
+  progress.total = wasmSize + fonts.filter((f) => !f.lazy).reduce((s, f) => s + f.size, 0) + packages.reduce((s, p) => s + p.size, 0);
+
+  progress.phase = '下载排版引擎';
+  report('typst 0.15.1 · wasm');
+  let wasmLoaded = 0;
+  const wasm = await fetchCached(wasmUrl, (n) => { wasmLoaded += n; progress.loaded += n; report('typst 0.15.1 · wasm'); });
+  progress.loaded += Math.max(0, wasmSize - wasmLoaded);
+
+  progress.phase = '下载字体';
+  const fontBuffers: (Uint8Array | { info: unknown; url: string })[] = [];
+  // 大字体并发拉，小的顺序无所谓
+  await Promise.all(fonts.map(async (f) => {
+    const url = `${base}fonts/${f.file}`;
+    if (f.lazy) { fontBuffers.push({ ...(f.info as object), url } as any); return; }
+    const buf = await fetchCached(url, (n) => { progress.loaded += n; report(f.file); });
+    fontBuffers.push(buf);
+  }));
+
+  progress.phase = '下载模板与依赖包';
+  const am = new MemoryAccessModel();
+  const registry = new StaticPackageRegistry(am);
+  await Promise.all(packages.map(async (p) => {
+    const buf = await fetchCached(`${base}packages/${p.file}`, (n) => { progress.loaded += n; report(`${p.name} ${p.version}`); });
+    registry.add(p, await ensureGzip(buf));
+  }));
+
+  progress.phase = '启动编译器';
+  progress.loaded = progress.total;
+  report();
+  compiler = createTypstCompiler();
+  await compiler.init({
+    getWrapper: async () => compilerWrapper,
+    getModule: () => wasm,
+    beforeBuild: [
+      withAccessModel(am),
+      withPackageRegistry(registry),
+      loadFonts(fontBuffers as any, { assets: false }),
+    ],
+  });
+  post({ type: 'ready', ms: Math.round(performance.now() - t0) });
+}
+
+function normalizeDiagnostics(raw: unknown): Diagnostic[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((d: any) => {
+    if (typeof d === 'string') return { severity: /error/.test(d) ? 'error' : 'warning', message: d, where: '' };
+    const path = String(d.path ?? '').replace(/^\/+/, '');
+    return {
+      severity: String(d.severity ?? 'error').toLowerCase(),
+      message: String(d.message ?? ''),
+      where: `${d.package ? d.package + '@' : ''}${path}${d.range ? ':' + d.range : ''}`,
+      package: d.package, path: d.path, range: d.range,
+    };
+  });
+}
+
+const enc = new TextEncoder();
+
+async function compile(msg: Extract<ToWorker, { type: 'compile' }>) {
+  if (!compiler) return;
+  const t0 = performance.now();
+  compiler.addSource('/main.typ', msg.main);
+  for (const [name, text] of Object.entries(msg.files)) compiler.mapShadow(`/${name}`, enc.encode(text));
+  for (const img of msg.images) {
+    compiler.mapShadow(`/images/${img.name}`, new Uint8Array(img.data));
+    mappedImages.set(img.name, img.data.byteLength);
+  }
+  for (const name of msg.removeImages) {
+    if (mappedImages.delete(name)) compiler.unmapShadow(`/images/${name}`);
+  }
+  try {
+    const res = await compiler.compile({ mainFilePath: '/main.typ', format: 0 as any, diagnostics: 'full' });
+    // 拷贝一份：结果是 wasm 内存上的视图，直接拿 .buffer 会把整块内存搬走
+    const artifact = res.result ? new Uint8Array(res.result as Uint8Array).buffer : null;
+    post({ type: 'compiled', id: msg.id, artifact, diagnostics: normalizeDiagnostics(res.diagnostics), ms: Math.round(performance.now() - t0) }, artifact ? [artifact] : []);
+  } catch (e) {
+    post({ type: 'compiled', id: msg.id, artifact: null, diagnostics: [{ severity: 'error', message: String((e as Error)?.message ?? e), where: '' }], ms: Math.round(performance.now() - t0) });
+  }
+}
+
+async function pdf(msg: Extract<ToWorker, { type: 'pdf' }>) {
+  if (!compiler) return;
+  try {
+    const res = await compiler.compile({ mainFilePath: '/main.typ', format: 1 as any, diagnostics: 'full' });
+    const buf = res.result ? new Uint8Array(res.result as Uint8Array).buffer : null;
+    post({ type: 'pdf', id: msg.id, pdf: buf, diagnostics: normalizeDiagnostics(res.diagnostics) }, buf ? [buf] : []);
+  } catch (e) {
+    post({ type: 'pdf', id: msg.id, pdf: null, diagnostics: [{ severity: 'error', message: String((e as Error)?.message ?? e), where: '' }] });
+  }
+}
+
+self.onmessage = (ev: MessageEvent<ToWorker>) => {
+  const msg = ev.data;
+  const run = async () => {
+    switch (msg.type) {
+      case 'init': await init(msg.baseUrl); break;
+      case 'compile': await compile(msg); break;
+      case 'pdf': await pdf(msg); break;
+    }
+  };
+  run().catch((e) => post({ type: 'fatal', message: String((e as Error)?.stack ?? e) }));
+};
