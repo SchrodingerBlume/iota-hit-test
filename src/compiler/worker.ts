@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 // 编译 worker：wasm 编译器、字体、包全住在这里，主线程只发源码收结果。
 // 大文件（wasm 30 MB、字体 49 MB）走 Cache API，第二次进站不再下载。
-import { createTypstCompiler, MemoryAccessModel, loadFonts, initOptions, type TypstCompiler } from '@myriaddreamin/typst.ts';
+import { createTypstCompiler, createTypstFontBuilder, MemoryAccessModel, loadFonts, initOptions, type TypstCompiler } from '@myriaddreamin/typst.ts';
 import * as compilerWrapper from '@myriaddreamin/typst-ts-web-compiler';
 import type { ToWorker, FromWorker, Diagnostic, Progress } from './protocol';
 
@@ -77,6 +77,13 @@ async function ensureGzip(buf: Uint8Array): Promise<Uint8Array> {
 
 let compiler: TypstCompiler | undefined;
 const mappedImages = new Map<string, number>();
+/** 站内字体留一份，换字体表时要连它们一起重建 */
+let bundledFonts: Uint8Array[] = [];
+let bundledFamilies: string[] = [];
+/** 用户字体：id → 字节。主线程不留副本 */
+const userFonts = new Map<string, Uint8Array>();
+const userFamilies = new Map<string, string[]>();
+let wasmBytes: Uint8Array | undefined;
 
 async function init(base: string) {
   const t0 = performance.now();
@@ -87,7 +94,8 @@ async function init(base: string) {
     fetch(`${base}fonts/manifest.json`).then((r) => r.json()),
     fetch(`${base}packages/manifest.json`).then((r) => r.json()),
   ]);
-  const fonts: { file: string; size: number; lazy: boolean; info: unknown }[] = fontManifest.fonts;
+  const fonts: { file: string; size: number; lazy: boolean; info: { info?: { family?: string }[] } }[] = fontManifest.fonts;
+  bundledFamilies = [...new Set(fonts.flatMap((f) => (f.info?.info ?? []).map((i) => i.family ?? '').filter(Boolean)))];
   const packages: { namespace: string; name: string; version: string; file: string; size: number }[] = pkgManifest.packages;
 
   const wasmUrl = new URL('../../vendor/typst-ts-web-compiler/typst_ts_web_compiler_bg.wasm', import.meta.url).href;
@@ -97,7 +105,7 @@ async function init(base: string) {
   progress.phase = '下载排版引擎';
   report('typst 0.15.1 · wasm');
   let wasmLoaded = 0;
-  const wasm = await fetchCached(wasmUrl, (n) => { wasmLoaded += n; progress.loaded += n; report('typst 0.15.1 · wasm'); });
+  const wasm = wasmBytes = await fetchCached(wasmUrl, (n) => { wasmLoaded += n; progress.loaded += n; report('typst 0.15.1 · wasm'); });
   progress.loaded += Math.max(0, wasmSize - wasmLoaded);
 
   progress.phase = '下载字体';
@@ -109,6 +117,7 @@ async function init(base: string) {
     const buf = await fetchCached(url, (n) => { progress.loaded += n; report(f.file); });
     fontBuffers.push(buf);
   }));
+  bundledFonts = fontBuffers.filter((f): f is Uint8Array => f instanceof Uint8Array);
 
   progress.phase = '下载模板与依赖包';
   const am = new MemoryAccessModel();
@@ -131,7 +140,7 @@ async function init(base: string) {
       loadFonts(fontBuffers as any, { assets: false }),
     ],
   });
-  post({ type: 'ready', ms: Math.round(performance.now() - t0) });
+  post({ type: 'ready', ms: Math.round(performance.now() - t0), families: bundledFamilies });
 }
 
 function normalizeDiagnostics(raw: unknown): Diagnostic[] {
@@ -183,6 +192,30 @@ async function pdf(msg: Extract<ToWorker, { type: 'pdf' }>) {
   }
 }
 
+/** 换字体表：站内字体 + 用户给的字体，整表重建后塞给编译器（编译器只借用，建完就释放） */
+async function setFonts(msg: Extract<ToWorker, { type: 'setFonts' }>) {
+  if (!compiler) return;
+  try {
+    const fb = createTypstFontBuilder();
+    await fb.init({ getWrapper: async () => compilerWrapper, getModule: () => wasmBytes! });
+    for (const id of msg.remove) { userFonts.delete(id); userFamilies.delete(id); }
+    for (const f of msg.add) {
+      const bytes = new Uint8Array(f.data);
+      const info = (await fb.getFontInfo(bytes)) as { info?: { family?: string }[] };
+      userFonts.set(f.id, bytes);
+      userFamilies.set(f.id, (info?.info ?? []).map((i) => i.family ?? '').filter(Boolean));
+    }
+    for (const f of bundledFonts) await fb.addFontData(f);
+    for (const f of userFonts.values()) await fb.addFontData(f);
+    await fb.build(async (resolver) => { compiler!.setFonts(resolver); });
+    const families = new Set(bundledFamilies);
+    for (const fams of userFamilies.values()) for (const f of fams) families.add(f);
+    post({ type: 'fontsSet', id: msg.id, families: [...families] });
+  } catch (e) {
+    post({ type: 'fontsSet', id: msg.id, families: [], error: String((e as Error)?.message ?? e) });
+  }
+}
+
 self.onmessage = (ev: MessageEvent<ToWorker>) => {
   const msg = ev.data;
   const run = async () => {
@@ -190,6 +223,7 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       case 'init': await init(msg.baseUrl); break;
       case 'compile': await compile(msg); break;
       case 'pdf': await pdf(msg); break;
+      case 'setFonts': await setFonts(msg); break;
     }
   };
   run().catch((e) => post({ type: 'fatal', message: String((e as Error)?.stack ?? e) }));

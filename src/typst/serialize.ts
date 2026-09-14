@@ -6,6 +6,12 @@ import { serializeDoc, escapeText, collectImages } from './pmToTypst';
 
 export const IOTA_HIT_VERSION = '0.1.0';
 
+export const FONTSET_ARG: Record<string, string> = {
+  webapp: 'fontset: presets.webapp + (kaishu: "FandolKai")',
+  windows: 'fontset: presets.windows',
+  macos: 'fontset: presets.macos',
+};
+
 export interface Project {
   main: string;
   /** 旁文件：refs.bib、achievements.bib；图片另走二进制通道 */
@@ -34,8 +40,9 @@ function settingsArgs(s: Settings): string[] {
   if (s.degreeLevel !== 'bachelor' && s.degreeType !== 'auto') {
     args.push(`degree-type: ${s.degreeType === 'none' ? 'none' : JSON.stringify(s.degreeType)}`);
   }
-  // 字体：webapp 那一档，楷体换 FandolKai（教育部楷体只有繁体字形）
-  args.push('fontset: presets.webapp + (kaishu: "FandolKai")');
+  // 字体：站内那一档是 webapp + FandolKai（教育部楷体只有繁体字形）；读了本机字体
+  // 就切模板自己的 windows / macos 档，缺的字由模板的回落链接住
+  args.push(FONTSET_ARG[s.fontset ?? 'webapp']);
   const bools: [keyof Settings, string][] = [
     ['captionBilingual', 'caption-bilingual'],
     ['captionNumberingByChapter', 'caption-numbering-by-chapter'],

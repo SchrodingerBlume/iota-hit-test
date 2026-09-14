@@ -1,6 +1,7 @@
 import { useStore } from '../model/store';
 import { AXES, SWITCHES, SWITCH_GROUPS } from '../model/options';
 import { TriSwitch } from './TriSwitch';
+import { FontCard } from './FontCard';
 
 export function SettingsPanel() {
   const settings = useStore((s) => s.doc.settings);
@@ -23,6 +24,7 @@ export function SettingsPanel() {
           </div>
         ))}
       </div>
+      <FontCard />
       {SWITCH_GROUPS.map((g) => {
         const defs = SWITCHES.filter((d) => d.group === g && (!d.applies || d.applies(settings)));
         if (!defs.length) return null;

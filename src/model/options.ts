@@ -245,7 +245,11 @@ export const SWITCHES: SwitchDef<any>[] = [
     hint: '字体没有真粗面时描边合成加粗（Word 的做法）',
     choices: onOff,
     group: '字体',
-    resolve: () => ({ value: true, reason: '问字体：宋体（Noto Serif）有真粗面就不合成，楷体没有就合成' }),
+    resolve: (s) => (s.fontset === 'windows'
+      ? { value: true, reason: '中易宋体、楷体没有粗体面，与 Word 一样描边合成' }
+      : s.fontset === 'macos'
+        ? { value: false, reason: '问字体：Songti SC 有真粗面就不合成' }
+        : { value: true, reason: '问字体：Noto Serif 有真粗面就不合成，FandolKai 没有就合成' }),
   },
   {
     key: 'fakeItalic',
@@ -253,7 +257,7 @@ export const SWITCHES: SwitchDef<any>[] = [
     hint: '强调用楷体；没楷体才退到斜切宋体',
     choices: onOff,
     group: '字体',
-    resolve: () => ({ value: false, reason: '本站带了 FandolKai，强调用楷体，不斜切' }),
+    resolve: (s) => ({ value: false, reason: s.fontset === 'webapp' ? '本站带了 FandolKai，强调用楷体，不斜切' : '本机有楷体就用楷体，不斜切' }),
   },
   {
     key: 'appendixNumbering',
@@ -299,6 +303,7 @@ export function resolveSwitch<V>(def: SwitchDef<any>, s: Settings): { effective:
 export const SWITCH_GROUPS = ['题注与编号', '标题与页面', '缩略语与列表', '字体'] as const;
 
 export const defaultSettings = (): Settings => ({
+  fontset: 'webapp',
   campus: 'harbin',
   degreeLevel: 'master',
   degreeType: 'auto',

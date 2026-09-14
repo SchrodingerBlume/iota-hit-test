@@ -8,6 +8,7 @@ import { EditorEnvContext, parseBibKeys, type EditorEnv } from '../editor/env';
 import { imageBytes, putImage, safeImageName, imageDimensions, removeImage } from '../editor/imageCache';
 import { loadImage } from '../model/persist';
 import { SAMPLE_IMAGE } from '../model/sample';
+import { useFontState } from '../fonts/userFonts';
 import { SettingsPanel } from './SettingsPanel';
 import { InfoPanel } from './InfoPanel';
 import { AbstractPanel, NomenclaturePanel, RichSection, BibPanel, DefensePanel, PagesPanel } from './panels';
@@ -32,6 +33,7 @@ const NAV: { key: Section; label: string; group: string; k?: string }[] = [
 /** 文档一变就（防抖后）重新生成 Typst 并交给 worker */
 function useAutoCompile(doc: ThesisDoc, loaded: boolean) {
   const status = useCompileState((s) => s.status);
+  const fontsVersion = useCompileState((s) => s.fontsVersion);
   const sent = useRef(new Map<string, number>());
   useEffect(() => {
     if (!loaded || status !== 'ready') return;
@@ -50,7 +52,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean) {
       requestCompile({ main: project.main, files: project.files, images, removeImages });
     }, 450);
     return () => window.clearTimeout(t);
-  }, [doc, loaded, status]);
+  }, [doc, loaded, status, fontsVersion]);
   return sent;
 }
 
@@ -80,6 +82,9 @@ export function App() {
         } catch { /* 没有也不致命 */ }
       }
       await load();
+      // 上次自己选的字体文件：装回引擎（引擎没就绪会等它）
+      void useFontState.getState().loadStored();
+      if (useStore.getState().doc.settings.fontset !== 'webapp') void useFontState.getState().autoReadLocal();
     })();
   }, []);
 

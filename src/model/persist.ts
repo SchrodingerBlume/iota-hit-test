@@ -2,7 +2,7 @@
 // 不用 localStorage：论文正文的 JSON 轻易过 5 MB。
 
 const DB = 'iota4web';
-const VERSION = 1;
+const VERSION = 2;
 
 function open(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -12,6 +12,8 @@ function open(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('doc')) db.createObjectStore('doc');
       if (!db.objectStoreNames.contains('images')) db.createObjectStore('images');
       if (!db.objectStoreNames.contains('cache')) db.createObjectStore('cache');
+      // v2：用户自己选的字体文件（文件名 → Blob）
+      if (!db.objectStoreNames.contains('fonts')) db.createObjectStore('fonts');
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -42,3 +44,7 @@ export const saveImage = (name: string, blob: Blob) => kv.set('images', name, bl
 export const loadImage = (name: string) => kv.get<Blob>('images', name);
 export const deleteImage = (name: string) => kv.del('images', name);
 export const listImages = () => kv.keys('images') as Promise<string[]>;
+export const saveFontFile = (name: string, blob: Blob) => kv.set('fonts', name, blob);
+export const loadFontFile = (name: string) => kv.get<Blob>('fonts', name);
+export const deleteFontFile = (name: string) => kv.del('fonts', name);
+export const listFontFiles = () => kv.keys('fonts') as Promise<string[]>;

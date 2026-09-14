@@ -13,13 +13,16 @@ export interface Diagnostic {
 export type ToWorker =
   | { type: 'init'; baseUrl: string }
   | { type: 'compile'; id: number; main: string; files: Record<string, string>; images: { name: string; data: ArrayBuffer }[]; removeImages: string[] }
-  | { type: 'pdf'; id: number };
+  | { type: 'pdf'; id: number }
+  /** 增删用户字体（本机读的或自己选的文件），字节只住在 worker；改完整表重建 */
+  | { type: 'setFonts'; id: number; add: { id: string; data: ArrayBuffer }[]; remove: string[] };
 
 export type Progress = { phase: string; loaded: number; total: number; detail?: string };
 
 export type FromWorker =
   | { type: 'progress'; progress: Progress }
-  | { type: 'ready'; ms: number }
+  | { type: 'ready'; ms: number; families: string[] }
   | { type: 'fatal'; message: string }
   | { type: 'compiled'; id: number; artifact: ArrayBuffer | null; diagnostics: Diagnostic[]; ms: number }
-  | { type: 'pdf'; id: number; pdf: ArrayBuffer | null; diagnostics: Diagnostic[] };
+  | { type: 'pdf'; id: number; pdf: ArrayBuffer | null; diagnostics: Diagnostic[] }
+  | { type: 'fontsSet'; id: number; families: string[]; error?: string };

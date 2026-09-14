@@ -13,6 +13,10 @@ export interface CompileState {
   diagnostics: Diagnostic[];
   lastMs: number | null;
   compileCount: number;
+  /** 字体表换过几次；变了就重排 */
+  fontsVersion: number;
+  /** 编译器眼下认得的家族名 */
+  families: string[];
 }
 
 export const useCompileState = create<CompileState>(() => ({
@@ -25,6 +29,8 @@ export const useCompileState = create<CompileState>(() => ({
   diagnostics: [],
   lastMs: null,
   compileCount: 0,
+  fontsVersion: 0,
+  families: [],
 }));
 
 export interface CompileInput {
@@ -39,6 +45,7 @@ let nextId = 1;
 let inFlight: number | null = null;
 let pending: CompileInput | null = null;
 const pdfWaiters = new Map<number, (r: { pdf: ArrayBuffer | null; diagnostics: Diagnostic[] }) => void>();
+const fontWaiters = new Map<number, (r: { families: string[]; error?: string }) => void>();
 
 function send(msg: ToWorker, transfer: Transferable[] = []) {
   worker?.postMessage(msg, transfer);
@@ -63,7 +70,7 @@ export function startCompiler() {
         useCompileState.setState({ progress: m.progress });
         break;
       case 'ready':
-        useCompileState.setState({ status: 'ready', bootMs: m.ms, progress: null });
+        useCompileState.setState({ status: 'ready', bootMs: m.ms, progress: null, families: m.families });
         flush();
         break;
       case 'fatal':
@@ -86,6 +93,13 @@ export function startCompiler() {
       case 'pdf': {
         pdfWaiters.get(m.id)?.({ pdf: m.pdf, diagnostics: m.diagnostics });
         pdfWaiters.delete(m.id);
+        break;
+      }
+      case 'fontsSet': {
+        const s = useCompileState.getState();
+        useCompileState.setState({ fontsVersion: s.fontsVersion + 1, families: m.families });
+        fontWaiters.get(m.id)?.({ families: m.families, error: m.error });
+        fontWaiters.delete(m.id);
         break;
       }
     }
@@ -124,5 +138,19 @@ export async function exportPdf(): Promise<{ pdf: ArrayBuffer | null; diagnostic
     const id = nextId++;
     pdfWaiters.set(id, resolve);
     send({ type: 'pdf', id });
+  });
+}
+
+/** 增删用户字体。等到引擎就绪、且没有在编的那一刻再换；字节转移过去，调用方不再持有 */
+export async function updateUserFonts(add: { id: string; data: ArrayBuffer }[], remove: string[]): Promise<{ families: string[]; error?: string }> {
+  await new Promise<void>((resolve) => {
+    const check = () => { if (useCompileState.getState().status === 'ready') resolve(); else setTimeout(check, 200); };
+    check();
+  });
+  await whenIdle();
+  return new Promise((resolve) => {
+    const id = nextId++;
+    fontWaiters.set(id, resolve);
+    send({ type: 'setFonts', id, add, remove }, add.map((a) => a.data));
   });
 }

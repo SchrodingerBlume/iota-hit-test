@@ -18,7 +18,11 @@ export type Lang = 'zh' | 'en';
 /** 富文本文档（ProseMirror JSON） */
 export type RichDoc = { type: 'doc'; content?: any[] };
 
+export type Fontset = 'webapp' | 'windows' | 'macos';
+
 export interface Settings {
+  /** 字体方案：站内开源字体（webapp 档 + FandolKai），或本机字体走模板的 windows / macos 档 */
+  fontset: Fontset;
   campus: Campus;
   degreeLevel: DegreeLevel;
   /** 学术／专业学位。auto 按 form 定；本科不印这一行 */
