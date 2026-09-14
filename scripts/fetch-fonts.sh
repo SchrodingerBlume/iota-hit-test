@@ -4,7 +4,7 @@
 #
 #   Noto Serif/Sans CJK SC   SIL OFL 1.1      github.com/notofonts/noto-cjk（语言专属 OTF，家族名带 CJK）
 #   FandolKai                GPL-3.0+ (FE)    CTAN fonts/fandol
-#   TeX Gyre Termes / Heros  GUST Font License  CTAN fonts/tex-gyre
+#   TeX Gyre Termes / Heros  GUST Font License  CTAN fonts/tex-gyre（镜像；GUST 原站备选）
 #   TeX Gyre Termes Math     GUST Font License  CTAN fonts/tex-gyre-math
 #   DejaVu Sans Mono         DejaVu license   typst-assets 自带的那四个文件
 set -euo pipefail
@@ -35,9 +35,14 @@ done
 
 echo "TeX Gyre Termes / Heros"
 if [ ! -s "$out/texgyretermes-regular.otf" ] || [ ! -s "$out/texgyreheros-regular.otf" ]; then
-  get https://www.gust.org.pl/projects/e-foundry/tex-gyre/termes/qtm2.004otf.zip "$tmp/qtm.zip"
-  get https://www.gust.org.pl/projects/e-foundry/tex-gyre/heros/qhv2.004otf.zip "$tmp/qhv.zip"
-  unzip -oq "$tmp/qtm.zip" -d "$tmp/tg"; unzip -oq "$tmp/qhv.zip" -d "$tmp/tg"
+  # 先走 CTAN 镜像（GitHub 的 runner 连不上 gust.org.pl），不行再去 GUST 原站
+  if curl -fsSL --retry 3 --connect-timeout 20 -o "$tmp/tg.zip" https://mirrors.ctan.org/fonts/tex-gyre.zip; then
+    unzip -oq "$tmp/tg.zip" -d "$tmp/tg"
+  else
+    get https://www.gust.org.pl/projects/e-foundry/tex-gyre/termes/qtm2.004otf.zip "$tmp/qtm.zip"
+    get https://www.gust.org.pl/projects/e-foundry/tex-gyre/heros/qhv2.004otf.zip "$tmp/qhv.zip"
+    unzip -oq "$tmp/qtm.zip" -d "$tmp/tg"; unzip -oq "$tmp/qhv.zip" -d "$tmp/tg"
+  fi
   for f in texgyretermes-regular texgyretermes-bold texgyretermes-italic texgyretermes-bolditalic \
            texgyreheros-regular texgyreheros-bold texgyreheros-italic texgyreheros-bolditalic; do
     cp "$(find "$tmp/tg" -name "$f.otf" | head -1)" "$out/$f.otf"
