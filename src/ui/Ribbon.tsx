@@ -26,16 +26,22 @@ import { usePreviewZoom } from './previewZoom';
 import { B, Sep, useEditorTick, useInsertActions, TableAlignTools, FontSizeTool, refocusPreviewAfter } from '../editor/tools';
 import { searchKey, selectCurrentMatch } from '../editor/extensions/Search';
 import { levelLabels } from '../typst/numbering';
+import { ThesisTab, LayoutTab, PagesTab } from './RibbonSettings';
 
 type LayoutMode = 'editor' | 'split' | 'preview';
-type TabKey = 'home' | 'insert' | 'cite' | 'table' | 'view';
+type TabKey = 'home' | 'insert' | 'thesis' | 'layout' | 'pages' | 'cite' | 'table' | 'view';
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'home', label: '开始' },
   { key: 'insert', label: '插入' },
+  { key: 'thesis', label: '论文' },
+  { key: 'layout', label: '版式' },
+  { key: 'pages', label: '页面' },
   { key: 'cite', label: '引用' },
   { key: 'table', label: '表格工具' },
   { key: 'view', label: '视图' },
 ];
+/** 外面（视图页的按钮、文件菜单）要切到某一页 */
+export const useRibbonTab = create<{ req: TabKey | null; go: (t: TabKey) => void }>((set) => ({ req: null, go: (t) => set({ req: t }) }));
 const COLLAPSE_KEY = 'iota4web-ribbon-collapsed-v2';
 
 /** 查找栏开关，⌘F 也从这儿开 */
@@ -100,6 +106,8 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const zoom = usePreviewZoom();
   const chain = () => ed!.chain().focus();
   const findOpen = useFindBar((s) => s.open);
+  const tabReq = useRibbonTab((s) => s.req);
+  useEffect(() => { if (tabReq) { setTab(tabReq); setAutoTable(false); if (collapsed) setPeek(true); useRibbonTab.setState({ req: null }); } /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [tabReq]);
 
   // 收起 / 展开：单击选项卡只切页（Word 也是），收起靠双击或右端的箭头
   const toggleCollapsed = (v: boolean) => { setCollapsed(v); setPeek(false); try { localStorage.setItem(COLLAPSE_KEY, v ? '1' : '0'); } catch { /* */ } };
@@ -185,9 +193,11 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bodyVisible]);
 
-  const where = none
-    ? (section === 'info' || section === 'settings' || section === 'pages' ? '这一页是表单，功能区管不着' : '点一下正文或预览里的字，功能区就活了')
-    : `编辑：${KEY_NAME[activeKey!] ?? ''}${usePreviewSurface.getState().focused ? '（在预览里）' : ''}`;
+  const where = tab === 'thesis' || tab === 'layout' || tab === 'pages'
+    ? '改的是整份论文的设置，即时重排'
+    : none
+      ? (section === 'info' ? '这一页是表单，功能区管不着' : '点一下正文或预览里的字，功能区就活了')
+      : `编辑：${KEY_NAME[activeKey!] ?? ''}${usePreviewSurface.getState().focused ? '（在预览里）' : ''}`;
 
   const symbolPop = (id: 'symbol' | 'symbol2', big: boolean) => (
     <Popover open={pop === id} onOpenChange={(_, d) => setPop(d.open ? id : null)} positioning="below-start" trapFocus={false}>
@@ -329,10 +339,13 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               </Group>
             </>
           )}
+          {tab === 'thesis' && <ThesisTab />}
+          {tab === 'layout' && <LayoutTab />}
+          {tab === 'pages' && <PagesTab />}
           {tab === 'cite' && (
             <>
               <Group label="目录">
-                <B title="目录由模板自动生成；排不排在「页面开关」里设" big icon={<DocumentTableSearch20Regular />} run={() => useStore.getState().setSection('pages')}>目录</B>
+                <B title="目录由模板自动生成；排不排在「页面」页里设" big icon={<DocumentTableSearch20Regular />} run={() => useRibbonTab.getState().go('pages')}>目录</B>
               </Group>
               <Group label="引文与书目">
                 <B title="引用参考文献" big icon={<Book20Regular />} disabled={none} run={() => ins.insertInline('cite')}>插入引文</B>
@@ -355,7 +368,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               <Group label="索引">
                 <B title="标记索引词（登记进索引页）" big icon={<BookmarkAdd20Regular />} disabled={none} run={() => ins.insertInline('idx')}>标记条目</B>
                 <Stack>
-                  <B title="索引页排不排在「页面开关」里设" icon={<Grid20Regular />} run={() => useStore.getState().setSection('pages')}>插入索引</B>
+                  <B title="索引页排不排在「页面」页里设" icon={<Grid20Regular />} run={() => useRibbonTab.getState().go('pages')}>插入索引</B>
                 </Stack>
               </Group>
             </>
@@ -398,7 +411,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               <Group label="显示">
                 <Stack>
                   <B title={layout.navOpen ? '收起左栏' : '展开左栏'} icon={layout.navOpen ? <PanelLeftContract20Regular /> : <PanelLeftExpand20Regular />} on={layout.navOpen} run={() => layout.setNavOpen(!layout.navOpen)}>导航栏</B>
-                  <B title="论文设置（校区、学位、阶段……）" icon={<Settings20Regular />} run={() => useStore.getState().setSection('settings')}>论文设置</B>
+                  <B title="论文设置（校区、学位、阶段……）在「论文」页" icon={<Settings20Regular />} run={() => useRibbonTab.getState().go('thesis')}>论文设置</B>
                   <B title="元信息（题目、作者、导师……）" icon={<Info20Regular />} run={() => useStore.getState().setSection('info')}>元信息</B>
                 </Stack>
               </Group>

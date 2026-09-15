@@ -24,9 +24,7 @@ import { fluentLight, fluentDark } from './fluent';
 import { SlidersHorizontal, BookText, PenLine, Library } from 'lucide-react';
 
 const NAV: { key: Section; label: string; group: string; k?: string }[] = [
-  { key: 'settings', label: '论文设置', group: '设置' },
   { key: 'info', label: '元信息', group: '设置' },
-  { key: 'pages', label: '页面开关', group: '设置' },
   { key: 'abstract', label: '摘要', group: '前置' },
   { key: 'nomenclature', label: '符号与缩略语', group: '前置' },
   { key: 'body', label: '正文', group: '主体' },
