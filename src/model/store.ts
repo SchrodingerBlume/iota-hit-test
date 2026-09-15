@@ -53,6 +53,7 @@ export const newDoc = (): ThesisDoc => ({
     listOfTables: false,
     listOfEquations: false,
     nomenclature: true,
+    nomenclatureMerged: true,
     appendix: true,
   },
   images: [],

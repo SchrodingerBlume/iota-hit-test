@@ -14,9 +14,11 @@ interface Props {
   /** 一插入就展开（新建时） */
   autoOpen?: boolean;
   onDelete?: () => void;
+  /** 弹出框宽一些（公式编辑） */
+  wide?: boolean;
 }
 
-export function InlineChip({ kind, text, title, selected, editable = true, children, autoOpen, onDelete }: Props) {
+export function InlineChip({ kind, text, title, selected, editable = true, children, autoOpen, onDelete, wide }: Props) {
   const [open, setOpen] = useState(!!autoOpen);
   const ref = useRef<HTMLSpanElement>(null);
 
@@ -42,7 +44,7 @@ export function InlineChip({ kind, text, title, selected, editable = true, child
         {text}
       </button>
       {open && (
-        <span className="chip-pop" contentEditable={false} onMouseDown={(e) => e.stopPropagation()}>
+        <span className={`chip-pop ${wide ? 'chip-pop-wide' : ''}`} contentEditable={false} onMouseDown={(e) => e.stopPropagation()}>
           {children(() => setOpen(false))}
           {onDelete && (
             <button type="button" className="btn btn-danger btn-xs chip-pop-del" onClick={onDelete}>删除</button>

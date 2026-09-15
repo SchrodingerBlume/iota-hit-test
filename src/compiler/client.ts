@@ -46,6 +46,7 @@ let inFlight: number | null = null;
 let pending: CompileInput | null = null;
 const pdfWaiters = new Map<number, (r: { pdf: ArrayBuffer | null; diagnostics: Diagnostic[] }) => void>();
 const fontWaiters = new Map<number, (r: { families: string[]; error?: string }) => void>();
+const snippetWaiters = new Map<number, (r: { artifact: ArrayBuffer | null; error?: string }) => void>();
 
 function send(msg: ToWorker, transfer: Transferable[] = []) {
   worker?.postMessage(msg, transfer);
@@ -93,6 +94,11 @@ export function startCompiler() {
       case 'pdf': {
         pdfWaiters.get(m.id)?.({ pdf: m.pdf, diagnostics: m.diagnostics });
         pdfWaiters.delete(m.id);
+        break;
+      }
+      case 'snippet': {
+        snippetWaiters.get(m.id)?.({ artifact: m.artifact, error: m.error });
+        snippetWaiters.delete(m.id);
         break;
       }
       case 'fontsSet': {
@@ -152,5 +158,18 @@ export async function updateUserFonts(add: { id: string; data: ArrayBuffer }[], 
     const id = nextId++;
     fontWaiters.set(id, resolve);
     send({ type: 'setFonts', id, add, remove }, add.map((a) => a.data));
+  });
+}
+
+/** 编一段 Typst 数学：等引擎就绪，不排队（片段很小，插在正文编译之间无妨） */
+export function compileSnippet(src: string, display: boolean): Promise<{ artifact: ArrayBuffer | null; error?: string }> {
+  return new Promise((resolve) => {
+    const go = () => {
+      if (useCompileState.getState().status !== 'ready') { setTimeout(go, 300); return; }
+      const id = nextId++;
+      snippetWaiters.set(id, resolve);
+      send({ type: 'snippet', id, src, display });
+    };
+    go();
   });
 }

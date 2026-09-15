@@ -5,13 +5,19 @@ import { useEffect, useState } from 'react';
 import { imageUrl } from '../imageCache';
 import { useEditorEnv } from '../env';
 import { Field } from './Chip';
+import { MathEditor } from '../math/MathEditor';
+import { useNumbering } from '../env';
+import { labelOf } from '../../typst/pmToTypst';
 
 const attr = (k: string, def: any) => ({ default: def, parseHTML: (el: HTMLElement) => el.getAttribute(`data-${k}`) ?? def, renderHTML: (a: any) => ({ [`data-${k}`]: a[k] }) });
 
-function CaptionFields({ node, updateAttributes, kindName, editable }: { node: NodeViewProps['node']; updateAttributes: NodeViewProps['updateAttributes']; kindName: string; editable: boolean }) {
+function CaptionFields({ node, updateAttributes, kindName, editable, prefix }: { node: NodeViewProps['node']; updateAttributes: NodeViewProps['updateAttributes']; kindName: string; editable: boolean; prefix?: string }) {
   return (
     <div className="fig-fields" contentEditable={false}>
-      <input className="fig-caption" disabled={!editable} value={node.attrs.caption ?? ''} placeholder={`${kindName}题（中文）`} onChange={(e) => updateAttributes({ caption: e.target.value })} />
+      <span className="fig-caption-row">
+        {prefix && <span className="fig-num" title="编号按模板规则算，预览里的为准">{prefix}</span>}
+        <input className="fig-caption" disabled={!editable} value={node.attrs.caption ?? ''} placeholder={`${kindName}题（中文）`} onChange={(e) => updateAttributes({ caption: e.target.value })} />
+      </span>
       <input className="fig-caption-en" disabled={!editable} value={node.attrs.captionEn ?? ''} placeholder={`${kindName}题（English，博士双语题注用）`} onChange={(e) => updateAttributes({ captionEn: e.target.value })} />
     </div>
   );
@@ -40,7 +46,7 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor }: No
           </label>
         )}
       </div>
-      <CaptionFields node={node} updateAttributes={updateAttributes} kindName="图" editable={editable} />
+      <CaptionFields node={node} updateAttributes={updateAttributes} kindName="图" editable={editable} prefix={useNumbering().get(labelOf(node.attrs as any, 'fig'))?.number} />
       <div className="fig-tools" contentEditable={false}>
         <label>宽 <input type="number" min={2} max={16} step={0.5} value={node.attrs.width ?? 8} disabled={!editable} onChange={(e) => updateAttributes({ width: Number(e.target.value) || 8 })} /> cm</label>
         <label>标签 <input value={node.attrs.label ?? ''} placeholder={`fig:${node.attrs.uid ?? ''}`} disabled={!editable} onChange={(e) => updateAttributes({ label: e.target.value.trim() })} /></label>
@@ -70,7 +76,7 @@ function TableFigureView({ node, updateAttributes, selected, deleteNode, editor 
   const editable = editor.isEditable;
   return (
     <NodeViewWrapper className={`fig tab ${selected ? 'is-selected' : ''}`}>
-      <CaptionFields node={node} updateAttributes={updateAttributes} kindName="表" editable={editable} />
+      <CaptionFields node={node} updateAttributes={updateAttributes} kindName="表" editable={editable} prefix={useNumbering().get(labelOf(node.attrs as any, 'tab'))?.number} />
       <NodeViewContent className="tab-body" />
       <div className="fig-tools" contentEditable={false}>
         <label>标签 <input value={node.attrs.label ?? ''} placeholder={`tab:${node.attrs.uid ?? ''}`} disabled={!editable} onChange={(e) => updateAttributes({ label: e.target.value.trim() })} /></label>
@@ -102,26 +108,14 @@ function EquationView({ node, updateAttributes, selected, deleteNode, editor }: 
   const mode = node.attrs.mode === 'latex' ? 'latex' : 'typst';
   const numbered = node.attrs.numbered !== false;
   const editable = editor.isEditable;
+  const num = useNumbering().get(labelOf(node.attrs as any, 'eq'))?.number;
   return (
     <NodeViewWrapper className={`eq ${selected ? 'is-selected' : ''}`} data-drag-handle>
-      <div className="eq-row" contentEditable={false}>
-        <span className="eq-badge">{mode === 'latex' ? 'LaTeX' : 'Typst'}</span>
-        <textarea
-          className="eq-src"
-          rows={Math.max(1, Math.min(6, src.split('\n').length))}
-          value={src}
-          disabled={!editable}
-          placeholder={mode === 'latex' ? '\\frac{a}{b} = c' : 'phi = D_"p"^2/150 psi^3/(1 - psi)^2'}
-          onChange={(e) => updateAttributes({ src: e.target.value })}
-          spellCheck={false}
-        />
-        <span className="eq-num">{numbered ? '(编号)' : ''}</span>
+      <div contentEditable={false} className="eq-with-num">
+        {numbered && num && <span className="eq-num-badge" title="编号按模板规则算，预览里的为准">{num}</span>}
+        <MathEditor value={src} mode={mode} display onChange={(v) => updateAttributes({ src: v })} onMode={(m) => updateAttributes({ mode: m })} autoFocus={!src} />
       </div>
       <div className="fig-tools" contentEditable={false}>
-        <span className="seg">
-          <button type="button" className={mode === 'typst' ? 'on' : ''} disabled={!editable} onClick={() => updateAttributes({ mode: 'typst' })}>Typst</button>
-          <button type="button" className={mode === 'latex' ? 'on' : ''} disabled={!editable} onClick={() => updateAttributes({ mode: 'latex' })}>LaTeX</button>
-        </span>
         <label><input type="checkbox" checked={numbered} disabled={!editable} onChange={(e) => updateAttributes({ numbered: e.target.checked })} /> 编号</label>
         <label>标签 <input value={node.attrs.label ?? ''} placeholder={`eq:${node.attrs.uid ?? ''}`} disabled={!editable} onChange={(e) => updateAttributes({ label: e.target.value.trim() })} /></label>
         <button type="button" className="btn btn-xs btn-danger" disabled={!editable} onClick={deleteNode}>删除</button>

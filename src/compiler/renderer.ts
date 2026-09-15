@@ -91,3 +91,11 @@ function decoratePages(container: HTMLElement, total: number) {
   svg.setAttribute('height', String(height));
   svg.setAttribute('data-height', String(height));
 }
+
+/** 小片段：产物 → SVG 字符串（临时会话，用完即弃） */
+export async function renderSnippetSvg(artifact: Uint8Array): Promise<string> {
+  await initRenderer();
+  if (!renderer) throw new Error('renderer not ready');
+  const svg = await renderer.renderSvg({ artifactContent: artifact, format: 'vector' } as any);
+  return svg;
+}

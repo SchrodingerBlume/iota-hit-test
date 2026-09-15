@@ -4,6 +4,7 @@ import type { ThesisDoc } from '../model/types';
 import { startCompiler, requestCompile, exportPdf, useCompileState } from '../compiler/client';
 import { serializeProject } from '../typst/serialize';
 import { collectRefTargets } from '../typst/pmToTypst';
+import { computeNumbering } from '../typst/numbering';
 import { EditorEnvContext, type EditorEnv } from '../editor/env';
 import { imageBytes, putImage, safeImageName, imageDimensions, clearImageCache } from '../editor/imageCache';
 import { ProjectsView } from './ProjectsView';
@@ -95,7 +96,12 @@ export function App() {
   // 编辑器周边：文献、可引用对象、缩略语、图片
   const env = useMemo<EditorEnv>(() => ({
     bibKeys: doc.references.filter((r) => r.key.trim()).map((r) => ({ key: r.key, title: r.fields.title ?? '' })),
-    refTargets: [...collectRefTargets(doc.body), ...collectRefTargets(doc.appendix)],
+    refTargets: (() => {
+      const nb = computeNumbering(doc.body as any, doc.settings, 'body');
+      const na = computeNumbering(doc.appendix as any, doc.settings, 'appendix');
+      return [...collectRefTargets(doc.body).map((r) => ({ ...r, number: nb.get(r.label)?.number, ref: nb.get(r.label)?.ref })),
+        ...collectRefTargets(doc.appendix).map((r) => ({ ...r, number: na.get(r.label)?.number, ref: na.get(r.label)?.ref }))];
+    })(),
     abbrs: doc.abbreviations.filter((a) => a.key.trim()).map((a) => ({ key: a.key.trim(), long: a.long })),
     images: doc.images,
     addImage: async (file) => {
@@ -106,7 +112,7 @@ export function App() {
       setImages([...useStore.getState().doc.images, { name, mime: file.type, ...(dim ?? {}) }]);
       return { name, ...(dim ?? {}) };
     },
-  }), [doc.references, doc.body, doc.appendix, doc.abbreviations, doc.images, setImages]);
+  }), [doc.references, doc.body, doc.appendix, doc.abbreviations, doc.images, doc.settings, setImages]);
 
   const onExportPdf = async () => {
     setBusy('正在导出 PDF…');

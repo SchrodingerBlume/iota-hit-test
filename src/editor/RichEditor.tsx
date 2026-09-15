@@ -1,5 +1,5 @@
 // 富文本编辑器：TipTap + 我们的节点。value 是 ProseMirror JSON，onChange 回同样的 JSON。
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Superscript from '@tiptap/extension-superscript';
@@ -11,7 +11,9 @@ import { HeadingEn } from './extensions/HeadingEn';
 import { UniqueId } from './extensions/UniqueId';
 import { MathInline, Cite, Ref, Abbr, Footnote, Ccwd, Idx } from './extensions/inline';
 import { Figure, TableFigure, Equation, PageBreak } from './extensions/blocks';
-import { useEditorEnv } from './env';
+import { useEditorEnv, NumberingContext } from './env';
+import { computeNumbering, type Part } from '../typst/numbering';
+import { useStore } from '../model/store';
 import { Undo2, Redo2, Pilcrow, Heading1, Heading2, Heading3, Heading4, Bold, Italic, Underline, Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Code, List, ListOrdered, CodeXml, Sigma, SquareFunction, BookMarked, Link2, MessageSquareQuote, BookmarkPlus, Space, Image, Table, SeparatorHorizontal, BetweenHorizontalStart, BetweenHorizontalEnd, BetweenVerticalStart, BetweenVerticalEnd, Rows3, Columns3, Minus, TableCellsMerge, PanelTop } from 'lucide-react';
 
 export interface RichEditorProps {
@@ -25,11 +27,15 @@ export interface RichEditorProps {
   className?: string;
   /** 换节时强制重建 */
   instanceKey: string;
+  /** 编号按哪一部分算：正文按章，附录按 A / 1 / 一 */
+  part?: Part;
 }
 
-export function RichEditor({ value, onChange, headings = true, blocks = true, placeholder, className, instanceKey }: RichEditorProps) {
+export function RichEditor({ value, onChange, headings = true, blocks = true, placeholder, className, instanceKey, part = 'other' }: RichEditorProps) {
   const lastEmitted = useRef<RichDoc | null>(null);
   const env = useEditorEnv();
+  const settings = useStore((s) => s.doc.settings);
+  const numbering = useMemo(() => computeNumbering(value as any, settings, part), [value, settings, part]);
 
   const editor = useEditor({
     extensions: [
@@ -70,10 +76,12 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
   }, [editor, value]);
 
   return (
-    <div className={`editor ${className ?? ''}`}>
-      {editor && <Toolbar editor={editor} headings={headings} blocks={blocks} />}
-      <EditorContent editor={editor} className="editor-body" />
-    </div>
+    <NumberingContext.Provider value={numbering}>
+      <div className={`editor ${className ?? ''}`}>
+        {editor && <Toolbar editor={editor} headings={headings} blocks={blocks} />}
+        <EditorContent editor={editor} className="editor-body" />
+      </div>
+    </NumberingContext.Provider>
   );
 }
 

@@ -192,6 +192,31 @@ async function pdf(msg: Extract<ToWorker, { type: 'pdf' }>) {
   }
 }
 
+/** 公式预览：把一段 Typst 数学编成一页刚好包住它的小文档，主线程再画成 SVG */
+async function snippet(msg: Extract<ToWorker, { type: 'snippet' }>) {
+  if (!compiler) return;
+  const body = msg.display ? `$ ${msg.src} $` : `$${msg.src}$`;
+  const src = `#set page(width: auto, height: auto, margin: 3pt, fill: none)
+#set text(size: 11pt, font: ("Times New Roman", "TeX Gyre Termes", "Noto Serif CJK SC"))
+#show math.equation: set text(font: ("Cambria Math", "TeX Gyre Termes Math"))
+#set math.equation(numbering: none)
+${body}
+`;
+  compiler.addSource('/snippet.typ', src);
+  try {
+    const res = await compiler.compile({ mainFilePath: '/snippet.typ', format: 0 as any, diagnostics: 'full' });
+    const errors = normalizeDiagnostics(res.diagnostics).filter((d) => d.severity === 'error');
+    if (!res.result || errors.length) {
+      post({ type: 'snippet', id: msg.id, artifact: null, error: errors.map((e) => e.message).join('；') || '编译失败' });
+      return;
+    }
+    const artifact = new Uint8Array(res.result as Uint8Array).buffer;
+    post({ type: 'snippet', id: msg.id, artifact }, [artifact]);
+  } catch (e) {
+    post({ type: 'snippet', id: msg.id, artifact: null, error: String((e as Error)?.message ?? e) });
+  }
+}
+
 /** 换字体表：站内字体 + 用户给的字体，整表重建后塞给编译器（编译器只借用，建完就释放） */
 async function setFonts(msg: Extract<ToWorker, { type: 'setFonts' }>) {
   if (!compiler) return;
@@ -224,6 +249,7 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       case 'compile': await compile(msg); break;
       case 'pdf': await pdf(msg); break;
       case 'setFonts': await setFonts(msg); break;
+      case 'snippet': await snippet(msg); break;
     }
   };
   run().catch((e) => post({ type: 'fatal', message: String((e as Error)?.stack ?? e) }));

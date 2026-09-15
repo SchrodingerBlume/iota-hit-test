@@ -4,6 +4,8 @@ import { ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react';
 import { useState, type ReactElement } from 'react';
 import { InlineChip, Field } from './Chip';
 import { useEditorEnv } from '../env';
+import { MathEditor, forPreview } from '../math/MathEditor';
+import { MathPreview } from '../math/MathPreview';
 
 const inlineAtom = (name: string, attrs: Record<string, { default: any }>, View: (p: NodeViewProps) => ReactElement) =>
   Node.create({
@@ -30,19 +32,9 @@ function MathInlineView({ node, updateAttributes, selected, deleteNode, editor }
   const src = String(node.attrs.src ?? '');
   const mode = node.attrs.mode === 'latex' ? 'latex' : 'typst';
   return (
-    <InlineChip kind="math" text={src ? <code>{src}</code> : <em>公式</em>} title="行内公式" selected={selected} editable={editor.isEditable} autoOpen={!src} onDelete={deleteNode}>
+    <InlineChip kind="math" text={src ? <MathPreview src={forPreview(src, mode)} mode={mode} /> : <em>公式</em>} title={src || '行内公式'} selected={selected} editable={editor.isEditable} autoOpen={!src} onDelete={deleteNode} wide>
       {(close) => (
-        <>
-          <Field label={mode === 'latex' ? 'LaTeX' : 'Typst 数学'}>
-            <input autoFocus value={src} placeholder={mode === 'latex' ? '\\frac{a}{b}' : 'x^2 + y_1'} onChange={(e) => updateAttributes({ src: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); close(); } }} />
-          </Field>
-          <Field label="语法">
-            <span className="seg">
-              <button type="button" className={mode === 'typst' ? 'on' : ''} onClick={() => updateAttributes({ mode: 'typst' })}>Typst</button>
-              <button type="button" className={mode === 'latex' ? 'on' : ''} onClick={() => updateAttributes({ mode: 'latex' })}>LaTeX</button>
-            </span>
-          </Field>
-        </>
+        <MathEditor value={src} mode={mode} display={false} compact autoFocus onChange={(v) => updateAttributes({ src: v })} onMode={(m) => updateAttributes({ mode: m })} onEnter={close} />
       )}
     </InlineChip>
   );
@@ -90,7 +82,7 @@ function RefView({ node, updateAttributes, selected, deleteNode, editor }: NodeV
   const env = useEditorEnv();
   const target = String(node.attrs.target ?? '');
   const hit = env.refTargets.find((r) => r.label === target);
-  const text = hit ? `${KIND_NAME[hit.kind]} ${hit.index}` : target || <em>引用</em>;
+  const text = hit ? (hit.ref ?? `${KIND_NAME[hit.kind]} ${hit.index}`) : target || <em>引用</em>;
   return (
     <InlineChip kind="ref" text={text} title={hit ? `${KIND_NAME[hit.kind]}：${hit.title}` : '交叉引用'} selected={selected} editable={editor.isEditable} autoOpen={!target} onDelete={deleteNode}>
       {(close) => (
@@ -100,7 +92,7 @@ function RefView({ node, updateAttributes, selected, deleteNode, editor }: NodeV
             {env.refTargets.map((r) => (
               <li key={r.label} className={r.label === target ? 'on' : ''}>
                 <button type="button" onClick={() => { updateAttributes({ target: r.label }); close(); }}>
-                  <b>{KIND_NAME[r.kind]} {r.index}</b> <span className="muted">{r.title || r.label}</span>
+                  <b>{r.ref ?? `${KIND_NAME[r.kind]} ${r.index}`}</b> <span className="muted">{r.title || r.label}</span>
                 </button>
               </li>
             ))}

@@ -94,8 +94,9 @@ export interface Abbreviation {
 }
 
 export interface SymbolEntry {
-  /** Typst 数学写法，如 `p`、`eta`、`Delta P` */
+  /** 数学写法：Typst（`eta`）或 LaTeX（`\\eta`），按 mode 分 */
   symbol: string;
+  mode?: 'typst' | 'latex';
   meaning: string;
 }
 
@@ -126,6 +127,8 @@ export interface Pages {
   listOfTables: boolean;
   listOfEquations: boolean;
   nomenclature: boolean;
+  /** 符号表与缩略语表合成一页（#nomenclature），还是各印一页 */
+  nomenclatureMerged: boolean;
   appendix: boolean;
 }
 

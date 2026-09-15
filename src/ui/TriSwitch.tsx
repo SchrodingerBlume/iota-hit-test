@@ -48,8 +48,8 @@ export function TriSwitch({ def, settings, onChange }: Props) {
       </div>
       <div className="tri-note">
         {isAuto
-          ? <><span className="auto-tag">A</span>自动 → <b>{effective ? on.label : off.label}</b> · {auto.reason}</>
-          : <>已固定为 <b>{raw ? on.label : off.label}</b>{auto.value !== raw && <>（自动档会是「{auto.value ? on.label : off.label}」：{auto.reason}）</>}</>}
+          ? <><span className="auto-tag">A</span>自动 → <b className={effective ? 'v-on' : 'v-off'}>{effective ? on.label : off.label}</b> · {auto.reason}</>
+          : <>已固定为 <b className={raw ? 'v-on' : 'v-off'}>{raw ? on.label : off.label}</b>{auto.value !== raw && <>（自动档会是「{auto.value ? on.label : off.label}」：{auto.reason}）</>}</>}
       </div>
     </div>
   );

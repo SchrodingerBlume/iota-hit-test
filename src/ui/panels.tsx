@@ -4,15 +4,19 @@ import { useStore, type RichKey } from '../model/store';
 import type { Abbreviation, SymbolEntry, DefensePerson, Pages } from '../model/types';
 import { RichEditor } from '../editor/RichEditor';
 import { BibEditor } from './BibEditor';
+import { MathPreview } from '../editor/math/MathPreview';
+import { MathEditor } from '../editor/math/MathEditor';
+import { useState } from 'react';
 
 export function RichSection({ title, lead, richKey, headings, blocks, placeholder }: { title: string; lead?: string; richKey: RichKey; headings: boolean; blocks?: boolean; placeholder?: string }) {
+  const part = richKey === 'body' ? 'body' : richKey === 'appendix' ? 'appendix' : 'other';
   const value = useStore((s) => s.doc[richKey]);
   const setRich = useStore((s) => s.setRich);
   return (
     <>
       <h2>{title}</h2>
       {lead && <p className="lead">{lead}</p>}
-      <RichEditor instanceKey={richKey} value={value} onChange={(v) => setRich(richKey, v)} headings={headings} blocks={blocks ?? true} placeholder={placeholder} />
+      <RichEditor instanceKey={richKey} value={value} onChange={(v) => setRich(richKey, v)} headings={headings} blocks={blocks ?? true} placeholder={placeholder} part={part} />
     </>
   );
 }
@@ -66,6 +70,7 @@ export function NomenclaturePanel() {
       <p className="lead">物理量名称及符号表（规范 2.4 点名的前置表）与缩略语表。正文里用工具栏的「Ab」插入缩写，首次出现自动展开成「有限元方法（Finite Element Method，FEM）」。</p>
       <div className="card">
         <label className="toggle"><button type="button" className={`sw ${pages.nomenclature ? 'on' : ''}`} onClick={() => setPages({ nomenclature: !pages.nomenclature })} /> <span className="t-lab">排这一页</span><span className="t-hint">关掉则缩写照常展开，只是不印表</span></label>
+        <label className="toggle"><button type="button" className={`sw ${pages.nomenclatureMerged !== false ? 'on' : ''}`} onClick={() => setPages({ nomenclatureMerged: !(pages.nomenclatureMerged !== false) })} /> <span className="t-lab">符号与缩略语合成一页</span><span className="t-hint">开：一页「符号及缩略语」两段；关：「物理量名称及符号表」「缩略语表」各一页</span></label>
       </div>
       <div className="card">
         <h3>缩略语</h3>
@@ -74,8 +79,7 @@ export function NomenclaturePanel() {
       </div>
       <div className="card">
         <h3>物理量符号</h3>
-        <ListTable<SymbolEntry> rows={symbols} onChange={setSymbols} blank={() => ({ symbol: '', meaning: '' })}
-          cols={[{ key: 'symbol', label: '符号（Typst 数学写法）', placeholder: 'eta', mono: true }, { key: 'meaning', label: '含义与单位', placeholder: '气体动力黏度，Pa·s' }]} />
+        <SymbolTable rows={symbols} onChange={setSymbols} />
       </div>
     </>
   );
@@ -195,6 +199,44 @@ export function PagesPanel() {
           </label>
         ))}
       </div>
+    </>
+  );
+}
+
+/** 物理量符号表：每行一个符号（Typst 或 LaTeX，带预览）+ 含义 */
+function SymbolTable({ rows, onChange }: { rows: SymbolEntry[]; onChange: (r: SymbolEntry[]) => void }) {
+  const [editing, setEditing] = useState<number | null>(null);
+  const set = (i: number, patch: Partial<SymbolEntry>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  return (
+    <>
+      <table className="tbl sym">
+        <thead><tr><th style={{ width: 90 }}>预览</th><th>符号</th><th>含义与单位</th><th /></tr></thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i}>
+              <td className="sym-preview"><button type="button" className="sym-btn" title="点开可视化编辑" onClick={() => setEditing(editing === i ? null : i)}><MathPreview src={r.symbol} mode={r.mode === 'latex' ? 'latex' : 'typst'} empty="…" /></button></td>
+              <td>
+                <span className="row" style={{ flexWrap: 'nowrap' }}>
+                  <input style={{ fontFamily: 'var(--mono)' }} value={r.symbol} placeholder={r.mode === 'latex' ? '\\eta' : 'eta'} onChange={(e) => set(i, { symbol: e.target.value })} />
+                  <span className="seg" title="写法">
+                    <button type="button" className={r.mode !== 'latex' ? 'on' : ''} onClick={() => set(i, { mode: 'typst' })}>T</button>
+                    <button type="button" className={r.mode === 'latex' ? 'on' : ''} onClick={() => set(i, { mode: 'latex' })}>L</button>
+                  </span>
+                </span>
+              </td>
+              <td><input value={r.meaning} placeholder="气体动力黏度，Pa·s" onChange={(e) => set(i, { meaning: e.target.value })} /></td>
+              <td><button type="button" className="del" title="删除" onClick={() => { onChange(rows.filter((_, j) => j !== i)); setEditing(null); }}>✕</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {editing !== null && rows[editing] && (
+        <div className="card" style={{ marginTop: 8 }}>
+          <h3>编辑符号 · 第 {editing + 1} 行</h3>
+          <MathEditor value={rows[editing].symbol} mode={rows[editing].mode === 'latex' ? 'latex' : 'typst'} display={false} onChange={(v) => set(editing, { symbol: v })} onMode={(m) => set(editing, { mode: m })} />
+        </div>
+      )}
+      <button type="button" className="btn btn-xs" style={{ marginTop: 6 }} onClick={() => onChange([...rows, { symbol: '', mode: 'typst', meaning: '' }])}>＋ 添加一行</button>
     </>
   );
 }

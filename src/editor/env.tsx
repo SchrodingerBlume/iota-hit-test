@@ -1,10 +1,11 @@
 // 编辑器周边环境：文献 key、可引用的图表公式、缩略语——给弹出框里的选择列表用。
 import { createContext, useContext } from 'react';
 import type { RefTarget } from '../typst/pmToTypst';
+import type { NumberInfo } from '../typst/numbering';
 
 export interface EditorEnv {
   bibKeys: { key: string; title: string }[];
-  refTargets: RefTarget[];
+  refTargets: (RefTarget & { number?: string; ref?: string })[];
   abbrs: { key: string; long: string }[];
   images: { name: string }[];
   /** 上传图片：返回存进库里的文件名 */
@@ -30,3 +31,7 @@ export function parseBibKeys(bib: string): { key: string; title: string }[] {
   }
   return out;
 }
+
+/** 当前这个编辑器里各节点的编号（标题、图、表、公式），按 label 查 */
+export const NumberingContext = createContext<Map<string, NumberInfo>>(new Map());
+export const useNumbering = () => useContext(NumberingContext);

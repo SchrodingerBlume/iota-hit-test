@@ -14,6 +14,8 @@ export type ToWorker =
   | { type: 'init'; baseUrl: string }
   | { type: 'compile'; id: number; main: string; files: Record<string, string>; images: { name: string; data: ArrayBuffer }[]; removeImages: string[] }
   | { type: 'pdf'; id: number }
+  /** 编一个 Typst 数学片段，给编辑器里的公式预览用 */
+  | { type: 'snippet'; id: number; src: string; display: boolean }
   /** 增删用户字体（本机读的或自己选的文件），字节只住在 worker；改完整表重建 */
   | { type: 'setFonts'; id: number; add: { id: string; data: ArrayBuffer }[]; remove: string[] };
 
@@ -25,4 +27,5 @@ export type FromWorker =
   | { type: 'fatal'; message: string }
   | { type: 'compiled'; id: number; artifact: ArrayBuffer | null; diagnostics: Diagnostic[]; ms: number }
   | { type: 'pdf'; id: number; pdf: ArrayBuffer | null; diagnostics: Diagnostic[] }
-  | { type: 'fontsSet'; id: number; families: string[]; error?: string };
+  | { type: 'fontsSet'; id: number; families: string[]; error?: string }
+  | { type: 'snippet'; id: number; artifact: ArrayBuffer | null; error?: string };

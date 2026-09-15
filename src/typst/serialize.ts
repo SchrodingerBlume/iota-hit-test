@@ -106,11 +106,18 @@ function nomenclature(doc: ThesisDoc): string {
   if (!doc.pages.nomenclature || doc.settings.stage !== 'final') {
     return abbrs.length ? `#list-of-abbreviations(${abbrDict}, form: none, shown: true)` : '';
   }
-  const symbolLines = symbols.map((s) => `  / $${s.symbol.trim()}$: ${escapeText(s.meaning.trim())}`).join('\n');
-  if (!symbols.length) {
-    return `#list-of-abbreviations(${abbrDict})`;
-  }
-  return `#nomenclature(\n  abbreviations: ${abbrDict},\n)[\n${symbolLines}\n]`;
+  // 符号：Typst 数学直接 $…$，LaTeX 走 mitex 的 #mi
+  const term = (s: { symbol: string; mode?: string }) => {
+    const src = s.symbol.trim();
+    if (s.mode === 'latex') { let f = '`'; while (src.includes(f)) f += '`'; return `#mi(${f}${src}${f})`; }
+    return `$${src}$`;
+  };
+  const symbolLines = symbols.map((s) => `  / ${term(s)}: ${escapeText(s.meaning.trim())}`).join('\n');
+  if (!symbols.length) return `#list-of-abbreviations(${abbrDict})`;
+  if (!abbrs.length) return `#list-of-symbols[\n${symbolLines}\n]`;
+  // 合并页与两张单页互斥：模板两个都写会报错
+  if (doc.pages.nomenclatureMerged !== false) return `#nomenclature(\n  abbreviations: ${abbrDict},\n)[\n${symbolLines}\n]`;
+  return `#list-of-symbols[\n${symbolLines}\n]\n\n#list-of-abbreviations(${abbrDict})`;
 }
 
 function defense(doc: ThesisDoc): string {
