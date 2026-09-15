@@ -166,6 +166,8 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
     const clip = document.createElement('div');
     clip.className = 'rb-ghost-clip';
     clip.style.height = `${H}px`;
+    // 贴在选项卡行底下（真抽屉虽然隐了形，展开态它还占着位，top: 100% 会落到它底下）
+    clip.style.top = `${drawer.offsetTop}px`;
     const ghost = drawer.cloneNode(true) as HTMLElement;
     ghost.className = 'rb-drawer rb-ghost';
     ghost.style.height = `${H}px`;
