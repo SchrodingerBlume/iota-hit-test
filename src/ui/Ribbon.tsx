@@ -156,6 +156,8 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
     if (drawer && bodyVisible) openHeight.current = drawer.getBoundingClientRect().height || openHeight.current;
   });
   const wasOpen = useRef(bodyVisible);
+  /** 正在跑的动画：快速连点时从它们当下的位置接着动，不跳、不叠加 */
+  const anim = useRef<{ main: Animation; ghost: Animation; clip: HTMLElement } | null>(null);
   useLayoutEffect(() => {
     const open = bodyVisible;
     if (firstRender.current) { firstRender.current = false; wasOpen.current = open; return; }
@@ -165,16 +167,28 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
     const main = document.querySelector<HTMLElement>('.main');
     const H = openHeight.current;
     if (!drawer || !main || !H) return;
-    // 动感照 Fluent 的曲线：展开是减速滑出（curveDecelerateMid），收起是加速缩回（curveAccelerateMid）；
-    // 抽屉从选项卡行底下整块滑出来 / 滑回去（不是自下而上「擦」出来），内容区同步平移
+    const tyOf = (el: Element) => { const m = getComputedStyle(el).transform; if (!m || m === 'none') return 0; const p = m.match(/matrix\(([^)]+)\)/); return p ? parseFloat(p[1].split(',')[5]) || 0 : 0; };
+    // 上一轮还没走完：记下内容区与抽屉眼下画在哪儿，取消旧动画，新动画从那儿起步。
+    // 版面已经翻到新状态（内容区的版面位置差了 H），所以起点要把这个差补回去
+    let mainFrom = open ? -H : H;
+    let ghostFrom = open ? -H : 0;
+    let opacityFrom = open ? 0.4 : 1;
+    const prev = anim.current;
+    if (prev) {
+      const curMain = tyOf(main);
+      const ghostEl = prev.clip.firstElementChild as HTMLElement | null;
+      if (ghostEl) { ghostFrom = tyOf(ghostEl); opacityFrom = parseFloat(getComputedStyle(ghostEl).opacity) || 1; }
+      mainFrom = curMain + (open ? -H : H);
+      prev.main.cancel(); prev.ghost.cancel(); prev.clip.remove();
+      anim.current = null;
+    }
     const ease = open ? 'cubic-bezier(0, 0, 0, 1)' : 'cubic-bezier(0.7, 0, 1, 0.5)';
     const dur = open ? 240 : 170;
-    if (open) main.style.height = `${main.getBoundingClientRect().height + H}px`;
-    const a2 = main.animate([{ transform: `translateY(${open ? -H : H}px)` }, { transform: 'none' }], { duration: dur, easing: ease });
+    main.style.height = open ? `${main.getBoundingClientRect().height + H}px` : '';
+    const a2 = main.animate([{ transform: `translateY(${mainFrom}px)` }, { transform: 'none' }], { duration: dur, easing: ease });
     const clip = document.createElement('div');
     clip.className = 'rb-ghost-clip';
     clip.style.height = `${H}px`;
-    // 贴在选项卡行底下（真抽屉虽然隐了形，展开态它还占着位，top: 100% 会落到它底下）
     clip.style.top = `${drawer.offsetTop}px`;
     const ghost = drawer.cloneNode(true) as HTMLElement;
     ghost.className = 'rb-drawer rb-ghost';
@@ -183,13 +197,13 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
     drawer.parentElement!.appendChild(clip);
     drawer.style.visibility = 'hidden';
     const a1 = ghost.animate(
-      open ? [{ transform: `translateY(${-H}px)`, opacity: 0.4 }, { transform: 'none', opacity: 1 }] : [{ transform: 'none', opacity: 1 }, { transform: `translateY(${-H}px)`, opacity: 0.4 }],
+      [{ transform: `translateY(${ghostFrom}px)`, opacity: opacityFrom }, { transform: open ? 'none' : `translateY(${-H}px)`, opacity: open ? 1 : 0.4 }],
       { duration: dur, easing: ease, fill: 'forwards' },
     );
+    anim.current = { main: a2, ghost: a1, clip };
     let done = false;
-    const finish = () => { if (done) return; done = true; clip.remove(); drawer.style.visibility = ''; main.style.height = ''; };
-    Promise.all([a1.finished, a2.finished]).then(finish, finish);
-    return finish;
+    const finish = () => { if (done) return; done = true; if (anim.current?.clip === clip) anim.current = null; clip.remove(); drawer.style.visibility = ''; main.style.height = ''; };
+    Promise.all([a1.finished, a2.finished]).then(finish, () => { /* 被新一轮取消：新一轮接手收尾 */ });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bodyVisible]);
 

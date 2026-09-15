@@ -47,7 +47,7 @@ export function FontCard() {
             </label>
             {busy && <span className="muted" style={{ fontSize: 12 }}>{busy}</span>}
           </div>
-          {error && <div className="diag err" style={{ marginTop: 8, padding: '6px 10px', borderRadius: 6, border: '1px solid' }}>{error}</div>}
+          {error && <div className="diag err" style={{ marginTop: 8, padding: '6px 10px', borderRadius: 'var(--r-s)', border: '1px solid' }}>{error}</div>}
           <p className="muted" style={{ fontSize: 12, margin: '8px 0 6px' }}>
             字节只进这台浏览器的内存，交给页面里的排版引擎，不上传。本机读到的每次进站点一下就有；自己选的文件会存在浏览器里，下次自动装上。
             {fontset === 'windows' && ' macOS 上装了 Office 的话，SimSun / SimHei / KaiTi / FangSong 一般在 Office 的字体目录里，选文件那条路也能装。'}

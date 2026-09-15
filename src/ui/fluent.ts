@@ -35,5 +35,8 @@ export function brandRamp(hex: string): BrandVariants {
 }
 
 const brand = brandRamp('#166183');
-export const fluentLight: Theme = { ...createLightTheme(brand), fontFamilyBase: 'var(--sans)' };
-export const fluentDark: Theme = { ...createDarkTheme(brand), fontFamilyBase: 'var(--sans)' };
+/** 与 app.css 里 --r-xs / --r-s / --r-m / --r-l 同一组数：Fluent 的按钮、输入框走 Medium，弹层走 Large */
+const radii = { borderRadiusNone: '0', borderRadiusSmall: '2px', borderRadiusMedium: '4px', borderRadiusLarge: '8px', borderRadiusXLarge: '12px', borderRadiusCircular: '999px' } as const;
+const font = { fontFamilyBase: 'var(--sans)' } as const;
+export const fluentLight: Theme = { ...createLightTheme(brand), ...radii, ...font };
+export const fluentDark: Theme = { ...createDarkTheme(brand), ...radii, ...font };

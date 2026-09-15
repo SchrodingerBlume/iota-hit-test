@@ -201,7 +201,7 @@ export function Preview() {
           </div>
         )}
         {status === 'ready' && shown.length > 0 && (
-          <div className={`diag ${errors.length ? 'err' : ''}`} style={{ marginBottom: 12, borderRadius: 8, border: '1px solid' }}>
+          <div className={`diag ${errors.length ? 'err' : ''}`} style={{ marginBottom: 12, borderRadius: 'var(--r-m)', border: '1px solid' }}>
             <ul>
               {shown.slice(0, 30).map((d, i) => (
                 <li key={i}><span className={`sev ${d.severity}`}>{d.severity === 'error' ? '错误' : '警告'}</span><span className="where">{d.where}</span><span>{d.message}</span></li>
