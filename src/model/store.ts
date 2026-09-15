@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ThesisDoc, Settings, Info, RichDoc, Pages, Abbreviation, SymbolEntry, Defense, ImageAsset } from './types';
+import type { ThesisDoc, Settings, Info, RichDoc, Pages, Abbreviation, SymbolEntry, Defense, ImageAsset, NomenclatureOptions } from './types';
 import { emptyDoc } from './types';
 import { defaultSettings } from './options';
 import { defaultInfo } from './info';
@@ -26,6 +26,7 @@ export const newDoc = (): ThesisDoc => ({
   abstractEn: emptyDoc(),
   abbreviations: [],
   symbols: [],
+  nomenclatureOptions: { sort: 'auto', usedOnly: 'auto', header: 'auto', hangingIndent: '', form: 'auto' },
   body: emptyDoc(),
   conclusion: emptyDoc(),
   references: [],
@@ -44,18 +45,11 @@ export const newDoc = (): ThesisDoc => ({
   acknowledgement: emptyDoc(),
   resume: emptyDoc(),
   pages: {
-    declarations: true,
-    index: false,
-    resume: false,
-    achievements: false,
-    defense: false,
-    listOfFigures: false,
-    listOfTables: false,
-    listOfEquations: false,
-    nomenclature: true,
-    nomenclatureMerged: true,
-    appendix: true,
+    declarations: 'auto', index: 'auto', resume: 'auto', achievements: 'auto', defense: 'auto',
+    listOfFigures: 'auto', listOfTables: 'auto', listOfEquations: 'auto',
+    symbolsPage: 'auto', abbreviationsPage: 'auto', nomenclatureMerged: 'auto', appendix: 'auto',
   },
+
   images: [],
 });
 
@@ -66,6 +60,12 @@ export function normalizeDoc(raw: Partial<ThesisDoc>): ThesisDoc {
   doc.settings = { ...base.settings, ...(raw.settings ?? {}) };
   doc.info = { ...base.info, ...(raw.info ?? {}) };
   doc.pages = { ...base.pages, ...(raw.pages ?? {}) };
+  // 旧工程：一个总开关管符号表与缩略语表，拆开；关着的旧布尔照旧，开着的（原来是默认）改成 auto
+  const rp: any = raw.pages ?? {};
+  if (rp.symbolsPage === undefined && rp.nomenclature === false) { doc.pages.symbolsPage = false; doc.pages.abbreviationsPage = false; }
+  for (const k of ['declarations', 'appendix', 'symbolsPage', 'abbreviationsPage', 'nomenclatureMerged'] as (keyof Pages)[]) if (rp[k] === true) (doc.pages as any)[k] = 'auto';
+  delete (doc.pages as any).nomenclature;
+  doc.nomenclatureOptions = { ...base.nomenclatureOptions, ...(raw.nomenclatureOptions ?? {}) };
   doc.defense = { ...base.defense, ...(raw.defense ?? {}) };
   for (const k of ['abstractZh', 'abstractEn', 'body', 'conclusion', 'appendix', 'acknowledgement', 'resume'] as RichKey[]) {
     if (!doc[k] || doc[k].type !== 'doc') doc[k] = emptyDoc();
@@ -116,6 +116,7 @@ interface State {
   setAchievementEntries: (e: BibEntry[]) => void;
   setAbbreviations: (a: Abbreviation[]) => void;
   setSymbols: (s: SymbolEntry[]) => void;
+  setNomenclatureOptions: (patch: Partial<NomenclatureOptions>) => void;
   setDefense: (d: Defense) => void;
   setImages: (images: ImageAsset[]) => void;
   /** 打开工程文件：并入当前项目（保留 id） */
@@ -182,6 +183,7 @@ export const useStore = create<State>((set, get) => {
     setAchievementEntries: (achievementEntries) => update((d) => ({ ...d, achievementEntries })),
     setAbbreviations: (abbreviations) => update((d) => ({ ...d, abbreviations })),
     setSymbols: (symbols) => update((d) => ({ ...d, symbols })),
+    setNomenclatureOptions: (patch) => update((d) => ({ ...d, nomenclatureOptions: { ...d.nomenclatureOptions, ...patch } })),
     setDefense: (defense) => update((d) => ({ ...d, defense })),
     setImages: (images) => update((d) => ({ ...d, images })),
     replaceDoc: (incoming) => {

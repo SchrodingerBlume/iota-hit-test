@@ -222,42 +222,28 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .seg button:hover { background: var(--panel-2); }
 .seg button.on { background: var(--accent); color: #fff; }
 
-/* ── 三态开关 ─────────────────────────────────────
-   关 · 自动 · 开 三个停靠位；自动档时滑块居中印「A」，并向映射到的那一端
-   延伸一段淡色影子，端上的字加重——一眼看出「自动 = 开」。滑块带一点回弹。 */
-.tri { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 9px 0; border-bottom: 1px dashed var(--line); }
-.tri:last-child { border-bottom: 0; }
-.tri .tri-lab { font-weight: 600; }
-.tri .tri-note { grid-column: 1 / -1; font-size: 12px; color: var(--muted); margin-top: -2px; }
-.tri .tri-note b { color: var(--ink); font-weight: 600; }
-.tri .tri-note b.v-on { color: var(--ok); }
-.tri .tri-note b.v-off { color: var(--danger); }
-.tri-track { position: relative; display: grid; grid-template-columns: 34px 34px 34px; height: 28px; border-radius: 14px; background: var(--panel-2); border: 1px solid var(--line-2); user-select: none; transition: box-shadow var(--fast) var(--ease); }
-.tri-track:hover { box-shadow: 0 0 0 3px var(--accent-soft); }
-.tri-track .stop { position: relative; z-index: 2; border: 0; background: none; font-size: 12px; color: var(--muted); border-radius: 14px; padding: 0; transition: color var(--base) var(--ease); }
-.tri-track .stop.auto { font-family: var(--mono); font-weight: 700; font-size: 11px; }
-.tri-track .stop.is-target { font-weight: 700; }
-.tri-track .stop.on.is-target { color: var(--ok); }
-.tri-track .stop.off.is-target { color: var(--danger); }
-.tri-track .stop.auto.is-current { color: #fff; }
-.tri-track .stop.is-current { color: #fff; }
-.tri-track .ghost { position: absolute; z-index: 1; top: 2px; bottom: 2px; border-radius: 12px; background: var(--ok-soft); animation: fade var(--base) var(--ease) both; }
-.tri-track .ghost.left { background: var(--danger-soft); }
-.tri-track .ghost.right { left: 34px; right: 2px; }
-.tri-track .ghost.left { left: 2px; width: 66px; }
-.tri-track .thumb { position: absolute; z-index: 1; top: 2px; left: 2px; width: 32px; height: 22px; border-radius: 11px; background: var(--panel); box-shadow: 0 1px 3px rgba(0,0,0,0.28); transition: transform 380ms var(--ease-spring), background-color var(--base) var(--ease); }
-.tri-track[data-pos="0"] .thumb { transform: translateX(0); background: var(--danger); }
-.tri-track[data-pos="1"] .thumb { transform: translateX(34px); background: var(--orange); }
-.tri-track[data-pos="2"] .thumb { transform: translateX(68px); background: var(--ok); }
-.tri-track[data-pos="1"] .stop.auto { color: #fff; }
-.tri .tri-note .auto-tag { display: inline-block; padding: 0 5px; border-radius: 3px; background: var(--orange-soft); color: var(--orange-ink); font-family: var(--mono); font-size: 11px; font-weight: 700; margin-right: 4px; }
-.multi .seg button.auto.on { background: var(--orange); }
-.multi .seg button.on:not(.auto) { background: var(--accent); }
-
-.multi { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 9px 0; border-bottom: 1px dashed var(--line); }
-.multi .seg button.auto { display: inline-flex; gap: 4px; align-items: center; }
-.multi .seg button.auto small { opacity: 0.8; font-family: var(--mono); }
-.multi .tri-note { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
+/* ── 统一的分段控件（auto / 值） ─────────────────────
+   Auto 段橙，布尔的开绿关红，多档的选中蓝；没选中的段灰字。 */
+.triseg { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; align-items: center; padding: 9px 0; border-bottom: 1px dashed var(--line); }
+.triseg:last-child { border-bottom: 0; }
+.triseg-lab { font-weight: 600; }
+.triseg-note { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
+.triseg-note b { font-weight: 600; }
+.triseg-seg { border-radius: 999px; overflow: hidden; }
+.triseg-seg button { padding: 4px 11px; font-size: 12.5px; color: var(--muted); background: var(--panel); border: 0; transition: background-color var(--base) var(--ease), color var(--base) var(--ease); }
+.triseg-seg button + button { border-left: 1px solid var(--line); }
+.triseg-seg button:hover { background: var(--panel-2); color: var(--ink); }
+.triseg-seg button.auto { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.02em; }
+.triseg-seg button.auto b { font-family: var(--sans); font-size: 12.5px; font-weight: 700; }
+.triseg-seg button.auto .triseg-arrow { opacity: 0.6; }
+.triseg-seg button.auto.on { background: var(--orange); color: #fff; }
+.triseg-seg button.auto.on b, .triseg-seg button.auto.on .triseg-arrow { color: #fff; opacity: 1; }
+.triseg-seg button.on.t-on { background: var(--ok); color: #fff; }
+.triseg-seg button.on.t-off { background: var(--danger); color: #fff; }
+.triseg-seg button.on.t-accent { background: var(--accent); color: #fff; }
+.triseg-note b.t-on, .triseg-seg button.auto:not(.on) b.t-on { color: var(--ok); }
+.triseg-note b.t-off, .triseg-seg button.auto:not(.on) b.t-off { color: var(--danger); }
+.triseg-note b.t-accent, .triseg-seg button.auto:not(.on) b.t-accent { color: var(--accent-ink); }
 
 .toggle { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); }
 .toggle:last-child { border-bottom: 0; }
@@ -646,3 +632,12 @@ body.is-resizing .preview-doc { transition: none; }
 .layout-seg button { padding: 4px 8px; display: inline-flex; }
 .layout-seg svg { width: 15px; height: 15px; }
 .err-badge { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--danger-soft); color: var(--danger); font-weight: 600; }
+/* 标签式输入（关键词） */
+.tags { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 6px; border: 1px solid var(--line-2); border-radius: var(--radius-s); background: var(--panel); min-height: 34px; cursor: text; transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease); }
+.tags:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.tag-item { display: inline-flex; align-items: center; gap: 3px; padding: 2px 4px 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); font-size: 13px; animation: pop var(--fast) var(--ease) both; }
+.tag-item button { border: 0; background: none; padding: 1px; display: inline-flex; color: var(--accent-ink); opacity: 0.7; cursor: pointer; border-radius: 50%; }
+.tag-item button:hover { opacity: 1; background: var(--accent-soft-2); }
+.tag-item button svg { width: 12px; height: 12px; }
+.tags input { flex: 1; min-width: 120px; border: 0; background: none; padding: 3px 4px; outline: none; }
+.rich p.no-indent { text-indent: 0; }

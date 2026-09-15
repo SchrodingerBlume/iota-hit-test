@@ -1,20 +1,11 @@
 import { useStore } from '../model/store';
 import { INFO_FIELDS, INFO_GROUPS, type InfoFieldDef } from '../model/info';
 import type { Info } from '../model/types';
-
-function KeywordsInput({ value, onChange, placeholder }: { value: string[]; onChange: (v: string[]) => void; placeholder?: string }) {
-  return (
-    <input
-      value={value.join('；')}
-      placeholder={placeholder ?? '关键词一；关键词二'}
-      onChange={(e) => onChange(e.target.value.split(/[;；,，]/).map((s) => s.trim()).filter((s, i, arr) => s || i === arr.length - 1))}
-    />
-  );
-}
+import { TagInput } from './TagInput';
 
 function FieldInput({ f, info, setInfo }: { f: InfoFieldDef; info: Info; setInfo: (p: Partial<Info>) => void }) {
   const v = info[f.key];
-  if (f.kind === 'keywords') return <KeywordsInput value={v as string[]} onChange={(x) => setInfo({ [f.key]: x })} />;
+  if (f.kind === 'keywords') return <TagInput value={v as string[]} onChange={(x) => setInfo({ [f.key]: x })} placeholder={f.key === 'keywords' ? '输入一个关键词后回车' : 'keyword, then Enter'} dataInfo={f.key} />;
   if (f.kind === 'textarea') return <textarea data-info={f.key} value={v as string} placeholder={f.placeholder} rows={2} onChange={(e) => setInfo({ [f.key]: e.target.value })} />;
   if (f.kind === 'month') return <input type="month" value={v as string} onChange={(e) => setInfo({ [f.key]: e.target.value })} />;
   return <input data-info={f.key} value={v as string} placeholder={f.placeholder} onChange={(e) => setInfo({ [f.key]: e.target.value })} />;

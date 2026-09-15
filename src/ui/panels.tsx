@@ -1,6 +1,8 @@
 // 其余的节：摘要、符号与缩略语、正文类富文本、参考文献、成果、答辩、页面开关。
 import { useMemo } from 'react';
 import { useStore, type RichKey } from '../model/store';
+import { PAGE_DEFS, resolvePage } from '../model/pages';
+import { TriSeg, ON_OFF } from './TriSwitch';
 import type { Abbreviation, SymbolEntry, DefensePerson, Pages } from '../model/types';
 import { RichEditor } from '../editor/RichEditor';
 import { BibEditor } from './BibEditor';
@@ -21,6 +23,15 @@ export function RichSection({ title, lead, richKey, headings, blocks, placeholde
   );
 }
 
+/** 某一页排不排：三态，auto 照指南 */
+export function PageSwitch({ pageKey }: { pageKey: keyof Pages }) {
+  const doc = useStore((s) => s.doc);
+  const setPages = useStore((s) => s.setPages);
+  const def = PAGE_DEFS.find((d) => d.key === pageKey)!;
+  const r = resolvePage(doc, pageKey);
+  return <TriSeg label={def.label} hint={def.hint} choices={ON_OFF} value={r.isAuto ? 'auto' : r.value} auto={r.auto} onChange={(v) => setPages({ [pageKey]: v } as any)} />;
+}
+
 export function AbstractPanel() {
   const zh = useStore((s) => s.doc.abstractZh);
   const en = useStore((s) => s.doc.abstractEn);
@@ -37,49 +48,71 @@ export function AbstractPanel() {
   );
 }
 
-function ListTable<T extends object>({ rows, cols, blank, onChange }: { rows: T[]; cols: { key: keyof T & string; label: string; placeholder?: string; mono?: boolean }[]; blank: () => T; onChange: (rows: T[]) => void }) {
-  const set = (i: number, k: keyof T, v: string) => onChange(rows.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
-  return (
-    <>
-      <table className="tbl">
-        <thead><tr>{cols.map((c) => <th key={String(c.key)}>{c.label}</th>)}<th /></tr></thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={i}>
-              {cols.map((c) => <td key={String(c.key)}><input style={c.mono ? { fontFamily: 'var(--mono)' } : undefined} value={String(r[c.key] ?? '')} placeholder={c.placeholder} onChange={(e) => set(i, c.key, e.target.value)} /></td>)}
-              <td><button type="button" className="del" title="删除" onClick={() => onChange(rows.filter((_, j) => j !== i))}>✕</button></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <button type="button" className="btn btn-xs" style={{ marginTop: 6 }} onClick={() => onChange([...rows, blank()])}>＋ 添加一行</button>
-    </>
-  );
-}
-
 export function NomenclaturePanel() {
   const abbreviations = useStore((s) => s.doc.abbreviations);
   const symbols = useStore((s) => s.doc.symbols);
-  const pages = useStore((s) => s.doc.pages);
+  const opts = useStore((s) => s.doc.nomenclatureOptions);
+  const doc = useStore((s) => s.doc);
   const setAbbreviations = useStore((s) => s.setAbbreviations);
   const setSymbols = useStore((s) => s.setSymbols);
-  const setPages = useStore((s) => s.setPages);
+  const setOpts = useStore((s) => s.setNomenclatureOptions);
+  const both = resolvePage(doc, 'symbolsPage').value && resolvePage(doc, 'abbreviationsPage').value;
+  const [advanced, setAdvanced] = useState(false);
   return (
     <>
       <h2>符号与缩略语</h2>
-      <p className="lead">物理量名称及符号表（规范 2.4 点名的前置表）与缩略语表。正文里用工具栏的「Ab」插入缩写，首次出现自动展开成「有限元方法（Finite Element Method，FEM）」。</p>
+      <p className="lead">物理量名称及符号表（规范 2.4 点名的前置表，可略）与缩略语表（hithesis 加的一页）。正文里用工具栏「Ab」插入缩写，首次出现自动展开成「有限元方法（Finite Element Method，FEM）」——不排表也照常展开。</p>
       <div className="card">
-        <label className="toggle"><button type="button" className={`sw ${pages.nomenclature ? 'on' : ''}`} onClick={() => setPages({ nomenclature: !pages.nomenclature })} /> <span className="t-lab">排这一页</span><span className="t-hint">关掉则缩写照常展开，只是不印表</span></label>
-        <label className="toggle"><button type="button" className={`sw ${pages.nomenclatureMerged !== false ? 'on' : ''}`} onClick={() => setPages({ nomenclatureMerged: !(pages.nomenclatureMerged !== false) })} /> <span className="t-lab">符号与缩略语合成一页</span><span className="t-hint">开：一页「符号及缩略语」两段；关：「物理量名称及符号表」「缩略语表」各一页</span></label>
+        <h3>排不排</h3>
+        <PageSwitch pageKey="symbolsPage" />
+        <PageSwitch pageKey="abbreviationsPage" />
+        {both && <PageSwitch pageKey="nomenclatureMerged" />}
       </div>
       <div className="card">
         <h3>缩略语</h3>
-        <ListTable<Abbreviation> rows={abbreviations} onChange={setAbbreviations} blank={() => ({ key: '', long: '', longEn: '' })}
-          cols={[{ key: 'key', label: '缩写', placeholder: 'FEM', mono: true }, { key: 'long', label: '中文全称', placeholder: '有限元方法' }, { key: 'longEn', label: '英文全称', placeholder: 'Finite Element Method' }]} />
+        <table className="tbl">
+          <thead><tr><th style={{ width: 110 }}>缩写（键）</th><th>中文全称</th><th>英文全称</th>{advanced && <><th style={{ width: 100 }}>印成</th><th style={{ width: 100 }}>复数</th><th style={{ width: 60 }}>进索引</th></>}<th /></tr></thead>
+          <tbody>
+            {abbreviations.map((r, i) => {
+              const set = (patch: Partial<Abbreviation>) => setAbbreviations(abbreviations.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+              return (
+                <tr key={i}>
+                  <td><input style={{ fontFamily: 'var(--mono)' }} value={r.key} placeholder="FEM" onChange={(e) => set({ key: e.target.value.replace(/\s+/g, '') })} /></td>
+                  <td><input value={r.long} placeholder="有限元方法" onChange={(e) => set({ long: e.target.value })} /></td>
+                  <td><input value={r.longEn} placeholder="Finite Element Method" onChange={(e) => set({ longEn: e.target.value })} /></td>
+                  {advanced && <>
+                    <td><input value={r.short ?? ''} placeholder={r.key || '同键'} title="印出来的缩写；空 = 与键相同" onChange={(e) => set({ short: e.target.value })} /></td>
+                    <td><input value={r.plural ?? ''} placeholder={(r.short || r.key) ? `${r.short || r.key}s` : '缩写+s'} title="复数形式；空 = 缩写加 s" onChange={(e) => set({ plural: e.target.value })} /></td>
+                    <td style={{ textAlign: 'center' }}><select value={r.indexed === undefined ? '' : r.indexed ? 'yes' : 'no'} onChange={(e) => set({ indexed: e.target.value === '' ? undefined : e.target.value === 'yes' })} title="这一条要不要登记进索引；空 = 跟「论文设置」里的开关"><option value="">跟设置</option><option value="yes">是</option><option value="no">否</option></select></td>
+                  </>}
+                  <td><button type="button" className="del" title="删除" onClick={() => setAbbreviations(abbreviations.filter((_, j) => j !== i))}>✕</button></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div className="row" style={{ marginTop: 6 }}>
+          <button type="button" className="btn btn-xs" onClick={() => setAbbreviations([...abbreviations, { key: '', long: '', longEn: '' }])}>＋ 添加一行</button>
+          <button type="button" className="btn btn-xs btn-ghost" onClick={() => setAdvanced((a) => !a)}>{advanced ? '收起' : '更多字段'}（印成什么、复数、进索引）</button>
+        </div>
       </div>
       <div className="card">
         <h3>物理量符号</h3>
         <SymbolTable rows={symbols} onChange={setSymbols} />
+      </div>
+      <div className="card">
+        <h3>表的排法</h3>
+        <TriSeg label="缩略语的次序" hint="hithesis 按缩写字母序；也可以照你登记的顺序" choices={[{ value: 'alpha', label: '字母序' }, { value: 'declared', label: '照登记顺序' }]} value={opts.sort ?? 'auto'} auto={{ value: 'alpha', reason: 'hithesis 按缩写字母序（不分大小写）' }} onChange={(v) => setOpts({ sort: v as any })} />
+        <TriSeg label="缩略语列哪些" hint="只列正文里用过的，还是登记的全列" choices={[{ value: 'used', label: '只列用过的' }, { value: 'all', label: '全列' }]} value={opts.usedOnly ?? 'auto'} auto={{ value: 'used', reason: '只列正文里用过的（hithesis 同）' }} onChange={(v) => setOpts({ usedOnly: v as any })} />
+        <TriSeg label="列头" hint="「符号 / 说明」「缩写 / 全称」那一行" choices={ON_OFF} value={opts.header === 'auto' ? 'auto' : opts.header === 'on'} auto={{ value: false, reason: '跟模板：hithesis 与 thuthesis 都不印列头' }} onChange={(v) => setOpts({ header: v === 'auto' ? 'auto' : v ? 'on' : 'off' })} />
+        <div className="triseg">
+          <div className="triseg-lab" title="说明列从左边多远起，两张表共用；留空按内容自动">说明列起点</div>
+          <span className="row"><input className="input" style={{ width: 90 }} type="number" min={1} max={8} step={0.1} value={opts.hangingIndent} placeholder="自动" onChange={(e) => setOpts({ hangingIndent: e.target.value })} /><span className="muted">cm</span></span>
+          <div className="triseg-note">{opts.hangingIndent ? `说明列从 ${opts.hangingIndent} cm 起` : '自动 → 按最宽的符号 / 缩写定（hithesis 的 labelwidth）'}</div>
+        </div>
+        {both && (
+          <TriSeg label="合并页的小标题" hint="一页两段时，「符号」「缩略语」两个小标题照哪一页的样子" choices={[{ value: 'achievements', label: '照成果页' }, { value: 'declarations', label: '照声明页' }, { value: 'no-subheadings', label: '不印' }]} value={opts.form === 'auto' ? 'auto' : opts.form} auto={{ value: 'achievements', reason: '宋体小四加粗顶格（成果页的组名样式）' }} onChange={(v) => setOpts({ form: v as any })} />
+        )}
       </div>
     </>
   );
@@ -101,10 +134,8 @@ export function BibPanel({ which }: { which: 'bibliography' | 'achievements' }) 
   const achievementEntries = useStore((s) => s.doc.achievementEntries);
   const body = useStore((s) => s.doc.body);
   const appendix = useStore((s) => s.doc.appendix);
-  const pages = useStore((s) => s.doc.pages);
   const setReferences = useStore((s) => s.setReferences);
   const setAchievementEntries = useStore((s) => s.setAchievementEntries);
-  const setPages = useStore((s) => s.setPages);
   const isBib = which === 'bibliography';
   const cited = useMemo(() => collectCited([body, appendix]), [body, appendix]);
   return (
@@ -115,11 +146,7 @@ export function BibPanel({ which }: { which: 'bibliography' | 'achievements' }) 
           ? '像 Zotero 那样逐条填；条目由 omni-gb7714 按 GB/T 7714—2025 排，正文里用工具栏「引用」插入。也能导入 / 导出 .bib，或直接改源码。'
           : '本人的论文、专利、项目与获奖，按类型分三组排；收录情况、影响因子、对应章节写在「附注」里。也能导入 / 导出 .bib。'}
       </p>
-      {!isBib && (
-        <div className="card">
-          <label className="toggle"><button type="button" className={`sw ${pages.achievements ? 'on' : ''}`} onClick={() => setPages({ achievements: !pages.achievements })} /> <span className="t-lab">排这一页</span><span className="t-hint">研究生终稿才有；本科没有这一项</span></label>
-        </div>
-      )}
+      {!isBib && <div className="card"><PageSwitch pageKey="achievements" /></div>}
       {isBib
         ? <BibEditor mode="references" entries={references} onChange={setReferences} citedKeys={cited} fileName="refs.bib" />
         : <BibEditor mode="achievements" entries={achievementEntries} onChange={setAchievementEntries} fileName="achievements.bib" />}
@@ -140,17 +167,14 @@ function PersonRow({ p, onChange }: { p: DefensePerson; onChange: (p: DefensePer
 
 export function DefensePanel() {
   const defense = useStore((s) => s.doc.defense);
-  const pages = useStore((s) => s.doc.pages);
-  const { setDefense, setPages } = useStore();
+  const { setDefense } = useStore();
   const setList = (k: 'reviewers' | 'members', i: number, p: DefensePerson) => setDefense({ ...defense, [k]: defense[k].map((x, j) => (j === i ? p : x)) });
   const blank = { name: '', title: '', affiliation: '', discipline: '' };
   return (
     <>
       <h2>评阅人、答辩委员会与决议</h2>
       <p className="lead">新版研究生范例加的一页，博士有；一人一条记录，留空的行不排。</p>
-      <div className="card">
-        <label className="toggle"><button type="button" className={`sw ${pages.defense ? 'on' : ''}`} onClick={() => setPages({ defense: !pages.defense })} /> <span className="t-lab">排这一页</span></label>
-      </div>
+      <div className="card"><PageSwitch pageKey="defense" /></div>
       <div className="card">
         <h3>评阅人</h3>
         {defense.reviewers.map((p, i) => <PersonRow key={i} p={p} onChange={(x) => setList('reviewers', i, x)} />)}
@@ -171,33 +195,13 @@ export function DefensePanel() {
   );
 }
 
-const PAGE_DEFS: { key: keyof Pages; label: string; hint: string }[] = [
-  { key: 'declarations', label: '原创性声明与使用权限', hint: '终稿必有；报告档自动跳过' },
-  { key: 'listOfFigures', label: '插图索引', hint: '规范里没有这一项，博士范例中英两份' },
-  { key: 'listOfTables', label: '表格索引', hint: '' },
-  { key: 'listOfEquations', label: '公式索引', hint: '' },
-  { key: 'appendix', label: '附录', hint: '「附录」一节里写了内容才排' },
-  { key: 'achievements', label: '攻读学位期间取得的成果', hint: '' },
-  { key: 'defense', label: '评阅人、答辩委员会与决议', hint: '' },
-  { key: 'index', label: '索引', hint: '规范 2.18 说可选；用工具栏「索」把词登记进去，一个都没标会是空页' },
-  { key: 'resume', label: '个人简历', hint: '除全日制硕士生外均增列，排最末' },
-];
-
 export function PagesPanel() {
-  const pages = useStore((s) => s.doc.pages);
-  const setPages = useStore((s) => s.setPages);
   return (
     <>
       <h2>页面开关</h2>
-      <p className="lead">封面、内封、摘要、目录、正文、结论、参考文献、致谢总是有；这里是可选的那几页。终稿专有的页在开题、中期档里由模板静默跳过。</p>
+      <p className="lead">封面、内封、摘要、目录、正文、结论、参考文献、致谢总是有；这里是可选的那几页。自动档照两份指南与范例的说法：谁有这一页、谁没有，或者有没有内容。终稿专有的页在开题、中期档里由模板静默跳过。</p>
       <div className="card">
-        {PAGE_DEFS.map((d) => (
-          <label className="toggle" key={d.key}>
-            <button type="button" className={`sw ${pages[d.key] ? 'on' : ''}`} onClick={() => setPages({ [d.key]: !pages[d.key] })} />
-            <span className="t-lab">{d.label}</span>
-            <span className="t-hint">{d.hint}</span>
-          </label>
-        ))}
+        {PAGE_DEFS.map((d) => <PageSwitch key={d.key} pageKey={d.key} />)}
       </div>
     </>
   );
@@ -218,7 +222,7 @@ function SymbolTable({ rows, onChange }: { rows: SymbolEntry[]; onChange: (r: Sy
               <td>
                 <span className="row" style={{ flexWrap: 'nowrap' }}>
                   <input style={{ fontFamily: 'var(--mono)' }} value={r.symbol} placeholder={r.mode === 'latex' ? '\\eta' : 'eta'} onChange={(e) => set(i, { symbol: e.target.value })} />
-                  <span className="seg" title="写法">
+                  <span className="seg" title="写法" style={{ flex: 'none' }}>
                     <button type="button" className={r.mode === 'latex' ? 'on' : ''} onClick={() => set(i, { mode: 'latex' })}>L</button>
                     <button type="button" className={r.mode !== 'latex' ? 'on' : ''} onClick={() => set(i, { mode: 'typst' })}>T</button>
                   </span>

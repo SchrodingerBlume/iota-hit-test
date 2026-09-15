@@ -206,8 +206,10 @@ function serializeList(node: PMNode, marker: '-' | '+', opts: SerializeOptions, 
 export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): string {
   switch (n.type) {
     case 'paragraph': {
-      const s = serializeInline(n.content, opts);
-      return escapeLineStart(s);
+      const s = escapeLineStart(serializeInline(n.content, opts));
+      // 不缩进的续段：模板全篇 first-line-indent 两字，这一段单独归零
+      if (n.attrs?.noIndent && s.trim()) return `#par(first-line-indent: 0pt)[${s}]`;
+      return s;
     }
     case 'heading': {
       if (opts.headings === false) {

@@ -23,7 +23,7 @@ export const INFO_FIELDS: InfoFieldDef[] = [
   { key: 'titleEn', label: '英文题目', param: 'title-en', kind: 'textarea', group: '题目', placeholder: 'RESEARCH ON KEY TECHNOLOGIES OF …' },
   { key: 'subtitle', label: '中文副题目', param: 'subtitle', kind: 'text', group: '题目', hint: '题目内容层次很多、难以简化时才有；留空不排', applies: final },
   { key: 'subtitleEn', label: '英文副题目', param: 'subtitle-en', kind: 'text', group: '题目', applies: final },
-  { key: 'keywords', label: '中文关键词', param: 'keywords', kind: 'keywords', group: '题目', hint: '回车或分号分隔', applies: final },
+  { key: 'keywords', label: '中文关键词', param: 'keywords', kind: 'keywords', group: '题目', hint: '一个一个加，回车确认；摘要页按模板的写法排', applies: final },
   { key: 'keywordsEn', label: '英文关键词', param: 'keywords-en', kind: 'keywords', group: '题目', applies: final },
 
   { key: 'author', label: '作者', param: 'author', kind: 'text', group: '作者与导师' },

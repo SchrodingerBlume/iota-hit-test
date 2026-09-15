@@ -88,9 +88,30 @@ export interface Info {
 }
 
 export interface Abbreviation {
+  /** 正文里 @key 用的键 */
   key: string;
   long: string;
   longEn: string;
+  /** 印出来的缩写；空 = 与 key 相同 */
+  short?: string;
+  /** 复数形式；空 = short + s */
+  plural?: string;
+  /** 这一条要不要登记进索引（覆盖文档级开关） */
+  indexed?: boolean;
+}
+
+/** 符号表 / 缩略语表的排法（iota-hit 的 list-of-symbols / list-of-abbreviations / nomenclature 参数） */
+export interface NomenclatureOptions {
+  /** 缩略语按字母序（auto）还是照声明顺序 */
+  sort: 'auto' | 'alpha' | 'declared';
+  /** 只列正文用过的（auto）还是全列 */
+  usedOnly: 'auto' | 'used' | 'all';
+  /** 印不印列头：auto = 跟模板（不印） */
+  header: 'auto' | 'on' | 'off';
+  /** 说明列从哪里起（cm）；空 = 按内容自动 */
+  hangingIndent: string;
+  /** 合并页的形态：小标题照成果页 / 照声明页 / 不印小标题 */
+  form: 'auto' | 'achievements' | 'declarations' | 'no-subheadings';
 }
 
 export interface SymbolEntry {
@@ -117,19 +138,21 @@ export interface Defense {
 }
 
 export interface Pages {
-  /** 可选页面的开关。终稿专有的页在报告档里模板自己会跳过 */
-  declarations: boolean;
-  index: boolean;
-  resume: boolean;
-  achievements: boolean;
-  defense: boolean;
-  listOfFigures: boolean;
-  listOfTables: boolean;
-  listOfEquations: boolean;
-  nomenclature: boolean;
-  /** 符号表与缩略语表合成一页（#nomenclature），还是各印一页 */
-  nomenclatureMerged: boolean;
-  appendix: boolean;
+  /** 可选页面排不排：auto 照指南与范例（见 src/model/pages.ts）；终稿专有的页在报告档里模板自己会跳过 */
+  declarations: Tri<boolean>;
+  index: Tri<boolean>;
+  resume: Tri<boolean>;
+  achievements: Tri<boolean>;
+  defense: Tri<boolean>;
+  listOfFigures: Tri<boolean>;
+  listOfTables: Tri<boolean>;
+  listOfEquations: Tri<boolean>;
+  /** 旧字段（v3 前的总开关），读入时拆成 symbolsPage / abbreviationsPage */
+  nomenclature?: boolean;
+  symbolsPage: Tri<boolean>;
+  abbreviationsPage: Tri<boolean>;
+  nomenclatureMerged: Tri<boolean>;
+  appendix: Tri<boolean>;
 }
 
 export interface ImageAsset {
@@ -153,6 +176,7 @@ export interface ThesisDoc {
   abstractEn: RichDoc;
   abbreviations: Abbreviation[];
   symbols: SymbolEntry[];
+  nomenclatureOptions: NomenclatureOptions;
   body: RichDoc;
   conclusion: RichDoc;
   /** 参考文献：结构化条目是真身，编译时生成 BibTeX */

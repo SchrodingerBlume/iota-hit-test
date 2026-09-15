@@ -4,6 +4,7 @@ import type { ThesisDoc, Settings, Info } from '../model/types';
 import { INFO_FIELDS } from '../model/info';
 import { serializeDoc, escapeText, collectImages, collectRefTargets } from './pmToTypst';
 import { generateBibtex } from '../bib/bibtex';
+import { resolvePage } from '../model/pages';
 
 export const IOTA_HIT_VERSION = '0.1.0';
 
@@ -97,15 +98,19 @@ function infoArgs(info: Info, s: Settings): string[] {
 function nomenclature(doc: ThesisDoc): string {
   const abbrs = doc.abbreviations.filter((a) => a.key.trim());
   const symbols = doc.symbols.filter((s) => s.symbol.trim());
+  const o = doc.nomenclatureOptions ?? { sort: 'auto', usedOnly: 'auto', header: 'auto', hangingIndent: '', form: 'auto' };
   if (!abbrs.length && !symbols.length) return '';
+  const q = (v: string) => JSON.stringify(v.trim());
   const abbrDict = abbrs.length
-    ? `(${abbrs.map((a) => `${JSON.stringify(a.key.trim())}: (long: ${JSON.stringify(a.long.trim())}${a.longEn.trim() ? `, long-en: ${JSON.stringify(a.longEn.trim())}` : ''})`).join(', ')},)`
+    ? `(${abbrs.map((a) => {
+        const parts = [`long: ${q(a.long)}`];
+        if (a.longEn?.trim()) parts.push(`long-en: ${q(a.longEn)}`);
+        if (a.short?.trim()) parts.push(`short: ${q(a.short)}`);
+        if (a.plural?.trim()) parts.push(`plural: ${q(a.plural)}`);
+        if (a.indexed !== undefined) parts.push(`indexed: ${a.indexed}`);
+        return `${q(a.key)}: (${parts.join(', ')})`;
+      }).join(', ')},)`
     : '(:)';
-  // 报告档里这一页被模板跳过、或用户关了这一页：只声明条目不印表（form: none），
-  // 正文里的缩写照常首次展开
-  if (!doc.pages.nomenclature || doc.settings.stage !== 'final') {
-    return abbrs.length ? `#list-of-abbreviations(${abbrDict}, form: none, shown: true)` : '';
-  }
   // 符号：Typst 数学直接 $…$，LaTeX 走 mitex 的 #mi
   const term = (s: { symbol: string; mode?: string }) => {
     const src = s.symbol.trim();
@@ -113,15 +118,34 @@ function nomenclature(doc: ThesisDoc): string {
     return `$${src}$`;
   };
   const symbolLines = symbols.map((s) => `  / ${term(s)}: ${escapeText(s.meaning.trim())}`).join('\n');
-  if (!symbols.length) return `#list-of-abbreviations(${abbrDict})`;
-  if (!abbrs.length) return `#list-of-symbols[\n${symbolLines}\n]`;
-  // 合并页与两张单页互斥：模板两个都写会报错
-  if (doc.pages.nomenclatureMerged !== false) return `#nomenclature(\n  abbreviations: ${abbrDict},\n)[\n${symbolLines}\n]`;
-  return `#list-of-symbols[\n${symbolLines}\n]\n\n#list-of-abbreviations(${abbrDict})`;
+  // 版式参数：两张表共用的
+  const shared: string[] = [];
+  if (o.header !== 'auto') shared.push(`header: ${o.header === 'on'}`);
+  if (o.hangingIndent && Number(o.hangingIndent) > 0) shared.push(`hanging-indent: ${Number(o.hangingIndent)}cm`);
+  const abbrOpts = [...shared];
+  if (o.sort === 'declared') abbrOpts.push('sort: false');
+  if (o.usedOnly === 'all') abbrOpts.push('used-only: false');
+  const withOpts = (base: string[]) => (base.length ? ', ' + base.join(', ') : '');
+
+  const inFinal = doc.settings.stage === 'final';
+  const wantSymbols = inFinal && resolvePage(doc, 'symbolsPage').value && symbols.length > 0;
+  const wantAbbrs = inFinal && resolvePage(doc, 'abbreviationsPage').value && abbrs.length > 0;
+  const parts: string[] = [];
+  if (wantSymbols && wantAbbrs && resolvePage(doc, 'nomenclatureMerged').value) {
+    // 合并页：一页两段。与两张单页互斥，模板两个都写会报错
+    const opts = [...abbrOpts];
+    if (o.form !== 'auto') opts.push(`form: ${JSON.stringify(o.form)}`);
+    return `#nomenclature(\n  abbreviations: ${abbrDict}${withOpts(opts)},\n)[\n${symbolLines}\n]`;
+  }
+  if (wantSymbols) parts.push(`#list-of-symbols(${shared.join(', ')})[\n${symbolLines}\n]`);
+  if (wantAbbrs) parts.push(`#list-of-abbreviations(${abbrDict}${withOpts(abbrOpts)})`);
+  // 不印缩略语表（关了、或报告档里模板本来就跳过）：只声明条目，正文里的缩写照常首次展开
+  else if (abbrs.length) parts.push(`#list-of-abbreviations(${abbrDict}, form: none, shown: true)`);
+  return parts.join('\n\n');
 }
 
 function defense(doc: ThesisDoc, knownLabels: Set<string>): string {
-  if (!doc.pages.defense) return '';
+  if (!resolvePage(doc, 'defense').value) return '';
   const d = doc.defense;
   const person = (p: { name: string; title: string; affiliation: string; discipline: string }) =>
     `(name: ${content(p.name)}, title: ${content(p.title)}, affiliation: ${content(p.affiliation)}, discipline: ${content(p.discipline)})`;
@@ -169,9 +193,9 @@ export function serializeProject(doc: ThesisDoc): Project {
   if (nomen) parts.push(nomen);
 
   parts.push('#table-of-contents()');
-  if (doc.pages.listOfFigures) parts.push('#list-of-figures()');
-  if (doc.pages.listOfTables) parts.push('#list-of-tables()');
-  if (doc.pages.listOfEquations) parts.push('#list-of-equations()');
+  if (resolvePage(doc, 'listOfFigures').value) parts.push('#list-of-figures()');
+  if (resolvePage(doc, 'listOfTables').value) parts.push('#list-of-tables()');
+  if (resolvePage(doc, 'listOfEquations').value) parts.push('#list-of-equations()');
 
   // ── 主体 ──
   parts.push('#show: mainmatter');
@@ -189,12 +213,12 @@ export function serializeProject(doc: ThesisDoc): Project {
   }
 
   const appendix = serializeDoc(doc.appendix, { headings: true, headingBase: 1, knownLabels });
-  if (doc.pages.appendix && appendix.trim()) {
+  if (resolvePage(doc, 'appendix').value && appendix.trim()) {
     parts.push(`#appendix[\n${indent(appendix, 2)}\n]`);
   }
 
   const ach = generateBibtex(doc.achievementEntries ?? []);
-  if (doc.pages.achievements && ach.trim()) {
+  if (resolvePage(doc, 'achievements').value && ach.trim()) {
     files['achievements.bib'] = ach;
     parts.push('#achievements(read("achievements.bib"))');
   }
@@ -202,14 +226,14 @@ export function serializeProject(doc: ThesisDoc): Project {
   const def = defense(doc, knownLabels);
   if (def) parts.push(def);
 
-  if (doc.pages.declarations) parts.push('#declarations()');
-  if (doc.pages.index) parts.push('#index()');
+  if (resolvePage(doc, 'declarations').value) parts.push('#declarations()');
+  if (resolvePage(doc, 'index').value) parts.push('#index()');
 
   const ack = serializeDoc(doc.acknowledgement, { headings: false, knownLabels });
   if (ack.trim()) parts.push(`#acknowledgement[\n${indent(ack, 2)}\n]`);
 
   const resume = serializeDoc(doc.resume, { headings: false, knownLabels });
-  if (doc.pages.resume && resume.trim()) parts.push(`#resume[\n${indent(resume, 2)}\n]`);
+  if (resolvePage(doc, 'resume').value && resume.trim()) parts.push(`#resume[\n${indent(resume, 2)}\n]`);
 
   const images = new Set<string>();
   for (const d of [doc.body, doc.appendix, doc.conclusion, doc.abstractZh, doc.abstractEn, doc.acknowledgement, doc.resume]) {

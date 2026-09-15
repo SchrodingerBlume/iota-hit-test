@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
+import Paragraph from '@tiptap/extension-paragraph';
 import Superscript from '@tiptap/extension-superscript';
 import Subscript from '@tiptap/extension-subscript';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -18,7 +19,17 @@ import { Figure, TableFigure, Equation, PageBreak } from './extensions/blocks';
 import { useEditorEnv, NumberingContext } from './env';
 import { computeNumbering, type Part } from '../typst/numbering';
 import { useStore, type RichKey } from '../model/store';
-import { Rows2, AArrowDown, AArrowUp, Grid3x3, Undo2, Redo2, Pilcrow, Heading1, Heading2, Heading3, Heading4, Bold, Italic, Underline, Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Code, List, ListOrdered, CodeXml, Sigma, SquareFunction, BookMarked, Link2, MessageSquareQuote, BookmarkPlus, Space, Image, Table, SeparatorHorizontal, BetweenHorizontalStart, BetweenHorizontalEnd, BetweenVerticalStart, BetweenVerticalEnd, Rows3, Columns3, Minus, TableCellsMerge, PanelTop, Plus, ChevronDown } from 'lucide-react';
+import { IndentDecrease, Rows2, AArrowDown, AArrowUp, Grid3x3, Undo2, Redo2, Pilcrow, Heading1, Heading2, Heading3, Heading4, Bold, Italic, Underline, Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Code, List, ListOrdered, CodeXml, Sigma, SquareFunction, BookMarked, Link2, MessageSquareQuote, BookmarkPlus, Space, Image, Table, SeparatorHorizontal, BetweenHorizontalStart, BetweenHorizontalEnd, BetweenVerticalStart, BetweenVerticalEnd, Rows3, Columns3, Minus, TableCellsMerge, PanelTop, Plus, ChevronDown } from 'lucide-react';
+
+/** 段落多一个「不缩进」属性：接在公式、列表后面的续段，模板里就是 first-line-indent: 0pt */
+const NoIndentParagraph = Paragraph.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      noIndent: { default: false, parseHTML: (el) => el.getAttribute('data-noindent') === 'true', renderHTML: (a) => (a.noIndent ? { 'data-noindent': 'true', class: 'no-indent' } : {}) },
+    };
+  },
+});
 
 export interface RichEditorProps {
   value: RichDoc;
@@ -47,7 +58,8 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ heading: false, link: false, codeBlock: { defaultLanguage: 'python' } }),
+      StarterKit.configure({ heading: false, link: false, paragraph: false, codeBlock: { defaultLanguage: 'python' } }),
+      NoIndentParagraph,
       ...(headings ? [HeadingEn] : []),
       Superscript, Subscript,
       Placeholder.configure({ placeholder: placeholder ?? '在这里写……' }),
@@ -211,6 +223,7 @@ function Toolbar({ editor, headings, blocks }: { editor: Editor; headings: boole
         <B title="上标" on={editor.isActive('superscript')} run={() => editor.chain().focus().toggleSuperscript().run()}><SuperscriptIcon /></B>
         <B title="下标" on={editor.isActive('subscript')} run={() => editor.chain().focus().toggleSubscript().run()}><SubscriptIcon /></B>
         <B title="等宽代码" on={editor.isActive('code')} run={() => editor.chain().focus().toggleCode().run()}><Code /></B>
+        <B title="这一段不首行缩进（接在公式、列表后面的续段）" on={editor.isActive('paragraph', { noIndent: true })} run={() => editor.chain().focus().updateAttributes('paragraph', { noIndent: !editor.getAttributes('paragraph').noIndent }).run()}><IndentDecrease /></B>
         <Sep />
         <B title="无序列表" on={editor.isActive('bulletList')} run={() => editor.chain().focus().toggleBulletList().run()}><List /></B>
         <B title="编号列表" on={editor.isActive('orderedList')} run={() => editor.chain().focus().toggleOrderedList().run()}><ListOrdered /></B>

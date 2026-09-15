@@ -33,10 +33,11 @@ export function useLayoutPrefs() {
     window.addEventListener('pointerup', up);
   }, [prefs.navOpen]);
 
-  const nav = prefs.navOpen ? `${NAV_W}px` : '0px';
+  // 左栏收起时它是 display:none，网格里没有这个孩子，列表里也不能给它留位
+  const nav = prefs.navOpen ? `${NAV_W}px ` : '';
   const gridColumns = prefs.mode === 'split'
-    ? `${nav} minmax(360px, ${prefs.ratio}fr) ${SPLIT_W}px minmax(320px, ${1 - prefs.ratio}fr)`
-    : `${nav} minmax(0, 1fr)`;
+    ? `${nav}minmax(360px, ${prefs.ratio}fr) ${SPLIT_W}px minmax(320px, ${1 - prefs.ratio}fr)`
+    : `${nav}minmax(0, 1fr)`;
 
   return {
     navOpen: prefs.navOpen, setNavOpen: (v: boolean) => setPrefs((p) => ({ ...p, navOpen: v })),
