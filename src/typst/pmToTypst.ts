@@ -218,6 +218,8 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
       const zh = serializeInline(n.content, opts).trim();
       const en = escapeText(String(n.attrs?.en ?? '').trim());
       const label = labelOf(n.attrs, 'sec');
+      // 不编号的标题：走函数形式关掉 numbering（模板认 numbering: none）
+      if (n.attrs?.numbered === false) return `#heading(level: ${level}, numbering: none)[${zh}${en ? `#en[${en}]` : ''}]${label ? ` <${label}>` : ''}`;
       return `${'='.repeat(level)} ${zh}${en ? `#en[${en}]` : ''}${label ? ` <${label}>` : ''}`;
     }
     case 'figure': {
@@ -262,8 +264,21 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
   }
 }
 
+const isEmptyParagraph = (n: PMNode) => n.type === 'paragraph' && !(n.content ?? []).some((c) => c.type !== 'text' || (c.text ?? '').trim() !== '');
+
 export function serializeBlocks(nodes: PMNode[] = [], opts: SerializeOptions = {}, depth = 0): string {
-  return nodes.map((n) => serializeBlock(n, opts, depth)).filter((s) => s.trim().length > 0).join('\n\n');
+  // 连着的空段落 = 用户敲的空回车，合成模板的 #enter(n)（真占一行的空段，Word 的写法）
+  // 首尾的空段落是编辑器自带的（空文档、末尾那个光标位），不算；夹在内容中间的才算
+  const out: string[] = [];
+  let blank = 0;
+  for (const n of nodes) {
+    if (isEmptyParagraph(n)) { if (out.length) blank++; continue; }
+    const s = serializeBlock(n, opts, depth);
+    if (!s.trim()) continue;
+    if (blank > 0) { out.push(`#enter(${blank})`); blank = 0; }
+    out.push(s);
+  }
+  return out.join('\n\n');
 }
 
 export function serializeDoc(doc: PMNode | undefined | null, opts: SerializeOptions = {}): string {

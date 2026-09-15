@@ -4,6 +4,7 @@ import Heading from '@tiptap/extension-heading';
 import { ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent, type NodeViewProps } from '@tiptap/react';
 import { useNumbering } from '../env';
 import { labelOf } from '../../typst/pmToTypst';
+import { Hash } from 'lucide-react';
 
 const LEVEL_NAME = ['章', '节', '条', '款'];
 
@@ -12,11 +13,13 @@ function HeadingView({ node, updateAttributes, editor }: NodeViewProps) {
   const editable = editor.isEditable;
   const num = useNumbering().get(labelOf(node.attrs as any, 'sec'))?.number;
   const en = String(node.attrs.en ?? '');
+  const numbered = node.attrs.numbered !== false;
   return (
-    <NodeViewWrapper className={`hd hd-${level} ${en ? 'has-en' : ''}`} data-level={level}>
+    <NodeViewWrapper className={`hd hd-${level} ${en ? 'has-en' : ''} ${numbered ? '' : 'is-unnumbered'}`} data-level={level}>
       <div className="hd-row">
-        <span className="hd-num" contentEditable={false} title={`${LEVEL_NAME[level - 1] ?? ''}标题（${level} 级）· 编号按模板规则算，预览为准`}>{num ?? ''}</span>
+        {numbered && <span className="hd-num" contentEditable={false} title={`${LEVEL_NAME[level - 1] ?? ''}标题（${level} 级）· 编号按模板规则算，预览为准`}>{num ?? ''}</span>}
         <NodeViewContent className="hd-zh" />
+        <button type="button" className={`hd-toggle ${numbered ? '' : 'on'}`} contentEditable={false} disabled={!editable} title={numbered ? '这条标题不编号（如「引言」「结束语」这类）' : '恢复编号'} onMouseDown={(e) => e.preventDefault()} onClick={() => updateAttributes({ numbered: !numbered })}><Hash /></button>
       </div>
       <div className="hd-en" contentEditable={false}>
         <input
@@ -38,6 +41,7 @@ export const HeadingEn = Heading.extend({
       en: { default: '', parseHTML: (el) => el.getAttribute('data-en') ?? '', renderHTML: (a) => ({ 'data-en': a.en }) },
       uid: { default: null, parseHTML: (el) => el.getAttribute('data-uid'), renderHTML: (a) => ({ 'data-uid': a.uid }) },
       label: { default: '', parseHTML: (el) => el.getAttribute('data-label') ?? '', renderHTML: (a) => ({ 'data-label': a.label }) },
+      numbered: { default: true, parseHTML: (el) => el.getAttribute('data-numbered') !== 'false', renderHTML: (a) => ({ 'data-numbered': String(a.numbered) }) },
     };
   },
   addNodeView() {

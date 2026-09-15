@@ -103,7 +103,10 @@ export function parseBibtex(src: string): BibEntry[] {
       skipWs();
       if (src[i] === ',') i++;
     }
-    out.push({ id: newEntryId(), key: key.trim(), type, fields });
+    // JabRef 惯例：groups = {分组名} 记分组；读进来当我们的分组，不留在字段里
+    const grp = fields.groups?.split(/[;,]/)[0]?.trim();
+    delete fields.groups;
+    out.push({ id: newEntryId(), key: key.trim(), type, fields, ...(grp ? { group: grp } : {}) });
   }
   return out;
 }
@@ -115,13 +118,18 @@ function escapeValue(v: string): string {
   return depth > 0 ? v + '}'.repeat(depth) : v;
 }
 
-export function generateBibtex(entries: BibEntry[]): string {
+/**
+ * 生成 BibTeX。withGroups：把分组写成 JabRef 惯例的 groups = {…} 字段（导出用）；
+ * 交给编译器的那份不写，免得排版包不认这个字段。
+ */
+export function generateBibtex(entries: BibEntry[], opts: { withGroups?: boolean } = {}): string {
   return entries
     .filter((e) => e.key.trim())
     .map((e) => {
       const lines = Object.entries(e.fields)
-        .filter(([, v]) => v != null && String(v).trim() !== '')
+        .filter(([k, v]) => k !== 'groups' && v != null && String(v).trim() !== '')
         .map(([k, v]) => `  ${k} = {${escapeValue(String(v).trim())}},`);
+      if (opts.withGroups && e.group?.trim()) lines.push(`  groups = {${escapeValue(e.group.trim())}},`);
       return `@${e.type || 'misc'}{${e.key.trim()},\n${lines.join('\n')}\n}`;
     })
     .join('\n\n') + (entries.length ? '\n' : '');

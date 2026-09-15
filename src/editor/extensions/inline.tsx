@@ -92,6 +92,45 @@ export const Cite = inlineAtom('cite', { keys: { default: '' } }, CiteView);
 
 // ── 交叉引用 ────────────────────────────────────────────────────
 const KIND_NAME: Record<string, string> = { fig: '图', tab: '表', eq: '式', sec: '节' };
+const KIND_GROUP: Record<string, string> = { fig: '图', tab: '表', eq: '公式', sec: '章节' };
+const KIND_ORDER = ['fig', 'tab', 'eq', 'sec'];
+
+/** 交叉引用选择器：按图 / 表 / 公式 / 章节分组，可搜索 */
+function RefPicker({ env, target, onPick }: { env: ReturnType<typeof useEditorEnv>; target: string; onPick: (label: string) => void }) {
+  const [q, setQ] = useState('');
+  const [kind, setKind] = useState<string>('');
+  const needle = q.trim().toLowerCase();
+  const items = env.refTargets.filter((r) => (!kind || r.kind === kind) && (!needle || `${r.ref ?? ''} ${r.title} ${r.label}`.toLowerCase().includes(needle)));
+  const kinds = KIND_ORDER.filter((k) => env.refTargets.some((r) => r.kind === k));
+  return (
+    <>
+      <div className="row" style={{ marginBottom: 6, gap: 6 }}>
+        <input autoFocus value={q} placeholder="搜索编号、题注、标题…" className="input" style={{ flex: 1 }} onChange={(e) => setQ(e.target.value)} />
+      </div>
+      <div className="row" style={{ marginBottom: 6, gap: 4 }}>
+        <button type="button" className={`bib-group-chip ${kind === '' ? 'on' : ''}`} onClick={() => setKind('')}>全部</button>
+        {kinds.map((k) => <button key={k} type="button" className={`bib-group-chip ${kind === k ? 'on' : ''}`} onClick={() => setKind(k)}>{KIND_GROUP[k]} <span className="muted">{env.refTargets.filter((r) => r.kind === k).length}</span></button>)}
+      </div>
+      <ul className="pick-list">
+        {KIND_ORDER.filter((k) => items.some((r) => r.kind === k)).map((k) => (
+          <li key={k} className="pick-group">
+            {!kind && <div className="pick-group-head">{KIND_GROUP[k]}</div>}
+            <ul>
+              {items.filter((r) => r.kind === k).map((r) => (
+                <li key={r.label} className={r.label === target ? 'on' : ''}>
+                  <button type="button" onClick={() => onPick(r.label)}>
+                    <b>{r.ref ?? `${KIND_NAME[r.kind]} ${r.index}`}</b> <span className="muted">{r.title || r.label}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+        {!items.length && <li className="muted">{env.refTargets.length ? '没有匹配的' : '文档里还没有图、表、公式或标题'}</li>}
+      </ul>
+    </>
+  );
+}
 function RefView({ node, updateAttributes, selected, deleteNode, editor }: NodeViewProps) {
   const env = useEditorEnv();
   const target = String(node.attrs.target ?? '');
@@ -99,21 +138,7 @@ function RefView({ node, updateAttributes, selected, deleteNode, editor }: NodeV
   const text = hit ? (hit.ref ?? `${KIND_NAME[hit.kind]} ${hit.index}`) : target ? <span className="ref-dangling" title="引用的对象不存在了（删了，或公式取消了编号）">??</span> : <em>引用</em>;
   return (
     <InlineChip kind="ref" text={text} title={hit ? `${KIND_NAME[hit.kind]}：${hit.title}` : '交叉引用'} selected={selected} editable={editor.isEditable} autoOpen={!target} onDelete={deleteNode}>
-      {(close) => (
-        <>
-          <div className="field-label">引用哪一个</div>
-          <ul className="pick-list">
-            {env.refTargets.map((r) => (
-              <li key={r.label} className={r.label === target ? 'on' : ''}>
-                <button type="button" onClick={() => { updateAttributes({ target: r.label }); close(); }}>
-                  <b>{r.ref ?? `${KIND_NAME[r.kind]} ${r.index}`}</b> <span className="muted">{r.title || r.label}</span>
-                </button>
-              </li>
-            ))}
-            {!env.refTargets.length && <li className="muted">文档里还没有图、表、公式或标题</li>}
-          </ul>
-        </>
-      )}
+      {(close) => <RefPicker env={env} target={target} onPick={(l) => { updateAttributes({ target: l }); close(); }} />}
     </InlineChip>
   );
 }

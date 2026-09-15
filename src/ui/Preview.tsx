@@ -82,6 +82,7 @@ export function Preview() {
       <div className="pane-bar">
         <span className="pane-title"><Eye />预览</span>
         {status === 'ready' && lastMs !== null && <span className="muted">{pages} 页 · {lastMs} ms{compiling ? ' · 排版中…' : ''}</span>}
+        {status === 'ready' && errors.length > 0 && <span className="err-badge" title="下面列了出错的位置">{errors.length} 个错误</span>}
         <span className="spacer" />
         <span className="join">
           <button type="button" className="btn btn-xs btn-icon" title="缩小（触控板捏合、⌘/Ctrl + 滚轮也行）" onClick={() => zoomAt(zoomRef.current - 0.1)}><ZoomOut /></button>

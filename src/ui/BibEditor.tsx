@@ -112,14 +112,14 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
     setSelected(copy.id);
   };
   const importFile = async (f: File) => {
-    const parsed = parseBibtex(await f.text()).map((p) => ({ ...p, group: groupFilter || undefined }));
+    const parsed = parseBibtex(await f.text()).map((p) => ({ ...p, group: p.group ?? (groupFilter || undefined) }));
     if (!parsed.length) { alert('这个文件里没解析出条目'); return; }
     // 同 key 的当作更新，其余追加
     const byKey = new Map(entries.map((e) => [e.key, e]));
     const merged = [...entries];
     for (const p of parsed) {
       const old = byKey.get(p.key);
-      if (old) merged[merged.indexOf(old)] = { ...old, type: p.type, fields: p.fields };
+      if (old) merged[merged.indexOf(old)] = { ...old, type: p.type, fields: p.fields, group: p.group ?? old.group };
       else merged.push(p);
     }
     onChange(merged);
@@ -132,7 +132,7 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
       // 尽量保留原 id，好让选中项不跳
       const byKey = new Map(entries.map((e) => [e.key, e.id]));
       const groupOf = new Map(entries.map((e) => [e.key, e.group]));
-      onChange(parsed.map((p) => ({ ...p, id: byKey.get(p.key) ?? p.id, group: groupOf.get(p.key) })));
+      onChange(parsed.map((p) => ({ ...p, id: byKey.get(p.key) ?? p.id, group: p.group ?? groupOf.get(p.key) })));
       setRaw(null); setRawError(null);
     } catch (e) { setRawError(String((e as Error).message ?? e)); }
   };
@@ -156,8 +156,8 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
           <AddMenu types={types} onAdd={add} />
           <span className="join">
             <button type="button" className="btn btn-xs btn-icon" title="导入 .bib 文件（同 key 的更新，其余追加）" onClick={() => fileInput.current?.click()}><Upload /></button>
-            <button type="button" className="btn btn-xs btn-icon" title="导出 .bib 文件" onClick={() => download(fileName, generateBibtex(entries))} disabled={!entries.length}><Download /></button>
-            <button type="button" className={`btn btn-xs btn-icon ${raw !== null ? 'on' : ''}`} title="直接改 BibTeX 源码" onClick={() => { setRaw(raw === null ? generateBibtex(entries) : null); setRawError(null); }}><Code2 /></button>
+            <button type="button" className="btn btn-xs btn-icon" title={groupFilter ? `导出分组「${groupFilter}」为 .bib（分组写在 groups 字段，JabRef 同款）` : '导出全部为 .bib（分组写在 groups 字段，JabRef 同款）'} onClick={() => { const set = groupFilter === null ? entries : entries.filter((e) => (groupFilter === '' ? !e.group?.trim() : e.group?.trim() === groupFilter)); download(groupFilter ? fileName.replace(/\.bib$/, `-${groupFilter}.bib`) : fileName, generateBibtex(set, { withGroups: true })); }} disabled={!entries.length}><Download /></button>
+            <button type="button" className={`btn btn-xs btn-icon ${raw !== null ? 'on' : ''}`} title="直接改 BibTeX 源码" onClick={() => { setRaw(raw === null ? generateBibtex(entries, { withGroups: true }) : null); setRawError(null); }}><Code2 /></button>
           </span>
           <input ref={fileInput} type="file" accept=".bib,text/plain" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importFile(f); e.target.value = ''; }} />
         </div>

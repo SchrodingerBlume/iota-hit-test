@@ -85,6 +85,12 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
   const walk = (n: PMNode) => {
     if (n.type === 'heading') {
       const level = Math.max(1, Math.min(4, n.attrs?.level ?? 1));
+      if (n.attrs?.numbered === false) {
+        // 不编号：不走计数器，也不重置图表计数（Typst 里 numbering: none 的标题不动 counter）
+        const label = labelOf(n.attrs, 'sec');
+        if (label) out.set(label, { kind: 'sec', label, number: '', ref: text(n), title: text(n), level });
+        return;
+      }
       counters[level - 1]++;
       for (let i = level; i < 4; i++) counters[i] = 0;
       if (level === 1) { fig = 0; tab = 0; eq = 0; }

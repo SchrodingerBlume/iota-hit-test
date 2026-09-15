@@ -18,7 +18,7 @@ import { Figure, TableFigure, Equation, PageBreak } from './extensions/blocks';
 import { useEditorEnv, NumberingContext } from './env';
 import { computeNumbering, type Part } from '../typst/numbering';
 import { useStore, type RichKey } from '../model/store';
-import { AlignLeft, AlignCenter, AlignRight, AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, Rows2, Undo2, Redo2, Pilcrow, Heading1, Heading2, Heading3, Heading4, Bold, Italic, Underline, Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Code, List, ListOrdered, CodeXml, Sigma, SquareFunction, BookMarked, Link2, MessageSquareQuote, BookmarkPlus, Space, Image, Table, SeparatorHorizontal, BetweenHorizontalStart, BetweenHorizontalEnd, BetweenVerticalStart, BetweenVerticalEnd, Rows3, Columns3, Minus, TableCellsMerge, PanelTop, Plus, ChevronDown } from 'lucide-react';
+import { Rows2, AArrowDown, AArrowUp, Grid3x3, Undo2, Redo2, Pilcrow, Heading1, Heading2, Heading3, Heading4, Bold, Italic, Underline, Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Code, List, ListOrdered, CodeXml, Sigma, SquareFunction, BookMarked, Link2, MessageSquareQuote, BookmarkPlus, Space, Image, Table, SeparatorHorizontal, BetweenHorizontalStart, BetweenHorizontalEnd, BetweenVerticalStart, BetweenVerticalEnd, Rows3, Columns3, Minus, TableCellsMerge, PanelTop, Plus, ChevronDown } from 'lucide-react';
 
 export interface RichEditorProps {
   value: RichDoc;
@@ -39,6 +39,7 @@ export interface RichEditorProps {
 
 export function RichEditor({ value, onChange, headings = true, blocks = true, placeholder, className, instanceKey, part = 'other', richKey }: RichEditorProps) {
   const lastEmitted = useRef<RichDoc | null>(null);
+  const [richSize] = useRichSize();
   const env = useEditorEnv();
   const settings = useStore((s) => s.doc.settings);
   const jump = useStore((s) => s.jump);
@@ -103,7 +104,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
 
   return (
     <NumberingContext.Provider value={numbering}>
-      <div className={`editor ${className ?? ''}`}>
+      <div className={`editor ${className ?? ''}`} style={{ '--rich-size': `${richSize}px` } as React.CSSProperties}>
         {editor && <Toolbar editor={editor} headings={headings} blocks={blocks} />}
         {editor && <Bubble editor={editor} />}
         <EditorContent editor={editor} className="editor-body" />
@@ -219,6 +220,8 @@ function Toolbar({ editor, headings, blocks }: { editor: Editor; headings: boole
         <B title="交叉引用图 / 表 / 式 / 节" run={() => insertInline('ref')}><Link2 /></B>
         <B title="缩略语（首次出现自动展开）" run={() => insertInline('abbr')}><span className="tb-text">Ab</span></B>
         <span className="tb-spacer" />
+        <FontSizeTool />
+        <Sep />
         <span className="menu">
           <button type="button" className="tb tb-wide" onMouseDown={(e) => e.preventDefault()} onClick={() => setMenu((m) => !m)} title="插入…"><Plus />插入<ChevronDown /></button>
           {menu && (
@@ -286,24 +289,42 @@ function Bubble({ editor }: { editor: Editor }) {
   );
 }
 
-/** 表格：对齐（单元格 / 整行）、列宽、行高 */
+/** 表格：九宫格对齐（像 Word）、作用于单元格或整行、列宽、行高 */
 function TableAlignTools({ editor }: { editor: Editor }) {
   const [rowScope, setRowScope] = useState(false);
+  const [open, setOpen] = useState(false);
   const info = currentCellInfo(editor.state);
-  const setAlign = (name: 'align' | 'valign', value: string | null) => {
-    if (rowScope) editor.chain().focus().setRowCellsAttribute(name, value).run();
-    else editor.chain().focus().setCellAttribute(name, value).run();
+  const apply = (align: string | null, valign: string | null) => {
+    const chain = editor.chain().focus();
+    if (rowScope) chain.setRowCellsAttribute('align', align).setRowCellsAttribute('valign', valign);
+    else chain.setCellAttribute('align', align).setCellAttribute('valign', valign);
+    chain.run();
+    setOpen(false);
   };
+  const H = ['left', 'center', 'right'] as const;
+  const V = ['top', 'horizon', 'bottom'] as const;
+  const HN = { left: '左', center: '中', right: '右' };
+  const VN = { top: '上', horizon: '中', bottom: '下' };
   const cw = info.colwidth ? +(info.colwidth / 37.8).toFixed(1) : '';
+  const cur = info.align || info.valign ? `${VN[(info.valign ?? 'horizon') as keyof typeof VN]}${HN[(info.align ?? 'center') as keyof typeof HN]}` : '默认';
   return (
     <>
-      <B title="左对齐" on={info.align === 'left'} run={() => setAlign('align', info.align === 'left' ? null : 'left')}><AlignLeft /></B>
-      <B title="居中" on={info.align === 'center'} run={() => setAlign('align', info.align === 'center' ? null : 'center')}><AlignCenter /></B>
-      <B title="右对齐" on={info.align === 'right'} run={() => setAlign('align', info.align === 'right' ? null : 'right')}><AlignRight /></B>
-      <B title="靠上" on={info.valign === 'top'} run={() => setAlign('valign', info.valign === 'top' ? null : 'top')}><AlignVerticalJustifyStart /></B>
-      <B title="垂直居中" on={info.valign === 'horizon'} run={() => setAlign('valign', info.valign === 'horizon' ? null : 'horizon')}><AlignVerticalJustifyCenter /></B>
-      <B title="靠下" on={info.valign === 'bottom'} run={() => setAlign('valign', info.valign === 'bottom' ? null : 'bottom')}><AlignVerticalJustifyEnd /></B>
-      <B title={rowScope ? '对齐作用于整行（点击改为只作用于当前 / 选中的单元格）' : '对齐只作用于当前 / 选中的单元格（点击改为整行）'} on={rowScope} run={() => setRowScope((r) => !r)}><Rows2 /><span className="tb-text">行</span></B>
+      <span className="menu">
+        <B title={`单元格对齐：${cur}（点开九宫格）`} on={open} run={() => setOpen((o) => !o)}><Grid3x3 /><span className="tb-text">{cur}</span></B>
+        {open && (
+          <span className="menu-pop align-pop" onMouseLeave={() => setOpen(false)}>
+            <div className="align-grid">
+              {V.map((v) => H.map((h) => (
+                <button key={v + h} type="button" className={`align-cell ${info.align === h && info.valign === v ? 'on' : ''}`} title={`${VN[v]}${HN[h]}`} onMouseDown={(e) => e.preventDefault()} onClick={() => apply(h, v)}>
+                  <span className="align-glyph" data-h={h} data-v={v}><i /><i /><i /></span>
+                </button>
+              )))}
+            </div>
+            <button type="button" className="btn btn-xs" style={{ width: '100%', marginTop: 6 }} onMouseDown={(e) => e.preventDefault()} onClick={() => apply(null, null)}>恢复默认（居中）</button>
+          </span>
+        )}
+      </span>
+      <B title={rowScope ? '对齐作用于整行（点击改为只作用于当前 / 选中的单元格）' : '对齐只作用于当前 / 选中的单元格（点击改为整行）'} on={rowScope} run={() => setRowScope((r) => !r)}><Rows2 /><span className="tb-text">整行</span></B>
       <Sep />
       <label className="tb-field" title="当前列的宽度（厘米）；也可以直接拖列线。留空 = 自动">
         列宽 <input type="number" min={0.5} max={16} step={0.1} value={cw} placeholder="自动" onChange={(e) => { const v = parseFloat(e.target.value); editor.chain().focus().setColumnWidth(Number.isFinite(v) && v > 0 ? Math.round(v * 37.8) : null).run(); }} /> cm
@@ -312,5 +333,26 @@ function TableAlignTools({ editor }: { editor: Editor }) {
         行高 <input type="number" min={0.3} max={10} step={0.1} value={info.rowHeight ?? ''} placeholder="自动" onChange={(e) => { const v = parseFloat(e.target.value); editor.chain().focus().setRowAttribute('height', Number.isFinite(v) && v > 0 ? String(v) : null).run(); }} /> cm
       </label>
     </>
+  );
+}
+
+/** 编辑区的显示字号（只影响编辑器，不影响排版），记在本机 */
+const SIZE_KEY = 'iota4web-rich-size';
+const sizeListeners = new Set<() => void>();
+function readSize(): number { try { const v = Number(localStorage.getItem(SIZE_KEY)); return v >= 13 && v <= 24 ? v : 16.5; } catch { return 16.5; } }
+export function useRichSize(): [number, (n: number) => void] {
+  const [size, setSize] = useState(readSize);
+  useEffect(() => { const fn = () => setSize(readSize()); sizeListeners.add(fn); return () => { sizeListeners.delete(fn); }; }, []);
+  const set = (n: number) => { const v = Math.min(24, Math.max(13, +n.toFixed(1))); try { localStorage.setItem(SIZE_KEY, String(v)); } catch { /* */ } sizeListeners.forEach((fn) => fn()); };
+  return [size, set];
+}
+function FontSizeTool() {
+  const [size, setSize] = useRichSize();
+  return (
+    <span className="tb-size" title="编辑区显示字号（只影响这里，不影响排版结果）">
+      <B title="字号小一点" run={() => setSize(size - 1)} disabled={size <= 13}><AArrowDown /></B>
+      <span className="tb-size-val">{Math.round(size)}</span>
+      <B title="字号大一点" run={() => setSize(size + 1)} disabled={size >= 24}><AArrowUp /></B>
+    </span>
   );
 }
