@@ -48,7 +48,7 @@ export function TriSwitch({ def, settings, onChange }: Props) {
       </div>
       <div className="tri-note">
         {isAuto
-          ? <>自动 → <b>{effective ? on.label : off.label}</b> · {auto.reason}</>
+          ? <><span className="auto-tag">A</span>自动 → <b>{effective ? on.label : off.label}</b> · {auto.reason}</>
           : <>已固定为 <b>{raw ? on.label : off.label}</b>{auto.value !== raw && <>（自动档会是「{auto.value ? on.label : off.label}」：{auto.reason}）</>}</>}
       </div>
     </div>
@@ -71,7 +71,7 @@ function MultiChoice({ def, raw, auto, isAuto, onChange }: { def: SwitchDef<any>
       </span>
       <div className="tri-note">
         {isAuto
-          ? <>自动 → <b>{labelOf(auto.value)}</b> · {auto.reason}</>
+          ? <><span className="auto-tag">A</span>自动 → <b>{labelOf(auto.value)}</b> · {auto.reason}</>
           : <>已固定为 <b>{labelOf(raw)}</b>{auto.value !== raw && <>（自动档会是「{labelOf(auto.value)}」：{auto.reason}）</>}</>}
       </div>
     </div>

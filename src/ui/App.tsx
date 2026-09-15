@@ -4,17 +4,16 @@ import type { ThesisDoc } from '../model/types';
 import { startCompiler, requestCompile, exportPdf, useCompileState } from '../compiler/client';
 import { serializeProject } from '../typst/serialize';
 import { collectRefTargets } from '../typst/pmToTypst';
-import { EditorEnvContext, parseBibKeys, type EditorEnv } from '../editor/env';
-import { imageBytes, putImage, safeImageName, imageDimensions, removeImage } from '../editor/imageCache';
-import { loadImage } from '../model/persist';
-import { SAMPLE_IMAGE } from '../model/sample';
+import { EditorEnvContext, type EditorEnv } from '../editor/env';
+import { imageBytes, putImage, safeImageName, imageDimensions, clearImageCache } from '../editor/imageCache';
+import { ProjectsView } from './ProjectsView';
 import { useFontState } from '../fonts/userFonts';
 import { SettingsPanel } from './SettingsPanel';
 import { InfoPanel } from './InfoPanel';
 import { AbstractPanel, NomenclaturePanel, RichSection, BibPanel, DefensePanel, PagesPanel } from './panels';
 import { Preview } from './Preview';
 import { useTheme } from './theme';
-import { FileDown, Save, FolderOpen, MoreHorizontal, FileText, FilePlus2, Info, Sun, Moon, SlidersHorizontal, BookText, PenLine, Library } from 'lucide-react';
+import { FileDown, Save, FolderOpen, MoreHorizontal, FileText, FilePlus2, Info, Sun, Moon, SlidersHorizontal, BookText, PenLine, Library, LayoutGrid } from 'lucide-react';
 
 const NAV: { key: Section; label: string; group: string; k?: string }[] = [
   { key: 'settings', label: '论文设置', group: '设置' },
@@ -37,10 +36,19 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean) {
   const status = useCompileState((s) => s.status);
   const fontsVersion = useCompileState((s) => s.fontsVersion);
   const sent = useRef(new Map<string, number>());
+  const lastProject = useRef<string | null>(null);
   useEffect(() => {
     if (!loaded || status !== 'ready') return;
     const t = window.setTimeout(async () => {
       const project = serializeProject(doc);
+      // 换了项目：图片名字空间变了，worker 里映射的旧图全撤掉，重新发
+      let stale: string[] = [];
+      if (lastProject.current !== doc.id) {
+        stale = [...sent.current.keys()];
+        sent.current.clear();
+        clearImageCache();
+        lastProject.current = doc.id;
+      }
       const images: { name: string; data: ArrayBuffer }[] = [];
       for (const name of project.images) {
         if (sent.current.has(name)) continue;
@@ -49,7 +57,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean) {
         images.push({ name, data: buf.slice(0) });
         sent.current.set(name, buf.byteLength);
       }
-      const removeImages = [...sent.current.keys()].filter((n) => !project.images.includes(n));
+      const removeImages = [...new Set([...stale, ...[...sent.current.keys()].filter((n) => !project.images.includes(n))])].filter((n) => !images.some((i) => i.name === n));
       for (const n of removeImages) sent.current.delete(n);
       requestCompile({ main: project.main, files: project.files, images, removeImages });
     }, 450);
@@ -67,9 +75,9 @@ function download(name: string, data: BlobPart, type: string) {
 }
 
 export function App() {
-  const { doc, section, loaded, setSection, load, replaceDoc, setImages } = useStore();
+  const { doc, section, loaded, view, setView, setSection, load, replaceDoc, setImages } = useStore();
   const compile = useCompileState();
-  const sentImages = useAutoCompile(doc, loaded);
+  useAutoCompile(doc, loaded);
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [theme, setTheme] = useTheme();
@@ -77,13 +85,6 @@ export function App() {
   useEffect(() => {
     startCompiler();
     void (async () => {
-      // 样例工程引用的那张图第一次要从站内拿进库，得赶在编辑器挂上去之前
-      if (!(await loadImage(SAMPLE_IMAGE))) {
-        try {
-          const blob = await fetch(new URL('sample/sample-bearing.png', document.baseURI)).then((r) => r.blob());
-          await putImage(SAMPLE_IMAGE, blob);
-        } catch { /* 没有也不致命 */ }
-      }
       await load();
       // 上次自己选的字体文件：装回引擎（引擎没就绪会等它）
       void useFontState.getState().loadStored();
@@ -93,7 +94,7 @@ export function App() {
 
   // 编辑器周边：文献、可引用对象、缩略语、图片
   const env = useMemo<EditorEnv>(() => ({
-    bibKeys: parseBibKeys(doc.bibliography),
+    bibKeys: doc.references.filter((r) => r.key.trim()).map((r) => ({ key: r.key, title: r.fields.title ?? '' })),
     refTargets: [...collectRefTargets(doc.body), ...collectRefTargets(doc.appendix)],
     abbrs: doc.abbreviations.filter((a) => a.key.trim()).map((a) => ({ key: a.key.trim(), long: a.long })),
     images: doc.images,
@@ -105,7 +106,7 @@ export function App() {
       setImages([...useStore.getState().doc.images, { name, mime: file.type, ...(dim ?? {}) }]);
       return { name, ...(dim ?? {}) };
     },
-  }), [doc.bibliography, doc.body, doc.appendix, doc.abbreviations, doc.images, setImages]);
+  }), [doc.references, doc.body, doc.appendix, doc.abbreviations, doc.images, setImages]);
 
   const onExportPdf = async () => {
     setBusy('正在导出 PDF…');
@@ -140,7 +141,6 @@ export function App() {
         for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
         await putImage(name, new Blob([bytes]));
       }
-      sentImages.current.clear();
       replaceDoc(raw);
     };
     input.click();
@@ -150,13 +150,7 @@ export function App() {
     download('main.typ', project.main, 'text/plain');
     for (const [name, text] of Object.entries(project.files)) download(name, text, 'text/plain');
   };
-  const onNew = async () => {
-    if (!confirm('新建空白工程？当前工程会被覆盖（先「保存工程」可以带走）。')) return;
-    for (const img of doc.images) await removeImage(img.name);
-    sentImages.current.clear();
-    const { newDoc } = await import('../model/store');
-    replaceDoc(newDoc());
-  };
+  const onNew = () => setView('projects');
 
   const panel = (() => {
     switch (section) {
@@ -188,18 +182,19 @@ export function App() {
             <span className="brand-mark" aria-hidden>ι</span>
             <span className="brand-text"><b>iota-hit</b><small>哈尔滨工业大学学位论文 · 在线编辑</small></span>
           </span>
+          <button type="button" className={`btn btn-ghost proj-btn ${view === 'projects' ? 'on' : ''}`} title="项目管理" onClick={() => setView(view === 'projects' ? 'editor' : 'projects')}><LayoutGrid />{loaded ? doc.name : '项目'}</button>
           <span className="spacer" />
           <span className="status"><i className={`dot ${dot}`} />{statusText}</span>
           <button type="button" className="btn btn-primary" disabled={compile.status !== 'ready' || !!busy} onClick={onExportPdf}><FileDown />导出 PDF</button>
           <button type="button" className="btn btn-ghost" onClick={onSaveProject}><Save />保存工程</button>
-          <button type="button" className="btn btn-ghost" onClick={onOpenProject}><FolderOpen />打开工程</button>
+          <button type="button" className="btn btn-ghost" title="读入 .iota.json 文件，内容并入当前项目" onClick={onOpenProject}><FolderOpen />导入文件</button>
           <span className="menu">
             <button type="button" className="btn btn-ghost btn-icon" title="更多" onClick={() => setMenu((m) => !m)}><MoreHorizontal /></button>
             {menu && (
               <span className="menu-pop" onMouseLeave={() => setMenu(false)}>
                 <button type="button" onClick={() => { setMenu(false); onExportTypst(); }}><FileText />导出 Typst 源码（main.typ + .bib）</button>
                 <hr />
-                <button type="button" onClick={() => { setMenu(false); void onNew(); }}><FilePlus2 />新建空白工程</button>
+                <button type="button" onClick={() => { setMenu(false); onNew(); }}><FilePlus2 />新建项目…</button>
                 <hr />
                 <button type="button" onClick={() => { setMenu(false); alert('iota-hit 在线编辑器\n\n排版：iota-hit 0.1.0（hithesis 的 Typst 复刻）\n引擎：Typst 0.15.1，经 typst.ts 编成 wasm 在浏览器里运行\n字体：Noto Serif/Sans CJK SC、FandolKai、TeX Gyre Termes/Heros、DejaVu Sans Mono；也可读本机字体切到 Windows / macOS 档\n\n整站静态，没有服务器；工程与图片只存在这台浏览器里，记得定期「保存工程」。'); }}><Info />关于</button>
               </span>
@@ -207,6 +202,7 @@ export function App() {
           </span>
           <button type="button" className="btn btn-ghost btn-icon theme-btn" title={theme === 'dark' ? '切到浅色' : '切到深色'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun /> : <Moon />}</button>
         </header>
+        {view === 'projects' ? <ProjectsView /> : (
         <div className="main">
           <nav className="nav">
             {['设置', '前置', '主体', '后置'].map((g) => (
@@ -224,6 +220,7 @@ export function App() {
           </section>
           <Preview />
         </div>
+        )}
       </div>
     </EditorEnvContext.Provider>
   );

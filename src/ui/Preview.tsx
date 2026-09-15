@@ -9,8 +9,58 @@ export function Preview() {
   const { status, progress, fatal, compiling, artifact, diagnostics, lastMs, compileCount } = useCompileState();
   const containerRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
+  const zoomRef = useRef(1);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [pages, setPages] = useState(0);
   const [renderError, setRenderError] = useState<string | null>(null);
+
+  /** 缩放并让光标底下那一点不动（cy 是相对滚动容器顶部的像素） */
+  const zoomAt = (next: number, cy?: number) => {
+    const el = scrollRef.current;
+    const z = Math.min(3, Math.max(0.3, +next.toFixed(3)));
+    if (el && cy !== undefined) {
+      const pad = 18; // .preview-scroll 的上内边距
+      const docY = (el.scrollTop + cy - pad) / zoomRef.current;
+      zoomRef.current = z;
+      setZoom(z);
+      // 宽度改了之后 SVG 才重排，滚动位置要等下一帧再定
+      requestAnimationFrame(() => { el.scrollTop = docY * z - (cy - pad); });
+    } else {
+      zoomRef.current = z;
+      setZoom(z);
+    }
+  };
+
+  // 触控板捏合：macOS/Windows 的浏览器把它发成 ctrlKey 的 wheel；Safari 另有 gesture 事件
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let idle: number | undefined;
+    const mark = () => { el.classList.add('is-zooming'); window.clearTimeout(idle); idle = window.setTimeout(() => el.classList.remove('is-zooming'), 160); };
+    const onWheel = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      mark();
+      const factor = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.01));
+      zoomAt(zoomRef.current * factor, e.clientY - el.getBoundingClientRect().top);
+    };
+    let gestureBase = 1;
+    const onGestureStart = (e: Event) => { e.preventDefault(); gestureBase = zoomRef.current; };
+    const onGestureChange = (e: Event) => {
+      e.preventDefault();
+      mark();
+      const g = e as Event & { scale: number; clientY: number };
+      zoomAt(gestureBase * g.scale, g.clientY - el.getBoundingClientRect().top);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('gesturestart', onGestureStart as EventListener, { passive: false });
+    el.addEventListener('gesturechange', onGestureChange as EventListener, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('gesturestart', onGestureStart as EventListener);
+      el.removeEventListener('gesturechange', onGestureChange as EventListener);
+    };
+  }, []);
 
   useEffect(() => {
     if (!artifact || !containerRef.current) return;
@@ -33,14 +83,14 @@ export function Preview() {
         {status === 'ready' && lastMs !== null && <span className="muted">{pages} 页 · {lastMs} ms{compiling ? ' · 排版中…' : ''}</span>}
         <span className="spacer" />
         <span className="join">
-          <button type="button" className="btn btn-xs btn-icon" title="缩小" onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.1).toFixed(2)))}><ZoomOut /></button>
-          <button type="button" className="btn btn-xs" style={{ width: 52, justifyContent: 'center' }} title="回到 100%" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
-          <button type="button" className="btn btn-xs btn-icon" title="放大" onClick={() => setZoom((z) => Math.min(2.5, +(z + 0.1).toFixed(2)))}><ZoomIn /></button>
-          <button type="button" className="btn btn-xs btn-icon" title="适宽" onClick={() => setZoom(1)}><Maximize2 /></button>
+          <button type="button" className="btn btn-xs btn-icon" title="缩小（触控板捏合、⌘/Ctrl + 滚轮也行）" onClick={() => zoomAt(zoomRef.current - 0.1)}><ZoomOut /></button>
+          <button type="button" className="btn btn-xs" style={{ width: 52, justifyContent: 'center' }} title="回到 100%" onClick={() => zoomAt(1)}>{Math.round(zoom * 100)}%</button>
+          <button type="button" className="btn btn-xs btn-icon" title="放大（触控板捏合、⌘/Ctrl + 滚轮也行）" onClick={() => zoomAt(zoomRef.current + 0.1)}><ZoomIn /></button>
+          <button type="button" className="btn btn-xs btn-icon" title="适宽" onClick={() => zoomAt(1)}><Maximize2 /></button>
         </span>
       </div>
       <div className="preview-progress" aria-hidden />
-      <div className="preview-scroll">
+      <div className="preview-scroll" ref={scrollRef}>
         {status === 'booting' && (
           <div className="boot">
             <h3><Loader2 />正在准备排版引擎</h3>

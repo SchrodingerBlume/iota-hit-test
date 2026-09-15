@@ -1,0 +1,246 @@
+// 文献条目的可视化录入：左边条目列表（搜索、按类型筛），右边逐字段的表单。
+// 参考文献页与成果页共用；成果页多两种自造类型和「附注」字段。
+// 原始 BibTeX 照样进出：导入文件、导出文件、以及一个能直接改的源码抽屉。
+import { useMemo, useRef, useState } from 'react';
+import type { BibEntry } from '../bib/bibtex';
+import { parseBibtex, generateBibtex, newEntryId, splitNames, joinNames, suggestKey } from '../bib/bibtex';
+import { TYPES, ACHIEVEMENT_TYPES, ACHIEVEMENT_TYPE_KEYS, ANNOTE_FIELD, typeDef, type FieldDef, type TypeDef } from '../bib/schema';
+import { Plus, Trash2, Copy, Search, Upload, Download, Code2, Wand2, ChevronDown, ChevronUp, Check } from 'lucide-react';
+
+interface Props {
+  entries: BibEntry[];
+  onChange: (e: BibEntry[]) => void;
+  /** 成果页：类型少一些、多附注 */
+  mode: 'references' | 'achievements';
+  /** 正文里被引用过的 key（列表上打个标） */
+  citedKeys?: Set<string>;
+  fileName: string;
+}
+
+const previewOf = (e: BibEntry) => {
+  const a = splitNames(e.fields.author ?? e.fields.editor ?? '');
+  const who = a.length ? (a.length > 3 ? `${a.slice(0, 3).join(', ')}, 等` : a.join(', ')) : '';
+  const year = (e.fields.year ?? e.fields.date ?? '').slice(0, 4);
+  return { who, year, title: e.fields.title ?? '（无题名）', mark: typeDef(e.type, ACHIEVEMENT_TYPES).mark };
+};
+
+function download(name: string, text: string) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Props) {
+  const [selected, setSelected] = useState<string | null>(entries[0]?.id ?? null);
+  const [q, setQ] = useState('');
+  const [filter, setFilter] = useState('');
+  const [raw, setRaw] = useState<string | null>(null);
+  const [rawError, setRawError] = useState<string | null>(null);
+  const [showExtra, setShowExtra] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const types: TypeDef[] = mode === 'achievements'
+    ? [...ACHIEVEMENT_TYPE_KEYS.map((k) => typeDef(k, ACHIEVEMENT_TYPES))]
+    : TYPES;
+
+  const list = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return entries.filter((e) => (!filter || typeDef(e.type, ACHIEVEMENT_TYPES).type === filter)
+      && (!needle || [e.key, e.type, ...Object.values(e.fields)].some((v) => String(v).toLowerCase().includes(needle))));
+  }, [entries, q, filter]);
+
+  const current = entries.find((e) => e.id === selected) ?? null;
+  const taken = new Set(entries.map((e) => e.key));
+
+  const patch = (id: string, fn: (e: BibEntry) => BibEntry) => onChange(entries.map((e) => (e.id === id ? fn(e) : e)));
+  const setField = (k: string, v: string) => current && patch(current.id, (e) => ({ ...e, fields: { ...e.fields, [k]: v } }));
+
+  const add = (type: string) => {
+    const e: BibEntry = { id: newEntryId(), key: '', type, fields: {} };
+    e.key = suggestKey(e, taken);
+    onChange([e, ...entries]);
+    setSelected(e.id);
+  };
+  const remove = (id: string) => {
+    const next = entries.filter((e) => e.id !== id);
+    onChange(next);
+    if (selected === id) setSelected(next[0]?.id ?? null);
+  };
+  const duplicate = (e: BibEntry) => {
+    const copy = { ...e, id: newEntryId(), fields: { ...e.fields } };
+    copy.key = suggestKey(copy, taken);
+    onChange([copy, ...entries]);
+    setSelected(copy.id);
+  };
+  const importFile = async (f: File) => {
+    const parsed = parseBibtex(await f.text());
+    if (!parsed.length) { alert('这个文件里没解析出条目'); return; }
+    // 同 key 的当作更新，其余追加
+    const byKey = new Map(entries.map((e) => [e.key, e]));
+    const merged = [...entries];
+    for (const p of parsed) {
+      const old = byKey.get(p.key);
+      if (old) merged[merged.indexOf(old)] = { ...old, type: p.type, fields: p.fields };
+      else merged.push(p);
+    }
+    onChange(merged);
+    setSelected(parsed[0].id);
+  };
+  const applyRaw = () => {
+    if (raw === null) return;
+    try {
+      const parsed = parseBibtex(raw);
+      // 尽量保留原 id，好让选中项不跳
+      const byKey = new Map(entries.map((e) => [e.key, e.id]));
+      onChange(parsed.map((p) => ({ ...p, id: byKey.get(p.key) ?? p.id })));
+      setRaw(null); setRawError(null);
+    } catch (e) { setRawError(String((e as Error).message ?? e)); }
+  };
+
+  const def = current ? typeDef(current.type, ACHIEVEMENT_TYPES) : null;
+  const known = new Set(def?.fields.map((f) => f.key) ?? []);
+  if (mode === 'achievements') known.add('annote');
+  const extraFields = current ? Object.keys(current.fields).filter((k) => !known.has(k)) : [];
+
+  return (
+    <div className="bib">
+      <aside className="bib-list">
+        <div className="bib-tools">
+          <span className="bib-search"><Search /><input value={q} placeholder="搜索 key、题名、作者…" onChange={(e) => setQ(e.target.value)} /></span>
+          <select className="bib-filter" value={filter} onChange={(e) => setFilter(e.target.value)} title="按类型筛">
+            <option value="">全部类型</option>
+            {types.map((t) => <option key={t.type} value={t.type}>{t.label}</option>)}
+          </select>
+        </div>
+        <div className="bib-add">
+          <AddMenu types={types} onAdd={add} />
+          <span className="join">
+            <button type="button" className="btn btn-xs btn-icon" title="导入 .bib 文件（同 key 的更新，其余追加）" onClick={() => fileInput.current?.click()}><Upload /></button>
+            <button type="button" className="btn btn-xs btn-icon" title="导出 .bib 文件" onClick={() => download(fileName, generateBibtex(entries))} disabled={!entries.length}><Download /></button>
+            <button type="button" className={`btn btn-xs btn-icon ${raw !== null ? 'on' : ''}`} title="直接改 BibTeX 源码" onClick={() => { setRaw(raw === null ? generateBibtex(entries) : null); setRawError(null); }}><Code2 /></button>
+          </span>
+          <input ref={fileInput} type="file" accept=".bib,text/plain" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importFile(f); e.target.value = ''; }} />
+        </div>
+        <ul className="bib-items">
+          {list.map((e) => {
+            const p = previewOf(e);
+            const cited = citedKeys?.has(e.key);
+            return (
+              <li key={e.id} className={`bib-item ${e.id === selected ? 'on' : ''}`} onClick={() => setSelected(e.id)}>
+                <span className="bib-mark">[{p.mark}]</span>
+                <span className="bib-item-body">
+                  <span className="bib-title">{p.title}</span>
+                  <span className="bib-sub muted">{[p.who, p.year].filter(Boolean).join(' · ')}<code>{e.key}</code>{cited && <span className="bib-cited" title="正文里引用过"><Check /></span>}</span>
+                </span>
+              </li>
+            );
+          })}
+          {!list.length && <li className="muted bib-empty">{entries.length ? '没有匹配的条目' : '还没有条目：点「添加」，或导入 .bib'}</li>}
+        </ul>
+        <div className="muted bib-count">{entries.length} 条{citedKeys ? ` · 已引用 ${entries.filter((e) => citedKeys.has(e.key)).length}` : ''}</div>
+      </aside>
+
+      <section className="bib-form">
+        {raw !== null ? (
+          <div className="bib-raw">
+            <div className="row" style={{ marginBottom: 8 }}>
+              <b>BibTeX 源码</b><span className="muted" style={{ fontSize: 12 }}>改完点「应用」，会重新解析成条目（key 相同的保留选中状态）</span>
+              <span className="spacer" style={{ flex: 1 }} />
+              <button type="button" className="btn btn-xs" onClick={() => { setRaw(null); setRawError(null); }}>取消</button>
+              <button type="button" className="btn btn-xs btn-primary" onClick={applyRaw}><Check />应用</button>
+            </div>
+            {rawError && <div className="diag err" style={{ padding: '6px 10px', marginBottom: 8 }}>{rawError}</div>}
+            <textarea className="mono input bib-raw-text" value={raw} spellCheck={false} onChange={(e) => setRaw(e.target.value)} />
+          </div>
+        ) : !current || !def ? (
+          <div className="bib-blank muted">{entries.length ? '在左边选一条' : '左边「添加」一条，或导入 .bib 文件'}</div>
+        ) : (
+          <div key={current.id} className="bib-fields work-inner">
+            <div className="bib-head">
+              <label className="field" style={{ flex: 1 }}>
+                <span className="field-label">类型</span>
+                <select value={def.type} onChange={(e) => patch(current.id, (x) => ({ ...x, type: e.target.value }))}>
+                  {types.map((t) => <option key={t.type} value={t.type}>{t.label} [{t.mark}]</option>)}
+                  {!types.some((t) => t.type === def.type) && <option value={def.type}>{def.type}</option>}
+                </select>
+              </label>
+              <label className="field" style={{ flex: 1 }}>
+                <span className="field-label">引用 key</span>
+                <span className="row" style={{ flexWrap: 'nowrap' }}>
+                  <input className="mono-input" value={current.key} onChange={(e) => patch(current.id, (x) => ({ ...x, key: e.target.value.replace(/[^\w:.\-+/]/g, '') }))} />
+                  <button type="button" className="btn btn-xs btn-icon" title="按作者+年份重新生成" onClick={() => patch(current.id, (x) => ({ ...x, key: suggestKey(x, new Set(entries.filter((o) => o.id !== x.id).map((o) => o.key))) }))}><Wand2 /></button>
+                </span>
+                {entries.some((o) => o.id !== current.id && o.key === current.key) && <span className="field-hint" style={{ color: 'var(--danger)' }}>key 与另一条重复</span>}
+              </label>
+              <span className="join bib-actions" style={{ flex: 'none' }}>
+                <button type="button" className="btn btn-xs btn-icon" title="复制一条" onClick={() => duplicate(current)}><Copy /></button>
+                <button type="button" className="btn btn-xs btn-icon btn-danger" title="删除" onClick={() => remove(current.id)}><Trash2 /></button>
+              </span>
+            </div>
+            <div className="bib-grid">
+              {def.fields.map((f) => <FieldInput key={f.key} f={f} value={current.fields[f.key] ?? ''} onChange={(v) => setField(f.key, v)} />)}
+              {mode === 'achievements' && <FieldInput f={ANNOTE_FIELD} value={current.fields.annote ?? ''} onChange={(v) => setField('annote', v)} />}
+            </div>
+            <button type="button" className="btn btn-ghost btn-xs" onClick={() => setShowExtra((s) => !s)}>{showExtra ? <ChevronUp /> : <ChevronDown />}其他字段{extraFields.length ? `（${extraFields.length}）` : ''}</button>
+            {showExtra && (
+              <div className="bib-extra">
+                {extraFields.map((k) => (
+                  <label className="field" key={k}>
+                    <span className="field-label"><code>{k}</code></span>
+                    <span className="row" style={{ flexWrap: 'nowrap' }}>
+                      <input value={current.fields[k]} onChange={(e) => setField(k, e.target.value)} />
+                      <button type="button" className="btn btn-xs btn-icon" title="删掉这个字段" onClick={() => patch(current.id, (x) => { const fields = { ...x.fields }; delete fields[k]; return { ...x, fields }; })}><Trash2 /></button>
+                    </span>
+                  </label>
+                ))}
+                <ExtraAdder onAdd={(k) => setField(k, '')} />
+                <p className="muted" style={{ fontSize: 12 }}>omni-gb7714 认的 biblatex 字段都能写：subtitle、series、eid、cstr、entrysubtype、langid、sortkey……</p>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function FieldInput({ f, value, onChange }: { f: FieldDef; value: string; onChange: (v: string) => void }) {
+  const wide = f.kind === 'names' || f.kind === 'long' || f.key === 'title' || f.key === 'booktitle' || f.key === 'url';
+  return (
+    <label className={`field ${wide ? 'wide' : ''}`}>
+      <span className="field-label">{f.label}{f.required && <span className="req">*</span>}{f.kind === 'names' && <span className="muted"> · 一行一个</span>}</span>
+      {f.kind === 'names'
+        ? <textarea rows={Math.max(1, Math.min(6, splitNames(value).length || 1))} value={splitNames(value).join('\n')} placeholder={'张三\n李四\nSmith, John'} onChange={(e) => onChange(joinNames(e.target.value))} />
+        : f.kind === 'long'
+          ? <textarea rows={2} value={value} placeholder={f.placeholder} onChange={(e) => onChange(e.target.value)} />
+          : <input value={value} placeholder={f.placeholder} onChange={(e) => onChange(e.target.value)} />}
+      {f.hint && <span className="field-hint">{f.hint}</span>}
+    </label>
+  );
+}
+
+function AddMenu({ types, onAdd }: { types: TypeDef[]; onAdd: (t: string) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="menu">
+      <button type="button" className="btn btn-xs btn-primary" onClick={() => setOpen((o) => !o)}><Plus />添加</button>
+      {open && (
+        <span className="menu-pop bib-add-menu" onMouseLeave={() => setOpen(false)}>
+          {types.map((t) => <button key={t.type} type="button" onClick={() => { onAdd(t.type); setOpen(false); }}><span className="bib-mark">[{t.mark}]</span>{t.label}</button>)}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function ExtraAdder({ onAdd }: { onAdd: (k: string) => void }) {
+  const [k, setK] = useState('');
+  return (
+    <span className="row">
+      <input className="input" style={{ width: 160 }} value={k} placeholder="字段名，如 series" onChange={(e) => setK(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))} onKeyDown={(e) => { if (e.key === 'Enter' && k) { onAdd(k); setK(''); } }} />
+      <button type="button" className="btn btn-xs" disabled={!k} onClick={() => { onAdd(k); setK(''); }}><Plus />加字段</button>
+    </span>
+  );
+}

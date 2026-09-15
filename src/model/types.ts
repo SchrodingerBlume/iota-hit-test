@@ -4,6 +4,9 @@
 // 富文本一律存 ProseMirror 的 JSON（TipTap 的 editor.getJSON()），
 // 转 Typst 在 src/typst/serialize.ts 与 src/editor/toTypst.ts 做。
 
+import type { BibEntry } from '../bib/bibtex';
+export type { BibEntry };
+
 export type Tri<T> = 'auto' | T;
 export type TriBool = Tri<boolean>;
 
@@ -138,6 +141,8 @@ export interface ImageAsset {
 export interface ThesisDoc {
   version: 1;
   id: string;
+  /** 项目名（项目管理界面里起的） */
+  name: string;
   updatedAt: string;
   settings: Settings;
   info: Info;
@@ -147,9 +152,12 @@ export interface ThesisDoc {
   symbols: SymbolEntry[];
   body: RichDoc;
   conclusion: RichDoc;
-  /** BibTeX 原文 */
+  /** 参考文献：结构化条目是真身，编译时生成 BibTeX */
+  references: BibEntry[];
+  /** 旧版工程留下的 BibTeX 原文，读入时解析进 references 后清空 */
   bibliography: string;
   appendix: RichDoc;
+  achievementEntries: BibEntry[];
   achievements: string;
   defense: Defense;
   acknowledgement: RichDoc;

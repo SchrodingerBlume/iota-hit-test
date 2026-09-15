@@ -40,6 +40,13 @@ export async function removeImage(name: string) {
   bytes.delete(name);
 }
 
+/** 换项目时清掉：名字空间变了，同名不同图 */
+export function clearImageCache() {
+  for (const u of urls.values()) URL.revokeObjectURL(u);
+  urls.clear();
+  bytes.clear();
+}
+
 /** 文件名规整：Typst 路径里别出现空格与奇怪字符 */
 export function safeImageName(original: string, taken: Set<string>): string {
   const ext = (original.match(/\.[A-Za-z0-9]+$/)?.[0] ?? '.png').toLowerCase();

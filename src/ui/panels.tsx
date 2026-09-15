@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { useStore, type RichKey } from '../model/store';
 import type { Abbreviation, SymbolEntry, DefensePerson, Pages } from '../model/types';
 import { RichEditor } from '../editor/RichEditor';
-import { parseBibKeys } from '../editor/env';
+import { BibEditor } from './BibEditor';
 
 export function RichSection({ title, lead, richKey, headings, blocks, placeholder }: { title: string; lead?: string; richKey: RichKey; headings: boolean; blocks?: boolean; placeholder?: string }) {
   const value = useStore((s) => s.doc[richKey]);
@@ -81,31 +81,44 @@ export function NomenclaturePanel() {
   );
 }
 
+/** 正文里引用过的 key（cite 节点） */
+function collectCited(docs: any[]): Set<string> {
+  const out = new Set<string>();
+  const walk = (n: any) => {
+    if (n?.type === 'cite') for (const k of String(n.attrs?.keys ?? '').split(/[,\s;]+/)) if (k) out.add(k);
+    for (const c of n?.content ?? []) walk(c);
+  };
+  docs.forEach(walk);
+  return out;
+}
+
 export function BibPanel({ which }: { which: 'bibliography' | 'achievements' }) {
-  const text = useStore((s) => s.doc[which]);
+  const references = useStore((s) => s.doc.references);
+  const achievementEntries = useStore((s) => s.doc.achievementEntries);
+  const body = useStore((s) => s.doc.body);
+  const appendix = useStore((s) => s.doc.appendix);
   const pages = useStore((s) => s.doc.pages);
-  const { setBibliography, setAchievements, setPages } = useStore();
-  const keys = useMemo(() => parseBibKeys(text), [text]);
+  const setReferences = useStore((s) => s.setReferences);
+  const setAchievementEntries = useStore((s) => s.setAchievementEntries);
+  const setPages = useStore((s) => s.setPages);
   const isBib = which === 'bibliography';
+  const cited = useMemo(() => collectCited([body, appendix]), [body, appendix]);
   return (
     <>
       <h2>{isBib ? '参考文献' : '攻读学位期间取得的成果'}</h2>
       <p className="lead">
         {isBib
-          ? '粘贴 BibTeX。条目由 omni-gb7714 按 GB/T 7714 排，只被引用过的才列出（full: true 时全列）。正文里用工具栏「[1]」引用。'
-          : '一份专用的 BibTeX：本人的论文（@article）、专利（@patent）、项目与获奖（@project / @award），按类型分三组；页码后的章节序号、收录情况写在 annote 字段。'}
+          ? '像 Zotero 那样逐条填；条目由 omni-gb7714 按 GB/T 7714—2025 排，正文里用工具栏「引用」插入。也能导入 / 导出 .bib，或直接改源码。'
+          : '本人的论文、专利、项目与获奖，按类型分三组排；收录情况、影响因子、对应章节写在「附注」里。也能导入 / 导出 .bib。'}
       </p>
       {!isBib && (
         <div className="card">
           <label className="toggle"><button type="button" className={`sw ${pages.achievements ? 'on' : ''}`} onClick={() => setPages({ achievements: !pages.achievements })} /> <span className="t-lab">排这一页</span><span className="t-hint">研究生终稿才有；本科没有这一项</span></label>
         </div>
       )}
-      <div className="card">
-        <textarea className="mono input" value={text} spellCheck={false} placeholder={isBib ? '@article{key,\n  author = {…},\n  title = {…},\n  …\n}' : '@article{mypaper1,\n  author = {…},\n  annote = {对应第 3 章；SCI 收录},\n}'} onChange={(e) => (isBib ? setBibliography : setAchievements)(e.target.value)} />
-        <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-          {keys.length ? <>识别到 {keys.length} 条：{keys.map((k) => <code key={k.key} style={{ marginRight: 8 }}>{k.key}</code>)}</> : '还没有条目'}
-        </div>
-      </div>
+      {isBib
+        ? <BibEditor mode="references" entries={references} onChange={setReferences} citedKeys={cited} fileName="refs.bib" />
+        : <BibEditor mode="achievements" entries={achievementEntries} onChange={setAchievementEntries} fileName="achievements.bib" />}
     </>
   );
 }

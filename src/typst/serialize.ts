@@ -3,6 +3,7 @@
 import type { ThesisDoc, Settings, Info } from '../model/types';
 import { INFO_FIELDS } from '../model/info';
 import { serializeDoc, escapeText, collectImages } from './pmToTypst';
+import { generateBibtex } from '../bib/bibtex';
 
 export const IOTA_HIT_VERSION = '0.1.0';
 
@@ -172,8 +173,9 @@ export function serializeProject(doc: ThesisDoc): Project {
   if (conclusion.trim()) parts.push(`#conclusion[\n${indent(conclusion, 2)}\n]`);
 
   // ── 后置 ──
-  if (doc.bibliography.trim()) {
-    files['refs.bib'] = doc.bibliography;
+  const refs = generateBibtex(doc.references ?? []);
+  if (refs.trim()) {
+    files['refs.bib'] = refs;
     parts.push('#bibliography(read("refs.bib"), full: true)');
   }
 
@@ -182,8 +184,9 @@ export function serializeProject(doc: ThesisDoc): Project {
     parts.push(`#appendix[\n${indent(appendix, 2)}\n]`);
   }
 
-  if (doc.pages.achievements && doc.achievements.trim()) {
-    files['achievements.bib'] = doc.achievements;
+  const ach = generateBibtex(doc.achievementEntries ?? []);
+  if (doc.pages.achievements && ach.trim()) {
+    files['achievements.bib'] = ach;
     parts.push('#achievements(read("achievements.bib"))');
   }
 

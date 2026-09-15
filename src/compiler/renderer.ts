@@ -41,5 +41,53 @@ export async function renderArtifact(artifact: Uint8Array, container: HTMLElemen
   // 那是给同一份文档换宽度用的缓存，我们每次都是新文档，先把它摘掉
   container.removeAttribute('data-applied-width');
   await renderer.renderToSvg({ renderSession: session, container });
-  return session.retrievePagesInfo();
+  const pages = session.retrievePagesInfo();
+  decoratePages(container, pages.length);
+  return pages;
+}
+
+/** 页与页之间留的空当（SVG 单位 = pt） */
+const PAGE_GAP = 22;
+
+/**
+ * typst.ts 把所有页画进一张 SVG、一页紧贴一页。这里把每页往下错开一个空当，
+ * 每页底下垫一张带阴影的白纸，空当里印页码——看着就是一叠纸，不是一条长卷。
+ */
+function decoratePages(container: HTMLElement, total: number) {
+  const svg = container.querySelector('svg.typst-doc') as SVGSVGElement | null;
+  if (!svg) return;
+  const pages = [...svg.querySelectorAll<SVGGElement>(':scope > g.typst-page')];
+  if (!pages.length) return;
+  const NS = 'http://www.w3.org/2000/svg';
+  let y = 0;
+  let width = 0;
+  pages.forEach((g, i) => {
+    const w = parseFloat(g.getAttribute('data-page-width') ?? '0');
+    const h = parseFloat(g.getAttribute('data-page-height') ?? '0');
+    width = Math.max(width, w);
+    g.setAttribute('transform', `translate(0, ${y})`);
+    // 白纸垫在页内容之下
+    const sheet = document.createElementNS(NS, 'rect');
+    sheet.setAttribute('class', 'page-sheet');
+    sheet.setAttribute('x', '0'); sheet.setAttribute('y', '0');
+    sheet.setAttribute('width', String(w)); sheet.setAttribute('height', String(h));
+    sheet.setAttribute('rx', '1.5');
+    g.insertBefore(sheet, g.firstChild);
+    // 空当里的页码与一条细线
+    if (i < pages.length - 1) {
+      const label = document.createElementNS(NS, 'text');
+      label.setAttribute('class', 'page-label');
+      label.setAttribute('x', String(w - 2));
+      label.setAttribute('y', String(y + h + PAGE_GAP * 0.62));
+      label.setAttribute('text-anchor', 'end');
+      label.textContent = `${i + 1} / ${total}`;
+      svg.appendChild(label);
+    }
+    y += h + PAGE_GAP;
+  });
+  const height = y - PAGE_GAP;
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('width', String(width));
+  svg.setAttribute('height', String(height));
+  svg.setAttribute('data-height', String(height));
 }

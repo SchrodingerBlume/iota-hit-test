@@ -8,6 +8,9 @@
 - 校区、学位级别、交什么、阶段、学科门类、文档语言六根轴走下拉框
 - 模板里那些默认为 `auto` 的布尔选项走三态开关：`关 · A · 开`，自动档时滑块居中印 A、向映射到的那一端延伸一段影子，下面一行写明「自动 → 开 · 为什么」
 - 字体默认用模板的 `presets.webapp + (kaishu: "FandolKai")`，全部开源、随站分发；首次进站下载约 120 MB（wasm 30 MB + 字体 90 MB），之后存进 Cache API 离线可用
+- 项目管理：多个项目各自存在浏览器里，新建时起名、选学位/阶段/校区，空白或样例起头；打开、重命名、复制、删除
+- 参考文献与成果页像 Zotero 那样逐字段填：14 类条目（字段照 omni-gb7714 手册 §4.3）加 iota 成果页自造的 `@project` / `@award`；.bib 照样导入、导出，也能直接改源码
+- 预览一页一张纸带页码，触控板捏合 / ⌘ + 滚轮缩放，光标底下那一点不动
 - 也能用**本机字体**切到模板的 `windows` / `macos` 档（模板全部标定常数按中易字体量的）：Chrome / Edge 桌面版一键读（Local Font Access API，授权一次以后自动读），别的浏览器选字体文件；字节只进页面里的 wasm，不上传，选的文件存 IndexedDB
 
 模板本身（`../iota-hit`）**一个字都没改**，原样打成 `@local/iota-hit:0.1.0` 的包随站分发。
@@ -29,7 +32,8 @@ scripts/
   build-wasm.sh            重建 vendor/ 里的两颗 wasm
   test-compile.mjs         在 Node 里用同一颗 wasm 编一份样张（排查模板问题用）
 src/
-  model/        工程的数据模型、选项登记表（下拉框 / 三态开关 / auto 映射）、持久化
+  model/        工程的数据模型、选项登记表（下拉框 / 三态开关 / auto 映射）、多项目持久化
+  bib/          BibTeX 解析与生成、条目类型与字段表
   typst/        ProseMirror JSON → Typst；整份工程 → main.typ
   editor/       TipTap 扩展：带英文名的标题、插图、带题注的表、公式、引用、缩略语、脚注……
   compiler/     编译 worker（wasm + 字体 + 包）、主线程客户端、SVG 渲染

@@ -2,6 +2,7 @@
 // 让人一眼看到标题、图、表、公式、引用都长什么样。
 import type { ThesisDoc, RichDoc } from './types';
 import { newDoc } from './store';
+import { parseBibtex } from '../bib/bibtex';
 
 const p = (...content: any[]): any => ({ type: 'paragraph', content: content.length ? content : undefined });
 const t = (text: string, marks?: any[]): any => ({ type: 'text', text, ...(marks ? { marks } : {}) });
@@ -91,6 +92,7 @@ const bib = `@article{willis1828,
 
 export function sampleDoc(): ThesisDoc {
   const d = newDoc();
+  d.name = '示例：局部多孔质气体静压轴承';
   d.settings.degreeLevel = 'doctor';
   d.info.title = '局部多孔质气体静压轴承\n关键技术的研究';
   d.info.titleEn = 'RESEARCH ON KEY TECHNOLOGIES OF PARTIAL POROUS EXTERNALLY PRESSURIZED GAS BEARING';
@@ -121,7 +123,7 @@ export function sampleDoc(): ThesisDoc {
   ];
   d.body = body;
   d.conclusion = conclusion;
-  d.bibliography = bib;
+  d.references = parseBibtex(bib);
   d.acknowledgement = acknowledgement;
   d.images = [{ name: SAMPLE_IMAGE, mime: 'image/png' }];
   return d;
