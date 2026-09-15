@@ -140,6 +140,16 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   };
 
   const bodyVisible = !minimal && (!collapsed || peek);
+  // 收起 / 展开是抽屉：高度过渡（grid-template-rows 0fr ↔ 1fr），过渡期间裁掉溢出，
+  // 平时不裁——不然弹出的表格网格、符号库会被切掉
+  const [animating, setAnimating] = useState(false);
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) { firstRender.current = false; return; }
+    setAnimating(true);
+    const t = window.setTimeout(() => setAnimating(false), 260);
+    return () => window.clearTimeout(t);
+  }, [collapsed]);
   const where = none
     ? (section === 'info' || section === 'settings' || section === 'pages' ? '这一页是表单，功能区管不着' : '点一下正文或预览里的字，功能区就活了')
     : `编辑：${KEY_NAME[activeKey!] ?? ''}${usePreviewSurface.getState().focused ? '（在预览里）' : ''}`;
@@ -155,7 +165,9 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
         {trailing}
         {!minimal && <button type="button" className="rb-collapse" title={collapsed ? '固定功能区（双击选项卡也行）' : '收起功能区（再点一下当前选项卡也行）'} onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(!collapsed)}>{collapsed ? <ChevronDown /> : <ChevronUp />}</button>}
       </div>
-      {bodyVisible && (
+      {!minimal && (
+        <div className={`rb-drawer ${collapsed && !peek ? 'is-closed' : ''} ${collapsed && peek ? 'is-peek' : ''} ${animating ? 'is-animating' : ''}`} aria-hidden={!bodyVisible}>
+        <div className="rb-drawer-inner">
         <div className="rb-body">
           {tab === 'home' && (
             <>
@@ -353,6 +365,8 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               </Group>
             </>
           )}
+        </div>
+        </div>
         </div>
       )}
       {findOpen && <FindBar editor={ed} />}
