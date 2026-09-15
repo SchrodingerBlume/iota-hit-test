@@ -743,8 +743,8 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .mirror-sel { background: var(--accent-soft-2); border-radius: 2px; }
 .rich .blk.mirror-sel, .rich .hd.mirror-sel { outline: 2px solid var(--accent); outline-offset: 2px; background: transparent; }
 
-/* 功能区：Word 的手感 */
-.ribbon { position: relative; }
+/* 功能区：Word 的手感。自己占一层，弹出的格子、符号库不能被下面的内容盖住 */
+.ribbon { position: relative; z-index: 20; }
 .rb-tabs { padding-top: 6px; }
 .rb-collapse { border: 0; background: none; color: var(--muted); padding: 4px; margin: 0 0 4px 4px; border-radius: 4px; display: inline-flex; }
 .rb-collapse:hover { background: var(--panel-2); color: var(--ink); }
