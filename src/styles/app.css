@@ -728,7 +728,7 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .rb-tab.is-ctx { color: var(--warn, #fc9000); }
 .rb-tab.is-ctx.on { border-bottom-color: var(--warn, #fc9000); }
 .rb-where { margin-left: auto; font-size: 11px; color: var(--muted); padding: 0 4px 6px; }
-.rb-body { display: flex; align-items: stretch; gap: 2px; padding: 6px 10px 4px; overflow-x: auto; min-height: 62px; animation: fade var(--fast) var(--ease) both; }
+.rb-body { display: flex; align-items: stretch; gap: 2px; padding: 6px 10px 4px; overflow: visible; min-height: 62px; animation: fade var(--fast) var(--ease) both; }
 .rb-group { display: flex; flex-direction: column; align-items: center; padding: 0 8px; border-right: 1px solid var(--line); }
 .rb-group:last-child { border-right: 0; }
 .rb-items { display: flex; align-items: center; gap: 2px; flex: 1; }
@@ -742,3 +742,57 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .mirror-caret { display: inline-block; width: 1.6px; height: 1.05em; vertical-align: -0.18em; margin: 0 -0.8px; background: var(--accent); animation: caret-blink 1.05s steps(2, start) infinite; pointer-events: none; }
 .mirror-sel { background: var(--accent-soft-2); border-radius: 2px; }
 .rich .blk.mirror-sel, .rich .hd.mirror-sel { outline: 2px solid var(--accent); outline-offset: 2px; background: transparent; }
+
+/* 功能区：Word 的手感 */
+.ribbon { position: relative; }
+.rb-tabs { padding-top: 6px; }
+.rb-collapse { border: 0; background: none; color: var(--muted); padding: 4px; margin: 0 0 4px 4px; border-radius: 4px; display: inline-flex; }
+.rb-collapse:hover { background: var(--panel-2); color: var(--ink); }
+.rb-collapse svg { width: 14px; height: 14px; }
+.ribbon.is-collapsed .rb-body { position: absolute; left: 0; right: 0; top: 100%; z-index: 40; background: var(--panel); border-bottom: 1px solid var(--line); box-shadow: var(--shadow-2); }
+.rb-body { min-height: 84px; padding: 6px 8px 4px; }
+.rb-group { padding: 0 6px; }
+.rb-items { align-items: flex-start; }
+.rb-stack { display: flex; flex-direction: column; gap: 0; }
+.rb-stack .tb { height: 24px; justify-content: flex-start; padding: 0 6px; min-width: 0; }
+.rb-small-label { font-size: 12px; font-weight: 400; }
+.rb-rows { display: flex; flex-direction: column; gap: 2px; }
+.rb-row { display: flex; align-items: center; gap: 2px; }
+.tb.tb-big { height: 70px; min-width: 52px; padding: 4px 8px; gap: 4px; font-size: 12px; font-weight: 400; justify-content: flex-start; }
+.tb.tb-big svg { width: 26px; height: 26px; margin-top: 4px; }
+.tb.tb-big .rb-dd { width: 12px; height: 12px; margin: 0; opacity: 0.6; }
+.tb .rb-dd { width: 11px; height: 11px; opacity: 0.6; }
+.rb-glyph { font-weight: 700; font-size: 20px; line-height: 26px; height: 26px; margin-top: 4px; }
+.rb-note { font-size: 11px; color: var(--muted); max-width: 120px; line-height: 1.4; align-self: center; padding: 0 4px; }
+/* 样式库：像 Word 那排带预览的样式格子 */
+.rb-styles { display: flex; gap: 4px; }
+.rb-style { width: 64px; height: 56px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 4px; cursor: pointer; transition: border-color var(--fast) var(--ease), background-color var(--fast) var(--ease); font-family: var(--serif); }
+.rb-style span { line-height: 1.1; white-space: nowrap; }
+.rb-style small { font-family: var(--sans); font-size: 10px; color: var(--muted); }
+.rb-style:hover { border-color: var(--accent-soft-2); background: var(--panel-2); }
+.rb-style.on { border-color: var(--accent); background: var(--accent-soft); }
+.rb-style:disabled { opacity: 0.4; cursor: default; }
+.rb-style-p span { font-size: 13px; }
+.rb-style-h1 span { font-size: 15px; font-weight: 700; font-family: var(--sans); }
+.rb-style-h2 span { font-size: 14px; font-weight: 700; font-family: var(--sans); }
+.rb-style-h3 span { font-size: 13px; font-weight: 600; font-family: var(--sans); }
+.rb-style-h4 span { font-size: 12px; font-weight: 600; font-family: var(--sans); }
+/* 表格网格与符号 */
+.rb-table-grid { left: 0; right: auto; transform-origin: top left; min-width: 0; padding: 8px 10px 8px; }
+.rb-grid-label { font-size: 12px; color: var(--ink); margin-bottom: 6px; white-space: nowrap; }
+.rb-grid { display: grid; grid-template-columns: repeat(10, 18px); gap: 2px; }
+.rb-cell { width: 18px; height: 18px; border: 1px solid var(--line-2); border-radius: 2px; background: var(--panel); padding: 0; cursor: pointer; }
+.rb-cell.on { background: var(--accent-soft-2); border-color: var(--accent); }
+.rb-symbols { left: 0; right: auto; transform-origin: top left; display: grid; grid-template-columns: repeat(12, 28px); gap: 2px; min-width: 0; padding: 8px; }
+.rb-sym { width: 28px; height: 28px; border: 1px solid transparent; border-radius: 4px; background: var(--panel); font-family: var(--serif); font-size: 16px; color: var(--ink); padding: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.rb-sym:hover { background: var(--accent-soft); border-color: var(--accent-soft-2); }
+/* 查找替换栏 */
+.findbar { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-top: 1px solid var(--line); background: var(--panel-2); font-size: 12.5px; animation: pop var(--fast) var(--ease) both; }
+.findbar > svg { width: 14px; height: 14px; color: var(--muted); }
+.findbar input[type=text], .findbar input:not([type]) { width: 200px; border: 1px solid var(--line-2); border-radius: 5px; padding: 4px 8px; background: var(--panel); color: var(--ink); font-size: 13px; }
+.findbar input:focus { border-color: var(--accent); outline: 0; box-shadow: 0 0 0 3px var(--accent-soft); }
+.findbar-count { min-width: 56px; color: var(--muted); font-family: var(--mono); font-size: 11px; }
+.findbar-opt { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); white-space: nowrap; }
+.findbar .spacer { flex: 1; }
+.rich .search-hit { background: rgba(252, 144, 0, 0.28); border-radius: 2px; }
+.rich .search-hit.is-current { background: rgba(252, 144, 0, 0.6); outline: 1px solid #fc9000; }

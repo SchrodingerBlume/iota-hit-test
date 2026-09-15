@@ -405,6 +405,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     if (k === 'PageUp' || k === 'PageDown') return; // 让滚动容器自己滚
     if (mod && (k === 'c' || k === 'x' || k === 'v')) return; // 交给 copy / cut / paste 事件
     if (mod && k === 'a') { e.preventDefault(); ed.commands.selectAll(); return; }
+    if (mod && (k === 'f' || k === 'h')) { e.preventDefault(); void import('./Ribbon').then((m) => m.useFindBar.getState().set(true)); return; }
     if (mod && k === 'z') { e.preventDefault(); if (e.shiftKey) ed.commands.redo(); else ed.commands.undo(); return; }
     if (mod && k === 'y') { e.preventDefault(); ed.commands.redo(); return; }
     if (mod && k === 'b') { e.preventDefault(); ed.commands.toggleBold(); return; }

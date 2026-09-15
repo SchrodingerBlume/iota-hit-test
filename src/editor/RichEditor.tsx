@@ -23,6 +23,8 @@ import { useStore, type RichKey } from '../model/store';
 import { registerEditor, unregisterEditor } from './registry';
 import { B, Sep, useEditorTick, useInsertActions, useRichSize } from './tools';
 import { MirrorCaret, mirrorCaretKey } from './extensions/MirrorCaret';
+import { Search } from './extensions/Search';
+import { useFindBar } from '../ui/Ribbon';
 import { recordTransaction, invalidatePositions } from './versions';
 import { usePreviewSurface } from '../ui/PreviewEditLayer';
 import { Bold, Italic, Underline, Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Code, Sigma, BookMarked, BookmarkPlus } from 'lucide-react';
@@ -80,7 +82,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
       AlignedTableCell, AlignedTableHeader, SizedTableRow, TableExtras,
       Figure, TableFigure, Equation, PageBreak, EqDenote,
       MathInline, Cite, Ref, Abbr, Footnote, Ccwd, Idx,
-      UniqueId, MirrorCaret,
+      UniqueId, MirrorCaret, Search,
     ],
     content: value,
     onUpdate: ({ editor }) => {
@@ -92,6 +94,11 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     onTransaction: ({ transaction }) => { if (richKey) recordTransaction(richKey, transaction); },
     editorProps: {
       attributes: { class: 'rich', spellcheck: 'false' },
+      // ⌘F / ⌘H 开查找替换栏（Word 的习惯）
+      handleKeyDown: (_view, event) => {
+        if ((event.metaKey || event.ctrlKey) && (event.key === 'f' || event.key === 'h')) { event.preventDefault(); useFindBar.getState().set(true); return true; }
+        return false;
+      },
       handlePaste: (view, event) => {
         // 直接粘贴图片：存库、插图
         const file = [...(event.clipboardData?.files ?? [])].find((f) => f.type.startsWith('image/'));
