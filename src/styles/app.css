@@ -826,3 +826,5 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .rb-where { padding: 0 6px; }
 .rb-collapse { margin: 0 0 0 2px; }
 .rb-style-item span { font-size: 13px; }
+.rb-pin { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--accent-soft-2); background: var(--accent-soft); color: var(--accent-ink); font-size: 12px; padding: 3px 8px; border-radius: 5px; margin-left: 4px; }
+.rb-pin svg { width: 12px; height: 12px; }

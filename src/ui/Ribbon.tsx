@@ -22,7 +22,7 @@ import {
   Sigma, SquareFunction, ListTree, Image, Table, CodeXml, MessageSquareQuote, BookmarkPlus, Space, SeparatorHorizontal, Omega, CornerDownLeft,
   BookMarked, Link2, Library, ListChecks, TableOfContents,
   BetweenHorizontalStart, BetweenHorizontalEnd, Rows3, Columns3, Minus, BetweenVerticalStart, BetweenVerticalEnd, TableCellsMerge, PanelTop, Trash2,
-  PanelLeftClose, PanelLeftOpen, PanelLeft, Columns2, PanelRight, ZoomIn, ZoomOut, Maximize2, MousePointerClick, ChevronUp, ChevronDown, X, ChevronLeft, ChevronRight, SlidersHorizontal, Info, LayoutGrid,
+  PanelLeftClose, PanelLeftOpen, PanelLeft, Columns2, PanelRight, ZoomIn, ZoomOut, Maximize2, MousePointerClick, ChevronUp, ChevronDown, X, ChevronLeft, ChevronRight, SlidersHorizontal, Info, LayoutGrid, Pin,
 } from 'lucide-react';
 
 type LayoutMode = 'editor' | 'split' | 'preview';
@@ -102,10 +102,13 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const findOpen = useFindBar((s) => s.open);
 
   // 收起 / 展开
-  const toggleCollapsed = (v: boolean) => { setCollapsed(v); setPeek(false); try { localStorage.setItem(COLLAPSE_KEY, v ? '1' : '0'); } catch { /* */ } };
+  /** 展开时抽屉是不是本来就临时弹着（那就不必再演抽屉，只把内容区推下去） */
+  const wasPeeking = useRef(false);
+  const toggleCollapsed = (v: boolean) => { wasPeeking.current = peek; setCollapsed(v); setPeek(false); try { localStorage.setItem(COLLAPSE_KEY, v ? '1' : '0'); } catch { /* */ } };
+  // 单击选项卡只切页，不收起（Word 也是：收起靠双击或右端的箭头）——不然点一下当前页就把功能区收了，
+  // 之后点选项卡只是临时弹出来、不推内容，像是坏了
   const onTab = (k: Tab) => {
     if (collapsed) { if (peek && tab === k) setPeek(false); else { setTab(k); setPeek(true); } }
-    else if (tab === k) toggleCollapsed(true);
     else setTab(k);
     setAutoTable(false);
   };
@@ -156,23 +159,30 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
     const main = document.querySelector<HTMLElement>('.main');
     const H = openHeight.current;
     if (!drawer || !main || !H || peek) return;
-    const ghost = drawer.cloneNode(true) as HTMLElement;
-    ghost.className = 'rb-drawer rb-ghost';
-    ghost.style.height = `${H}px`;
-    drawer.parentElement!.appendChild(ghost);
-    drawer.style.visibility = 'hidden';
     const ease = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
     const dur = 220;
-    // 收起：抽屉从下往上裁掉，内容区从被推下去的位置滑回来；展开反过来。
     // 展开时内容区的版面已经变矮，滑动期间用旧的高度顶着，别露底
-    const from = collapsed ? 'inset(0 0 0 0)' : 'inset(0 0 100% 0)';
-    const to = collapsed ? 'inset(0 0 100% 0)' : 'inset(0 0 0 0)';
     if (!collapsed) main.style.height = `${main.getBoundingClientRect().height + H}px`;
-    const a1 = ghost.animate([{ clipPath: from }, { clipPath: to }], { duration: dur, easing: ease, fill: 'forwards' });
     const a2 = main.animate([{ transform: `translateY(${collapsed ? H : -H}px)` }, { transform: 'none' }], { duration: dur, easing: ease });
+    // 抽屉本来就临时弹着（从 peek 固定下来）：它已经在眼前，只推内容
+    const needGhost = !(wasPeeking.current && !collapsed);
+    wasPeeking.current = false;
+    let ghost: HTMLElement | null = null;
+    let a1: Animation | null = null;
+    if (needGhost) {
+      ghost = drawer.cloneNode(true) as HTMLElement;
+      ghost.className = 'rb-drawer rb-ghost';
+      ghost.style.height = `${H}px`;
+      drawer.parentElement!.appendChild(ghost);
+      drawer.style.visibility = 'hidden';
+      // 收起：抽屉从下往上裁掉，内容区从被推下去的位置滑回来；展开反过来
+      const from = collapsed ? 'inset(0 0 0 0)' : 'inset(0 0 100% 0)';
+      const to = collapsed ? 'inset(0 0 100% 0)' : 'inset(0 0 0 0)';
+      a1 = ghost.animate([{ clipPath: from }, { clipPath: to }], { duration: dur, easing: ease, fill: 'forwards' });
+    }
     let done = false;
-    const finish = () => { if (done) return; done = true; ghost.remove(); drawer.style.visibility = ''; main.style.height = ''; };
-    Promise.all([a1.finished, a2.finished]).then(finish, finish);
+    const finish = () => { if (done) return; done = true; ghost?.remove(); drawer.style.visibility = ''; main.style.height = ''; };
+    Promise.all([a1?.finished, a2.finished]).then(finish, finish);
     return finish;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collapsed]);
@@ -189,7 +199,8 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
         ))}
         <span className="rb-where">{minimal ? '' : where}</span>
         {trailing}
-        {!minimal && <button type="button" className="rb-collapse" title={collapsed ? '固定功能区（双击选项卡也行）' : '收起功能区（再点一下当前选项卡也行）'} onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(!collapsed)}>{collapsed ? <ChevronDown /> : <ChevronUp />}</button>}
+        {collapsed && peek && <button type="button" className="rb-pin" title="固定功能区（不再收起）" onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(false)}><Pin />固定</button>}
+        {!minimal && <button type="button" className="rb-collapse" title={collapsed ? '固定功能区（双击选项卡也行）' : '收起功能区（双击选项卡也行）'} onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(!collapsed)}>{collapsed ? <ChevronDown /> : <ChevronUp />}</button>}
       </div>
       {!minimal && (
         <div ref={drawerRef} className={`rb-drawer ${collapsed && !peek ? 'is-closed' : ''} ${collapsed && peek ? 'is-peek' : ''}`} aria-hidden={!bodyVisible}>
