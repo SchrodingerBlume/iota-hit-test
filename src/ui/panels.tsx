@@ -199,10 +199,13 @@ export function PagesPanel() {
   return (
     <>
       <h2>页面开关</h2>
-      <p className="lead">封面、内封、摘要、目录、正文、结论、参考文献、致谢总是有；这里是可选的那几页。自动档照两份指南与范例的说法：谁有这一页、谁没有，或者有没有内容。终稿专有的页在开题、中期档里由模板静默跳过。</p>
-      <div className="card">
-        {PAGE_DEFS.map((d) => <PageSwitch key={d.key} pageKey={d.key} />)}
-      </div>
+      <p className="lead">前置与后置的每一页都能开关。自动档照两份指南与范例的说法：谁有这一页、谁没有，或者有没有内容。终稿专有的页在开题、中期档里由模板静默跳过；正文、结论、参考文献、致谢总是有。</p>
+      {(['前置', '后置'] as const).map((g) => (
+        <div className="card" key={g}>
+          <h3>{g}</h3>
+          {PAGE_DEFS.filter((d) => d.group === g).map((d) => <PageSwitch key={d.key} pageKey={d.key} />)}
+        </div>
+      ))}
     </>
   );
 }

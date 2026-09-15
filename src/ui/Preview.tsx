@@ -2,18 +2,20 @@ import { useEffect, useRef, useState } from 'react';
 import { useCompileState } from '../compiler/client';
 import { renderArtifact } from '../compiler/renderer';
 import { Eye, ZoomIn, ZoomOut, Maximize2, Loader2 } from 'lucide-react';
-import { jumpToPreviewText } from './jump';
+import { PreviewEditLayer } from './PreviewEditLayer';
 
 const fmtMB = (n: number) => (n / 1024 / 1024).toFixed(1);
 
 export function Preview() {
   const { status, progress, fatal, compiling, artifact, diagnostics, lastMs, compileCount } = useCompileState();
   const containerRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
   const zoomRef = useRef(1);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [pages, setPages] = useState(0);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [renderTick, setRenderTick] = useState(0);
 
   /** 缩放并让光标底下那一点不动（cy 是相对滚动容器顶部的像素） */
   const zoomAt = (next: number, cy?: number) => {
@@ -67,7 +69,7 @@ export function Preview() {
     if (!artifact || !containerRef.current) return;
     let alive = true;
     renderArtifact(artifact, containerRef.current)
-      .then((info) => { if (alive) { setPages(info.length); setRenderError(null); } })
+      .then((info) => { if (alive) { setPages(info.length); setRenderError(null); setRenderTick((t) => t + 1); } })
       .catch((e) => { if (alive) setRenderError(String(e?.message ?? e)); });
     return () => { alive = false; };
   }, [artifact, compileCount]);
@@ -119,7 +121,11 @@ export function Preview() {
         )}
         {renderError && <div className="diag err" style={{ marginBottom: 12, padding: 8 }}>渲染失败：{renderError}</div>}
         {status === 'ready' && !artifact && !compiling && !errors.length && <div className="preview-empty">还没有内容</div>}
-        <div ref={containerRef} className="preview-doc" style={{ width: `${Math.round(zoom * 100)}%` }} title="双击文字：在左侧编辑器里定位" onDoubleClick={(e) => jumpToPreviewText(e.target as Element)} />
+        {/* 渲染器会整个改写 preview-doc 的内容，编辑层只能做它的兄弟盖在上面 */}
+        <div ref={stageRef} className="preview-stage" style={{ width: `${Math.round(zoom * 100)}%` }}>
+          <div ref={containerRef} className="preview-doc" />
+          <PreviewEditLayer docRef={stageRef} scrollRef={scrollRef} renderTick={renderTick} />
+        </div>
       </div>
     </div>
   );

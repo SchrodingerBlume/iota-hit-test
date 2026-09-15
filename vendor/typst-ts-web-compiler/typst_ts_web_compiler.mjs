@@ -172,6 +172,32 @@ export class TypstCompileWorld {
         }
     }
     /**
+     * Glyph map for in-preview editing (iota4web patch): a flat f64 array,
+     * 8 numbers per glyph — page, x, y, w, h, byte_start, byte_end, kind.
+     * kind: 1 = text / math text (glyph-precise offsets), 2 = string literal
+     * (offset inside the literal, approximate when it has escapes),
+     * 0 = anything else (offsets are the node's range), 3 = an echo of the
+     * source that is not the place to edit it (outline entries, running
+     * headers / footers in the page margins). Only glyphs whose span lives
+     * in the main file are listed; coordinates are page pt.
+     * @returns {any}
+     */
+    glyph_map() {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.typstcompileworld_glyph_map(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return takeObject(r0);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
      * @param {IncrServer} state
      * @param {number} diagnostics_format
      * @returns {any}
@@ -1075,6 +1101,10 @@ function __wbg_get_imports() {
             const ret = new Uint32Array(getArrayU32FromWasm0(arg0, arg1));
             return addHeapObject(ret);
         },
+        __wbg_new_from_slice_3115b094b1002246: function(arg0, arg1) {
+            const ret = new Float64Array(getArrayF64FromWasm0(arg0, arg1));
+            return addHeapObject(ret);
+        },
         __wbg_new_from_slice_b5ea43e23f6008c0: function(arg0, arg1) {
             const ret = new Uint8Array(getArrayU8FromWasm0(arg0, arg1));
             return addHeapObject(ret);
@@ -1090,7 +1120,7 @@ function __wbg_get_imports() {
                     const a = state0.a;
                     state0.a = 0;
                     try {
-                        return __wasm_bindgen_func_elem_39820(a, state0.b, arg0, arg1);
+                        return __wasm_bindgen_func_elem_39825(a, state0.b, arg0, arg1);
                     } finally {
                         state0.a = a;
                     }
@@ -1190,7 +1220,7 @@ function __wbg_get_imports() {
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
             // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 16627, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_39826);
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_39831);
             return addHeapObject(ret);
         },
         __wbindgen_cast_0000000000000002: function(arg0) {
@@ -1227,10 +1257,10 @@ function __wbg_get_imports() {
     };
 }
 
-function __wasm_bindgen_func_elem_39826(arg0, arg1, arg2) {
+function __wasm_bindgen_func_elem_39831(arg0, arg1, arg2) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        wasm.__wasm_bindgen_func_elem_39826(retptr, arg0, arg1, addHeapObject(arg2));
+        wasm.__wasm_bindgen_func_elem_39831(retptr, arg0, arg1, addHeapObject(arg2));
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         if (r1) {
@@ -1241,8 +1271,8 @@ function __wasm_bindgen_func_elem_39826(arg0, arg1, arg2) {
     }
 }
 
-function __wasm_bindgen_func_elem_39820(arg0, arg1, arg2, arg3) {
-    wasm.__wasm_bindgen_func_elem_39820(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
+function __wasm_bindgen_func_elem_39825(arg0, arg1, arg2, arg3) {
+    wasm.__wasm_bindgen_func_elem_39825(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
 
 const IncrServerFinalization = (typeof FinalizationRegistry === 'undefined')
@@ -1357,6 +1387,11 @@ function dropObject(idx) {
     heap_next = idx;
 }
 
+function getArrayF64FromWasm0(ptr, len) {
+    ptr = ptr >>> 0;
+    return getFloat64ArrayMemory0().subarray(ptr / 8, ptr / 8 + len);
+}
+
 function getArrayJsValueFromWasm0(ptr, len) {
     ptr = ptr >>> 0;
     const mem = getDataViewMemory0();
@@ -1383,6 +1418,14 @@ function getDataViewMemory0() {
         cachedDataViewMemory0 = new DataView(wasm.memory.buffer);
     }
     return cachedDataViewMemory0;
+}
+
+let cachedFloat64ArrayMemory0 = null;
+function getFloat64ArrayMemory0() {
+    if (cachedFloat64ArrayMemory0 === null || cachedFloat64ArrayMemory0.byteLength === 0) {
+        cachedFloat64ArrayMemory0 = new Float64Array(wasm.memory.buffer);
+    }
+    return cachedFloat64ArrayMemory0;
 }
 
 function getStringFromWasm0(ptr, len) {
@@ -1547,6 +1590,7 @@ function __wbg_finalize_init(instance, module) {
     wasm = instance.exports;
     wasmModule = module;
     cachedDataViewMemory0 = null;
+    cachedFloat64ArrayMemory0 = null;
     cachedUint32ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
     return wasm;

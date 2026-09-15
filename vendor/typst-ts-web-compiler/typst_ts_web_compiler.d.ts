@@ -37,6 +37,17 @@ export class TypstCompileWorld {
     [Symbol.dispose](): void;
     compile(kind: number, diagnostics_format: number): any;
     get_artifact(fmt: number, diagnostics_format: number): any;
+    /**
+     * Glyph map for in-preview editing (iota4web patch): a flat f64 array,
+     * 8 numbers per glyph — page, x, y, w, h, byte_start, byte_end, kind.
+     * kind: 1 = text / math text (glyph-precise offsets), 2 = string literal
+     * (offset inside the literal, approximate when it has escapes),
+     * 0 = anything else (offsets are the node's range), 3 = an echo of the
+     * source that is not the place to edit it (outline entries, running
+     * headers / footers in the page margins). Only glyphs whose span lives
+     * in the main file are listed; coordinates are page pt.
+     */
+    glyph_map(): any;
     incr_compile(state: IncrServer, diagnostics_format: number): any;
     query(kind: number, selector: string, field?: string | null): string;
     set_pdf_opts(opts: any): void;
@@ -111,26 +122,6 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
-    readonly __wbg_incrserver_free: (a: number, b: number) => void;
-    readonly __wbg_typstcompilerbuilder_free: (a: number, b: number) => void;
-    readonly __wbg_typstfontresolver_free: (a: number, b: number) => void;
-    readonly __wbg_typstfontresolverbuilder_free: (a: number, b: number) => void;
-    readonly incrserver_current: (a: number, b: number) => void;
-    readonly incrserver_reset: (a: number) => void;
-    readonly incrserver_set_attach_debug_info: (a: number, b: number) => void;
-    readonly typstcompilerbuilder_add_lazy_font: (a: number, b: number, c: number) => number;
-    readonly typstcompilerbuilder_add_raw_font: (a: number, b: number) => number;
-    readonly typstcompilerbuilder_build: (a: number) => number;
-    readonly typstcompilerbuilder_new: (a: number) => void;
-    readonly typstcompilerbuilder_set_access_model: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
-    readonly typstcompilerbuilder_set_dummy_access_model: (a: number, b: number) => void;
-    readonly typstcompilerbuilder_set_package_registry: (a: number, b: number, c: number) => number;
-    readonly typstcompilerbuilder_set_pdf_opts: (a: number, b: number, c: number) => void;
-    readonly typstfontresolverbuilder_add_lazy_font: (a: number, b: number, c: number, d: number) => void;
-    readonly typstfontresolverbuilder_add_raw_font: (a: number, b: number, c: number) => void;
-    readonly typstfontresolverbuilder_build: (a: number) => number;
-    readonly typstfontresolverbuilder_get_font_info: (a: number, b: number, c: number) => void;
-    readonly typstfontresolverbuilder_new: (a: number) => void;
     readonly __wbg_typstcompiler_free: (a: number, b: number) => void;
     readonly __wbg_typstcompileworld_free: (a: number, b: number) => void;
     readonly get_font_info: (a: number) => number;
@@ -153,16 +144,37 @@ export interface InitOutput {
     readonly typstcompiler_unmap_shadow: (a: number, b: number, c: number) => number;
     readonly typstcompileworld_compile: (a: number, b: number, c: number, d: number) => void;
     readonly typstcompileworld_get_artifact: (a: number, b: number, c: number, d: number) => void;
+    readonly typstcompileworld_glyph_map: (a: number, b: number) => void;
     readonly typstcompileworld_incr_compile: (a: number, b: number, c: number, d: number) => void;
     readonly typstcompileworld_query: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly typstcompileworld_set_pdf_opts: (a: number, b: number, c: number) => void;
     readonly typstcompileworld_title: (a: number, b: number, c: number) => void;
+    readonly __wbg_incrserver_free: (a: number, b: number) => void;
+    readonly __wbg_typstcompilerbuilder_free: (a: number, b: number) => void;
+    readonly __wbg_typstfontresolver_free: (a: number, b: number) => void;
+    readonly __wbg_typstfontresolverbuilder_free: (a: number, b: number) => void;
+    readonly incrserver_current: (a: number, b: number) => void;
+    readonly incrserver_reset: (a: number) => void;
+    readonly incrserver_set_attach_debug_info: (a: number, b: number) => void;
+    readonly typstcompilerbuilder_add_lazy_font: (a: number, b: number, c: number) => number;
+    readonly typstcompilerbuilder_add_raw_font: (a: number, b: number) => number;
+    readonly typstcompilerbuilder_build: (a: number) => number;
+    readonly typstcompilerbuilder_new: (a: number) => void;
+    readonly typstcompilerbuilder_set_access_model: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
+    readonly typstcompilerbuilder_set_dummy_access_model: (a: number, b: number) => void;
+    readonly typstcompilerbuilder_set_package_registry: (a: number, b: number, c: number) => number;
+    readonly typstcompilerbuilder_set_pdf_opts: (a: number, b: number, c: number) => void;
+    readonly typstfontresolverbuilder_add_lazy_font: (a: number, b: number, c: number, d: number) => void;
+    readonly typstfontresolverbuilder_add_raw_font: (a: number, b: number, c: number) => void;
+    readonly typstfontresolverbuilder_build: (a: number) => number;
+    readonly typstfontresolverbuilder_get_font_info: (a: number, b: number, c: number) => void;
+    readonly typstfontresolverbuilder_new: (a: number) => void;
     readonly __wbg_proxycontext_free: (a: number, b: number) => void;
     readonly proxycontext_context: (a: number) => number;
     readonly proxycontext_untar: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly proxycontext_new: (a: number) => number;
-    readonly __wasm_bindgen_func_elem_39826: (a: number, b: number, c: number, d: number) => void;
-    readonly __wasm_bindgen_func_elem_39820: (a: number, b: number, c: number, d: number) => void;
+    readonly __wasm_bindgen_func_elem_39831: (a: number, b: number, c: number, d: number) => void;
+    readonly __wasm_bindgen_func_elem_39825: (a: number, b: number, c: number, d: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number) => void;

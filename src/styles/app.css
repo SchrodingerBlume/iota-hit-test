@@ -144,14 +144,15 @@ code { font-family: var(--mono); font-size: 0.92em; }
 .pane-title svg { width: 14px; height: 14px; color: var(--accent); }
 .pane-bar .spacer { flex: 1; }
 .preview-scroll { overflow: auto; padding: 18px; }
-.preview-doc { margin: 0 auto; transition: width var(--base) var(--ease), opacity var(--base) var(--ease), filter var(--base) var(--ease); }
+.preview-stage { position: relative; margin: 0 auto; transition: width var(--base) var(--ease); }
+.preview-doc { transition: opacity var(--base) var(--ease), filter var(--base) var(--ease); }
 .preview.is-compiling .preview-doc { opacity: 0.55; filter: saturate(0.8); }
 .preview-doc svg { width: 100%; height: auto; display: block; background: transparent; overflow: visible; }
 .preview-doc svg .page-sheet { fill: var(--paper); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.18)) drop-shadow(0 6px 16px rgba(0,0,0,0.10)); }
 :root[data-theme="dark"] .preview-doc svg .page-sheet { filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6)) drop-shadow(0 10px 24px rgba(0,0,0,0.5)); }
 .preview-doc svg .page-label { fill: var(--muted); font-family: var(--sans); font-size: 9px; }
 .preview-doc svg .page-rule { stroke: var(--line-2); stroke-width: 0.5; }
-.preview-scroll.is-zooming .preview-doc { transition: none; }
+.preview-scroll.is-zooming .preview-stage, .preview-scroll.is-zooming .preview-doc { transition: none; }
 .preview-doc .typst-doc { width: 100%; }
 .preview-empty { display: grid; place-items: center; height: 100%; color: var(--muted); text-align: center; padding: 24px; }
 /* 排版中：预览顶上一道流动的主色细线 */
@@ -542,10 +543,21 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .chip-math .math-preview.typst-host svg { height: 1.25em; width: auto; }
 .chip-math .math-preview.katex-host .katex { font-size: 1em; }
 .chip-math { padding: 0 4px; vertical-align: middle; }
-.math-src-row { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: start; }
-.math-src-row .eq-src { font-family: var(--mono); resize: none; width: 100%; line-height: 1.5; color: var(--ink); text-align: left; border: 1px solid var(--line-2); border-radius: var(--radius-s); padding: 6px 8px; background: var(--panel); font-size: 13px; }
-.math-src-row .eq-src:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.math-src-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.math-editor .eq-src { font-family: var(--mono); resize: none; width: 100%; line-height: 1.5; color: var(--ink); text-align: left; border: 1px solid var(--line-2); border-radius: var(--radius-s); padding: 6px 8px; background: var(--panel); font-size: 13px; }
+.math-editor .eq-src:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .math-src-row .btn.on { background: var(--accent-soft); color: var(--accent-ink); }
+.math-tip { font-size: 11px; }
+/* MathLive 所见即所得公式框 */
+.math-field-box { position: relative; }
+.math-field-box math-field { display: block; width: 100%; min-height: 48px; padding: 8px 12px; border: 1px solid var(--line-2); border-radius: var(--radius-s); background: var(--panel); color: var(--ink); text-align: center; --caret-color: var(--accent); --selection-background-color: var(--accent-soft); --placeholder-color: var(--muted); --contains-highlight-background-color: var(--accent-soft); --smart-fence-color: var(--muted); }
+.math-field-box math-field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); outline: 0; }
+.math-field-box math-field::part(virtual-keyboard-toggle), .math-field-box math-field::part(menu-toggle) { display: none; }
+.math-field-box math-field::part(container) { justify-content: center; }
+.math-field-hint { position: absolute; left: 12px; right: 12px; top: 50%; transform: translateY(-50%); text-align: center; color: var(--muted); font-size: 12px; pointer-events: none; }
+.math-field-hint code { background: var(--panel-2); padding: 0 4px; border-radius: 3px; }
+.math-editor.is-compact .math-field-box math-field { min-height: 40px; padding: 5px 10px; }
+:root[data-theme="dark"] .math-field-box math-field { --text-font-family: inherit; }
 .math-error { font-size: 12px; color: var(--danger); background: var(--danger-soft); padding: 4px 8px; border-radius: var(--radius-s); font-family: var(--mono); }
 .math-palette { border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--panel); animation: pop var(--fast) var(--ease) both; }
 .math-palette-tabs { display: flex; gap: 2px; padding: 4px 6px 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
@@ -555,6 +567,9 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .math-palette-grid { display: flex; flex-wrap: wrap; gap: 3px; padding: 8px; max-height: 190px; overflow: auto; }
 .math-key { min-width: 36px; height: 36px; padding: 0 6px; border: 1px solid transparent; border-radius: 5px; background: var(--panel-2); color: var(--ink); display: inline-flex; align-items: center; justify-content: center; transition: background-color var(--fast) var(--ease), border-color var(--fast) var(--ease), transform var(--fast) var(--ease-spring); }
 .math-key .katex { font-size: 0.95em; }
+/* KaTeX 画的分式、积分号比按钮高：裁掉溢出的部分，别让它盖住旁边的键 */
+.math-key { overflow: hidden; position: relative; }
+.math-key > * { pointer-events: none; }
 .math-key:hover { background: var(--accent-soft); border-color: var(--accent-soft-2); transform: translateY(-1px); }
 .math-key:active { transform: scale(0.94); }
 .math-palette-hint { font-size: 11px; padding: 0 10px 8px; }
@@ -623,7 +638,7 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .splitter:hover, body.is-resizing .splitter { background: var(--accent-soft-2); }
 .splitter:hover::after, body.is-resizing .splitter::after { background: var(--accent); }
 body.is-resizing { cursor: col-resize; user-select: none; }
-body.is-resizing .preview-doc { transition: none; }
+body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: none; }
 .preview-slot { display: contents; }
 .preview-slot[hidden] { display: none; }
 .main.mode-preview .preview { border-left: 0; }
@@ -641,3 +656,36 @@ body.is-resizing .preview-doc { transition: none; }
 .tag-item button svg { width: 12px; height: 12px; }
 .tags input { flex: 1; min-width: 120px; border: 0; background: none; padding: 3px 4px; outline: none; }
 .rich p.no-indent { text-indent: 0; }
+
+/* ── 预览区直接编辑 ─────────────────────────────────────────────── */
+.pv-layer { position: absolute; inset: 0; z-index: 3; user-select: none; -webkit-user-select: none; touch-action: pan-x pan-y pinch-zoom; }
+.pv-layer.cur-text { cursor: text; }
+.pv-layer.cur-pointer { cursor: pointer; }
+.pv-sel { position: absolute; background: rgba(22, 97, 131, 0.24); border-radius: 1px; pointer-events: none; }
+:root[data-theme="dark"] .pv-sel { background: rgba(102, 178, 218, 0.32); }
+.pv-caret { position: absolute; width: 1.6px; background: var(--accent); pointer-events: none; animation: caret-blink 1.05s steps(2, start) infinite; box-shadow: 0 0 0 0.5px rgba(255,255,255,0.6); }
+.pv-caret.is-idle { animation: none; background: transparent; border-left: 1.6px dashed var(--accent); opacity: 0.55; box-shadow: none; }
+@keyframes caret-blink { 50% { opacity: 0; } }
+.pv-overlay { position: absolute; white-space: pre; font-family: "Noto Serif CJK SC", "Times New Roman", serif; color: #000; background: var(--paper); pointer-events: none; z-index: 1; padding-right: 1px; }
+.pv-overlay.is-composing { border-bottom: 2px solid var(--accent); background: var(--accent-soft); }
+.pv-input { position: absolute; width: 1px; min-width: 1px; padding: 0; margin: 0; border: 0; outline: 0; opacity: 0.01; resize: none; overflow: hidden; background: transparent; color: transparent; caret-color: transparent; font-size: 16px; z-index: 0; }
+.preview.is-compiling .pv-layer { opacity: 1; }
+
+/* ── 式中符号注释（eqdenote） ─────────────────────────────────────── */
+.denote { padding: 6px 10px 8px; font-family: var(--serif); font-size: 15px; }
+.denote-grid { display: grid; grid-template-columns: auto auto auto 1fr auto; column-gap: 8px; row-gap: 4px; align-items: center; }
+.denote-lead { color: var(--ink); white-space: nowrap; font-size: 15px; }
+.denote-lead.is-muted { color: var(--muted); font-size: 12px; }
+.denote-sym { justify-self: end; min-width: 2.2em; text-align: right; }
+.denote-sym .math-preview { font-size: 15px; }
+.denote-sym-btn { border: 1px dashed transparent; border-radius: 4px; padding: 0 4px; background: none; cursor: pointer; color: var(--ink); font-family: var(--serif); min-height: 24px; }
+.denote-sym-btn:hover { border-color: var(--line-2); background: var(--panel-2); }
+.denote-sym-btn em { color: var(--muted); font-style: normal; font-size: 12px; }
+.denote-dash { color: var(--ink); letter-spacing: -0.1em; }
+.denote-meaning input { width: 100%; border: 0; border-bottom: 1px dashed transparent; background: none; font-family: var(--serif); font-size: 15px; color: var(--ink); padding: 2px 0; outline: 0; }
+.denote-meaning input:hover, .denote-meaning input:focus { border-bottom-color: var(--line-2); }
+.denote-del { opacity: 0; }
+.denote-grid:hover .denote-del, .blk.is-selected .denote-del { opacity: 1; }
+.denote-pop { position: relative; }
+.denote-pop .chip-pop { left: 0; top: 100%; }
+.denote-foot { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-family: var(--sans); font-size: 12px; color: var(--muted); }

@@ -5,6 +5,7 @@ import { startCompiler, requestCompile, exportPdf, useCompileState } from '../co
 import { serializeProject } from '../typst/serialize';
 import { collectRefTargets } from '../typst/pmToTypst';
 import { computeNumbering } from '../typst/numbering';
+import { docVersion } from '../editor/versions';
 import { resolvePage } from '../model/pages';
 import { EditorEnvContext, type EditorEnv } from '../editor/env';
 import { imageBytes, putImage, safeImageName, imageDimensions, clearImageCache } from '../editor/imageCache';
@@ -62,7 +63,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean) {
       }
       const removeImages = [...new Set([...stale, ...[...sent.current.keys()].filter((n) => !project.images.includes(n))])].filter((n) => !images.some((i) => i.name === n));
       for (const n of removeImages) sent.current.delete(n);
-      requestCompile({ main: project.main, files: project.files, images, removeImages });
+      requestCompile({ main: project.main, files: project.files, images, removeImages, segments: project.segments, version: docVersion() });
     }, 450);
     return () => window.clearTimeout(t);
   }, [doc, loaded, status, fontsVersion]);
@@ -224,7 +225,7 @@ export function App() {
               <div key={g}>
                 <h4>{GROUP_ICON[g]}{g}</h4>
                 {NAV.filter((n) => n.group === g).map((n) => {
-                  const off = loaded && ((n.key === 'appendix' && !resolvePage(doc, 'appendix').value) || (n.key === 'achievements' && !resolvePage(doc, 'achievements').value) || (n.key === 'defense' && !resolvePage(doc, 'defense').value) || (n.key === 'resume' && !resolvePage(doc, 'resume').value));
+                  const off = loaded && ((n.key === 'abstract' && !resolvePage(doc, 'abstract').value) || (n.key === 'nomenclature' && !resolvePage(doc, 'symbolsPage').value && !resolvePage(doc, 'abbreviationsPage').value) || (n.key === 'appendix' && !resolvePage(doc, 'appendix').value) || (n.key === 'achievements' && !resolvePage(doc, 'achievements').value) || (n.key === 'defense' && !resolvePage(doc, 'defense').value) || (n.key === 'resume' && !resolvePage(doc, 'resume').value));
                   return <button key={n.key} type="button" className={`${section === n.key ? 'on' : ''} ${off ? 'off' : ''}`} onClick={() => setSection(n.key)}>{n.label}{off && <span className="k">关</span>}</button>;
                 })}
               </div>

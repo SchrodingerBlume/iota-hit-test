@@ -1,0 +1,123 @@
+diff --git a/packages/compiler/src/lib.rs b/packages/compiler/src/lib.rs
+index b9de839b..bd3bfac9 100644
+--- a/packages/compiler/src/lib.rs
++++ b/packages/compiler/src/lib.rs
+@@ -475,6 +475,118 @@ impl TypstCompileWorld {
+         })
+     }
+ 
++    /// Glyph map for in-preview editing (iota4web patch): a flat f64 array,
++    /// 8 numbers per glyph — page, x, y, w, h, byte_start, byte_end, kind.
++    /// kind: 1 = text / math text (glyph-precise offsets), 2 = string literal
++    /// (offset inside the literal, approximate when it has escapes),
++    /// 0 = anything else (offsets are the node's range), 3 = an echo of the
++    /// source that is not the place to edit it (outline entries, running
++    /// headers / footers in the page margins). Only glyphs whose span lives
++    /// in the main file are listed; coordinates are page pt.
++    pub fn glyph_map(&mut self) -> Result<JsValue, JsValue> {
++        use ::typst::introspection::Tag;
++        use ::typst::layout::{Frame, FrameItem, Point, Transform};
++        use ::typst::syntax::{Source, SyntaxKind};
++        use ::typst::World;
++
++        let Some(doc) = self.do_compile_paged()? else {
++            return Ok(JsValue::NULL);
++        };
++        let world = self.graph.world();
++        let main = world.main();
++        let source: Source = world.source(main).map_err(|e| format!("{e:?}"))?;
++
++        struct Walk<'a> {
++            source: &'a Source,
++            out: Vec<f64>,
++            /// Open introspection tags: (location, is an outline entry)
++            tags: Vec<(::typst::introspection::Location, bool)>,
++            page_h: f64,
++        }
++
++        fn walk(wk: &mut Walk, frame: &Frame, ts: Transform, page: usize) {
++            let source = wk.source;
++            for (pos, item) in frame.items() {
++                match item {
++                    FrameItem::Tag(tag) => match tag {
++                        Tag::Start(elem, _) => {
++                            if let Some(loc) = elem.location() {
++                                let name = elem.func().name();
++                                wk.tags.push((loc, name == "entry"));
++                            }
++                        }
++                        Tag::End(loc, _, _) => {
++                            if let Some(i) = wk.tags.iter().rposition(|(l, _)| l == loc) {
++                                wk.tags.truncate(i);
++                            }
++                        }
++                    },
++                    FrameItem::Group(g) => {
++                        let t = ts
++                            .pre_concat(Transform::translate(pos.x, pos.y))
++                            .pre_concat(g.transform);
++                        walk(wk, &g.frame, t, page);
++                    }
++                    FrameItem::Text(text) => {
++                        let in_entry = wk.tags.iter().any(|(_, e)| *e);
++                        let mut x = pos.x;
++                        for glyph in &text.glyphs {
++                            let w = glyph.x_advance.at(text.size);
++                            let (span, off) = glyph.span;
++                            if span.id() == Some(source.id()) {
++                                if let Some(node) = source.find(span) {
++                                    let r = node.range();
++                                    let len = glyph.range().len();
++                                    let (start, end, kind): (usize, usize, f64) = match node.kind() {
++                                        SyntaxKind::Text | SyntaxKind::MathText => {
++                                            let s = (r.start + off as usize).min(r.end);
++                                            (s, (s + len).min(r.end), 1.0)
++                                        }
++                                        SyntaxKind::Str => {
++                                            let inner_end = r.end.saturating_sub(1).max(r.start);
++                                            let s = (r.start + 1 + off as usize).min(inner_end);
++                                            (s, (s + len).min(inner_end), 2.0)
++                                        }
++                                        _ => (r.start, r.end, 0.0),
++                                    };
++                                    let p1 = Point::new(x, pos.y - text.size).transform(ts);
++                                    let p2 = Point::new(x + w, pos.y).transform(ts);
++                                    let (x1, y1) = (p1.x.to_pt(), p1.y.to_pt());
++                                    let (x2, y2) = (p2.x.to_pt(), p2.y.to_pt());
++                                    let top = y1.min(y2);
++                                    let bottom = y1.max(y2);
++                                    // Running headers / footers sit in the page margins: an echo, not the text itself.
++                                    let in_margin = bottom < wk.page_h * 0.085 || top > wk.page_h * 0.93;
++                                    let kind = if in_entry || in_margin { 3.0 } else { kind };
++                                    wk.out.extend_from_slice(&[
++                                        page as f64,
++                                        x1.min(x2),
++                                        top,
++                                        (x2 - x1).abs(),
++                                        bottom - top,
++                                        start as f64,
++                                        end as f64,
++                                        kind,
++                                    ]);
++                                }
++                            }
++                            x += w;
++                        }
++                    }
++                    _ => {}
++                }
++            }
++        }
++
++        let mut w = Walk { source: &source, out: Vec::new(), tags: Vec::new(), page_h: 842.0 };
++        for (i, page) in doc.pages().iter().enumerate() {
++            w.page_h = page.frame.size().y.to_pt();
++            w.tags.clear();
++            walk(&mut w, &page.frame, Transform::identity(), i);
++        }
++        Ok(js_sys::Float64Array::from(w.out.as_slice()).into())
++    }
++
+     pub fn query(
+         &mut self,
+         kind: u8,

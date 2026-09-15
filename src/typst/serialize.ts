@@ -2,9 +2,11 @@
 // 结构照 iota-hit/template/example.typ：前置 → 主体 → 附录 → 后置。
 import type { ThesisDoc, Settings, Info } from '../model/types';
 import { INFO_FIELDS } from '../model/info';
-import { serializeDoc, escapeText, collectImages, collectRefTargets } from './pmToTypst';
+import { serializeDoc, escapeText, collectImages, collectRefTargets, indexPositions } from './pmToTypst';
 import { generateBibtex } from '../bib/bibtex';
 import { resolvePage } from '../model/pages';
+import { mark, stripMarks, type Segment } from './sourcemap';
+import type { RichKey } from '../model/store';
 
 export const IOTA_HIT_VERSION = '0.1.0';
 
@@ -19,11 +21,29 @@ export interface Project {
   /** 旁文件：refs.bib、achievements.bib；图片另走二进制通道 */
   files: Record<string, string>;
   images: string[];
+  /** main.typ 里每段文字对应编辑器里的哪儿（预览区直接编辑用） */
+  segments: Segment[];
 }
 
 const content = (s: string) => `[${escapeText(s.trim())}]`;
-/** 多行题目：手写换行变成 \ */
-const multiline = (s: string) => `[${s.trim().split(/\r?\n/).map((l) => escapeText(l.trim())).filter(Boolean).join(' \\ ')}]`;
+/** 元信息字段：内容外面套映射记号，pmFrom/pmTo 记的是在字段值里的偏移 */
+const infoContent = (field: string, s: string) => {
+  const raw = s.trim();
+  return `[${mark('info', 'info', 0, raw.length, escapeText(raw), { attr: field, raw })}]`;
+};
+const infoMultiline = (field: string, s: string) => {
+  const value = s.trim();
+  const lines: string[] = [];
+  let offset = 0;
+  for (const line of value.split(/\r?\n/)) {
+    const raw = line.trim();
+    const start = offset + line.indexOf(raw);
+    offset += line.length + 1;
+    if (!raw) continue;
+    lines.push(mark('info', 'info', start, start + raw.length, escapeText(raw), { attr: field, raw }));
+  }
+  return `[${lines.join(' \\ ')}]`;
+};
 
 function tri(v: 'auto' | boolean | string): string {
   if (v === 'auto') return 'auto';
@@ -79,18 +99,18 @@ function infoArgs(info: Info, s: Settings): string[] {
     const v = info[f.key];
     if (f.kind === 'keywords') {
       const list = (v as string[]).map((k) => k.trim()).filter(Boolean);
-      if (list.length) args.push(`${f.param}: (${list.map(content).join(', ')},)`);
+      if (list.length) args.push(`${f.param}: (${list.map((k, i) => `[${mark('info', 'info', i, i + 1, escapeText(k), { attr: f.key, raw: k })}]`).join(', ')},)`);
       continue;
     }
     const str = String(v ?? '').trim();
     if (!str) continue;
     if (f.kind === 'month') {
       // 模板收 "YYYY-MM" 字符串，自己按语言排成「2026 年 6 月」/「June, 2026」
-      if (/^\d{4}-\d{2}$/.test(str)) args.push(`${f.param}: ${JSON.stringify(str)}`);
-      else args.push(`${f.param}: ${content(str)}`);
+      if (/^\d{4}-\d{2}$/.test(str)) args.push(`${f.param}: "${mark('info', 'info', 0, str.length, str, { attr: f.key, raw: str })}"`);
+      else args.push(`${f.param}: ${infoContent(f.key, str)}`);
       continue;
     }
-    args.push(`${f.param}: ${f.kind === 'textarea' ? multiline(str) : content(str)}`);
+    args.push(`${f.param}: ${f.kind === 'textarea' ? infoMultiline(f.key, str) : infoContent(f.key, str)}`);
   }
   return args;
 }
@@ -180,29 +200,30 @@ export function serializeProject(doc: ThesisDoc): Project {
   // ── 前置 ──
   parts.push('#show: frontmatter');
   const coverArgs = s.titleEnXiaoer !== 'auto' ? `title-en-xiaoer: ${tri(s.titleEnXiaoer)}` : '';
-  parts.push(`#cover(${coverArgs})`);
-  parts.push(`#titlepage(${coverArgs})`);
+  if (resolvePage(doc, 'cover').value) parts.push(`#cover(${coverArgs})`);
+  if (resolvePage(doc, 'titlepage').value) parts.push(`#titlepage(${coverArgs})`);
 
-  const abstractZh = serializeDoc(doc.abstractZh, { headings: false, knownLabels });
-  const abstractEn = serializeDoc(doc.abstractEn, { headings: false, knownLabels });
-  if (abstractZh.trim() || abstractEn.trim()) {
+  const rich = (key: RichKey, opts: { headings: boolean; headingBase?: number }) => serializeDoc(doc[key], { ...opts, knownLabels, map: { key, posOf: indexPositions(doc[key] as any) } });
+  const abstractZh = rich('abstractZh', { headings: false });
+  const abstractEn = rich('abstractEn', { headings: false });
+  if (resolvePage(doc, 'abstract').value && (abstractZh.trim() || abstractEn.trim())) {
     parts.push(`#abstract(en: [\n${indent(abstractEn, 2)}\n])[\n${indent(abstractZh, 2)}\n]`);
   }
 
   const nomen = nomenclature(doc);
   if (nomen) parts.push(nomen);
 
-  parts.push('#table-of-contents()');
+  if (resolvePage(doc, 'tableOfContents').value) parts.push('#table-of-contents()');
   if (resolvePage(doc, 'listOfFigures').value) parts.push('#list-of-figures()');
   if (resolvePage(doc, 'listOfTables').value) parts.push('#list-of-tables()');
   if (resolvePage(doc, 'listOfEquations').value) parts.push('#list-of-equations()');
 
   // ── 主体 ──
   parts.push('#show: mainmatter');
-  const body = serializeDoc(doc.body, { headings: true, headingBase: 1, knownLabels });
+  const body = rich('body', { headings: true, headingBase: 1 });
   parts.push(body || '= 绪论');
 
-  const conclusion = serializeDoc(doc.conclusion, { headings: false, knownLabels });
+  const conclusion = rich('conclusion', { headings: false });
   if (conclusion.trim()) parts.push(`#conclusion[\n${indent(conclusion, 2)}\n]`);
 
   // ── 后置 ──
@@ -212,7 +233,7 @@ export function serializeProject(doc: ThesisDoc): Project {
     parts.push('#bibliography(read("refs.bib"), full: true)');
   }
 
-  const appendix = serializeDoc(doc.appendix, { headings: true, headingBase: 1, knownLabels });
+  const appendix = rich('appendix', { headings: true, headingBase: 1 });
   if (resolvePage(doc, 'appendix').value && appendix.trim()) {
     parts.push(`#appendix[\n${indent(appendix, 2)}\n]`);
   }
@@ -229,10 +250,10 @@ export function serializeProject(doc: ThesisDoc): Project {
   if (resolvePage(doc, 'declarations').value) parts.push('#declarations()');
   if (resolvePage(doc, 'index').value) parts.push('#index()');
 
-  const ack = serializeDoc(doc.acknowledgement, { headings: false, knownLabels });
+  const ack = rich('acknowledgement', { headings: false });
   if (ack.trim()) parts.push(`#acknowledgement[\n${indent(ack, 2)}\n]`);
 
-  const resume = serializeDoc(doc.resume, { headings: false, knownLabels });
+  const resume = rich('resume', { headings: false });
   if (resolvePage(doc, 'resume').value && resume.trim()) parts.push(`#resume[\n${indent(resume, 2)}\n]`);
 
   const images = new Set<string>();
@@ -240,5 +261,6 @@ export function serializeProject(doc: ThesisDoc): Project {
     for (const i of collectImages(d)) images.add(i);
   }
 
-  return { main: parts.join('\n\n') + '\n', files, images: [...images] };
+  const { text: main, segments } = stripMarks(parts.join('\n\n') + '\n');
+  return { main, files, images: [...images], segments };
 }

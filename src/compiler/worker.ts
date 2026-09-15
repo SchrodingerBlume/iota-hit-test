@@ -76,6 +76,8 @@ async function ensureGzip(buf: Uint8Array): Promise<Uint8Array> {
 }
 
 let compiler: TypstCompiler | undefined;
+/** 上一次编译的世界快照：留着给字形表用，下次编译再释放 */
+let world: any = null;
 const mappedImages = new Map<string, number>();
 /** 站内字体留一份，换字体表时要连它们一起重建 */
 let bundledFonts: Uint8Array[] = [];
@@ -159,6 +161,46 @@ function normalizeDiagnostics(raw: unknown): Diagnostic[] {
 
 const enc = new TextEncoder();
 
+/** UTF-8 字节偏移 → UTF-16 下标的查表（编译器给的是字节，编辑器认的是 JS 字符串下标） */
+function byteToUnitTable(s: string): Uint32Array {
+  const bytes = enc.encode(s).length;
+  const table = new Uint32Array(bytes + 1);
+  let b = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    let n: number;
+    if (c < 0x80) n = 1;
+    else if (c < 0x800) n = 2;
+    else if (c >= 0xd800 && c <= 0xdbff) n = 4; // 代理对：高位算 4 字节，低位不占
+    else if (c >= 0xdc00 && c <= 0xdfff) n = 0;
+    else n = 3;
+    for (let k = 0; k < n; k++) table[b + k] = i;
+    b += n;
+  }
+  table[bytes] = s.length;
+  return table;
+}
+
+/** 字形表：wasm 给的字节偏移换成 UTF-16 下标，拷出 wasm 内存 */
+function glyphMap(main: string): ArrayBuffer | null {
+  if (!world || typeof world.glyph_map !== 'function') return null;
+  try {
+    const raw = world.glyph_map() as Float64Array | null;
+    if (!raw || !raw.length) return null;
+    const out = new Float64Array(raw); // 拷贝
+    const table = byteToUnitTable(main);
+    const last = table.length - 1;
+    for (let i = 0; i < out.length; i += 8) {
+      out[i + 5] = table[Math.min(last, out[i + 5])];
+      out[i + 6] = table[Math.min(last, out[i + 6])];
+    }
+    return out.buffer;
+  } catch (e) {
+    console.warn('[iota4web] 字形表失败', e);
+    return null;
+  }
+}
+
 async function compile(msg: Extract<ToWorker, { type: 'compile' }>) {
   if (!compiler) return;
   const t0 = performance.now();
@@ -172,12 +214,17 @@ async function compile(msg: Extract<ToWorker, { type: 'compile' }>) {
     if (mappedImages.delete(name)) compiler.unmapShadow(`/images/${name}`);
   }
   try {
-    const res = await compiler.compile({ mainFilePath: '/main.typ', format: 0 as any, diagnostics: 'full' });
+    // 不走 typst.ts 的 compile() 包装：自己拿世界快照，编完留着，字形表从同一份文档上取
+    const raw = (compiler as any).compiler;
+    try { world?.free(); } catch { /* 已经释放过 */ }
+    world = raw.snapshot(undefined, '/main.typ', undefined);
+    const res = world.get_artifact(0, 3); // 0 = vector，3 = full diagnostics
     // 拷贝一份：结果是 wasm 内存上的视图，直接拿 .buffer 会把整块内存搬走
     const artifact = res.result ? new Uint8Array(res.result as Uint8Array).buffer : null;
-    post({ type: 'compiled', id: msg.id, artifact, diagnostics: normalizeDiagnostics(res.diagnostics), ms: Math.round(performance.now() - t0) }, artifact ? [artifact] : []);
+    const glyphs = artifact ? glyphMap(msg.main) : null;
+    post({ type: 'compiled', id: msg.id, artifact, diagnostics: normalizeDiagnostics(res.diagnostics), ms: Math.round(performance.now() - t0), glyphs }, [artifact, glyphs].filter((x): x is ArrayBuffer => !!x));
   } catch (e) {
-    post({ type: 'compiled', id: msg.id, artifact: null, diagnostics: [{ severity: 'error', message: String((e as Error)?.message ?? e), where: '' }], ms: Math.round(performance.now() - t0) });
+    post({ type: 'compiled', id: msg.id, artifact: null, diagnostics: [{ severity: 'error', message: String((e as Error)?.message ?? e), where: '' }], ms: Math.round(performance.now() - t0), glyphs: null });
   }
 }
 

@@ -1,6 +1,7 @@
 // 主线程这一侧：起 worker、排队编译、把状态放进一个 zustand store 给界面用。
 import { create } from 'zustand';
 import type { ToWorker, FromWorker, Diagnostic, Progress } from './protocol';
+import type { Segment } from '../typst/sourcemap';
 
 export interface CompileState {
   status: 'booting' | 'ready' | 'error';
@@ -17,6 +18,10 @@ export interface CompileState {
   fontsVersion: number;
   /** 编译器眼下认得的家族名 */
   families: string[];
+  /** 与 artifact 配套的字形表、源码映射、文档版本（预览区直接编辑用） */
+  glyphs: Float64Array | null;
+  segments: Segment[];
+  mapVersion: number;
 }
 
 export const useCompileState = create<CompileState>(() => ({
@@ -31,6 +36,9 @@ export const useCompileState = create<CompileState>(() => ({
   compileCount: 0,
   fontsVersion: 0,
   families: [],
+  glyphs: null,
+  segments: [],
+  mapVersion: -1,
 }));
 
 export interface CompileInput {
@@ -38,11 +46,15 @@ export interface CompileInput {
   files: Record<string, string>;
   images: { name: string; data: ArrayBuffer }[];
   removeImages: string[];
+  /** 源码映射与它对应的文档版本 */
+  segments?: Segment[];
+  version?: number;
 }
 
 let worker: Worker | null = null;
 let nextId = 1;
 let inFlight: number | null = null;
+let inFlightInput: CompileInput | null = null;
 let pending: CompileInput | null = null;
 const pdfWaiters = new Map<number, (r: { pdf: ArrayBuffer | null; diagnostics: Diagnostic[] }) => void>();
 const fontWaiters = new Map<number, (r: { families: string[]; error?: string }) => void>();
@@ -57,8 +69,10 @@ function flush() {
   const input = pending;
   pending = null;
   inFlight = nextId++;
+  inFlightInput = input;
   useCompileState.setState({ compiling: true });
-  send({ type: 'compile', id: inFlight, ...input }, input.images.map((i) => i.data));
+  const { segments: _s, version: _v, ...msg } = input;
+  send({ type: 'compile', id: inFlight, ...msg }, input.images.map((i) => i.data));
 }
 
 export function startCompiler() {
@@ -81,12 +95,15 @@ export function startCompiler() {
         if (m.id !== inFlight) break;
         inFlight = null;
         const s = useCompileState.getState();
+        const input = inFlightInput;
+        inFlightInput = null;
         useCompileState.setState({
           compiling: false,
           artifact: m.artifact ? new Uint8Array(m.artifact) : s.artifact,
           diagnostics: m.diagnostics,
           lastMs: m.ms,
           compileCount: s.compileCount + 1,
+          ...(m.artifact ? { glyphs: m.glyphs ? new Float64Array(m.glyphs) : null, segments: input?.segments ?? [], mapVersion: input?.version ?? -1 } : {}),
         });
         flush();
         break;

@@ -3,7 +3,8 @@ import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react';
 import { useState, type ReactElement } from 'react';
 import { InlineChip, Field } from './Chip';
-import { useEditorEnv } from '../env';
+import { useEditorEnv, useOpenNonce, focusAttrInput } from '../env';
+import { useEffect, useRef } from 'react';
 import { MathEditor, forPreview } from '../math/MathEditor';
 import { MathPreview } from '../math/MathPreview';
 
@@ -28,11 +29,12 @@ const inlineAtom = (name: string, attrs: Record<string, { default: any }>, View:
   });
 
 // ── 行内公式 ────────────────────────────────────────────────────
-function MathInlineView({ node, updateAttributes, selected, deleteNode, editor }: NodeViewProps) {
+function MathInlineView({ node, updateAttributes, selected, deleteNode, editor, getPos }: NodeViewProps) {
+  const open = useOpenNonce(getPos);
   const src = String(node.attrs.src ?? '');
   const mode = node.attrs.mode === 'latex' ? 'latex' : 'typst';
   return (
-    <InlineChip kind="math" text={src ? <MathPreview src={forPreview(src, mode)} mode={mode} /> : <em>公式</em>} title={src || '行内公式'} selected={selected} editable={editor.isEditable} autoOpen={!src} onDelete={deleteNode} wide>
+    <InlineChip kind="math" openNonce={open.nonce} text={src ? <MathPreview src={forPreview(src, mode)} mode={mode} /> : <em>公式</em>} title={src || '行内公式'} selected={selected} editable={editor.isEditable} autoOpen={!src} onDelete={deleteNode} wide>
       {(close) => (
         <MathEditor value={src} mode={mode} display={false} compact autoFocus onChange={(v) => updateAttributes({ src: v })} onMode={(m) => updateAttributes({ mode: m })} onEnter={close} />
       )}
@@ -49,7 +51,8 @@ function groupBy<T extends { group?: string }>(items: T[]): [string, T[]][] {
 }
 
 // ── 文献引用 ────────────────────────────────────────────────────
-function CiteView({ node, updateAttributes, selected, deleteNode, editor }: NodeViewProps) {
+function CiteView({ node, updateAttributes, selected, deleteNode, editor, getPos }: NodeViewProps) {
+  const open = useOpenNonce(getPos);
   const env = useEditorEnv();
   const keys = String(node.attrs.keys ?? '').split(/[,\s;]+/).filter(Boolean);
   const [q, setQ] = useState('');
@@ -59,7 +62,7 @@ function CiteView({ node, updateAttributes, selected, deleteNode, editor }: Node
   };
   const list = env.bibKeys.filter((b) => !q || b.key.toLowerCase().includes(q.toLowerCase()) || b.title.toLowerCase().includes(q.toLowerCase()));
   return (
-    <InlineChip kind="cite" text={keys.length ? `[${keys.join(', ')}]` : <em>引用</em>} title="参考文献引用" selected={selected} editable={editor.isEditable} autoOpen={!keys.length} onDelete={deleteNode}>
+    <InlineChip kind="cite" openNonce={open.nonce} text={keys.length ? `[${keys.join(', ')}]` : <em>引用</em>} title="参考文献引用" selected={selected} editable={editor.isEditable} autoOpen={!keys.length} onDelete={deleteNode}>
       {() => (
         <>
           <Field label="文献" hint={env.bibKeys.length ? '点选，可多选' : '先在「参考文献」里粘贴 BibTeX'}>
@@ -131,13 +134,14 @@ function RefPicker({ env, target, onPick }: { env: ReturnType<typeof useEditorEn
     </>
   );
 }
-function RefView({ node, updateAttributes, selected, deleteNode, editor }: NodeViewProps) {
+function RefView({ node, updateAttributes, selected, deleteNode, editor, getPos }: NodeViewProps) {
+  const open = useOpenNonce(getPos);
   const env = useEditorEnv();
   const target = String(node.attrs.target ?? '');
   const hit = env.refTargets.find((r) => r.label === target);
   const text = hit ? (hit.ref ?? `${KIND_NAME[hit.kind]} ${hit.index}`) : target ? <span className="ref-dangling" title="引用的对象不存在了（删了，或公式取消了编号）">??</span> : <em>引用</em>;
   return (
-    <InlineChip kind="ref" text={text} title={hit ? `${KIND_NAME[hit.kind]}：${hit.title}` : '交叉引用'} selected={selected} editable={editor.isEditable} autoOpen={!target} onDelete={deleteNode}>
+    <InlineChip kind="ref" openNonce={open.nonce} text={text} title={hit ? `${KIND_NAME[hit.kind]}：${hit.title}` : '交叉引用'} selected={selected} editable={editor.isEditable} autoOpen={!target} onDelete={deleteNode}>
       {(close) => <RefPicker env={env} target={target} onPick={(l) => { updateAttributes({ target: l }); close(); }} />}
     </InlineChip>
   );
@@ -145,12 +149,13 @@ function RefView({ node, updateAttributes, selected, deleteNode, editor }: NodeV
 export const Ref = inlineAtom('ref', { target: { default: '' } }, RefView);
 
 // ── 缩略语 ──────────────────────────────────────────────────────
-function AbbrView({ node, updateAttributes, selected, deleteNode, editor }: NodeViewProps) {
+function AbbrView({ node, updateAttributes, selected, deleteNode, editor, getPos }: NodeViewProps) {
+  const open = useOpenNonce(getPos);
   const env = useEditorEnv();
   const key = String(node.attrs.key ?? '');
   const hit = env.abbrs.find((a) => a.key === key);
   return (
-    <InlineChip kind="abbr" text={key || <em>缩写</em>} title={hit ? `${key}：${hit.long}（首次出现自动展开）` : '缩略语'} selected={selected} editable={editor.isEditable} autoOpen={!key} onDelete={deleteNode}>
+    <InlineChip kind="abbr" openNonce={open.nonce} text={key || <em>缩写</em>} title={hit ? `${key}：${hit.long}（首次出现自动展开）` : '缩略语'} selected={selected} editable={editor.isEditable} autoOpen={!key} onDelete={deleteNode}>
       {(close) => (
         <>
           <div className="field-label">缩略语</div>
@@ -170,13 +175,16 @@ function AbbrView({ node, updateAttributes, selected, deleteNode, editor }: Node
 export const Abbr = inlineAtom('abbr', { key: { default: '' } }, AbbrView);
 
 // ── 脚注 ────────────────────────────────────────────────────────
-function FootnoteView({ node, updateAttributes, selected, deleteNode, editor }: NodeViewProps) {
+function FootnoteView({ node, updateAttributes, selected, deleteNode, editor, getPos }: NodeViewProps) {
+  const open = useOpenNonce(getPos);
   const text = String(node.attrs.text ?? '');
+  const wrap = useRef<HTMLSpanElement>(null);
+  useEffect(() => { if (open.nonce && open.attr) requestAnimationFrame(() => focusAttrInput(wrap.current?.closest('.chip-wrap') as HTMLElement | null, open.attr, open.offset)); }, [open]);
   return (
-    <InlineChip kind="footnote" text="①" title={text || '脚注'} selected={selected} editable={editor.isEditable} autoOpen={!text} onDelete={deleteNode}>
+    <InlineChip kind="footnote" openNonce={open.nonce} text={<span ref={wrap}>①</span>} title={text || '脚注'} selected={selected} editable={editor.isEditable} autoOpen={!text} onDelete={deleteNode}>
       {() => (
         <Field label="脚注内容">
-          <textarea autoFocus rows={3} value={text} onChange={(e) => updateAttributes({ text: e.target.value })} />
+          <textarea autoFocus rows={3} data-attr="text" value={text} onChange={(e) => updateAttributes({ text: e.target.value })} />
         </Field>
       )}
     </InlineChip>
@@ -185,10 +193,11 @@ function FootnoteView({ node, updateAttributes, selected, deleteNode, editor }: 
 export const Footnote = inlineAtom('footnote', { text: { default: '' } }, FootnoteView);
 
 // ── 索引词（#idx） ──────────────────────────────────────────────
-function IdxView({ node, updateAttributes, selected, deleteNode, editor }: NodeViewProps) {
+function IdxView({ node, updateAttributes, selected, deleteNode, editor, getPos }: NodeViewProps) {
+  const open = useOpenNonce(getPos);
   const text = String(node.attrs.text ?? '');
   return (
-    <InlineChip kind="idx" text={text || <em>索引词</em>} title="登记进索引页的词（正文里照常印出）" selected={selected} editable={editor.isEditable} autoOpen={!text} onDelete={deleteNode}>
+    <InlineChip kind="idx" openNonce={open.nonce} text={text || <em>索引词</em>} title="登记进索引页的词（正文里照常印出）" selected={selected} editable={editor.isEditable} autoOpen={!text} onDelete={deleteNode}>
       {(close) => (
         <Field label="索引词" hint="印在正文里，同时登记进索引页（要排索引页记得在「页面开关」里打开）">
           <input autoFocus value={text} onChange={(e) => updateAttributes({ text: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); close(); } }} />

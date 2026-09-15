@@ -23,6 +23,7 @@ function HeadingView({ node, updateAttributes, editor }: NodeViewProps) {
       </div>
       <div className="hd-en" contentEditable={false}>
         <input
+          data-attr="en"
           value={en}
           placeholder="English title（博士双语目录用，可空）"
           disabled={!editable}

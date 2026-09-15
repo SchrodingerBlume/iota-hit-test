@@ -16,11 +16,14 @@ interface Props {
   onDelete?: () => void;
   /** 弹出框宽一些（公式编辑） */
   wide?: boolean;
+  /** 变了就展开（预览里双击过来的请求） */
+  openNonce?: number;
 }
 
-export function InlineChip({ kind, text, title, selected, editable = true, children, autoOpen, onDelete, wide }: Props) {
+export function InlineChip({ kind, text, title, selected, editable = true, children, autoOpen, onDelete, wide, openNonce }: Props) {
   const [open, setOpen] = useState(!!autoOpen);
   const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => { if (openNonce) setOpen(true); }, [openNonce]);
 
   useEffect(() => {
     if (!open) return;

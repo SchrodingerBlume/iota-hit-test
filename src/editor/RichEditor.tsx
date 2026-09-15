@@ -10,16 +10,20 @@ import Subscript from '@tiptap/extension-subscript';
 import Placeholder from '@tiptap/extension-placeholder';
 import { TableKit, createTable } from '@tiptap/extension-table';
 import { AlignedTableCell, AlignedTableHeader, SizedTableRow, TableExtras, currentCellInfo } from './extensions/table';
-import { TextSelection, NodeSelection } from '@tiptap/pm/state';
+import { NodeSelection } from '@tiptap/pm/state';
 import type { RichDoc } from '../model/types';
 import { HeadingEn } from './extensions/HeadingEn';
 import { UniqueId } from './extensions/UniqueId';
 import { MathInline, Cite, Ref, Abbr, Footnote, Ccwd, Idx } from './extensions/inline';
 import { Figure, TableFigure, Equation, PageBreak } from './extensions/blocks';
-import { useEditorEnv, NumberingContext } from './env';
+import { EqDenote } from './extensions/eqdenote';
+import { useEditorEnv, NumberingContext, RichKeyContext } from './env';
 import { computeNumbering, type Part } from '../typst/numbering';
 import { useStore, type RichKey } from '../model/store';
-import { IndentDecrease, Rows2, AArrowDown, AArrowUp, Grid3x3, Undo2, Redo2, Pilcrow, Heading1, Heading2, Heading3, Heading4, Bold, Italic, Underline, Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Code, List, ListOrdered, CodeXml, Sigma, SquareFunction, BookMarked, Link2, MessageSquareQuote, BookmarkPlus, Space, Image, Table, SeparatorHorizontal, BetweenHorizontalStart, BetweenHorizontalEnd, BetweenVerticalStart, BetweenVerticalEnd, Rows3, Columns3, Minus, TableCellsMerge, PanelTop, Plus, ChevronDown } from 'lucide-react';
+import { registerEditor, unregisterEditor } from './registry';
+import { recordTransaction, invalidatePositions } from './versions';
+import { usePreviewSurface } from '../ui/PreviewEditLayer';
+import { ListTree, IndentDecrease, Rows2, AArrowDown, AArrowUp, Grid3x3, Undo2, Redo2, Pilcrow, Heading1, Heading2, Heading3, Heading4, Bold, Italic, Underline, Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Code, List, ListOrdered, CodeXml, Sigma, SquareFunction, BookMarked, Link2, MessageSquareQuote, BookmarkPlus, Space, Image, Table, SeparatorHorizontal, BetweenHorizontalStart, BetweenHorizontalEnd, BetweenVerticalStart, BetweenVerticalEnd, Rows3, Columns3, Minus, TableCellsMerge, PanelTop, Plus, ChevronDown } from 'lucide-react';
 
 /** 段落多一个「不缩进」属性：接在公式、列表后面的续段，模板里就是 first-line-indent: 0pt */
 const NoIndentParagraph = Paragraph.extend({
@@ -53,7 +57,6 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
   const [richSize] = useRichSize();
   const env = useEditorEnv();
   const settings = useStore((s) => s.doc.settings);
-  const jump = useStore((s) => s.jump);
   const numbering = useMemo(() => computeNumbering(value as any, settings, part), [value, settings, part]);
 
   const editor = useEditor({
@@ -65,7 +68,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
       Placeholder.configure({ placeholder: placeholder ?? '在这里写……' }),
       TableKit.configure({ table: { resizable: true, cellMinWidth: 40 }, tableCell: false, tableHeader: false, tableRow: false }),
       AlignedTableCell, AlignedTableHeader, SizedTableRow, TableExtras,
-      Figure, TableFigure, Equation, PageBreak,
+      Figure, TableFigure, Equation, PageBreak, EqDenote,
       MathInline, Cite, Ref, Abbr, Footnote, Ccwd, Idx,
       UniqueId,
     ],
@@ -75,6 +78,8 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
       lastEmitted.current = json;
       onChange(json);
     },
+    // 每一笔改动的 mapping 记下来：预览区的字形表要靠它把老位置换算成新位置
+    onTransaction: ({ transaction }) => { if (richKey) recordTransaction(richKey, transaction); },
     editorProps: {
       attributes: { class: 'rich', spellcheck: 'false' },
       handlePaste: (view, event) => {
@@ -92,65 +97,31 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
   // 外面换了文档（打开工程、换节）才 setContent；自己发出去的不回灌
   useEffect(() => {
     if (!editor) return;
+    // 第一次：编辑器就是拿 value 建的，不用灌，也别把预览的位置表作废
+    if (lastEmitted.current === null) { lastEmitted.current = value; return; }
     if (value === lastEmitted.current) return;
+    invalidatePositions();
     editor.commands.setContent(value, { emitUpdate: false });
   }, [editor, value]);
 
-  // 预览里双击过来的定位：在本编辑器的文档里找那段字，选中并滚到眼前
+  // 登记到编辑器表里：预览区直接编辑要找到它（挂上来时内容就是工程里那份，位置不必作废）
   useEffect(() => {
-    if (!editor || !jump || jump.richKey !== richKey) return;
-    const hit = locate(editor, jump.needle);
-    if (!hit) return;
-    const { from, to, node } = hit;
-    const tr = editor.state.tr;
-    tr.setSelection(node ? NodeSelection.create(editor.state.doc, from) : TextSelection.create(editor.state.doc, from, to));
-    editor.view.dispatch(tr.scrollIntoView());
-    editor.view.focus();
-    // 闪一下，让眼睛找得到
-    requestAnimationFrame(() => {
-      const dom = editor.view.domAtPos(from).node as HTMLElement | Text;
-      const el = (dom.nodeType === 3 ? dom.parentElement : (dom as HTMLElement))?.closest('.rich > *, .rich li, .rich td, .rich th') as HTMLElement | null;
-      if (el) { el.classList.add('is-flash'); setTimeout(() => el.classList.remove('is-flash'), 1200); }
-    });
-  }, [editor, jump, richKey]);
+    if (!editor || !richKey) return;
+    registerEditor(richKey, editor);
+    return () => unregisterEditor(richKey, editor);
+  }, [editor, richKey]);
 
   return (
     <NumberingContext.Provider value={numbering}>
-      <div className={`editor ${className ?? ''}`} style={{ '--rich-size': `${richSize}px` } as React.CSSProperties}>
-        {editor && <Toolbar editor={editor} headings={headings} blocks={blocks} />}
-        {editor && <Bubble editor={editor} />}
-        <EditorContent editor={editor} className="editor-body" />
-      </div>
+      <RichKeyContext.Provider value={richKey}>
+        <div className={`editor ${className ?? ''}`} style={{ '--rich-size': `${richSize}px` } as React.CSSProperties}>
+          {editor && <Toolbar editor={editor} headings={headings} blocks={blocks} />}
+          {editor && <Bubble editor={editor} />}
+          <EditorContent editor={editor} className="editor-body" />
+        </div>
+      </RichKeyContext.Provider>
     </NumberingContext.Provider>
   );
-}
-
-/** 在编辑器文档里找一段字：先按整段找，找不到就逐步缩短；也查题注与英文标题这类属性 */
-function locate(editor: Editor, needle: string): { from: number; to: number; node?: boolean } | null {
-  const doc = editor.state.doc;
-  const clean = needle.replace(/\s+/g, '');
-  if (!clean) return null;
-  const chunks: { text: string; pos: number }[] = [];
-  const attrHits: { from: number; text: string }[] = [];
-  doc.descendants((node, pos) => {
-    if (node.isText && node.text) chunks.push({ text: node.text, pos });
-    const a = node.attrs ?? {};
-    for (const k of ['caption', 'captionEn', 'en', 'text']) if (typeof a[k] === 'string' && a[k].trim()) attrHits.push({ from: pos, text: String(a[k]) });
-    return true;
-  });
-  const flat: string[] = [];
-  const posOf: number[] = [];
-  for (const c of chunks) for (let i = 0; i < c.text.length; i++) { const ch = c.text[i]; if (/\s/.test(ch)) continue; flat.push(ch); posOf.push(c.pos + i); }
-  const hay = flat.join('');
-  for (let len = clean.length; len >= 3; len = Math.floor(len * 0.7)) {
-    const mid = Math.floor(clean.length / 2);
-    const start = Math.max(0, mid - Math.floor(len / 2));
-    const piece = clean.slice(start, start + len);
-    const i = hay.indexOf(piece);
-    if (i >= 0) return { from: posOf[i], to: posOf[i + piece.length - 1] + 1 };
-    for (const h of attrHits) if (h.text.replace(/\s+/g, '').includes(piece)) return { from: h.from, to: h.from, node: true };
-  }
-  return null;
 }
 
 // ── 工具栏 ──────────────────────────────────────────────────────
@@ -165,9 +136,23 @@ function useEditorTick(editor: Editor) {
   }, [editor]);
 }
 
-const B = ({ on, run, title, children, disabled, wide }: { on?: boolean; run: () => void; title: string; children: React.ReactNode; disabled?: boolean; wide?: boolean }) => (
-  <button type="button" className={`tb ${on ? 'on' : ''} ${wide ? 'tb-wide' : ''}`} title={title} disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={run}>{children}</button>
-);
+/**
+ * 工具栏按钮。人在预览区里打字时按它，命令照样作用于同一份选区（预览的光标就是编辑器的
+ * 选区）；命令一般会把焦点拉到左侧编辑器，按完再把焦点还给预览——除非命令自己打开了别的
+ * 输入框（新建公式那种），那就随它。
+ */
+const B = ({ on, run, title, children, disabled, wide }: { on?: boolean; run: () => void; title: string; children: React.ReactNode; disabled?: boolean; wide?: boolean }) => {
+  const click = () => {
+    const wasPreview = usePreviewSurface.getState().focused;
+    run();
+    // TipTap 的 focus() 是下一帧才真正聚焦的，等它落定再抢回来
+    if (wasPreview) setTimeout(() => {
+      const ae = document.activeElement as HTMLElement | null;
+      if (!ae || ae.classList.contains('rich') || ae === document.body) usePreviewSurface.getState().refocus();
+    }, 60);
+  };
+  return <button type="button" className={`tb ${on ? 'on' : ''} ${wide ? 'tb-wide' : ''}`} title={title} disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={click}>{children}</button>;
+};
 const Sep = () => <span className="tb-sep" aria-hidden />;
 
 function useInsertActions(editor: Editor) {
@@ -191,13 +176,14 @@ function useInsertActions(editor: Editor) {
     input.click();
   };
   const insertEquation = () => editor.chain().focus().insertContent({ type: 'equation', attrs: {} }).run();
+  const insertDenote = () => editor.chain().focus().insertContent({ type: 'eqdenote', attrs: { rows: JSON.stringify([{ symbol: '', mode: 'latex', meaning: '' }]), lead: 'auto' } }).run();
   const insertPageBreak = () => editor.chain().focus().insertContent({ type: 'pageBreak' }).run();
-  return { insertInline, insertTable, insertFigure, insertEquation, insertPageBreak };
+  return { insertInline, insertTable, insertFigure, insertEquation, insertDenote, insertPageBreak };
 }
 
 function Toolbar({ editor, headings, blocks }: { editor: Editor; headings: boolean; blocks: boolean }) {
   useEditorTick(editor);
-  const { insertInline, insertTable, insertFigure, insertEquation, insertPageBreak } = useInsertActions(editor);
+  const { insertInline, insertTable, insertFigure, insertEquation, insertDenote, insertPageBreak } = useInsertActions(editor);
   const inTable = editor.isActive('table');
   const [menu, setMenu] = useState(false);
 
@@ -242,6 +228,7 @@ function Toolbar({ editor, headings, blocks }: { editor: Editor; headings: boole
               {blocks && <button type="button" onClick={() => { setMenu(false); insertFigure(); }}><Image />插图…</button>}
               {blocks && <button type="button" onClick={() => { setMenu(false); insertTable(); }}><Table />表格（3 × 3，带题注）</button>}
               {blocks && <button type="button" onClick={() => { setMenu(false); insertEquation(); }}><SquareFunction />行间公式（编号）</button>}
+              {blocks && <button type="button" onClick={() => { setMenu(false); insertDenote(); }}><ListTree />式中符号注释（式中 x——…）</button>}
               {blocks && <button type="button" onClick={() => { setMenu(false); editor.chain().focus().toggleCodeBlock().run(); }}><CodeXml />代码块</button>}
               {blocks && <hr />}
               <button type="button" onClick={() => { setMenu(false); insertInline('footnote'); }}><MessageSquareQuote />脚注</button>

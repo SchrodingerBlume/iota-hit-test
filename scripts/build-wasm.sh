@@ -9,6 +9,9 @@ commit="$(cat "$here/vendor/typst-ts-web-compiler/COMMIT" 2>/dev/null || echo ma
 if [ ! -d "$work" ]; then git clone https://github.com/Myriad-Dreamin/typst.ts.git "$work"; fi
 git -C "$work" fetch --depth 1 origin "$commit" || true
 git -C "$work" checkout "$commit" || true
+# 预览区直接编辑要的字形表接口（glyph_map）不在上游，打个小补丁；见 scripts/wasm-patch/
+git -C "$work" checkout -- packages/compiler/src/lib.rs
+git -C "$work" apply "$here/scripts/wasm-patch/compiler-glyph-map.patch"
 rustup target add wasm32-unknown-unknown
 command -v wasm-pack >/dev/null || cargo install wasm-pack
 cd "$work/packages/compiler"

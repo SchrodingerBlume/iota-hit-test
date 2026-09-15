@@ -25,7 +25,8 @@ export type FromWorker =
   | { type: 'progress'; progress: Progress }
   | { type: 'ready'; ms: number; families: string[] }
   | { type: 'fatal'; message: string }
-  | { type: 'compiled'; id: number; artifact: ArrayBuffer | null; diagnostics: Diagnostic[]; ms: number }
+  /** glyphs：字形表，每 8 个数一个字形——page, x, y, w, h, 源码起, 源码止（main.typ 的 UTF-16 下标）, kind */
+  | { type: 'compiled'; id: number; artifact: ArrayBuffer | null; diagnostics: Diagnostic[]; ms: number; glyphs: ArrayBuffer | null }
   | { type: 'pdf'; id: number; pdf: ArrayBuffer | null; diagnostics: Diagnostic[] }
   | { type: 'fontsSet'; id: number; families: string[]; error?: string }
   | { type: 'snippet'; id: number; artifact: ArrayBuffer | null; error?: string };

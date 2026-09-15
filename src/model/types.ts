@@ -139,6 +139,10 @@ export interface Defense {
 
 export interface Pages {
   /** 可选页面排不排：auto 照指南与范例（见 src/model/pages.ts）；终稿专有的页在报告档里模板自己会跳过 */
+  cover: Tri<boolean>;
+  titlepage: Tri<boolean>;
+  abstract: Tri<boolean>;
+  tableOfContents: Tri<boolean>;
   declarations: Tri<boolean>;
   index: Tri<boolean>;
   resume: Tri<boolean>;

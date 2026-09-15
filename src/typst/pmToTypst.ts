@@ -11,7 +11,11 @@
 //   pageBreak               #pagebreak()
 //   bulletList / orderedList  - / +
 //   codeBlock               ```lang … ```
+//   eqdenote                #eqdenote[/ $x$: 说明]
 // 纯文本里 Typst 的特殊字符一律转义，行首会被当成标记的字符再多转义一次。
+// 带 map 选项时，文本与节点外面套上源码映射的记号（见 sourcemap.ts），预览区直接编辑靠它。
+import { mark, unmarked } from './sourcemap';
+import type { RichKey } from '../model/store';
 
 export interface PMNode {
   type: string;
@@ -30,32 +34,67 @@ export interface SerializeOptions {
   imageDir?: string;
   /** 全工程里存在的标签；引用了不存在的（比如公式取消了编号）就印红色 ??，别让整篇编译失败 */
   knownLabels?: Set<string>;
+  /** 打源码映射记号：这份富文本的 key，以及每个节点的 ProseMirror 位置 */
+  map?: { key: RichKey; posOf: WeakMap<PMNode, number> };
 }
+
+// ── ProseMirror 位置 ──────────────────────────────────────────────
+// 文本节点占字数，容器节点占 2 + 内容，其余（原子）占 1。
+const CONTAINERS = new Set(['doc', 'paragraph', 'heading', 'blockquote', 'bulletList', 'orderedList', 'listItem', 'codeBlock', 'tableFigure', 'table', 'tableRow', 'tableCell', 'tableHeader']);
+const sizeCache = new WeakMap<PMNode, number>();
+export function nodeSize(n: PMNode): number {
+  if (n.type === 'text') return (n.text ?? '').length;
+  if (!CONTAINERS.has(n.type)) return 1;
+  const hit = sizeCache.get(n);
+  if (hit !== undefined) return hit;
+  let s = 2;
+  for (const c of n.content ?? []) s += nodeSize(c);
+  sizeCache.set(n, s);
+  return s;
+}
+
+/** 每个节点在文档里的位置（文本：第一个字；其余：节点前） */
+export function indexPositions(doc: PMNode): WeakMap<PMNode, number> {
+  const posOf = new WeakMap<PMNode, number>();
+  const walk = (n: PMNode, contentStart: number) => {
+    let p = contentStart;
+    for (const c of n.content ?? []) {
+      posOf.set(c, p);
+      if (CONTAINERS.has(c.type)) walk(c, p + 1);
+      p += nodeSize(c);
+    }
+  };
+  walk(doc, 0);
+  return posOf;
+}
+
+/** 给节点套记号（没开映射就原样） */
+function tag(opts: SerializeOptions, n: PMNode, kind: 'node' | 'attr', inner: string, extra: { attr?: string; raw?: string } = {}): string {
+  const pos = opts.map?.posOf.get(n);
+  if (pos === undefined || !opts.map) return inner;
+  return mark(kind, opts.map.key, pos, pos + nodeSize(n), inner, extra);
+}
+
 
 // ── 文本转义 ────────────────────────────────────────────────────
 
-/** 行内任何位置都要转义的字符 */
-const INLINE_SPECIAL = /[\\*_`#$@<>\[\]~]/g;
+/** 行内任何位置都要转义的字符。斜线也转（// 与 /* 会开注释），一个字对一个转义，映射好算 */
+const INLINE_SPECIAL = /[\\*_`#$@<>\[\]~/]/g;
 
 export function escapeText(s: string): string {
-  return s
-    .replace(INLINE_SPECIAL, (c) => '\\' + c)
-    // 注释与斜线：// 与 /* 在标记里开注释
-    .replace(/\/\//g, '\\/\\/')
-    .replace(/\/\*/g, '\\/*')
-    .replace(/\*\//g, '*\\/');
+  return s.replace(INLINE_SPECIAL, (c) => '\\' + c);
 }
 
-/** 一段开头如果长得像列表、标题、词条，补一个反斜杠 */
+/** 一段开头如果长得像列表、标题、词条，补一个反斜杠（跳过映射记号看内容） */
 export function escapeLineStart(s: string): string {
-  // 转义之后 * _ 已经带反斜杠了，这里只管没转义的：= - + / 与「1.」
-  if (/^\s*(=|-|\+|\/|\d+\.)(\s|$)/.test(s)) return s.replace(/^(\s*)/, '$1\\');
+  // 转义之后 * _ / 已经带反斜杠了，这里只管没转义的：= - + 与「1.」
+  if (/^\s*(=|-|\+|\d+\.)(\s|$)/.test(unmarked(s))) return s.replace(/^((?:\s|\uE000[^\uE001]*\uE001)*)/, '$1\\');
   return s;
 }
 
 // ── 行内 ────────────────────────────────────────────────────────
 
-function wrapMarks(text: string, marks: PMNode['marks'] = []): string {
+function wrapMarks(text: string, marks: PMNode['marks'] = [], rawText?: string): string {
   let out = text;
   for (const m of marks) {
     switch (m.type) {
@@ -63,7 +102,7 @@ function wrapMarks(text: string, marks: PMNode['marks'] = []): string {
       case 'italic': out = `#emph[${out}]`; break;
       case 'underline': out = `#underline[${out}]`; break;
       case 'strike': out = `#strike[${out}]`; break;
-      case 'code': out = `#raw(${JSON.stringify(rawOf(text))})`; break;
+      case 'code': out = `#raw(${rawText ?? JSON.stringify(rawOf(text))})`; break;
       case 'superscript': out = `#super[${out}]`; break;
       case 'subscript': out = `#sub[${out}]`; break;
       case 'link': out = `#link(${JSON.stringify(m.attrs?.href ?? '')})[${out}]`; break;
@@ -96,28 +135,41 @@ export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {
   for (const n of nodes) {
     switch (n.type) {
       case 'text': {
+        const raw = n.text ?? '';
+        const escaped = escapeText(raw);
+        const pos = opts.map?.posOf.get(n);
         const isCode = n.marks?.some((m) => m.type === 'code');
-        out += isCode ? wrapMarks(escapeText(n.text ?? ''), n.marks) : wrapMarks(escapeText(n.text ?? ''), n.marks);
+        if (pos !== undefined && opts.map) {
+          // 等宽代码走 #raw("…")：记号套在引号里面，字形偏移就是从引号后数的
+          const rawArg = isCode ? `"${mark('text', opts.map.key, pos, pos + raw.length, JSON.stringify(raw).slice(1, -1), { raw })}"` : undefined;
+          out += wrapMarks(mark('text', opts.map.key, pos, pos + raw.length, escaped, { raw }), n.marks, rawArg);
+        } else {
+          out += wrapMarks(escaped, n.marks);
+        }
         break;
       }
       case 'hardBreak': out += ' \\\n'; break;
-      case 'mathInline': out += mathInline(n.attrs); break;
+      case 'mathInline': out += tag(opts, n, 'node', mathInline(n.attrs)); break;
       case 'cite': {
         const keys = String(n.attrs?.keys ?? '').split(/[,，;；\s]+/).filter(Boolean);
         // 写成函数调用而不是 @key：Typst 0.15 的 @ 引用会把紧跟的汉字也吞进 label
-        out += keys.map((k) => `#cite(<${k}>)`).join('');
+        out += tag(opts, n, 'node', keys.map((k) => `#cite(<${k}>)`).join(''));
         break;
       }
       case 'ref': {
         const t = n.attrs?.target;
         if (!t) break;
-        out += opts.knownLabels && !opts.knownLabels.has(t) ? '#text(red)[??]' : `#ref(<${t}>)`;
+        out += tag(opts, n, 'node', opts.knownLabels && !opts.knownLabels.has(t) ? '#text(red)[??]' : `#ref(<${t}>)`);
         break;
       }
-      case 'abbr': out += n.attrs?.key ? `#ref(<${n.attrs.key}>)` : ''; break;
-      case 'footnote': out += `#footnote[${escapeText(String(n.attrs?.text ?? ''))}]`; break;
-      case 'ccwd': out += `#ccwd(${n.attrs?.n ?? 1})`; break;
-      case 'idx': out += n.attrs?.text ? `#idx[${escapeText(String(n.attrs.text))}]` : ''; break;
+      case 'abbr': out += n.attrs?.key ? tag(opts, n, 'node', `#ref(<${n.attrs.key}>)`) : ''; break;
+      case 'footnote': {
+        const text = String(n.attrs?.text ?? '');
+        out += `#footnote[${tag(opts, n, 'attr', escapeText(text), { attr: 'text', raw: text })}]`;
+        break;
+      }
+      case 'ccwd': out += tag(opts, n, 'node', `#ccwd(${n.attrs?.n ?? 1})`); break;
+      case 'idx': out += n.attrs?.text ? tag(opts, n, 'node', `#idx[${escapeText(String(n.attrs.text))}]`) : ''; break;
       default:
         if (n.content) out += serializeInline(n.content, opts);
     }
@@ -134,13 +186,16 @@ export function labelOf(attrs: Record<string, any> | undefined, prefix: string):
   return base.replace(/[^A-Za-z0-9_:.\-]/g, '-');
 }
 
-function caption(attrs: Record<string, any> = {}): string {
-  const zh = escapeText(String(attrs.caption ?? '').trim());
-  const en = escapeText(String(attrs.captionEn ?? '').trim());
-  return en ? `${zh}#en[${en}]` : zh;
+function caption(n: PMNode, opts: SerializeOptions): string {
+  const attrs = n.attrs ?? {};
+  const zhRaw = String(attrs.caption ?? '').trim();
+  const enRaw = String(attrs.captionEn ?? '').trim();
+  const zh = tag(opts, n, 'attr', escapeText(zhRaw), { attr: 'caption', raw: zhRaw });
+  const en = tag(opts, n, 'attr', escapeText(enRaw), { attr: 'captionEn', raw: enRaw });
+  return enRaw ? `${zh}#en[${en}]` : zh;
 }
 
-function serializeTable(table: PMNode): string {
+function serializeTable(table: PMNode, opts: SerializeOptions): string {
   const rows = (table.content ?? []).filter((r) => r.type === 'tableRow');
   if (!rows.length) return '';
   // 列数按第一行的 colspan 之和算
@@ -170,7 +225,7 @@ function serializeTable(table: PMNode): string {
   const rowHeights = rows.map((r) => (r.attrs?.height ? `${Number(r.attrs.height)}cm` : 'auto'));
   const rowsArg = rowHeights.some((h) => h !== 'auto') ? `\n    rows: (${rowHeights.join(', ')}),` : '';
   const cell = (c: PMNode): string => {
-    const body = (c.content ?? []).map((p) => serializeInline(p.content, {})).join(' \\ ');
+    const body = (c.content ?? []).map((p) => serializeInline(p.content, opts)).join(' \\ ');
     const colspan = c.attrs?.colspan ?? 1;
     const rowspan = c.attrs?.rowspan ?? 1;
     const align = [c.attrs?.align, c.attrs?.valign].filter(Boolean).join(' + ');
@@ -218,24 +273,25 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
       }
       const level = Math.max(1, Math.min(4, (n.attrs?.level ?? 1) + ((opts.headingBase ?? 1) - 1)));
       const zh = serializeInline(n.content, opts).trim();
-      const en = escapeText(String(n.attrs?.en ?? '').trim());
+      const enRaw = String(n.attrs?.en ?? '').trim();
+      const en = enRaw ? `#en[${tag(opts, n, 'attr', escapeText(enRaw), { attr: 'en', raw: enRaw })}]` : '';
       const label = labelOf(n.attrs, 'sec');
       // 不编号的标题：走函数形式关掉 numbering（模板认 numbering: none）
-      if (n.attrs?.numbered === false) return `#heading(level: ${level}, numbering: none)[${zh}${en ? `#en[${en}]` : ''}]${label ? ` <${label}>` : ''}`;
-      return `${'='.repeat(level)} ${zh}${en ? `#en[${en}]` : ''}${label ? ` <${label}>` : ''}`;
+      if (n.attrs?.numbered === false) return `#heading(level: ${level}, numbering: none)[${zh}${en}]${label ? ` <${label}>` : ''}`;
+      return `${'='.repeat(level)} ${zh}${en}${label ? ` <${label}>` : ''}`;
     }
     case 'figure': {
       const img = String(n.attrs?.image ?? '');
       if (!img) return '';
       const width = Number(n.attrs?.width) || 8;
       const label = labelOf(n.attrs, 'fig');
-      return `#figure(\n  image(${JSON.stringify(`${opts.imageDir ?? 'images'}/${img}`)}, width: ${width}cm),\n  caption: [${caption(n.attrs)}],\n)${label ? ` <${label}>` : ''}`;
+      return tag(opts, n, 'node', `#figure(\n  image(${JSON.stringify(`${opts.imageDir ?? 'images'}/${img}`)}, width: ${width}cm),\n  caption: [${caption(n, opts)}],\n)`) + (label ? ` <${label}>` : '');
     }
     case 'tableFigure': {
       const table = (n.content ?? []).find((c) => c.type === 'table');
       if (!table) return '';
       const label = labelOf(n.attrs, 'tab');
-      return `#figure(\n  caption: [${caption(n.attrs)}],\n  ${serializeTable(table)},\n)${label ? ` <${label}>` : ''}`;
+      return tag(opts, n, 'node', `#figure(\n  caption: [${caption(n, opts)}],\n  ${serializeTable(table, opts)},\n)`) + (label ? ` <${label}>` : '');
     }
     case 'equation': {
       const src = String(n.attrs?.src ?? '').trim();
@@ -244,8 +300,21 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
       const label = unnumbered ? '' : labelOf(n.attrs, 'eq');
       const body = n.attrs?.mode === 'latex' ? `#mitex(${backtick(src)})` : `$ ${src} $`;
       // 不编号：模板给所有块公式编号，要在局部把 numbering 关掉
-      if (unnumbered) return `#[#set math.equation(numbering: none)\n${body}]`;
-      return `${body}${label ? ` <${label}>` : ''}`;
+      if (unnumbered) return tag(opts, n, 'node', `#[#set math.equation(numbering: none)\n${body}]`);
+      return tag(opts, n, 'node', body) + (label ? ` <${label}>` : '');
+    }
+    case 'eqdenote': {
+      // 公式底下的「式中　x——…」：模板收原生 terms 语法，一行一个 / 符号: 说明
+      const rows = parseDenoteRows(n.attrs?.rows);
+      if (!rows.length) return '';
+      const term = (sym: string, mode: string) => sym.split(/[、,，]/).map((x) => x.trim()).filter(Boolean).map((x) => (mode === 'latex' ? `#mi(${backtick(x)})` : `$${x}$`)).join('、');
+      const lines = rows.map((r, i) => {
+        const meaning = r.meaning.trim();
+        const body = opts.map ? mark('attr', opts.map.key, opts.map.posOf.get(n) ?? 0, (opts.map.posOf.get(n) ?? 0) + 1, escapeText(meaning), { attr: `rows.${i}.meaning`, raw: meaning }) : escapeText(meaning);
+        return `  / ${term(r.symbol, r.mode)}: ${body}`;
+      });
+      const lead = n.attrs?.lead === 'none' ? 'lead: none' : n.attrs?.lead && n.attrs.lead !== 'auto' ? `lead: [${escapeText(String(n.attrs.lead))}]` : '';
+      return tag(opts, n, 'node', `#eqdenote(${lead})[\n${lines.join('\n')}\n]`);
     }
     case 'codeBlock': {
       const lang = String(n.attrs?.language ?? '').trim();
@@ -266,6 +335,14 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
   }
 }
 
+export interface DenoteRow { symbol: string; mode: 'typst' | 'latex'; meaning: string }
+/** eqdenote 的行存在属性里（JSON 串），坏了就当空 */
+export function parseDenoteRows(v: unknown): DenoteRow[] {
+  if (Array.isArray(v)) return v as DenoteRow[];
+  if (typeof v !== 'string' || !v) return [];
+  try { const arr = JSON.parse(v); return Array.isArray(arr) ? arr : []; } catch { return []; }
+}
+
 const isEmptyParagraph = (n: PMNode) => n.type === 'paragraph' && !(n.content ?? []).some((c) => c.type !== 'text' || (c.text ?? '').trim() !== '');
 
 export function serializeBlocks(nodes: PMNode[] = [], opts: SerializeOptions = {}, depth = 0): string {
@@ -276,7 +353,7 @@ export function serializeBlocks(nodes: PMNode[] = [], opts: SerializeOptions = {
   for (const n of nodes) {
     if (isEmptyParagraph(n)) { if (out.length) blank++; continue; }
     const s = serializeBlock(n, opts, depth);
-    if (!s.trim()) continue;
+    if (!unmarked(s).trim()) continue;
     if (blank > 0) { out.push(`#enter(${blank})`); blank = 0; }
     out.push(s);
   }

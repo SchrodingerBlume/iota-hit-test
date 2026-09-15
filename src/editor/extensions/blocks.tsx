@@ -2,9 +2,9 @@
 // 默认长得像文档里的样子（图居中、题注一行、公式居中带编号）；选中或悬停时才浮出一条小工具条。
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent, type NodeViewProps } from '@tiptap/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { imageUrl } from '../imageCache';
-import { useEditorEnv, useNumbering } from '../env';
+import { useEditorEnv, useNumbering, useOpenNonce, focusAttrInput } from '../env';
 import { labelOf } from '../../typst/pmToTypst';
 import { MathEditor, forPreview } from '../math/MathEditor';
 import { MathPreview } from '../math/MathPreview';
@@ -19,10 +19,10 @@ function Caption({ node, updateAttributes, kindName, editable, prefix }: { node:
     <div className="cap" contentEditable={false}>
       <div className="cap-zh">
         {prefix && <span className="cap-num" title="编号按模板规则算，预览为准">{prefix}</span>}
-        <AutoInput className="cap-input" disabled={!editable} value={node.attrs.caption ?? ''} placeholder={`${kindName}题`} minWidth={60} onChange={(e) => updateAttributes({ caption: e.target.value })} />
+        <AutoInput className="cap-input" data-attr="caption" disabled={!editable} value={node.attrs.caption ?? ''} placeholder={`${kindName}题`} minWidth={60} onChange={(e) => updateAttributes({ caption: e.target.value })} />
       </div>
       <div className="cap-en">
-        <AutoInput className="cap-input-en" disabled={!editable} value={node.attrs.captionEn ?? ''} placeholder="English caption（博士双语题注用，可空）" minWidth={60} onChange={(e) => updateAttributes({ captionEn: e.target.value })} />
+        <AutoInput className="cap-input-en" data-attr="captionEn" disabled={!editable} value={node.attrs.captionEn ?? ''} placeholder="English caption（博士双语题注用，可空）" minWidth={60} onChange={(e) => updateAttributes({ captionEn: e.target.value })} />
       </div>
     </div>
   );
@@ -43,8 +43,11 @@ function LabelField({ node, updateAttributes, prefix, editable }: { node: NodeVi
 }
 
 // ── 插图 ────────────────────────────────────────────────────────
-function FigureView({ node, updateAttributes, selected, deleteNode, editor }: NodeViewProps) {
+function FigureView({ node, updateAttributes, selected, deleteNode, editor, getPos }: NodeViewProps) {
   const env = useEditorEnv();
+  const wrap = useRef<HTMLDivElement>(null);
+  const open = useOpenNonce(getPos);
+  useEffect(() => { if (open.nonce) requestAnimationFrame(() => focusAttrInput(wrap.current, open.attr ?? 'caption', open.offset)); }, [open]);
   const [url, setUrl] = useState<string | null>(null);
   const name = String(node.attrs.image ?? '');
   useEffect(() => { let alive = true; void imageUrl(name).then((u) => { if (alive) setUrl(u); }); return () => { alive = false; }; }, [name, env.images]);
@@ -57,7 +60,7 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor }: No
     updateAttributes(patch);
   };
   return (
-    <NodeViewWrapper className={`blk fig ${selected ? 'is-selected' : ''}`} data-drag-handle>
+    <NodeViewWrapper className={`blk fig ${selected ? 'is-selected' : ''}`} data-drag-handle ref={wrap}>
       <div className="fig-body" contentEditable={false}>
         {url ? <img src={url} alt="" style={{ width: `${(node.attrs.width ?? 8) * 28}px`, maxWidth: '100%' }} draggable={false} /> : (
           <label className="fig-drop">
@@ -97,11 +100,14 @@ export const Figure = Node.create({
 });
 
 // ── 表（figure 壳 + 真表格） ─────────────────────────────────────
-function TableFigureView({ node, updateAttributes, selected, deleteNode, editor }: NodeViewProps) {
+function TableFigureView({ node, updateAttributes, selected, deleteNode, editor, getPos }: NodeViewProps) {
   const editable = editor.isEditable;
+  const wrap = useRef<HTMLDivElement>(null);
+  const open = useOpenNonce(getPos);
+  useEffect(() => { if (open.nonce) requestAnimationFrame(() => focusAttrInput(wrap.current, open.attr ?? 'caption', open.offset)); }, [open]);
   const num = useNumbering().get(labelOf(node.attrs as any, 'tab'))?.number;
   return (
-    <NodeViewWrapper className={`blk tab ${selected ? 'is-selected' : ''}`}>
+    <NodeViewWrapper className={`blk tab ${selected ? 'is-selected' : ''}`} ref={wrap}>
       <Caption node={node} updateAttributes={updateAttributes} kindName="表" editable={editable} prefix={num} />
       <NodeViewContent className="tab-body" />
       <Tools>
@@ -130,8 +136,10 @@ export const TableFigure = Node.create({
 
 // ── 行间公式 ────────────────────────────────────────────────────
 // 平时就是一条居中的公式带编号；点它（或新建的空公式）才展开源码与符号面板。
-function EquationView({ node, updateAttributes, selected, deleteNode, editor }: NodeViewProps) {
+function EquationView({ node, updateAttributes, selected, deleteNode, editor, getPos }: NodeViewProps) {
   const src = String(node.attrs.src ?? '');
+  const open = useOpenNonce(getPos);
+  useEffect(() => { if (open.nonce) setEditing(true); }, [open]);
   const mode = node.attrs.mode === 'latex' ? 'latex' : 'typst';
   const numbered = node.attrs.numbered !== false;
   const editable = editor.isEditable;
