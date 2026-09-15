@@ -9,8 +9,9 @@ export interface CompileState {
   fatal: string | null;
   bootMs: number | null;
   compiling: boolean;
-  /** 最近一次成功的产物 */
+  /** 最近一次成功的产物（与上一版的差；fresh 表示要整个 reset） */
   artifact: Uint8Array | null;
+  artifactFresh: boolean;
   diagnostics: Diagnostic[];
   lastMs: number | null;
   compileCount: number;
@@ -22,6 +23,8 @@ export interface CompileState {
   glyphs: Float64Array | null;
   segments: Segment[];
   mapVersion: number;
+  /** 上一次把产物画成 SVG 花的毫秒（主线程） */
+  renderMs: number | null;
 }
 
 export const useCompileState = create<CompileState>(() => ({
@@ -31,6 +34,7 @@ export const useCompileState = create<CompileState>(() => ({
   bootMs: null,
   compiling: false,
   artifact: null,
+  artifactFresh: true,
   diagnostics: [],
   lastMs: null,
   compileCount: 0,
@@ -39,6 +43,7 @@ export const useCompileState = create<CompileState>(() => ({
   glyphs: null,
   segments: [],
   mapVersion: -1,
+  renderMs: null,
 }));
 
 export interface CompileInput {
@@ -100,6 +105,7 @@ export function startCompiler() {
         useCompileState.setState({
           compiling: false,
           artifact: m.artifact ? new Uint8Array(m.artifact) : s.artifact,
+          artifactFresh: m.artifact ? m.fresh : s.artifactFresh,
           diagnostics: m.diagnostics,
           lastMs: m.ms,
           compileCount: s.compileCount + 1,

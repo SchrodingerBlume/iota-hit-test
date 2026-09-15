@@ -57,7 +57,15 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
   const [richSize] = useRichSize();
   const env = useEditorEnv();
   const settings = useStore((s) => s.doc.settings);
-  const numbering = useMemo(() => computeNumbering(value as any, settings, part), [value, settings, part]);
+  // 编号表没变就沿用同一个 Map：它是 context 值，换了对象所有节点视图都要重画一遍
+  const numRef = useRef<{ sig: string; map: ReturnType<typeof computeNumbering> } | null>(null);
+  const numbering = useMemo(() => {
+    const map = computeNumbering(value as any, settings, part);
+    const sig = JSON.stringify([...map.entries()]);
+    if (numRef.current?.sig === sig) return numRef.current.map;
+    numRef.current = { sig, map };
+    return map;
+  }, [value, settings, part]);
 
   const editor = useEditor({
     extensions: [

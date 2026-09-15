@@ -11,7 +11,7 @@ import { NodeSelection, Selection, TextSelection } from '@tiptap/pm/state';
 import { useCompileState } from '../compiler/client';
 import { useStore, type RichKey, type Section } from '../model/store';
 import { getEditor, onRegistryChange, whenEditorReady } from '../editor/registry';
-import { docVersion, toNewPos, toOldPos } from '../editor/versions';
+import { docVersion, mappingSince, toNewPos, toOldPos } from '../editor/versions';
 import { useOpenRequest } from '../editor/openRequest';
 import { buildIndex, caretRect, hitPos, hitTest, lineStep, selectionRects, EMPTY_INDEX, type CaretRect, type Glyph, type Hit, type Line } from './previewEdit';
 
@@ -53,7 +53,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   const goalX = useRef<number | null>(null);
   const [cursor, setCursor] = useState('');
   const [composing, setComposing] = useState<string | null>(null);
-  const [pending, setPending] = useState<{ key: RichKey; version: number; text: string } | null>(null);
+  const [pending, setPending] = useState<{ key: RichKey; version: number; text: string; fading?: boolean } | null>(null);
   const [geom, setGeom] = useState<PageGeom[]>([]);
   /** 自己数连击：pointerdown 的 detail 恒为 0，双击选词、三击选段得靠这个 */
   const clicks = useRef({ t: 0, x: 0, y: 0, n: 0 });
@@ -116,8 +116,28 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     return selectionRects(index, activeKey, a, b, caret ? { page: caret.page, y: caret.y } : prefer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sel, activeKey, index, caret, stale]);
-  // 字形表跟上了，暂印的字就不用了
-  useEffect(() => { if (pending && index.version >= pending.version) setPending(null); }, [index.version, pending]);
+  // 字形表跟上了：暂印的字淡出，与真字形交叉
+  useEffect(() => {
+    if (!pending || pending.fading || index.version < pending.version) return;
+    setPending({ ...pending, fading: true });
+    const t = window.setTimeout(() => setPending((p) => (p && p.fading ? null : p)), 220);
+    return () => window.clearTimeout(t);
+  }, [index.version, pending]);
+  // 删掉的字在重排前就该消失（Word 是当场没的）：编译那一版里的字形，映射到现在的位置若已塌成空，
+  // 就盖一块纸色把它遮掉
+  const gone = useMemo(() => {
+    if (!stale || !activeKey) return [] as { page: number; x: number; y: number; w: number; h: number }[];
+    const m = mappingSince(activeKey, index.version);
+    const arr = index.byKey.get(activeKey);
+    if (!m || !arr) return [];
+    const out: { page: number; x: number; y: number; w: number; h: number }[] = [];
+    for (const g of arr) {
+      if (g.kind !== 'text') continue;
+      if (m.map(g.to, -1) <= m.map(g.from, 1)) out.push({ page: g.page, x: g.x, y: g.y, w: g.w, h: g.h });
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stale, activeKey, index, docVersion()]);
   // 光标跑出视野就滚过去（Word：视野跟着光标走）。刚切到某份富文本时它的选区还是旧的，
   // 那一下不跟，等点击把选区放好再说
   const lastCaretKey = useRef('');
@@ -316,6 +336,48 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     prefer.current = { page: hit.glyph.page, y: hit.glyph.y };
     setSelection(ed, extend ? ed.state.selection.anchor : p, p);
   };
+  /**
+   * 退格 / 删除。ProseMirror 的键位表只管并段、删节点，单个字的删除是交给浏览器的
+   * contenteditable 做的——这儿没有浏览器帮忙，得自己删：按字素（合成字符、代理对算一个），
+   * Alt 按词，⌘ 到行首 / 行尾；有选区就删选区；在段首 / 段尾、贴着原子节点时才交给键位表并段。
+   */
+  const deleteChar = (ed: Editor, dir: -1 | 1, unit: 'char' | 'word' | 'line') => {
+    const { doc, selection } = ed.state;
+    if (!selection.empty) { ed.view.dispatch(ed.state.tr.deleteSelection().scrollIntoView()); return; }
+    const head = selection.head;
+    const $h = doc.resolve(head);
+    let target: number | null = null;
+    if (unit === 'line' && caret && activeKey) {
+      const gs = caret.line.glyphs.filter((g) => g.key === activeKey && g.kind === 'text');
+      if (gs.length) { const g = dir < 0 ? gs[0] : gs[gs.length - 1]; target = nowPos(activeKey, dir < 0 ? g.from : g.to, dir < 0 ? 1 : -1); }
+    } else if (unit === 'word') {
+      const r = wordRange(ed, head + (dir > 0 ? 1 : -1), dir);
+      target = dir < 0 ? r.from : r.to;
+      if (target === head) target = head + dir;
+    } else {
+      // 字素：段落文字里，光标前 / 后那个字有几个码元
+      const text = doc.textBetween($h.start(), $h.end(), undefined, '\uFFFC');
+      const off = head - $h.start();
+      const Seg = (Intl as any).Segmenter;
+      const side = dir < 0 ? text.slice(0, off) : text.slice(off);
+      let n = 1;
+      if (Seg && side) {
+        const segs = [...new Seg(undefined, { granularity: 'grapheme' }).segment(side)] as { segment: string }[];
+        n = (dir < 0 ? segs[segs.length - 1] : segs[0])?.segment.length ?? 1;
+      }
+      const inBlock = dir < 0 ? off > 0 : off < text.length;
+      if (inBlock) target = head + dir * n;
+    }
+    const nb = dir > 0 ? $h.nodeAfter : $h.nodeBefore;
+    if (target === null || (nb && !nb.isText && nb.isInline)) {
+      // 段首、段尾、贴着公式引用这类原子节点：并段 / 删节点交给键位表
+      dispatchKey(ed, { key: dir < 0 ? 'Backspace' : 'Delete', code: dir < 0 ? 'Backspace' : 'Delete' });
+      return;
+    }
+    const from = Math.min(head, target), to = Math.max(head, target);
+    if (from < $h.start() || to > $h.end()) { dispatchKey(ed, { key: dir < 0 ? 'Backspace' : 'Delete', code: dir < 0 ? 'Backspace' : 'Delete' }); return; }
+    ed.view.dispatch(ed.state.tr.delete(from, to).scrollIntoView());
+  };
   const lineEdge = (ed: Editor, edge: 'start' | 'end', extend: boolean) => {
     if (!caret || !activeKey) return;
     const gs = caret.line.glyphs.filter((g) => g.key === activeKey && g.kind === 'text');
@@ -346,7 +408,12 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     if (mod && k === 'b') { e.preventDefault(); ed.commands.toggleBold(); return; }
     if (mod && k === 'i') { e.preventDefault(); ed.commands.toggleItalic(); return; }
     if (mod && k === 'u') { e.preventDefault(); ed.commands.toggleUnderline(); return; }
-    if (k === 'Enter' || k === 'Backspace' || k === 'Delete' || k === 'Tab') {
+    if (k === 'Backspace' || k === 'Delete') {
+      e.preventDefault();
+      deleteChar(ed, k === 'Backspace' ? -1 : 1, e.altKey || (!isMac && e.ctrlKey) ? 'word' : isMac && mod ? 'line' : 'char');
+      return;
+    }
+    if (k === 'Enter' || k === 'Tab') {
       e.preventDefault();
       dispatchKey(ed, { key: k, code: k, shiftKey: e.shiftKey, altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey });
       if (k === 'Enter') setPending(null);
@@ -398,16 +465,17 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   // ── 画 ──────────────────────────────────────────────────────
   const caretPx = caret ? pageTo(caret.page, caret.x, caret.y) : null;
   const caretH = caret && caretPx ? caret.h * caretPx.scale : 0;
-  const pendingText = pending && pending.key === activeKey && index.version < pending.version ? pending.text : '';
+  const pendingText = pending && pending.key === activeKey ? pending.text : '';
   const overlayText = composing !== null ? composing : pendingText;
-  const overlayW = useMemo(() => (overlayText && caretH ? measureText(overlayText, caretH * 0.92) : 0), [overlayText, caretH]);
+  const overlayW = useMemo(() => (overlayText && caretH && !(composing === null && pending?.fading) ? measureText(overlayText, caretH * 0.92) : 0), [overlayText, caretH, composing, pending?.fading]);
   const caretLeft = caretPx ? caretPx.left + overlayW : 0;
 
   return (
     <div ref={layerRef} data-active={activeKey ?? ''} data-focused={focused ? 1 : 0} className={`pv-layer ${cursor} ${focused ? 'is-focused' : ''}`} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerLeave={() => setCursor('')}>
       {rects.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <div key={i} className="pv-sel" style={{ left: p.left, top: p.top, width: r.w * p.scale, height: r.h * p.scale }} /> : null; })}
+      {gone.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <div key={`g${i}`} className="pv-gone" style={{ left: p.left, top: p.top, width: r.w * p.scale + 0.5, height: r.h * p.scale }} /> : null; })}
       {caretPx && overlayText && (
-        <span className={`pv-overlay ${composing !== null ? 'is-composing' : ''}`} style={{ left: caretPx.left, top: caretPx.top, height: caretH, fontSize: caretH * 0.92, lineHeight: `${caretH}px` }}>{overlayText}</span>
+        <span className={`pv-overlay ${composing !== null ? 'is-composing' : ''} ${composing === null && pending?.fading ? 'is-fading' : ''}`} style={{ left: caretPx.left, top: caretPx.top, height: caretH, fontSize: caretH * 0.92, lineHeight: `${caretH}px` }}>{overlayText}</span>
       )}
       {caretPx && sel?.empty !== false && (
         <div className={`pv-caret ${focused ? '' : 'is-idle'}`} style={{ left: caretLeft, top: caretPx.top, height: caretH }} />

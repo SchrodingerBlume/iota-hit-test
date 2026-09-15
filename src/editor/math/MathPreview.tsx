@@ -1,6 +1,6 @@
 // 公式预览：LaTeX 走 KaTeX（同步、纯前端），Typst 数学交给页面里的 wasm 引擎编一个
 // 小片段再画成 SVG（与正文同一套字体，所见即所得）。结果按源码缓存。
-import { useEffect, useState, type ReactElement } from 'react';
+import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { compileSnippet } from '../../compiler/client';
@@ -69,9 +69,11 @@ export function MathPreview({ src, mode, display = false, onError, className, em
     if (mode === 'latex') onError?.(trimmed ? katexHtml(trimmed, display).error ?? null : null);
   }, [trimmed, mode, display]);
 
+  // KaTeX 每次几毫秒，父组件重画时别跟着重算
+  const katexOut = useMemo(() => (mode === 'latex' && trimmed ? katexHtml(trimmed, display) : null), [mode, trimmed, display]);
   if (!trimmed) return <span className={`math-preview is-empty ${className ?? ''}`}>{empty ?? '（空公式）'}</span>;
-  if (mode === 'latex') {
-    const r = katexHtml(trimmed, display);
+  if (mode === 'latex' && katexOut) {
+    const r = katexOut;
     return <span className={`math-preview katex-host ${r.error ? 'has-error' : ''} ${className ?? ''}`} dangerouslySetInnerHTML={{ __html: r.html }} />;
   }
   const stale = typst.key !== trimmed;

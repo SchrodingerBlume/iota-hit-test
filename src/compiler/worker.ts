@@ -78,6 +78,9 @@ async function ensureGzip(buf: Uint8Array): Promise<Uint8Array> {
 let compiler: TypstCompiler | undefined;
 /** 上一次编译的世界快照：留着给字形表用，下次编译再释放 */
 let world: any = null;
+/** 增量服务：每次只给渲染器发「与上一版的差」，主线程只补丁变了的页 */
+let incr: any = null;
+let incrFresh = true;
 const mappedImages = new Map<string, number>();
 /** 站内字体留一份，换字体表时要连它们一起重建 */
 let bundledFonts: Uint8Array[] = [];
@@ -218,13 +221,18 @@ async function compile(msg: Extract<ToWorker, { type: 'compile' }>) {
     const raw = (compiler as any).compiler;
     try { world?.free(); } catch { /* 已经释放过 */ }
     world = raw.snapshot(undefined, '/main.typ', undefined);
-    const res = world.get_artifact(0, 3); // 0 = vector，3 = full diagnostics
+    if (!incr) { incr = raw.create_incr_server(); incrFresh = true; }
+    const res = world.incr_compile(incr, 3); // 3 = full diagnostics；结果是与上一版的差
+    // 成功那一支只带 result，诊断（警告）另问一次——编译结果是缓存的，不重编
+    const diagnostics = res?.diagnostics ?? (res?.result ? world.compile(0, 3)?.diagnostics : undefined);
     // 拷贝一份：结果是 wasm 内存上的视图，直接拿 .buffer 会把整块内存搬走
-    const artifact = res.result ? new Uint8Array(res.result as Uint8Array).buffer : null;
+    const artifact = res?.result ? new Uint8Array(res.result as Uint8Array).buffer : null;
     const glyphs = artifact ? glyphMap(msg.main) : null;
-    post({ type: 'compiled', id: msg.id, artifact, diagnostics: normalizeDiagnostics(res.diagnostics), ms: Math.round(performance.now() - t0), glyphs }, [artifact, glyphs].filter((x): x is ArrayBuffer => !!x));
+    const fresh = incrFresh;
+    if (artifact) incrFresh = false;
+    post({ type: 'compiled', id: msg.id, artifact, fresh, diagnostics: normalizeDiagnostics(diagnostics), ms: Math.round(performance.now() - t0), glyphs }, [artifact, glyphs].filter((x): x is ArrayBuffer => !!x));
   } catch (e) {
-    post({ type: 'compiled', id: msg.id, artifact: null, diagnostics: [{ severity: 'error', message: String((e as Error)?.message ?? e), where: '' }], ms: Math.round(performance.now() - t0), glyphs: null });
+    post({ type: 'compiled', id: msg.id, artifact: null, fresh: false, diagnostics: [{ severity: 'error', message: String((e as Error)?.message ?? e), where: '' }], ms: Math.round(performance.now() - t0), glyphs: null });
   }
 }
 

@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCompileState } from '../compiler/client';
 import { renderArtifact } from '../compiler/renderer';
+import { flipBefore, flipAfter } from './flip';
 import { Eye, ZoomIn, ZoomOut, Maximize2, Loader2 } from 'lucide-react';
 import { PreviewEditLayer } from './PreviewEditLayer';
 
 const fmtMB = (n: number) => (n / 1024 / 1024).toFixed(1);
 
 export function Preview() {
-  const { status, progress, fatal, compiling, artifact, diagnostics, lastMs, compileCount } = useCompileState();
+  const { status, progress, fatal, compiling, artifact, artifactFresh, diagnostics, lastMs, compileCount } = useCompileState();
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
@@ -138,8 +139,14 @@ export function Preview() {
   useEffect(() => {
     if (!artifact || !containerRef.current) return;
     let alive = true;
-    renderArtifact(artifact, containerRef.current)
-      .then((info) => { if (alive) { setPages(info.length); setRenderError(null); setRenderTick((t) => t + 1); } })
+    const t0 = performance.now();
+    const sc = scrollRef.current;
+    const view = () => { const r = sc?.getBoundingClientRect(); return r ? [r.top, r.bottom] as const : [0, window.innerHeight] as const; };
+    renderArtifact(artifact, containerRef.current, artifactFresh, {
+      before: (c) => { const [a, b] = view(); flipBefore(c, a, b); },
+      after: (c) => { const [a, b] = view(); flipAfter(c, a, b); },
+    })
+      .then((info) => { if (alive) { useCompileState.setState({ renderMs: Math.round(performance.now() - t0) }); setPages(info.length); setRenderError(null); setRenderTick((t) => t + 1); } })
       .catch((e) => { if (alive) setRenderError(String(e?.message ?? e)); });
     return () => { alive = false; };
   }, [artifact, compileCount]);

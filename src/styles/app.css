@@ -150,8 +150,14 @@ code { font-family: var(--mono); font-size: 0.92em; }
 .preview-scroll.is-zooming .preview-stage { will-change: transform; }
 .preview-scroll.is-zooming * { transition: none !important; }
 .preview-doc { transition: opacity var(--base) var(--ease), filter var(--base) var(--ease); }
-.preview.is-compiling .preview-doc { opacity: 0.55; filter: saturate(0.8); }
+.preview-doc { position: relative; }
 .preview-doc svg { width: 100%; height: auto; display: block; background: transparent; overflow: visible; }
+.preview-doc svg.typst-doc { position: relative; z-index: 1; }
+.preview-doc svg.page-chrome { position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; }
+/* 重排落地：挪了的文字块从旧位置滑过来，新块淡入（translate 是用户单位，见 flip.ts） */
+.preview-doc g.typst-text.flip-move { transition: translate 240ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.preview-doc g.typst-text.flip-in { animation: flip-in 240ms ease-out both; }
+@keyframes flip-in { from { opacity: 0; } to { opacity: 1; } }
 .preview-doc svg .page-sheet { fill: var(--paper); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.18)) drop-shadow(0 6px 16px rgba(0,0,0,0.10)); }
 :root[data-theme="dark"] .preview-doc svg .page-sheet { filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6)) drop-shadow(0 10px 24px rgba(0,0,0,0.5)); }
 .preview-doc svg .page-label { fill: var(--muted); font-family: var(--sans); font-size: 9px; }
@@ -671,6 +677,8 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 @keyframes caret-blink { 50% { opacity: 0; } }
 .pv-overlay { position: absolute; white-space: pre; font-family: "Noto Serif CJK SC", "Times New Roman", serif; color: #000; background: var(--paper); pointer-events: none; z-index: 1; padding-right: 1px; }
 .pv-overlay.is-composing { border-bottom: 2px solid var(--accent); background: var(--accent-soft); }
+.pv-overlay.is-fading { opacity: 0; background: transparent; transition: opacity 200ms ease-out; }
+.pv-gone { position: absolute; background: var(--paper); pointer-events: none; z-index: 1; }
 .pv-input { position: absolute; width: 1px; min-width: 1px; padding: 0; margin: 0; border: 0; outline: 0; opacity: 0.01; resize: none; overflow: hidden; background: transparent; color: transparent; caret-color: transparent; font-size: 16px; z-index: 0; }
 .preview.is-compiling .pv-layer { opacity: 1; }
 

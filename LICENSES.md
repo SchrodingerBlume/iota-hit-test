@@ -5,6 +5,7 @@
 | iota-hit 模板（`public/packages/local-iota-hit-*.tar.gz`） | LPPL-1.3c | 本机 `../iota-hit`，原样打包 |
 | omni-gb7714（`local-omni-gb7714-*.tar.gz`） | Apache-2.0 | 本机 typst local 包 |
 | 其余 `@preview/*` 包（glossy、lovelace、algorithmic、quan、auto-pinyin、zhconv、auto-bihua、glotter、jurlstify、mitex、valkyrie） | 各自的许可，见各包 `typst.toml` / LICENSE | packages.typst.org |
+| `src/compiler/svgPatch.mjs`（typst.ts 的增量 SVG 补丁算法，包没导出，抄了一份） | Apache-2.0 | github.com/Myriad-Dreamin/typst.ts |
 | typst.ts 编译器 / 渲染器 wasm（`vendor/`） | Apache-2.0 | github.com/Myriad-Dreamin/typst.ts 主分支自建，提交号见 `vendor/*/COMMIT` |
 | Typst | Apache-2.0 | 编进 wasm 里，0.15.1 |
 | Noto Serif CJK SC、Noto Sans CJK SC | SIL Open Font License 1.1 | github.com/notofonts/noto-cjk |

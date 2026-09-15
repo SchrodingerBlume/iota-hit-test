@@ -64,7 +64,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean) {
       const removeImages = [...new Set([...stale, ...[...sent.current.keys()].filter((n) => !project.images.includes(n))])].filter((n) => !images.some((i) => i.name === n));
       for (const n of removeImages) sent.current.delete(n);
       requestCompile({ main: project.main, files: project.files, images, removeImages, segments: project.segments, version: docVersion() });
-    }, 450);
+    }, 130);
     return () => window.clearTimeout(t);
   }, [doc, loaded, status, fontsVersion]);
   return sent;
