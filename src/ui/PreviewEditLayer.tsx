@@ -80,11 +80,13 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     if (!doc) return;
     const base = doc.getBoundingClientRect();
     const out: PageGeom[] = [];
+    // 页的位置从变换矩阵取：页组的 bbox 只是内容的外框（白纸画在另一张 SVG 里），量它会偏
     doc.querySelectorAll<SVGGElement>('svg.typst-doc > g.typst-page').forEach((g, i) => {
-      const r = g.getBoundingClientRect();
+      const m = g.getScreenCTM();
+      if (!m) return;
       const w = parseFloat(g.getAttribute('data-page-width') ?? '0') || 1;
       const h = parseFloat(g.getAttribute('data-page-height') ?? '0') || 1;
-      out[i] = { left: r.left - base.left, top: r.top - base.top, scale: r.width / w, w, h };
+      out[i] = { left: m.e - base.left, top: m.f - base.top, scale: m.a, w, h };
     });
     setGeom(out);
   }, [docRef]);

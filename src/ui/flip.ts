@@ -10,7 +10,12 @@ let scaleOf = new Map<Element, number>();
 
 function pagesNear(container: HTMLElement, viewportTop: number, viewportBottom: number): SVGGElement[] {
   const groups = [...container.querySelectorAll<SVGGElement>(':scope > svg.typst-doc > g.typst-page')];
-  return groups.filter((g) => { const r = g.getBoundingClientRect(); return r.bottom >= viewportTop - 200 && r.top <= viewportBottom + 200; });
+  return groups.filter((g) => {
+    const m = g.getScreenCTM();
+    if (!m) return false;
+    const h = (parseFloat(g.getAttribute('data-page-height') ?? '0') || 0) * m.a;
+    return m.f + h >= viewportTop - 200 && m.f <= viewportBottom + 200;
+  });
 }
 
 /** 补丁前：记下视口附近每个文字块的位置 */
@@ -30,8 +35,7 @@ export function flipAfter(container: HTMLElement, viewportTop: number, viewportB
   const moved: { el: SVGGElement; dx: number; dy: number }[] = [];
   const fresh: SVGGElement[] = [];
   for (const g of pagesNear(container, viewportTop, viewportBottom)) {
-    const w = parseFloat(g.getAttribute('data-page-width') ?? '0') || 1;
-    const scale = g.getBoundingClientRect().width / w;
+    const scale = g.getScreenCTM()?.a ?? 1;
     scaleOf.set(g, scale);
     for (const t of g.querySelectorAll<SVGGElement>('g.typst-text')) {
       const old = runs.get(t);
