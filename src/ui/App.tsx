@@ -16,7 +16,7 @@ import { InfoPanel } from './InfoPanel';
 import { AbstractPanel, NomenclaturePanel, RichSection, BibPanel, DefensePanel, PagesPanel } from './panels';
 import { Preview } from './Preview';
 import { useTheme } from './theme';
-import { FileDown, Save, FolderOpen, MoreHorizontal, FileText, FilePlus2, Info, Sun, Moon, SlidersHorizontal, BookText, PenLine, Library, LayoutGrid } from 'lucide-react';
+import { FileDown, Save, FolderOpen, FileText, FilePlus2, Info, Sun, Moon, SlidersHorizontal, BookText, PenLine, Library, LayoutGrid } from 'lucide-react';
 import { useLayoutPrefs } from './layout';
 import { Ribbon } from './Ribbon';
 
@@ -188,33 +188,37 @@ export function App() {
   return (
     <EditorEnvContext.Provider value={env}>
       <div className="app">
-        <header className="topbar">
-          <span className="brand">
-            <span className="brand-mark" aria-hidden>ι</span>
-            <span className="brand-text"><b>iota-hit</b><small>哈尔滨工业大学学位论文 · 在线编辑</small></span>
+        {/* 顶栏并进功能区那一行：左边品牌与「文件」菜单，右边状态、导出、主题 */}
+        {(() => { const leading = (
+          <span className="rb-leading">
+            <span className="brand" title="iota-hit · 哈尔滨工业大学学位论文在线编辑"><span className="brand-mark" aria-hidden>ι</span><b>iota-hit</b></span>
+            <span className="menu">
+              <button type="button" className={`rb-tab rb-file ${menu ? 'on' : ''}`} onMouseDown={(e) => e.preventDefault()} onClick={() => setMenu((m) => !m)}>文件</button>
+              {menu && (
+                <span className="menu-pop rb-file-menu" onMouseLeave={() => setMenu(false)}>
+                  <button type="button" onClick={() => { setMenu(false); setView(view === 'projects' ? 'editor' : 'projects'); }}><LayoutGrid />{view === 'projects' ? '回到编辑' : '项目管理'}</button>
+                  <button type="button" onClick={() => { setMenu(false); onNew(); }}><FilePlus2 />新建项目…</button>
+                  <hr />
+                  <button type="button" onClick={() => { setMenu(false); onSaveProject(); }}><Save />保存工程（.iota.json）</button>
+                  <button type="button" onClick={() => { setMenu(false); onOpenProject(); }}><FolderOpen />导入文件（并入当前项目）</button>
+                  <hr />
+                  <button type="button" disabled={compile.status !== 'ready' || !!busy} onClick={() => { setMenu(false); void onExportPdf(); }}><FileDown />导出 PDF</button>
+                  <button type="button" onClick={() => { setMenu(false); onExportTypst(); }}><FileText />导出 Typst 源码（main.typ + .bib）</button>
+                  <hr />
+                  <button type="button" onClick={() => { setMenu(false); alert('iota-hit 在线编辑器\n\n排版：iota-hit 0.1.0（hithesis 的 Typst 复刻）\n引擎：Typst 0.15.1，经 typst.ts 编成 wasm 在浏览器里运行\n字体：Noto Serif/Sans CJK SC、FandolKai、TeX Gyre Termes/Heros、DejaVu Sans Mono；也可读本机字体切到 Windows / macOS 档\n\n整站静态，没有服务器；工程与图片只存在这台浏览器里，记得定期「保存工程」。'); }}><Info />关于</button>
+                </span>
+              )}
+            </span>
+            <button type="button" className={`rb-proj ${view === 'projects' ? 'on' : ''}`} title="项目管理" onClick={() => setView(view === 'projects' ? 'editor' : 'projects')}>{loaded ? doc.name : '项目'}</button>
           </span>
-          <button type="button" className={`btn btn-ghost proj-btn ${view === 'projects' ? 'on' : ''}`} title="项目管理" onClick={() => setView(view === 'projects' ? 'editor' : 'projects')}><LayoutGrid />{loaded ? doc.name : '项目'}</button>
-          <span className="spacer" />
-          <span className="status"><i className={`dot ${dot}`} />{statusText}</span>
-          <button type="button" className="btn btn-primary" disabled={compile.status !== 'ready' || !!busy} onClick={onExportPdf}><FileDown />导出 PDF</button>
-          <button type="button" className="btn btn-ghost" onClick={onSaveProject}><Save />保存工程</button>
-          <button type="button" className="btn btn-ghost" title="读入 .iota.json 文件，内容并入当前项目" onClick={onOpenProject}><FolderOpen />导入文件</button>
-          <span className="menu">
-            <button type="button" className="btn btn-ghost btn-icon" title="更多" onClick={() => setMenu((m) => !m)}><MoreHorizontal /></button>
-            {menu && (
-              <span className="menu-pop" onMouseLeave={() => setMenu(false)}>
-                <button type="button" onClick={() => { setMenu(false); onExportTypst(); }}><FileText />导出 Typst 源码（main.typ + .bib）</button>
-                <hr />
-                <button type="button" onClick={() => { setMenu(false); onNew(); }}><FilePlus2 />新建项目…</button>
-                <hr />
-                <button type="button" onClick={() => { setMenu(false); alert('iota-hit 在线编辑器\n\n排版：iota-hit 0.1.0（hithesis 的 Typst 复刻）\n引擎：Typst 0.15.1，经 typst.ts 编成 wasm 在浏览器里运行\n字体：Noto Serif/Sans CJK SC、FandolKai、TeX Gyre Termes/Heros、DejaVu Sans Mono；也可读本机字体切到 Windows / macOS 档\n\n整站静态，没有服务器；工程与图片只存在这台浏览器里，记得定期「保存工程」。'); }}><Info />关于</button>
-              </span>
-            )}
+        ); const trailing = (
+          <span className="rb-trailing">
+            <span className="status"><i className={`dot ${dot}`} />{statusText}</span>
+            <button type="button" className="btn btn-primary btn-sm" disabled={compile.status !== 'ready' || !!busy} onClick={onExportPdf}><FileDown />导出 PDF</button>
+            <button type="button" className="btn btn-ghost btn-icon theme-btn" title={theme === 'dark' ? '切到浅色' : '切到深色'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun /> : <Moon />}</button>
           </span>
-          <button type="button" className="btn btn-ghost btn-icon theme-btn" title={theme === 'dark' ? '切到浅色' : '切到深色'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun /> : <Moon />}</button>
-        </header>
+        ); return view === 'projects' ? <Ribbon minimal leading={leading} trailing={trailing} layout={{ navOpen, setNavOpen, mode, setMode }} /> : <Ribbon leading={leading} trailing={trailing} layout={{ navOpen, setNavOpen, mode, setMode }} />; })()}
         {view === 'projects' ? <ProjectsView /> : (<>
-        <Ribbon layout={{ navOpen, setNavOpen, mode, setMode }} />
         <div className={`main mode-${mode} ${navOpen ? '' : 'nav-closed'}`} ref={mainRef} style={{ gridTemplateColumns: gridColumns }}>
           <nav className="nav" hidden={!navOpen}>
             {['设置', '前置', '主体', '后置'].map((g) => (

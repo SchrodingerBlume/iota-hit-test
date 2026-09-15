@@ -37,6 +37,21 @@ function sw<V>(key: keyof Settings, s: Settings): V {
   return resolveSwitch<V>(def, s).effective;
 }
 
+/**
+ * 各级标题在这一档里的叫法与样子（样式库、标题旁的提示用）。照指南「表 2」：
+ * 论文是 章 / 节 / 条 / 款 四级；开题、中期报告没有「章」，第一级就是节（1 / 1.1 / 1.1.1）。
+ * 款底下的「项」（（1）接排）是段落写法不是标题，模板不做，编辑器里对应编号列表。
+ */
+export function levelLabels(s: Settings): { level: number; name: string; sample: string }[] {
+  const isReport = s.stage !== 'final' && !(s.campus === 'shenzhen' && s.degreeLevel === 'bachelor');
+  const en = s.lang === 'en';
+  const hass = s.category === 'hass';
+  if (isReport) return [{ level: 1, name: '节', sample: '1' }, { level: 2, name: '条', sample: '1.1' }, { level: 3, name: '款', sample: '1.1.1' }];
+  if (en) return [{ level: 1, name: 'Chapter', sample: 'Chapter 1' }, { level: 2, name: 'Section', sample: '1.1' }, { level: 3, name: '', sample: '1.1.1' }, { level: 4, name: '', sample: '1.1.1.1' }];
+  if (hass) return [{ level: 1, name: '章', sample: '第一章' }, { level: 2, name: '节', sample: '一、' }, { level: 3, name: '条', sample: '（一）' }, { level: 4, name: '款', sample: '1.' }];
+  return [{ level: 1, name: '章', sample: '第 1 章' }, { level: 2, name: '节', sample: '1.1' }, { level: 3, name: '条', sample: '1.1.1' }, { level: 4, name: '款', sample: '1.1.1.1' }];
+}
+
 export function computeNumbering(doc: PMNode | null | undefined, settings: Settings, part: Part): Map<string, NumberInfo> {
   const out = new Map<string, NumberInfo>();
   if (!doc) return out;

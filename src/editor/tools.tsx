@@ -14,10 +14,12 @@ export function useEditorTick(editor: Editor | null) {
   const [, setTick] = useState(0);
   useEffect(() => {
     if (!editor) return;
-    const bump = () => setTick((t) => t + 1);
+    // 一帧里可能来好几笔事务（输入法、批量替换），合成一次重画
+    let raf = 0;
+    const bump = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; setTick((t) => t + 1); }); };
     editor.on('transaction', bump);
     editor.on('selectionUpdate', bump);
-    return () => { editor.off('transaction', bump); editor.off('selectionUpdate', bump); };
+    return () => { editor.off('transaction', bump); editor.off('selectionUpdate', bump); cancelAnimationFrame(raf); };
   }, [editor]);
 }
 

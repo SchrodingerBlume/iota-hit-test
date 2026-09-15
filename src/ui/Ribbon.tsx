@@ -14,6 +14,7 @@ import { usePreviewSurface } from './PreviewEditLayer';
 import { usePreviewZoom } from './previewZoom';
 import { B, Sep, useEditorTick, useInsertActions, TableAlignTools, FontSizeTool, refocusPreviewAfter } from '../editor/tools';
 import { searchKey, selectCurrentMatch } from '../editor/extensions/Search';
+import { levelLabels } from '../typst/numbering';
 import { create } from 'zustand';
 import {
   Undo2, Redo2, Bold, Italic, Underline, Strikethrough, Superscript, Subscript, Code, RemoveFormatting, PaintRoller, Scissors, Copy, ClipboardPaste,
@@ -64,9 +65,11 @@ export interface RibbonLayout {
 /** 常用符号：论文里常打的（破折号、间隔号、单位、希腊字母、上下标数字…） */
 const SYMBOLS = ['—', '–', '·', '…', '「', '」', '『', '』', '《', '》', '〈', '〉', '【', '】', '×', '÷', '±', '≈', '≠', '≤', '≥', '∞', '°', '℃', 'µ', 'Ω', '‰', '′', '″', '²', '³', '½', '→', '←', '↔', '⇒', '√', '∑', '∫', '∂', '∇', 'α', 'β', 'γ', 'δ', 'ε', 'θ', 'λ', 'μ', 'π', 'ρ', 'σ', 'τ', 'φ', 'ω', 'Δ', 'Σ', 'Φ', 'Ψ', '©', '®', '™', '§', '¶', '€', '£', '¥'];
 
-export function Ribbon({ layout }: { layout: RibbonLayout }) {
+export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonLayout; leading?: ReactNode; trailing?: ReactNode; minimal?: boolean }) {
   const activeKey = usePreviewSurface((s) => s.activeKey);
   const section = useStore((s) => s.section);
+  const settings = useStore((s) => s.doc.settings);
+  const levels = levelLabels(settings);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [tab, setTab] = useState<Tab>('home');
   const [autoTable, setAutoTable] = useState(false);
@@ -136,7 +139,7 @@ export function Ribbon({ layout }: { layout: RibbonLayout }) {
     paste: async () => { if (!ed) return; try { const text = await navigator.clipboard.readText(); if (text) ed.chain().focus().insertContent(text.split(/\r?\n/).map((l) => `<p>${l.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]!))}</p>`).join('')).run(); } catch { document.execCommand('paste'); } },
   };
 
-  const bodyVisible = !collapsed || peek;
+  const bodyVisible = !minimal && (!collapsed || peek);
   const where = none
     ? (section === 'info' || section === 'settings' || section === 'pages' ? '这一页是表单，功能区管不着' : '点一下正文或预览里的字，功能区就活了')
     : `编辑：${KEY_NAME[activeKey!] ?? ''}${usePreviewSurface.getState().focused ? '（在预览里）' : ''}`;
@@ -144,11 +147,13 @@ export function Ribbon({ layout }: { layout: RibbonLayout }) {
   return (
     <div ref={root} className={`ribbon ${none ? 'is-idle' : ''} ${collapsed ? 'is-collapsed' : ''} ${peek ? 'is-peek' : ''}`} onClick={(e) => { const t = e.target as HTMLElement; if (t.closest('.tb') && !t.closest('.rb-keep')) afterCommand(); }}>
       <div className="rb-tabs">
-        {TABS.filter((t) => t.key !== 'table' || inTable).map((t) => (
+        {leading}
+        {!minimal && TABS.filter((t) => t.key !== 'table' || inTable).map((t) => (
           <button key={t.key} type="button" className={`rb-tab ${tab === t.key && bodyVisible ? 'on' : ''} ${t.key === 'table' ? 'is-ctx' : ''}`} onMouseDown={(e) => e.preventDefault()} onClick={() => onTab(t.key)} onDoubleClick={() => toggleCollapsed(!collapsed)}>{t.label}</button>
         ))}
-        <span className="rb-where">{where}</span>
-        <button type="button" className="rb-collapse" title={collapsed ? '固定功能区（双击选项卡也行）' : '收起功能区（再点一下当前选项卡也行）'} onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(!collapsed)}>{collapsed ? <ChevronDown /> : <ChevronUp />}</button>
+        <span className="rb-where">{minimal ? '' : where}</span>
+        {trailing}
+        {!minimal && <button type="button" className="rb-collapse" title={collapsed ? '固定功能区（双击选项卡也行）' : '收起功能区（再点一下当前选项卡也行）'} onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(!collapsed)}>{collapsed ? <ChevronDown /> : <ChevronUp />}</button>}
       </div>
       {bodyVisible && (
         <div className="rb-body">
@@ -207,9 +212,10 @@ export function Ribbon({ layout }: { layout: RibbonLayout }) {
               <Group label="样式">
                 <div className="rb-styles">
                   <button type="button" className={`rb-style rb-style-p ${ed?.isActive('paragraph') ? 'on' : ''}`} disabled={none} title="正文段落" onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(() => chain().setParagraph().run())}><span>正文</span></button>
-                  {([1, 2, 3, 4] as const).map((l) => (
-                    <button key={l} type="button" className={`rb-style rb-style-h${l} ${ed?.isActive('heading', { level: l }) ? 'on' : ''}`} disabled={none || !headings} title={`${['章', '节', '条', '款'][l - 1]}（${l} 级标题）`} onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(() => chain().toggleHeading({ level: l }).run())}><span>{['第 1 章', '1.1', '1.1.1', '1.1.1.1'][l - 1]}</span><small>{['章', '节', '条', '款'][l - 1]}</small></button>
+                  {levels.map(({ level: l, name, sample }) => (
+                    <button key={l} type="button" className={`rb-style rb-style-h${l} ${ed?.isActive('heading', { level: l }) ? 'on' : ''}`} disabled={none || !headings} title={`${name || `${l} 级`}标题（${l} 级）`} onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(() => chain().toggleHeading({ level: l as 1 | 2 | 3 | 4 }).run())}><span>{sample}</span><small>{name || `${l} 级`}</small></button>
                   ))}
+                  <button type="button" className={`rb-style rb-style-item ${ed?.isActive('orderedList') ? 'on' : ''}`} disabled={none} title="项：款底下那一级——指南说是「（1）」题序、内容接排的段落写法，不是标题；用编号列表" onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(() => chain().toggleOrderedList().run())}><span>（1）</span><small>项</small></button>
                 </div>
               </Group>
               <Group label="编辑">

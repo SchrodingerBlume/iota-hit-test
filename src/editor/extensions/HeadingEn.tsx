@@ -3,21 +3,23 @@
 import Heading from '@tiptap/extension-heading';
 import { ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent, type NodeViewProps } from '@tiptap/react';
 import { useNumbering } from '../env';
+import { useStore } from '../../model/store';
+import { levelLabels } from '../../typst/numbering';
 import { labelOf } from '../../typst/pmToTypst';
 import { Hash } from 'lucide-react';
-
-const LEVEL_NAME = ['章', '节', '条', '款'];
 
 function HeadingView({ node, updateAttributes, editor }: NodeViewProps) {
   const level = node.attrs.level as number;
   const editable = editor.isEditable;
+  const settings = useStore((s) => s.doc.settings);
+  const levelName = levelLabels(settings).find((l) => l.level === level)?.name ?? `${level} 级`;
   const num = useNumbering().get(labelOf(node.attrs as any, 'sec'))?.number;
   const en = String(node.attrs.en ?? '');
   const numbered = node.attrs.numbered !== false;
   return (
     <NodeViewWrapper className={`hd hd-${level} ${en ? 'has-en' : ''} ${numbered ? '' : 'is-unnumbered'}`} data-level={level}>
       <div className="hd-row">
-        {numbered && <span className="hd-num" contentEditable={false} title={`${LEVEL_NAME[level - 1] ?? ''}标题（${level} 级）· 编号按模板规则算，预览为准`}>{num ?? ''}</span>}
+        {numbered && <span className="hd-num" contentEditable={false} title={`${levelName}标题（${level} 级）· 编号按模板规则算，预览为准`}>{num ?? ''}</span>}
         <NodeViewContent className="hd-zh" />
         <button type="button" className={`hd-toggle ${numbered ? '' : 'on'}`} contentEditable={false} disabled={!editable} title={numbered ? '这条标题不编号（如「引言」「结束语」这类）' : '恢复编号'} onMouseDown={(e) => e.preventDefault()} onClick={() => updateAttributes({ numbered: !numbered })}><Hash /></button>
       </div>

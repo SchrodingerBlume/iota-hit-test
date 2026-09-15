@@ -18,8 +18,18 @@ function pagesNear(container: HTMLElement, viewportTop: number, viewportBottom: 
   });
 }
 
+let inflight: SVGGElement[] = [];
+let cleanupTimer = 0;
+/** 上一轮动画还没走完就来了新一轮：先让它们各就各位，量出来的才是真位置 */
+function settleInflight() {
+  window.clearTimeout(cleanupTimer);
+  for (const el of inflight) { el.classList.remove('flip-move', 'flip-in'); el.style.translate = ''; el.style.opacity = ''; }
+  inflight = [];
+}
+
 /** 补丁前：记下视口附近每个文字块的位置 */
 export function flipBefore(container: HTMLElement, viewportTop: number, viewportBottom: number) {
+  settleInflight();
   runs.clear();
   scaleOf = new Map();
   for (const g of pagesNear(container, viewportTop, viewportBottom)) {
@@ -49,7 +59,7 @@ export function flipAfter(container: HTMLElement, viewportTop: number, viewportB
   runs.clear();
   if (!moved.length && !fresh.length) return;
   // 太多块一起动（整页重排）就别做了，动画本身会成负担
-  if (moved.length > 400) return;
+  if (moved.length > 160 || fresh.length > 400) return;
   for (const { el, dx, dy } of moved) {
     el.classList.remove('flip-move');
     el.style.translate = `${dx}px ${dy}px`;
@@ -57,12 +67,10 @@ export function flipAfter(container: HTMLElement, viewportTop: number, viewportB
   for (const el of fresh) { el.classList.remove('flip-in'); el.style.opacity = '0'; }
   // 强制一次样式计算，让起点生效
   void container.offsetWidth;
+  inflight = [...moved.map((m) => m.el), ...fresh];
   requestAnimationFrame(() => {
     for (const { el } of moved) { el.classList.add('flip-move'); el.style.translate = '0px 0px'; }
     for (const el of fresh) { el.classList.add('flip-in'); el.style.opacity = ''; }
-    window.setTimeout(() => {
-      for (const { el } of moved) { el.classList.remove('flip-move'); el.style.translate = ''; }
-      for (const el of fresh) el.classList.remove('flip-in');
-    }, 320);
+    cleanupTimer = window.setTimeout(settleInflight, 220);
   });
 }

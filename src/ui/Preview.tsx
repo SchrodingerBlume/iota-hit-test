@@ -9,7 +9,16 @@ import { PreviewEditLayer } from './PreviewEditLayer';
 const fmtMB = (n: number) => (n / 1024 / 1024).toFixed(1);
 
 export function Preview() {
-  const { status, progress, fatal, compiling, artifact, artifactFresh, diagnostics, lastMs, compileCount } = useCompileState();
+  // 只订阅要画的几项：glyphs / segments 那些大数组换了不必重画这里
+  const status = useCompileState((s) => s.status);
+  const progress = useCompileState((s) => s.progress);
+  const fatal = useCompileState((s) => s.fatal);
+  const compiling = useCompileState((s) => s.compiling);
+  const artifact = useCompileState((s) => s.artifact);
+  const artifactFresh = useCompileState((s) => s.artifactFresh);
+  const diagnostics = useCompileState((s) => s.diagnostics);
+  const lastMs = useCompileState((s) => s.lastMs);
+  const compileCount = useCompileState((s) => s.compileCount);
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
