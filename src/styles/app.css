@@ -700,3 +700,10 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .denote-pop { position: relative; }
 .denote-pop .chip-pop { left: 0; top: 100%; }
 .denote-foot { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-family: var(--sans); font-size: 12px; color: var(--muted); }
+/* 关键词拖动换位置 */
+.tag-item { cursor: grab; user-select: none; -webkit-user-select: none; touch-action: none; }
+.tag-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tags.is-dragging { cursor: grabbing; }
+.tags.is-dragging .tag-item { cursor: grabbing; }
+.tag-item.is-ghost { opacity: 0.3; }
+.tag-item.is-lifted { box-shadow: var(--shadow-2); transform: scale(1.04); background: var(--accent-soft-2); animation: none; }
