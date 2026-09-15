@@ -754,7 +754,8 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .rb-drawer.is-closed { grid-template-rows: 0fr; }
 .rb-drawer-inner { min-height: 0; }
 .rb-drawer.is-closed .rb-drawer-inner { overflow: hidden; }
-.rb-drawer.rb-ghost { position: absolute; left: 0; right: 0; top: 100%; z-index: 39; background: var(--panel); border-bottom: 1px solid var(--line); pointer-events: none; overflow: hidden; }
+.rb-ghost-clip { position: absolute; left: 0; right: 0; top: 100%; z-index: 39; overflow: hidden; pointer-events: none; }
+.rb-drawer.rb-ghost { background: var(--panel); border-bottom: 1px solid var(--line); box-shadow: 0 6px 16px -8px rgba(0,0,0,0.18); }
 .app { overflow: hidden; }
 .main { will-change: transform; }
 .rb-drawer.is-peek { box-shadow: inset 0 1px 0 var(--accent-soft-2); }

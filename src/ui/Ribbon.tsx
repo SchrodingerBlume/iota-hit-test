@@ -157,20 +157,27 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
     const main = document.querySelector<HTMLElement>('.main');
     const H = openHeight.current;
     if (!drawer || !main || !H) return;
-    const ease = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
-    const dur = 220;
+    // 动感照 Fluent 的曲线：展开是减速滑出（curveDecelerateMid），收起是加速缩回（curveAccelerateMid）；
+    // 抽屉从选项卡行底下整块滑出来 / 滑回去（不是自下而上「擦」出来），内容区同步平移
+    const ease = open ? 'cubic-bezier(0, 0, 0, 1)' : 'cubic-bezier(0.7, 0, 1, 0.5)';
+    const dur = open ? 240 : 170;
     if (open) main.style.height = `${main.getBoundingClientRect().height + H}px`;
     const a2 = main.animate([{ transform: `translateY(${open ? -H : H}px)` }, { transform: 'none' }], { duration: dur, easing: ease });
+    const clip = document.createElement('div');
+    clip.className = 'rb-ghost-clip';
+    clip.style.height = `${H}px`;
     const ghost = drawer.cloneNode(true) as HTMLElement;
     ghost.className = 'rb-drawer rb-ghost';
     ghost.style.height = `${H}px`;
-    drawer.parentElement!.appendChild(ghost);
+    clip.appendChild(ghost);
+    drawer.parentElement!.appendChild(clip);
     drawer.style.visibility = 'hidden';
-    const from = open ? 'inset(0 0 100% 0)' : 'inset(0 0 0 0)';
-    const to = open ? 'inset(0 0 0 0)' : 'inset(0 0 100% 0)';
-    const a1 = ghost.animate([{ clipPath: from }, { clipPath: to }], { duration: dur, easing: ease, fill: 'forwards' });
+    const a1 = ghost.animate(
+      open ? [{ transform: `translateY(${-H}px)`, opacity: 0.4 }, { transform: 'none', opacity: 1 }] : [{ transform: 'none', opacity: 1 }, { transform: `translateY(${-H}px)`, opacity: 0.4 }],
+      { duration: dur, easing: ease, fill: 'forwards' },
+    );
     let done = false;
-    const finish = () => { if (done) return; done = true; ghost.remove(); drawer.style.visibility = ''; main.style.height = ''; };
+    const finish = () => { if (done) return; done = true; clip.remove(); drawer.style.visibility = ''; main.style.height = ''; };
     Promise.all([a1.finished, a2.finished]).then(finish, finish);
     return finish;
     // eslint-disable-next-line react-hooks/exhaustive-deps
