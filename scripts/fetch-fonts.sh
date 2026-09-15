@@ -17,7 +17,19 @@ mkdir -p "$out"
 get() { # get <url> <dest>
   if [ -s "$2" ]; then echo "  已有 $(basename "$2")"; return; fi
   echo "  ↓ $1"
-  curl -fsSL --retry 3 -o "$2" "$1"
+  curl -fsSL --retry 3 --connect-timeout 20 -o "$2" "$1"
+}
+
+# CTAN：mirrors.ctan.org 随机跳到某个镜像，偶尔碰上证书坏的；按固定顺序轮询几个靠谱的
+CTAN_MIRRORS="https://mirrors.tuna.tsinghua.edu.cn/CTAN https://mirrors.mit.edu/CTAN https://mirror.ctan.org https://mirrors.ctan.org"
+get_ctan() { # get_ctan <path-under-ctan> <dest>
+  for m in $CTAN_MIRRORS; do
+    echo "  ↓ $m/$1"
+    if curl -fsSL --retry 2 --connect-timeout 20 -o "$2" "$m/$1"; then return 0; fi
+    echo "    （$m 不行，换下一个）"
+  done
+  echo "所有 CTAN 镜像都失败：$1" >&2
+  return 1
 }
 
 echo "Noto CJK SC"
@@ -36,7 +48,7 @@ done
 echo "TeX Gyre Termes / Heros"
 if [ ! -s "$out/texgyretermes-regular.otf" ] || [ ! -s "$out/texgyreheros-regular.otf" ]; then
   # 先走 CTAN 镜像（GitHub 的 runner 连不上 gust.org.pl），不行再去 GUST 原站
-  if curl -fsSL --retry 3 --connect-timeout 20 -o "$tmp/tg.zip" https://mirrors.ctan.org/fonts/tex-gyre.zip; then
+  if get_ctan fonts/tex-gyre.zip "$tmp/tg.zip"; then
     unzip -oq "$tmp/tg.zip" -d "$tmp/tg"
   else
     get https://www.gust.org.pl/projects/e-foundry/tex-gyre/termes/qtm2.004otf.zip "$tmp/qtm.zip"
@@ -51,14 +63,14 @@ fi
 
 echo "TeX Gyre Termes Math"
 if [ ! -s "$out/texgyretermes-math.otf" ]; then
-  get https://mirrors.ctan.org/fonts/tex-gyre-math.zip "$tmp/tgm.zip"
+  get_ctan fonts/tex-gyre-math.zip "$tmp/tgm.zip"
   unzip -oq "$tmp/tgm.zip" -d "$tmp/tgm"
   cp "$(find "$tmp/tgm" -name 'texgyretermes-math.otf' | head -1)" "$out/texgyretermes-math.otf"
 fi
 
 echo "FandolKai"
 if [ ! -s "$out/FandolKai-Regular.otf" ]; then
-  get https://mirrors.ctan.org/fonts/fandol.zip "$tmp/fandol.zip"
+  get_ctan fonts/fandol.zip "$tmp/fandol.zip"
   unzip -oq "$tmp/fandol.zip" -d "$tmp/fandol"
   cp "$(find "$tmp/fandol" -name 'FandolKai-Regular.otf' | head -1)" "$out/FandolKai-Regular.otf"
 fi
