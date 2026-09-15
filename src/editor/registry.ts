@@ -4,12 +4,17 @@ import type { Editor } from '@tiptap/core';
 import type { RichKey } from '../model/store';
 
 const editors = new Map<RichKey, Editor>();
+const metas = new Map<RichKey, EditorMeta>();
 const listeners = new Set<() => void>();
 
-export function registerEditor(key: RichKey, editor: Editor) {
+export interface EditorMeta { blocks: boolean; headings: boolean }
+
+export function registerEditor(key: RichKey, editor: Editor, meta: EditorMeta = { blocks: true, headings: true }) {
   editors.set(key, editor);
+  metas.set(key, meta);
   for (const l of listeners) l();
 }
+export const getEditorMeta = (key: RichKey): EditorMeta | undefined => metas.get(key);
 export function unregisterEditor(key: RichKey, editor: Editor) {
   if (editors.get(key) === editor) editors.delete(key);
   for (const l of listeners) l();

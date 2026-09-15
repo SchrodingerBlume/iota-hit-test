@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useCompileState } from '../compiler/client';
 import { renderArtifact } from '../compiler/renderer';
 import { flipBefore, flipAfter } from './flip';
+import { usePreviewZoom } from './previewZoom';
 import { Eye, ZoomIn, ZoomOut, Maximize2, Loader2 } from 'lucide-react';
 import { PreviewEditLayer } from './PreviewEditLayer';
 
@@ -107,6 +108,9 @@ export function Preview() {
     if (!g.raf) g.raf = requestAnimationFrame(applyGestureFrame);
   };
   const zoomTo = (z: number) => zoomBy(Math.min(3, Math.max(0.3, z)) / (gesture.current?.target ?? zoomRef.current));
+  // 功能区「视图」页也要能缩放
+  useEffect(() => { usePreviewZoom.getState().set({ zoomBy, zoomTo }); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  useEffect(() => { usePreviewZoom.getState().set({ zoom }); }, [zoom]);
 
   // 触控板捏合：macOS/Windows 的浏览器把它发成 ctrlKey 的 wheel；Safari 另有 gesture 事件
   useEffect(() => {

@@ -16,8 +16,9 @@ import { InfoPanel } from './InfoPanel';
 import { AbstractPanel, NomenclaturePanel, RichSection, BibPanel, DefensePanel, PagesPanel } from './panels';
 import { Preview } from './Preview';
 import { useTheme } from './theme';
-import { FileDown, Save, FolderOpen, MoreHorizontal, FileText, FilePlus2, Info, Sun, Moon, SlidersHorizontal, BookText, PenLine, Library, LayoutGrid, PanelLeftClose, PanelLeftOpen, PanelLeft, Columns2, PanelRight } from 'lucide-react';
+import { FileDown, Save, FolderOpen, MoreHorizontal, FileText, FilePlus2, Info, Sun, Moon, SlidersHorizontal, BookText, PenLine, Library, LayoutGrid } from 'lucide-react';
 import { useLayoutPrefs } from './layout';
+import { Ribbon } from './Ribbon';
 
 const NAV: { key: Section; label: string; group: string; k?: string }[] = [
   { key: 'settings', label: '论文设置', group: '设置' },
@@ -188,18 +189,12 @@ export function App() {
     <EditorEnvContext.Provider value={env}>
       <div className="app">
         <header className="topbar">
-          <button type="button" className="btn btn-ghost btn-icon" title={navOpen ? '收起左栏' : '展开左栏'} onClick={() => setNavOpen(!navOpen)}>{navOpen ? <PanelLeftClose /> : <PanelLeftOpen />}</button>
           <span className="brand">
             <span className="brand-mark" aria-hidden>ι</span>
             <span className="brand-text"><b>iota-hit</b><small>哈尔滨工业大学学位论文 · 在线编辑</small></span>
           </span>
           <button type="button" className={`btn btn-ghost proj-btn ${view === 'projects' ? 'on' : ''}`} title="项目管理" onClick={() => setView(view === 'projects' ? 'editor' : 'projects')}><LayoutGrid />{loaded ? doc.name : '项目'}</button>
           <span className="spacer" />
-          <span className="seg layout-seg" title="布局">
-            <button type="button" className={mode === 'editor' ? 'on' : ''} title="只看编辑" onClick={() => setMode('editor')}><PanelLeft /></button>
-            <button type="button" className={mode === 'split' ? 'on' : ''} title="编辑 + 预览" onClick={() => setMode('split')}><Columns2 /></button>
-            <button type="button" className={mode === 'preview' ? 'on' : ''} title="只看预览" onClick={() => setMode('preview')}><PanelRight /></button>
-          </span>
           <span className="status"><i className={`dot ${dot}`} />{statusText}</span>
           <button type="button" className="btn btn-primary" disabled={compile.status !== 'ready' || !!busy} onClick={onExportPdf}><FileDown />导出 PDF</button>
           <button type="button" className="btn btn-ghost" onClick={onSaveProject}><Save />保存工程</button>
@@ -218,7 +213,8 @@ export function App() {
           </span>
           <button type="button" className="btn btn-ghost btn-icon theme-btn" title={theme === 'dark' ? '切到浅色' : '切到深色'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun /> : <Moon />}</button>
         </header>
-        {view === 'projects' ? <ProjectsView /> : (
+        {view === 'projects' ? <ProjectsView /> : (<>
+        <Ribbon layout={{ navOpen, setNavOpen, mode, setMode }} />
         <div className={`main mode-${mode} ${navOpen ? '' : 'nav-closed'}`} ref={mainRef} style={{ gridTemplateColumns: gridColumns }}>
           <nav className="nav" hidden={!navOpen}>
             {['设置', '前置', '主体', '后置'].map((g) => (
@@ -237,7 +233,7 @@ export function App() {
           {mode === 'split' && <div className="splitter" title={`拖动调整比例（${Math.round(ratio * 100)}% : ${Math.round((1 - ratio) * 100)}%）`} onPointerDown={startDrag} />}
           <div className="preview-slot" hidden={mode === 'editor'}><Preview /></div>
         </div>
-        )}
+        </>)}
       </div>
     </EditorEnvContext.Provider>
   );

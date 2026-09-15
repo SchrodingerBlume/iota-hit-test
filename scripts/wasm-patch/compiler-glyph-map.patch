@@ -1,8 +1,8 @@
 diff --git a/packages/compiler/src/lib.rs b/packages/compiler/src/lib.rs
-index b9de839b..bd3bfac9 100644
+index b9de839b..1baccfbf 100644
 --- a/packages/compiler/src/lib.rs
 +++ b/packages/compiler/src/lib.rs
-@@ -475,6 +475,118 @@ impl TypstCompileWorld {
+@@ -475,6 +475,123 @@ impl TypstCompileWorld {
          })
      }
  
@@ -80,8 +80,13 @@ index b9de839b..bd3bfac9 100644
 +                                        }
 +                                        _ => (r.start, r.end, 0.0),
 +                                    };
-+                                    let p1 = Point::new(x, pos.y - text.size).transform(ts);
-+                                    let p2 = Point::new(x + w, pos.y).transform(ts);
++                                    // Box from ascender to descender, like a caret in a word processor;
++                                    // pos.y is the baseline.
++                                    let fm = text.font.metrics();
++                                    let asc = fm.ascender.at(text.size);
++                                    let desc = fm.descender.at(text.size);
++                                    let p1 = Point::new(x, pos.y - asc).transform(ts);
++                                    let p2 = Point::new(x + w, pos.y - desc).transform(ts);
 +                                    let (x1, y1) = (p1.x.to_pt(), p1.y.to_pt());
 +                                    let (x2, y2) = (p2.x.to_pt(), p2.y.to_pt());
 +                                    let top = y1.min(y2);
