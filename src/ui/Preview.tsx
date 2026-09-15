@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCompileState } from '../compiler/client';
 import { renderArtifact } from '../compiler/renderer';
+import { Eye, ZoomIn, ZoomOut, Maximize2, Loader2 } from 'lucide-react';
 
 const fmtMB = (n: number) => (n / 1024 / 1024).toFixed(1);
 
@@ -26,20 +27,23 @@ export function Preview() {
   const shown = [...errors, ...warnings.filter((w) => !/unknown font family: (kaiti_gb2312|lisu|stxinwei|simsun|simhei|kaiti|fangsong)/i.test(w.message))];
 
   return (
-    <div className="preview">
-      <div className="preview-bar">
-        <span>预览</span>
-        {status === 'ready' && lastMs !== null && <span className="muted">· {pages} 页 · {lastMs} ms{compiling ? ' · 排版中…' : ''}</span>}
+    <div className={`preview ${compiling ? 'is-compiling' : ''}`}>
+      <div className="pane-bar">
+        <span className="pane-title"><Eye />预览</span>
+        {status === 'ready' && lastMs !== null && <span className="muted">{pages} 页 · {lastMs} ms{compiling ? ' · 排版中…' : ''}</span>}
         <span className="spacer" />
-        <button type="button" className="btn btn-xs" onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.1).toFixed(2)))}>−</button>
-        <span style={{ width: 42, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
-        <button type="button" className="btn btn-xs" onClick={() => setZoom((z) => Math.min(2.5, +(z + 0.1).toFixed(2)))}>＋</button>
-        <button type="button" className="btn btn-xs" onClick={() => setZoom(1)}>重置</button>
+        <span className="join">
+          <button type="button" className="btn btn-xs btn-icon" title="缩小" onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.1).toFixed(2)))}><ZoomOut /></button>
+          <button type="button" className="btn btn-xs" style={{ width: 52, justifyContent: 'center' }} title="回到 100%" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
+          <button type="button" className="btn btn-xs btn-icon" title="放大" onClick={() => setZoom((z) => Math.min(2.5, +(z + 0.1).toFixed(2)))}><ZoomIn /></button>
+          <button type="button" className="btn btn-xs btn-icon" title="适宽" onClick={() => setZoom(1)}><Maximize2 /></button>
+        </span>
       </div>
+      <div className="preview-progress" aria-hidden />
       <div className="preview-scroll">
         {status === 'booting' && (
           <div className="boot">
-            <h3>正在准备排版引擎</h3>
+            <h3><Loader2 />正在准备排版引擎</h3>
             <div className="muted">Typst 0.15.1 编译器（wasm）、Noto CJK 等开源字体与 iota-hit 模板包，共约 120 MB。只下载这一次，之后存在浏览器里离线可用。</div>
             <div className="bar"><i style={{ width: progress && progress.total ? `${Math.min(100, (progress.loaded / progress.total) * 100)}%` : '2%' }} /></div>
             <div className="detail">{progress ? `${progress.phase} · ${fmtMB(progress.loaded)} / ${fmtMB(progress.total)} MB${progress.detail ? ' · ' + progress.detail : ''}` : '…'}</div>
