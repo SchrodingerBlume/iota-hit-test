@@ -34,7 +34,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'table', label: '表格工具' },
   { key: 'view', label: '视图' },
 ];
-const COLLAPSE_KEY = 'iota4web-ribbon-collapsed';
+const COLLAPSE_KEY = 'iota4web-ribbon-collapsed-v2';
 
 /** 查找栏开关，⌘F 也从这儿开 */
 export const useFindBar = create<{ open: boolean; set: (open: boolean) => void }>((set) => ({ open: false, set: (open) => set({ open }) }));
@@ -102,9 +102,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const findOpen = useFindBar((s) => s.open);
 
   // 收起 / 展开
-  /** 展开时抽屉是不是本来就临时弹着（那就不必再演抽屉，只把内容区推下去） */
-  const wasPeeking = useRef(false);
-  const toggleCollapsed = (v: boolean) => { wasPeeking.current = peek; setCollapsed(v); setPeek(false); try { localStorage.setItem(COLLAPSE_KEY, v ? '1' : '0'); } catch { /* */ } };
+  const toggleCollapsed = (v: boolean) => { setCollapsed(v); setPeek(false); try { localStorage.setItem(COLLAPSE_KEY, v ? '1' : '0'); } catch { /* */ } };
   // 单击选项卡只切页，不收起（Word 也是：收起靠双击或右端的箭头）——不然点一下当前页就把功能区收了，
   // 之后点选项卡只是临时弹出来、不推内容，像是坏了
   const onTab = (k: Tab) => {
@@ -143,6 +141,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   };
 
   const bodyVisible = !minimal && (!collapsed || peek);
+  // 收起态临时弹出也占位（把内容推下去），不盖在内容上——盖着的那种看起来像没展开。
   // 收起 / 展开的动画不动版面：版面一步到位，动画全用 transform / clip-path 做——
   // 抽屉克隆一份盖在原位按高度裁，底下的内容区整块平移过去。逐帧改高度会让编辑区和
   // 十几页的预览每帧重排，跟不上；合成层动画怎么都稳。
@@ -151,41 +150,38 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const firstRender = useRef(true);
   useLayoutEffect(() => {
     const drawer = drawerRef.current;
-    if (drawer && !collapsed) openHeight.current = drawer.getBoundingClientRect().height || openHeight.current;
+    if (drawer && bodyVisible) openHeight.current = drawer.getBoundingClientRect().height || openHeight.current;
   });
+  const wasOpen = useRef(bodyVisible);
   useLayoutEffect(() => {
-    if (firstRender.current) { firstRender.current = false; return; }
+    const open = bodyVisible;
+    if (firstRender.current) { firstRender.current = false; wasOpen.current = open; return; }
+    if (wasOpen.current === open) return;
+    wasOpen.current = open;
     const drawer = drawerRef.current;
     const main = document.querySelector<HTMLElement>('.main');
     const H = openHeight.current;
-    if (!drawer || !main || !H || peek) return;
+    if (!drawer || !main || !H) return;
     const ease = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
     const dur = 220;
     // 展开时内容区的版面已经变矮，滑动期间用旧的高度顶着，别露底
-    if (!collapsed) main.style.height = `${main.getBoundingClientRect().height + H}px`;
-    const a2 = main.animate([{ transform: `translateY(${collapsed ? H : -H}px)` }, { transform: 'none' }], { duration: dur, easing: ease });
-    // 抽屉本来就临时弹着（从 peek 固定下来）：它已经在眼前，只推内容
-    const needGhost = !(wasPeeking.current && !collapsed);
-    wasPeeking.current = false;
-    let ghost: HTMLElement | null = null;
-    let a1: Animation | null = null;
-    if (needGhost) {
-      ghost = drawer.cloneNode(true) as HTMLElement;
-      ghost.className = 'rb-drawer rb-ghost';
-      ghost.style.height = `${H}px`;
-      drawer.parentElement!.appendChild(ghost);
-      drawer.style.visibility = 'hidden';
-      // 收起：抽屉从下往上裁掉，内容区从被推下去的位置滑回来；展开反过来
-      const from = collapsed ? 'inset(0 0 0 0)' : 'inset(0 0 100% 0)';
-      const to = collapsed ? 'inset(0 0 100% 0)' : 'inset(0 0 0 0)';
-      a1 = ghost.animate([{ clipPath: from }, { clipPath: to }], { duration: dur, easing: ease, fill: 'forwards' });
-    }
+    if (open) main.style.height = `${main.getBoundingClientRect().height + H}px`;
+    const a2 = main.animate([{ transform: `translateY(${open ? -H : H}px)` }, { transform: 'none' }], { duration: dur, easing: ease });
+    const ghost = drawer.cloneNode(true) as HTMLElement;
+    ghost.className = 'rb-drawer rb-ghost';
+    ghost.style.height = `${H}px`;
+    drawer.parentElement!.appendChild(ghost);
+    drawer.style.visibility = 'hidden';
+    // 收起：抽屉从下往上裁掉，内容区从被推下去的位置滑回来；展开反过来
+    const from = open ? 'inset(0 0 100% 0)' : 'inset(0 0 0 0)';
+    const to = open ? 'inset(0 0 0 0)' : 'inset(0 0 100% 0)';
+    const a1 = ghost.animate([{ clipPath: from }, { clipPath: to }], { duration: dur, easing: ease, fill: 'forwards' });
     let done = false;
-    const finish = () => { if (done) return; done = true; ghost?.remove(); drawer.style.visibility = ''; main.style.height = ''; };
-    Promise.all([a1?.finished, a2.finished]).then(finish, finish);
+    const finish = () => { if (done) return; done = true; ghost.remove(); drawer.style.visibility = ''; main.style.height = ''; };
+    Promise.all([a1.finished, a2.finished]).then(finish, finish);
     return finish;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [collapsed]);
+  }, [bodyVisible]);
   const where = none
     ? (section === 'info' || section === 'settings' || section === 'pages' ? '这一页是表单，功能区管不着' : '点一下正文或预览里的字，功能区就活了')
     : `编辑：${KEY_NAME[activeKey!] ?? ''}${usePreviewSurface.getState().focused ? '（在预览里）' : ''}`;
@@ -203,7 +199,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
         {!minimal && <button type="button" className="rb-collapse" title={collapsed ? '固定功能区（双击选项卡也行）' : '收起功能区（双击选项卡也行）'} onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(!collapsed)}>{collapsed ? <ChevronDown /> : <ChevronUp />}</button>}
       </div>
       {!minimal && (
-        <div ref={drawerRef} className={`rb-drawer ${collapsed && !peek ? 'is-closed' : ''} ${collapsed && peek ? 'is-peek' : ''}`} aria-hidden={!bodyVisible}>
+        <div ref={drawerRef} className={`rb-drawer ${bodyVisible ? '' : 'is-closed'} ${collapsed && peek ? 'is-peek' : ''}`} aria-hidden={!bodyVisible}>
         <div className="rb-drawer-inner">
         <div className="rb-body">
           {tab === 'home' && (

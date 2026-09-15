@@ -757,8 +757,7 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .rb-drawer.rb-ghost { position: absolute; left: 0; right: 0; top: 100%; z-index: 39; background: var(--panel); border-bottom: 1px solid var(--line); pointer-events: none; overflow: hidden; }
 .app { overflow: hidden; }
 .main { will-change: transform; }
-.rb-drawer.is-peek { position: absolute; left: 0; right: 0; top: 100%; z-index: 40; background: var(--panel); border-bottom: 1px solid var(--line); box-shadow: var(--shadow-2); transition: none; animation: rb-peek 180ms var(--ease) both; }
-@keyframes rb-peek { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.rb-drawer.is-peek { box-shadow: inset 0 1px 0 var(--accent-soft-2); }
 .rb-body { min-height: 84px; padding: 6px 8px 4px; }
 .rb-group { padding: 0 6px; }
 .rb-items { align-items: flex-start; }
