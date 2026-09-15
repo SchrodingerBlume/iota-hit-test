@@ -21,6 +21,13 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
 }
 const Rows = ({ children }: { children: ReactNode }) => <div className="rb-rows">{children}</div>;
 const Row = ({ children }: { children: ReactNode }) => <div className="rb-row">{children}</div>;
+/** 三行一组（Word 的小按钮就排三行），按列填满 */
+function chunkRows<T>(items: T[], rows = 3): T[][] {
+  const per = Math.ceil(items.length / rows);
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += per) out.push(items.slice(i, i + per));
+  return out;
+}
 
 const FONTSETS: { value: Settings['fontset']; label: string; hint: string }[] = [
   { value: 'webapp', label: '站内开源字体', hint: 'Noto CJK + FandolKai + TeX Gyre，随站分发，谁打开都一样' },
@@ -102,9 +109,6 @@ export function ThesisTab() {
           </Row>
         </Rows>
       </Group>
-      <Group label="说明">
-        <span className="rb-hint">校区、学位、阶段这几根轴决定整份版面；其余开关在「版式」页，默认交给模板按档位映射，按钮上写着自动档现在等于什么</span>
-      </Group>
     </>
   );
 }
@@ -138,12 +142,10 @@ export function LayoutTab() {
       {SWITCH_GROUPS.map((g) => {
         const defs = SWITCHES.filter((d) => d.group === g && d.key !== 'degreeType' && (!d.applies || d.applies(settings)));
         if (!defs.length) return null;
-        const half = Math.ceil(defs.length / 2);
         return (
           <Group label={g} key={g}>
             <Rows>
-              <Row>{defs.slice(0, half).map((d) => <SwitchMenu key={d.key} def={d} settings={settings} onChange={(v) => setSettings({ [d.key]: v } as Partial<Settings>)} />)}</Row>
-              <Row>{defs.slice(half).map((d) => <SwitchMenu key={d.key} def={d} settings={settings} onChange={(v) => setSettings({ [d.key]: v } as Partial<Settings>)} />)}</Row>
+              {chunkRows(defs).map((row, i) => <Row key={i}>{row.map((d) => <SwitchMenu key={d.key} def={d} settings={settings} onChange={(v) => setSettings({ [d.key]: v } as Partial<Settings>)} />)}</Row>)}
             </Rows>
           </Group>
         );
@@ -161,7 +163,6 @@ export function PagesTab() {
     <>
       {(['前置', '后置'] as const).map((g) => {
         const defs = PAGE_DEFS.filter((d) => d.group === g);
-        const half = Math.ceil(defs.length / 2);
         const item = (d: (typeof PAGE_DEFS)[number]) => {
           const r = resolvePage(doc, d.key);
           return <TriMenu key={d.key} label={d.label} hint={d.hint} choices={onOff} value={r.isAuto ? 'auto' : r.value} auto={r.auto} onChange={(v) => setPages({ [d.key]: v } as Partial<Pages>)} />;
@@ -169,15 +170,11 @@ export function PagesTab() {
         return (
           <Group label={g} key={g}>
             <Rows>
-              <Row>{defs.slice(0, half).map(item)}</Row>
-              <Row>{defs.slice(half).map(item)}</Row>
+              {chunkRows(defs).map((row, i) => <Row key={i}>{row.map(item)}</Row>)}
             </Rows>
           </Group>
         );
       })}
-      <Group label="说明">
-        <span className="rb-hint">自动档照两份指南与范例：谁有这一页、谁没有，或者有没有内容；终稿专有的页在开题、中期档里由模板静默跳过</span>
-      </Group>
     </>
   );
 }

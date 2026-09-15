@@ -727,7 +727,7 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .rb-tab.is-ctx { color: var(--warn, #fc9000); }
 .rb-tab.is-ctx.on { border-bottom-color: var(--warn, #fc9000); }
 .rb-where { margin-left: auto; font-size: 11px; color: var(--muted); padding: 0 4px 6px; }
-.rb-body { display: flex; align-items: stretch; gap: 2px; padding: 6px 10px 4px; overflow: visible; min-height: 62px; }
+.rb-body { display: flex; align-items: stretch; gap: 2px; padding: 6px 10px 4px; overflow-x: auto; overflow-y: hidden; min-height: 62px; scrollbar-width: thin; }
 .rb-group { display: flex; flex-direction: column; align-items: center; padding: 0 8px; border-right: 1px solid var(--line); }
 .rb-group:last-child { border-right: 0; }
 .rb-items { display: flex; align-items: center; gap: 2px; flex: 1; }
@@ -866,9 +866,13 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .rb-dd { min-width: 128px; }
 .rb-dd-wide { min-width: 200px; }
 .rb-dd .fui-Dropdown__button { font-size: 12.5px; }
-.rb-tri { height: 26px; min-width: 0; padding: 0 6px; font-weight: 400; gap: 6px; }
-.rb-tri-name { font-size: 12px; color: var(--ink); }
-.rb-tri-val { font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--panel-2); color: var(--ink-2); font-family: var(--mono); }
+.rb-tri { height: 26px; min-width: 0; padding: 0 6px; font-weight: 400; gap: 6px; white-space: nowrap; flex: none; }
+.rb-tri .fui-Button__icon, .rb-tri .fui-MenuButton__menuIcon { margin-left: 2px; }
+.rb-tri-name { font-size: 12px; color: var(--ink); white-space: nowrap; }
+.rb-tri-val { font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 999px; background: var(--panel-2); color: var(--ink-2); font-family: var(--mono); white-space: nowrap; }
+.rb-row { flex-wrap: nowrap; }
+.rb-axis { flex: none; }
+.rb-axis-name { white-space: nowrap; }
 .rb-tri.is-auto .rb-tri-val { background: rgba(252, 144, 0, 0.16); color: #b55e00; }
 .rb-tri-val.is-on { color: var(--ok, #2e7d32); }
 .rb-tri-val.is-off { color: var(--danger, #c62828); }
