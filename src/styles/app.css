@@ -827,3 +827,34 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .rb-style-item span { font-size: 13px; }
 .rb-pin { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--accent-soft-2); background: var(--accent-soft); color: var(--accent-ink); font-size: 12px; padding: 3px 8px; border-radius: 5px; margin-left: 4px; }
 .rb-pin svg { width: 12px; height: 12px; }
+
+/* ── Fluent UI 之上的功能区细节 ─────────────────────────────────── */
+/* 只管挂在 #root 里的那个 provider——Fluent 给弹层建的传送门节点也带同一个类名，别把它撑成整页盖住内容 */
+#root > .fluent-root { height: 100%; }
+.fluent-root { background: transparent !important; color: inherit; font-family: var(--sans) !important; }
+.rb-tablist { margin: 0 8px; }
+.rb-tablist .fui-Tab { padding: 8px 12px; font-size: 13.5px; }
+.rb-tab-ctx { color: var(--orange, #fc9000) !important; }
+.rb-tab-ctx.fui-Tab[aria-selected="true"]::after { background-color: var(--orange, #fc9000) !important; }
+.rb-btn { min-width: 32px; }
+.rb-btn.rb-big { flex-direction: column; height: 72px; min-width: 56px; padding: 6px 8px 4px; gap: 4px; font-weight: 400; font-size: 12px; justify-content: flex-start; }
+.rb-btn.rb-big .fui-Button__icon, .rb-btn.rb-big .fui-ToggleButton__icon { margin: 0; }
+.rb-btn.rb-big svg { width: 26px; height: 26px; }
+.rb-btn.rb-menu::after { content: ''; width: 0; height: 0; border: 4px solid transparent; border-top-color: currentColor; margin-left: 2px; opacity: 0.6; }
+.rb-btn.rb-big.rb-menu::after { margin: 0; }
+.rb-stack .rb-btn { justify-content: flex-start; height: 24px; min-height: 24px; padding: 0 6px; font-weight: 400; font-size: 12px; }
+.rb-stack .rb-btn svg { width: 18px; height: 18px; }
+.rb-sep { height: 20px; align-self: center; margin: 0 2px; }
+.rb-sep.fui-Divider { min-height: 0; }
+.rb-inline { display: inline-flex; align-items: center; gap: 2px; }
+.rb-file { border-radius: 5px !important; font-weight: 600; }
+.rb-proj { color: var(--muted) !important; font-weight: 400 !important; max-width: 220px; overflow: hidden; }
+.rb-proj.on { background: var(--panel-2) !important; }
+.rb-pin { margin-left: 4px; }
+.rb-collapse { margin-left: 2px; }
+.rb-table-grid.fui-PopoverSurface { padding: 10px 12px; }
+.rb-symbols.fui-PopoverSurface { display: grid; grid-template-columns: repeat(12, 28px); gap: 2px; padding: 8px; }
+.findbar-input { width: 220px; }
+.tb-size-ico { width: 18px; height: 18px; color: var(--muted); margin-right: 2px; }
+.bubble .rb-btn { min-width: 28px; height: 28px; }
+.rb-drawer.rb-ghost .fui-Tooltip { display: none; }

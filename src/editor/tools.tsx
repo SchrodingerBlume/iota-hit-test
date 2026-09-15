@@ -1,20 +1,20 @@
-// 工具栏与气泡菜单共用的零件：按钮、分隔线、插入动作、表格对齐、编辑区字号。
+// 功能区与气泡菜单共用的零件：按钮（Fluent UI 的）、分隔线、插入动作、表格对齐、编辑区字号。
 // 按钮的命令作用于「当前编辑器」——人在预览区里打字时，预览的光标就是编辑器的选区，
 // 命令照样生效；命令一般会把焦点拉到左侧编辑器，按完再把焦点还给预览。
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
 import type { Editor } from '@tiptap/core';
 import { createTable } from '@tiptap/extension-table';
+import { Button, ToggleButton, Tooltip, Divider, Popover, PopoverTrigger, PopoverSurface } from '@fluentui/react-components';
+import { TextAlignCenter20Regular, TableCellEdit20Regular, TextFontSize20Regular } from '@fluentui/react-icons';
 import { currentCellInfo } from './extensions/table';
 import { useEditorEnv } from './env';
 import { usePreviewSurface } from '../ui/PreviewEditLayer';
-import { Grid3x3, Rows2, AArrowDown, AArrowUp } from 'lucide-react';
 
-/** 编辑器每一笔事务都重画（按钮的亮暗跟着选区走） */
+/** 编辑器每一笔事务都重画（按钮的亮暗跟着选区走），一帧合成一次 */
 export function useEditorTick(editor: Editor | null) {
   const [, setTick] = useState(0);
   useEffect(() => {
     if (!editor) return;
-    // 一帧里可能来好几笔事务（输入法、批量替换），合成一次重画
     let raf = 0;
     const bump = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; setTick((t) => t + 1); }); };
     editor.on('transaction', bump);
@@ -34,18 +34,52 @@ export function refocusPreviewAfter(run: () => void) {
   }, 60);
 }
 
-export const B = ({ on, run, title, children, disabled, wide, big }: { on?: boolean; run: () => void; title: string; children: React.ReactNode; disabled?: boolean; wide?: boolean; big?: boolean }) => (
-  <button type="button" className={`tb ${on ? 'on' : ''} ${wide ? 'tb-wide' : ''} ${big ? 'tb-big' : ''}`} title={title} disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(run)}>{children}</button>
-);
-export const Sep = () => <span className="tb-sep" aria-hidden />;
+export interface BProps {
+  /** 亮着（切换类按钮） */
+  on?: boolean;
+  run: () => void;
+  title: string;
+  /** 图标（Fluent 的 20 号图标） */
+  icon?: ReactElement;
+  children?: ReactNode;
+  disabled?: boolean;
+  /** 大按钮：图标在上、字在下（Word 的样子） */
+  big?: boolean;
+  /** 带下拉箭头 */
+  menu?: boolean;
+  className?: string;
+}
+
+/**
+ * 功能区按钮：Fluent 的 Button / ToggleButton，按下时不夺焦点（mousedown 拦掉），
+ * 命令跑完把焦点还给预览。
+ */
+export function B({ on, run, title, icon, children, disabled, big, menu, className }: BProps) {
+  const cls = `rb-btn ${big ? 'rb-big' : ''} ${menu ? 'rb-menu' : ''} ${className ?? ''}`;
+  const common = { as: 'button' as const, appearance: 'subtle' as const, icon, disabled, className: cls, onMouseDown: (e: React.MouseEvent) => e.preventDefault(), onClick: () => refocusPreviewAfter(run), 'aria-label': children ? undefined : title };
+  const btn = on !== undefined
+    ? <ToggleButton {...common} checked={!!on}>{children}</ToggleButton>
+    : <Button {...common}>{children}</Button>;
+  return <Tooltip content={title} relationship={children ? 'description' : 'label'} withArrow positioning="below">{btn}</Tooltip>;
+}
+export const Sep = () => <Divider vertical className="rb-sep" />;
 
 export function useInsertActions(editor: Editor | null) {
   const env = useEditorEnv();
   const ed = () => editor!;
   const insertInline = (type: string, attrs: Record<string, any> = {}) => ed().chain().focus().insertContent({ type, attrs }).run();
-  const insertTable = () => {
-    const table = createTable(ed().schema, 3, 3, true);
+  const insertTable = (rows = 3, cols = 3) => {
+    const table = createTable(ed().schema, rows, cols, true);
+    const at = ed().state.selection.from;
     ed().chain().focus().insertContent({ type: 'tableFigure', attrs: {}, content: [table.toJSON()] }).run();
+    // 光标放进第一格（Word 也是）——功能区顺势切到「表格工具」
+    let first = -1;
+    ed().state.doc.nodesBetween(at, ed().state.doc.content.size, (node, pos) => {
+      if (first >= 0) return false;
+      if (node.type.name === 'tableFigure') { node.descendants((n, p) => { if (first < 0 && n.isTextblock) first = pos + 1 + p + 1; return first < 0; }); return false; }
+      return true;
+    });
+    if (first >= 0) ed().commands.setTextSelection(first);
   };
   const insertFigure = () => {
     const input = document.createElement('input');
@@ -86,22 +120,22 @@ export function TableAlignTools({ editor }: { editor: Editor }) {
   const cur = info.align || info.valign ? `${VN[(info.valign ?? 'horizon') as keyof typeof VN]}${HN[(info.align ?? 'center') as keyof typeof HN]}` : '默认';
   return (
     <>
-      <span className="menu">
-        <B title={`单元格对齐：${cur}（点开九宫格）`} on={open} run={() => setOpen((o) => !o)}><Grid3x3 /><span className="tb-text">{cur}</span></B>
-        {open && (
-          <span className="menu-pop align-pop" onMouseLeave={() => setOpen(false)}>
-            <div className="align-grid">
-              {V.map((v) => H.map((h) => (
-                <button key={v + h} type="button" className={`align-cell ${info.align === h && info.valign === v ? 'on' : ''}`} title={`${VN[v]}${HN[h]}`} onMouseDown={(e) => e.preventDefault()} onClick={() => apply(h, v)}>
-                  <span className="align-glyph" data-h={h} data-v={v}><i /><i /><i /></span>
-                </button>
-              )))}
-            </div>
-            <button type="button" className="btn btn-xs" style={{ width: '100%', marginTop: 6 }} onMouseDown={(e) => e.preventDefault()} onClick={() => apply(null, null)}>恢复默认（居中）</button>
-          </span>
-        )}
-      </span>
-      <B title={rowScope ? '对齐作用于整行（点击改为只作用于当前 / 选中的单元格）' : '对齐只作用于当前 / 选中的单元格（点击改为整行）'} on={rowScope} run={() => setRowScope((r) => !r)}><Rows2 /><span className="tb-text">整行</span></B>
+      <Popover open={open} onOpenChange={(_, d) => setOpen(d.open)} positioning="below-start" trapFocus={false}>
+        <PopoverTrigger disableButtonEnhancement>
+          <ToggleButton appearance="subtle" className="rb-btn rb-menu" icon={<TextAlignCenter20Regular />} checked={open} onMouseDown={(e) => e.preventDefault()} onClick={() => setOpen((o) => !o)} title={`单元格对齐：${cur}（点开九宫格）`}>{cur}</ToggleButton>
+        </PopoverTrigger>
+        <PopoverSurface className="align-pop">
+          <div className="align-grid">
+            {V.map((v) => H.map((h) => (
+              <button key={v + h} type="button" className={`align-cell ${info.align === h && info.valign === v ? 'on' : ''}`} title={`${VN[v]}${HN[h]}`} onMouseDown={(e) => e.preventDefault()} onClick={() => apply(h, v)}>
+                <span className="align-glyph" data-h={h} data-v={v}><i /><i /><i /></span>
+              </button>
+            )))}
+          </div>
+          <Button size="small" style={{ width: '100%', marginTop: 6 }} onMouseDown={(e) => e.preventDefault()} onClick={() => apply(null, null)}>恢复默认（居中）</Button>
+        </PopoverSurface>
+      </Popover>
+      <B title={rowScope ? '对齐作用于整行（点击改为只作用于当前 / 选中的单元格）' : '对齐只作用于当前 / 选中的单元格（点击改为整行）'} on={rowScope} icon={<TableCellEdit20Regular />} run={() => setRowScope((r) => !r)}>整行</B>
       <Sep />
       <label className="tb-field" title="当前列的宽度（厘米）；也可以直接拖列线。留空 = 自动">
         列宽 <input type="number" min={0.5} max={16} step={0.1} value={cw} placeholder="自动" onChange={(e) => { const v = parseFloat(e.target.value); editor.chain().focus().setColumnWidth(Number.isFinite(v) && v > 0 ? Math.round(v * 37.8) : null).run(); }} /> cm
@@ -127,9 +161,10 @@ export function FontSizeTool() {
   const [size, setSize] = useRichSize();
   return (
     <span className="tb-size" title="编辑区显示字号（只影响这里，不影响排版结果）">
-      <B title="字号小一点" run={() => setSize(size - 1)} disabled={size <= 13}><AArrowDown /></B>
+      <TextFontSize20Regular className="tb-size-ico" />
+      <B title="字号小一点" run={() => setSize(size - 1)} disabled={size <= 13}>A−</B>
       <span className="tb-size-val">{Math.round(size)}</span>
-      <B title="字号大一点" run={() => setSize(size + 1)} disabled={size >= 24}><AArrowUp /></B>
+      <B title="字号大一点" run={() => setSize(size + 1)} disabled={size >= 24}>A+</B>
     </span>
   );
 }

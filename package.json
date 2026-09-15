@@ -14,6 +14,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fluentui/react-components": "^9.74.7",
+    "@fluentui/react-icons": "^2.0.341",
     "@myriaddreamin/typst-ts-renderer": "file:./vendor/typst-ts-renderer",
     "@myriaddreamin/typst-ts-web-compiler": "file:./vendor/typst-ts-web-compiler",
     "@myriaddreamin/typst.ts": "^0.8.0-rc3",

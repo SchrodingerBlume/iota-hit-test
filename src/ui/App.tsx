@@ -16,9 +16,12 @@ import { InfoPanel } from './InfoPanel';
 import { AbstractPanel, NomenclaturePanel, RichSection, BibPanel, DefensePanel, PagesPanel } from './panels';
 import { Preview } from './Preview';
 import { useTheme } from './theme';
-import { FileDown, Save, FolderOpen, FileText, FilePlus2, Info, Sun, Moon, SlidersHorizontal, BookText, PenLine, Library, LayoutGrid } from 'lucide-react';
 import { useLayoutPrefs } from './layout';
 import { Ribbon } from './Ribbon';
+import { FluentProvider, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuDivider, Button, Tooltip } from '@fluentui/react-components';
+import { Apps20Regular, DocumentAdd20Regular, Save20Regular, FolderOpen20Regular, DocumentPdf20Regular, Document20Regular, Info20Regular, WeatherSunny20Regular, WeatherMoon20Regular } from '@fluentui/react-icons';
+import { fluentLight, fluentDark } from './fluent';
+import { SlidersHorizontal, BookText, PenLine, Library } from 'lucide-react';
 
 const NAV: { key: Section; label: string; group: string; k?: string }[] = [
   { key: 'settings', label: '论文设置', group: '设置' },
@@ -83,7 +86,6 @@ export function App() {
   const { doc, section, loaded, view, setView, setSection, load, replaceDoc, setImages } = useStore();
   const compile = useCompileState();
   useAutoCompile(doc, loaded);
-  const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [theme, setTheme] = useTheme();
   const { navOpen, setNavOpen, mode, setMode, ratio, startDrag, mainRef, gridColumns } = useLayoutPrefs();
@@ -187,35 +189,40 @@ export function App() {
 
   return (
     <EditorEnvContext.Provider value={env}>
+      <FluentProvider theme={theme === 'dark' ? fluentDark : fluentLight} className="fluent-root">
       <div className="app">
         {/* 顶栏并进功能区那一行：左边品牌与「文件」菜单，右边状态、导出、主题 */}
         {(() => { const leading = (
           <span className="rb-leading">
             <span className="brand" title="iota-hit · 哈尔滨工业大学学位论文在线编辑"><span className="brand-mark" aria-hidden>ι</span><b>iota-hit</b></span>
-            <span className="menu">
-              <button type="button" className={`rb-tab rb-file ${menu ? 'on' : ''}`} onMouseDown={(e) => e.preventDefault()} onClick={() => setMenu((m) => !m)}>文件</button>
-              {menu && (
-                <span className="menu-pop rb-file-menu" onMouseLeave={() => setMenu(false)}>
-                  <button type="button" onClick={() => { setMenu(false); setView(view === 'projects' ? 'editor' : 'projects'); }}><LayoutGrid />{view === 'projects' ? '回到编辑' : '项目管理'}</button>
-                  <button type="button" onClick={() => { setMenu(false); onNew(); }}><FilePlus2 />新建项目…</button>
-                  <hr />
-                  <button type="button" onClick={() => { setMenu(false); onSaveProject(); }}><Save />保存工程（.iota.json）</button>
-                  <button type="button" onClick={() => { setMenu(false); onOpenProject(); }}><FolderOpen />导入文件（并入当前项目）</button>
-                  <hr />
-                  <button type="button" disabled={compile.status !== 'ready' || !!busy} onClick={() => { setMenu(false); void onExportPdf(); }}><FileDown />导出 PDF</button>
-                  <button type="button" onClick={() => { setMenu(false); onExportTypst(); }}><FileText />导出 Typst 源码（main.typ + .bib）</button>
-                  <hr />
-                  <button type="button" onClick={() => { setMenu(false); alert('iota-hit 在线编辑器\n\n排版：iota-hit 0.1.0（hithesis 的 Typst 复刻）\n引擎：Typst 0.15.1，经 typst.ts 编成 wasm 在浏览器里运行\n字体：Noto Serif/Sans CJK SC、FandolKai、TeX Gyre Termes/Heros、DejaVu Sans Mono；也可读本机字体切到 Windows / macOS 档\n\n整站静态，没有服务器；工程与图片只存在这台浏览器里，记得定期「保存工程」。'); }}><Info />关于</button>
-                </span>
-              )}
-            </span>
-            <button type="button" className={`rb-proj ${view === 'projects' ? 'on' : ''}`} title="项目管理" onClick={() => setView(view === 'projects' ? 'editor' : 'projects')}>{loaded ? doc.name : '项目'}</button>
+            <Menu positioning="below-start">
+              <MenuTrigger disableButtonEnhancement>
+                <Button appearance="primary" className="rb-file" onMouseDown={(e) => e.preventDefault()}>文件</Button>
+              </MenuTrigger>
+              <MenuPopover className="rb-file-menu">
+                <MenuList>
+                  <MenuItem icon={<Apps20Regular />} onClick={() => setView(view === 'projects' ? 'editor' : 'projects')}>{view === 'projects' ? '回到编辑' : '项目管理'}</MenuItem>
+                  <MenuItem icon={<DocumentAdd20Regular />} onClick={onNew}>新建项目…</MenuItem>
+                  <MenuDivider />
+                  <MenuItem icon={<Save20Regular />} onClick={onSaveProject}>保存工程（.iota.json）</MenuItem>
+                  <MenuItem icon={<FolderOpen20Regular />} onClick={onOpenProject}>导入文件（并入当前项目）</MenuItem>
+                  <MenuDivider />
+                  <MenuItem icon={<DocumentPdf20Regular />} disabled={compile.status !== 'ready' || !!busy} onClick={() => void onExportPdf()}>导出 PDF</MenuItem>
+                  <MenuItem icon={<Document20Regular />} onClick={onExportTypst}>导出 Typst 源码（main.typ + .bib）</MenuItem>
+                  <MenuDivider />
+                  <MenuItem icon={<Info20Regular />} onClick={() => alert('iota-hit 在线编辑器\n\n排版：iota-hit 0.1.0（hithesis 的 Typst 复刻）\n引擎：Typst 0.15.1，经 typst.ts 编成 wasm 在浏览器里运行\n字体：Noto Serif/Sans CJK SC、FandolKai、TeX Gyre Termes/Heros、DejaVu Sans Mono；也可读本机字体切到 Windows / macOS 档\n\n整站静态，没有服务器；工程与图片只存在这台浏览器里，记得定期「保存工程」。')}>关于</MenuItem>
+                </MenuList>
+              </MenuPopover>
+            </Menu>
+            <Button appearance="subtle" size="small" className={`rb-proj ${view === 'projects' ? 'on' : ''}`} title="项目管理" onClick={() => setView(view === 'projects' ? 'editor' : 'projects')}>{loaded ? doc.name : '项目'}</Button>
           </span>
         ); const trailing = (
           <span className="rb-trailing">
             <span className="status"><i className={`dot ${dot}`} />{statusText}</span>
-            <button type="button" className="btn btn-primary btn-sm" disabled={compile.status !== 'ready' || !!busy} onClick={onExportPdf}><FileDown />导出 PDF</button>
-            <button type="button" className="btn btn-ghost btn-icon theme-btn" title={theme === 'dark' ? '切到浅色' : '切到深色'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun /> : <Moon />}</button>
+            <Button appearance="primary" size="small" icon={<DocumentPdf20Regular />} disabled={compile.status !== 'ready' || !!busy} onClick={onExportPdf}>导出 PDF</Button>
+            <Tooltip content={theme === 'dark' ? '切到浅色' : '切到深色'} relationship="label" positioning="below">
+              <Button appearance="subtle" size="small" className="theme-btn" icon={theme === 'dark' ? <WeatherSunny20Regular /> : <WeatherMoon20Regular />} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
+            </Tooltip>
           </span>
         ); return view === 'projects' ? <Ribbon minimal leading={leading} trailing={trailing} layout={{ navOpen, setNavOpen, mode, setMode }} /> : <Ribbon leading={leading} trailing={trailing} layout={{ navOpen, setNavOpen, mode, setMode }} />; })()}
         {view === 'projects' ? <ProjectsView /> : (<>
@@ -239,6 +246,7 @@ export function App() {
         </div>
         </>)}
       </div>
+      </FluentProvider>
     </EditorEnvContext.Provider>
   );
 }

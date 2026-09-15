@@ -27,7 +27,7 @@ import { Search } from './extensions/Search';
 import { useFindBar } from '../ui/Ribbon';
 import { recordTransaction, invalidatePositions } from './versions';
 import { usePreviewSurface } from '../ui/PreviewEditLayer';
-import { Bold, Italic, Underline, Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Code, Sigma, BookMarked, BookmarkPlus } from 'lucide-react';
+import { TextBold20Regular, TextItalic20Regular, TextUnderline20Regular, TextSuperscript20Regular, TextSubscript20Regular, Code20Regular, MathFormula20Regular, Book20Regular, BookmarkAdd20Regular } from '@fluentui/react-icons';
 
 /** 段落多一个「不缩进」属性：接在公式、列表后面的续段，模板里就是 first-line-indent: 0pt */
 const NoIndentParagraph = Paragraph.extend({
@@ -173,16 +173,16 @@ function Bubble({ editor }: { editor: Editor }) {
   const { insertInline } = useInsertActions(editor);
   return (
     <BubbleMenu editor={editor} className="bubble" options={bubbleOptions} shouldShow={bubbleShouldShow}>
-      <B title="加粗" on={editor.isActive('bold')} run={() => editor.chain().focus().toggleBold().run()}><Bold /></B>
-      <B title="强调" on={editor.isActive('italic')} run={() => editor.chain().focus().toggleItalic().run()}><Italic /></B>
-      <B title="下划线" on={editor.isActive('underline')} run={() => editor.chain().focus().toggleUnderline().run()}><Underline /></B>
-      <B title="上标" on={editor.isActive('superscript')} run={() => editor.chain().focus().toggleSuperscript().run()}><SuperscriptIcon /></B>
-      <B title="下标" on={editor.isActive('subscript')} run={() => editor.chain().focus().toggleSubscript().run()}><SubscriptIcon /></B>
-      <B title="等宽代码" on={editor.isActive('code')} run={() => editor.chain().focus().toggleCode().run()}><Code /></B>
+      <B title="加粗" icon={<TextBold20Regular />} on={editor.isActive('bold')} run={() => editor.chain().focus().toggleBold().run()} />
+      <B title="强调" icon={<TextItalic20Regular />} on={editor.isActive('italic')} run={() => editor.chain().focus().toggleItalic().run()} />
+      <B title="下划线" icon={<TextUnderline20Regular />} on={editor.isActive('underline')} run={() => editor.chain().focus().toggleUnderline().run()} />
+      <B title="下标" icon={<TextSubscript20Regular />} on={editor.isActive('subscript')} run={() => editor.chain().focus().toggleSubscript().run()} />
+      <B title="上标" icon={<TextSuperscript20Regular />} on={editor.isActive('superscript')} run={() => editor.chain().focus().toggleSuperscript().run()} />
+      <B title="等宽代码" icon={<Code20Regular />} on={editor.isActive('code')} run={() => editor.chain().focus().toggleCode().run()} />
       <Sep />
-      <B title="变成行内公式（LaTeX）" run={() => { const { from, to } = editor.state.selection; const text = editor.state.doc.textBetween(from, to, ' '); editor.chain().focus().insertContent({ type: 'mathInline', attrs: { src: text, mode: 'latex' } }).run(); }}><Sigma /></B>
-      <B title="在此引用文献" run={() => { editor.chain().focus().setTextSelection(editor.state.selection.to).run(); insertInline('cite'); }}><BookMarked /></B>
-      <B title="登记为索引词" run={() => { const { from, to } = editor.state.selection; const text = editor.state.doc.textBetween(from, to, ' '); editor.chain().focus().insertContent({ type: 'idx', attrs: { text } }).run(); }}><BookmarkPlus /></B>
+      <B title="变成行内公式（LaTeX）" icon={<MathFormula20Regular />} run={() => { const { from, to } = editor.state.selection; const text = editor.state.doc.textBetween(from, to, ' '); editor.chain().focus().insertContent({ type: 'mathInline', attrs: { src: text, mode: 'latex' } }).run(); }} />
+      <B title="在此引用文献" icon={<Book20Regular />} run={() => { editor.chain().focus().setTextSelection(editor.state.selection.to).run(); insertInline('cite'); }} />
+      <B title="登记为索引词" icon={<BookmarkAdd20Regular />} run={() => { const { from, to } = editor.state.selection; const text = editor.state.doc.textBetween(from, to, ' '); editor.chain().focus().insertContent({ type: 'idx', attrs: { text } }).run(); }} />
     </BubbleMenu>
   );
 }
