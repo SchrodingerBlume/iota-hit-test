@@ -707,3 +707,8 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .tags.is-dragging .tag-item { cursor: grabbing; }
 .tag-item.is-ghost { opacity: 0.3; }
 .tag-item.is-lifted { box-shadow: var(--shadow-2); transform: scale(1.04); background: var(--accent-soft-2); animation: none; }
+/* typst.ts 的文本选择层（foreignObject 里一层透明的系统字体文字）：增量渲染的 SVG 不自带隐藏它的
+   样式，以前是靠正文里公式预览小 SVG 顺带的 <style> 遮着的——切到别的节那份卸掉就显形成重影。
+   预览有自己的光标与选区，这一层用不着，直接不画 */
+.preview-doc svg.typst-doc foreignObject { display: none; }
+.preview-doc svg.typst-doc .tsel { color: transparent; }
