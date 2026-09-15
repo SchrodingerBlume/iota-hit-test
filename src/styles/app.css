@@ -144,7 +144,11 @@ code { font-family: var(--mono); font-size: 0.92em; }
 .pane-title svg { width: 14px; height: 14px; color: var(--accent); }
 .pane-bar .spacer { flex: 1; }
 .preview-scroll { overflow: auto; padding: 18px; }
-.preview-stage { position: relative; margin: 0 auto; transition: width var(--base) var(--ease); }
+.preview-canvas { margin: 0 auto; }
+.preview-stage { position: relative; margin: 0 auto; }
+/* 捏合进行中：版面只是 transform 缩放，字形层不重绘；关掉一切过渡免得叠加抖动 */
+.preview-scroll.is-zooming .preview-stage { will-change: transform; }
+.preview-scroll.is-zooming * { transition: none !important; }
 .preview-doc { transition: opacity var(--base) var(--ease), filter var(--base) var(--ease); }
 .preview.is-compiling .preview-doc { opacity: 0.55; filter: saturate(0.8); }
 .preview-doc svg { width: 100%; height: auto; display: block; background: transparent; overflow: visible; }
@@ -152,7 +156,6 @@ code { font-family: var(--mono); font-size: 0.92em; }
 :root[data-theme="dark"] .preview-doc svg .page-sheet { filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6)) drop-shadow(0 10px 24px rgba(0,0,0,0.5)); }
 .preview-doc svg .page-label { fill: var(--muted); font-family: var(--sans); font-size: 9px; }
 .preview-doc svg .page-rule { stroke: var(--line-2); stroke-width: 0.5; }
-.preview-scroll.is-zooming .preview-stage, .preview-scroll.is-zooming .preview-doc { transition: none; }
 .preview-doc .typst-doc { width: 100%; }
 .preview-empty { display: grid; place-items: center; height: 100%; color: var(--muted); text-align: center; padding: 24px; }
 /* 排版中：预览顶上一道流动的主色细线 */
