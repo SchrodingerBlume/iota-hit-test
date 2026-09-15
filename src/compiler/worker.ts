@@ -184,6 +184,8 @@ function byteToUnitTable(s: string): Uint32Array {
   return table;
 }
 
+import { GLYPH_STRIDE } from './protocol';
+
 /** 字形表：wasm 给的字节偏移换成 UTF-16 下标，拷出 wasm 内存 */
 function glyphMap(main: string): ArrayBuffer | null {
   if (!world || typeof world.glyph_map !== 'function') return null;
@@ -193,7 +195,7 @@ function glyphMap(main: string): ArrayBuffer | null {
     const out = new Float64Array(raw); // 拷贝
     const table = byteToUnitTable(main);
     const last = table.length - 1;
-    for (let i = 0; i < out.length; i += 8) {
+    for (let i = 0; i < out.length; i += GLYPH_STRIDE) {
       out[i + 5] = table[Math.min(last, out[i + 5])];
       out[i + 6] = table[Math.min(last, out[i + 6])];
     }
@@ -220,7 +222,8 @@ async function compile(msg: Extract<ToWorker, { type: 'compile' }>) {
     // 不走 typst.ts 的 compile() 包装：自己拿世界快照，编完留着，字形表从同一份文档上取
     const raw = (compiler as any).compiler;
     try { world?.free(); } catch { /* 已经释放过 */ }
-    world = raw.snapshot(undefined, '/main.typ', undefined);
+    // sys.inputs.preview：main.typ 里预览专用的东西（空行上的隐形 ¶）只在这儿生效，PDF 不带
+    world = raw.snapshot(undefined, '/main.typ', [['preview', '1']]);
     if (!incr) { incr = raw.create_incr_server(); incrFresh = true; }
     const res = world.incr_compile(incr, 3); // 3 = full diagnostics；结果是与上一版的差
     // 成功那一支只带 result，诊断（警告）另问一次——编译结果是缓存的，不重编
@@ -238,6 +241,8 @@ async function compile(msg: Extract<ToWorker, { type: 'compile' }>) {
 
 async function pdf(msg: Extract<ToWorker, { type: 'pdf' }>) {
   if (!compiler) return;
+  // 正式排版用的 main.typ（不带预览记号）；下一次预览编译会再把预览那份换回来
+  compiler.addSource('/main.typ', msg.main);
   try {
     const res = await compiler.compile({ mainFilePath: '/main.typ', format: 1 as any, diagnostics: 'full' });
     const buf = res.result ? new Uint8Array(res.result as Uint8Array).buffer : null;

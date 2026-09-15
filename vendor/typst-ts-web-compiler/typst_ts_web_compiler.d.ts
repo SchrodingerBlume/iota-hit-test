@@ -39,7 +39,11 @@ export class TypstCompileWorld {
     get_artifact(fmt: number, diagnostics_format: number): any;
     /**
      * Glyph map for in-preview editing (iota4web patch): a flat f64 array,
-     * 8 numbers per glyph — page, x, y, w, h, byte_start, byte_end, kind.
+     * 10 numbers per glyph — page, x, y, w, h, byte_start, byte_end, kind,
+     * first code point of the glyph's text, number of chars it covers
+     * (0 for a glyph the shaper inserted, e.g. a hyphen). The last two let
+     * the JS side align glyphs with the original text when spans are
+     * unreliable (regex show rules re-slice text elements).
      * kind: 1 = text / math text (glyph-precise offsets), 2 = string literal
      * (offset inside the literal, approximate when it has escapes),
      * 0 = anything else (offsets are the node's range), 3 = an echo of the
@@ -173,8 +177,8 @@ export interface InitOutput {
     readonly proxycontext_context: (a: number) => number;
     readonly proxycontext_untar: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly proxycontext_new: (a: number) => number;
-    readonly __wasm_bindgen_func_elem_39831: (a: number, b: number, c: number, d: number) => void;
-    readonly __wasm_bindgen_func_elem_39825: (a: number, b: number, c: number, d: number) => void;
+    readonly __wasm_bindgen_func_elem_39834: (a: number, b: number, c: number, d: number) => void;
+    readonly __wasm_bindgen_func_elem_39828: (a: number, b: number, c: number, d: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number) => void;

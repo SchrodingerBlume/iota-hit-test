@@ -686,6 +686,8 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .pv-overlay.is-composing { border-bottom: 2px solid var(--accent); background: var(--accent-soft); }
 .pv-overlay.is-fading { opacity: 0; background: transparent; transition: opacity 200ms ease-out; }
 .pv-gone { position: absolute; background: var(--paper); pointer-events: none; z-index: 1; }
+/* 编辑标记（Word 的 ¶）：只在覆盖层上画，不进排版结果 */
+.pv-mark { position: absolute; pointer-events: none; user-select: none; z-index: 2; font-family: "Times New Roman", "Noto Serif CJK SC", serif; color: var(--accent); opacity: 0.55; white-space: pre; }
 .pv-input { position: absolute; width: 1px; min-width: 1px; padding: 0; margin: 0; border: 0; outline: 0; opacity: 0.01; resize: none; overflow: hidden; background: transparent; color: transparent; caret-color: transparent; font-size: 16px; z-index: 0; }
 .preview.is-compiling .pv-layer { opacity: 1; }
 

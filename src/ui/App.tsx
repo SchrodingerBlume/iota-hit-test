@@ -46,7 +46,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean) {
   useEffect(() => {
     if (!loaded || status !== 'ready') return;
     const t = window.setTimeout(async () => {
-      const project = serializeProject(doc);
+      const project = serializeProject(doc, { preview: true });
       // 换了项目：图片名字空间变了，worker 里映射的旧图全撤掉，重新发
       let stale: string[] = [];
       if (lastProject.current !== doc.id) {
@@ -122,7 +122,7 @@ export function App() {
   const onExportPdf = async () => {
     setBusy('正在导出 PDF…');
     try {
-      const r = await exportPdf();
+      const r = await exportPdf(serializeProject(doc).main);
       if (r.pdf) download(`${doc.info.title.split('\n')[0] || '论文'}.pdf`, r.pdf, 'application/pdf');
       else alert('导出失败：' + r.diagnostics.map((d) => d.message).join('\n'));
     } finally { setBusy(null); }

@@ -13,7 +13,7 @@ import { useStore, type RichKey, type Section } from '../model/store';
 import { getEditor, onRegistryChange, whenEditorReady } from '../editor/registry';
 import { docVersion, mappingSince, toNewPos, toOldPos } from '../editor/versions';
 import { useOpenRequest } from '../editor/openRequest';
-import { buildIndex, caretRect, hitPos, hitTest, lineStep, selectionRects, EMPTY_INDEX, type CaretRect, type Glyph, type Hit, type Line } from './previewEdit';
+import { buildIndex, caretRect, hitPos, hitTest, lineStep, selectionRects, paragraphMarks, EMPTY_INDEX, type CaretRect, type Glyph, type Hit, type Line } from './previewEdit';
 
 const KEY_SECTION: Record<RichKey, Section> = {
   body: 'body', appendix: 'appendix', conclusion: 'conclusion', acknowledgement: 'acknowledgement', resume: 'resume',
@@ -30,6 +30,13 @@ interface Surface {
 }
 export const usePreviewSurface = create<Surface>((set) => ({ activeKey: null, focused: false, refocus: () => {}, set: (p) => set(p) }));
 
+/** 显示编辑标记（Word 的 ¶）：只画在预览的覆盖层上，排版结果与 PDF 不受影响；记在本机 */
+const MARKS_KEY = 'iota4web-show-marks';
+export const usePreviewMarks = create<{ on: boolean; toggle: () => void }>((set) => ({
+  on: (() => { try { return localStorage.getItem(MARKS_KEY) === '1'; } catch { return false; } })(),
+  toggle: () => set((s) => { const on = !s.on; try { localStorage.setItem(MARKS_KEY, on ? '1' : '0'); } catch { /* 无痕模式 */ } return { on }; }),
+}));
+
 interface PageGeom { left: number; top: number; scale: number; w: number; h: number }
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -39,6 +46,8 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   const segments = useCompileState((s) => s.segments);
   const mapVersion = useCompileState((s) => s.mapVersion);
   const index = useMemo(() => (glyphs ? buildIndex(glyphs, segments, mapVersion) : EMPTY_INDEX), [glyphs, segments, mapVersion]);
+  const marksOn = usePreviewMarks((s) => s.on);
+  const marks = useMemo(() => (marksOn ? paragraphMarks(index, segments) : []), [marksOn, index, segments]);
 
   const activeKey = usePreviewSurface((s) => s.activeKey);
   const focused = usePreviewSurface((s) => s.focused);
@@ -134,7 +143,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     if (!m || !arr) return [];
     const out: { page: number; x: number; y: number; w: number; h: number }[] = [];
     for (const g of arr) {
-      if (g.kind !== 'text') continue;
+      if (g.kind !== 'text' || g.from === g.to) continue;
       if (m.map(g.to, -1) <= m.map(g.from, 1)) out.push({ page: g.page, x: g.x, y: g.y, w: g.w, h: g.h });
     }
     return out;
@@ -477,6 +486,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     <div ref={layerRef} data-active={activeKey ?? ''} data-focused={focused ? 1 : 0} className={`pv-layer ${cursor} ${focused ? 'is-focused' : ''}`} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerLeave={() => setCursor('')}>
       {rects.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <div key={i} className="pv-sel" style={{ left: p.left, top: p.top, width: r.w * p.scale, height: r.h * p.scale }} /> : null; })}
       {gone.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <div key={`g${i}`} className="pv-gone" style={{ left: p.left, top: p.top, width: r.w * p.scale + 0.5, height: r.h * p.scale }} /> : null; })}
+      {marks.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <span key={`m${i}`} className={`pv-mark ${r.blank ? 'is-blank' : ''}`} style={{ left: p.left, top: p.top, height: r.h * p.scale, fontSize: r.h * p.scale * 0.8, lineHeight: `${r.h * p.scale}px` }}>¶</span> : null; })}
       {caretPx && overlayText && (
         <span className={`pv-overlay ${composing !== null ? 'is-composing' : ''} ${composing === null && pending?.fading ? 'is-fading' : ''}`} style={{ left: caretPx.left, top: caretPx.top, height: caretH, fontSize: caretH * 0.92, lineHeight: `${caretH}px` }}>{overlayText}</span>
       )}

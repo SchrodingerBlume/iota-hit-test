@@ -7,7 +7,8 @@
 //   · 一段选区 → 一行一条的高亮矩形
 //   · 上下方向键 → 上一行 / 下一行里最近的字
 import type { RichKey } from '../model/store';
-import { segmentAt, typToRawOffset, type Segment, type SegKind } from '../typst/sourcemap';
+import { segmentAt, type Segment, type SegKind } from '../typst/sourcemap';
+import { GLYPH_STRIDE } from '../compiler/protocol';
 
 export interface Glyph {
   page: number;
@@ -43,29 +44,60 @@ export interface GlyphIndex {
 
 export const EMPTY_INDEX: GlyphIndex = { version: -1, pages: [], byKey: new Map(), lineOf: new Map(), count: 0 };
 
+/** 一段原文里按顺序对字形的游标 */
+interface Cursor { k: number; lastStart: number; lastEnd: number; lastCp: number; lastFrom: number; lastTo: number }
+
+/**
+ * 把一个字形对到原文里的第几个字。字形是按阅读顺序来的，原文也是，所以顺着走就行：
+ * 字对得上就认下一个，对不上（Typst 把直引号弯了、把 --- 合成了破折号）就当一个字，
+ * 中间隔着几个原文字（折行处吞掉的空格、连字）就往前找一小段。不靠编译器给的源码
+ * 偏移——模板的 show regex 会把文本元素切片，切片之后的偏移从 0 重新数，靠不住。
+ */
+function align(text: string, cur: Cursor, cp: number, nchars: number): [number, number] {
+  if (nchars === 0) return [Math.min(cur.k, text.length), Math.min(cur.k, text.length)]; // 排版器自己加的字形（断词连字符）
+  const c = cp ? String.fromCodePoint(cp) : '';
+  let k = cur.k;
+  // 原文走完了还有字形来：同一段字排了第二遍（罕见），从头再对
+  if (k >= text.length && c && text.startsWith(c)) k = 0;
+  let j = -1;
+  if (c && text.startsWith(c, k)) j = k;
+  else if (c) { const f = text.indexOf(c, k); if (f >= 0 && f <= k + 8) j = f; }
+  if (j < 0) { const a = Math.min(k, text.length); const b = Math.min(text.length, a + 1); cur.k = b; return [a, b]; }
+  let e = j;
+  for (let q = 0; q < nchars && e < text.length; q++) e += (text.codePointAt(e) ?? 0) > 0xffff ? 2 : 1;
+  cur.k = e;
+  return [j, e];
+}
+
 export function buildIndex(raw: Float64Array | null, segments: Segment[], version: number): GlyphIndex {
   if (!raw || !segments.length) return { ...EMPTY_INDEX, version };
   const glyphs: Glyph[] = [];
-  for (let i = 0; i + 7 < raw.length; i += 8) {
+  const cursors = new Map<Segment, Cursor>();
+  for (let i = 0; i + GLYPH_STRIDE - 1 < raw.length; i += GLYPH_STRIDE) {
     const start = raw[i + 5];
     const end = raw[i + 6];
     const kind = raw[i + 7];
+    const cp = raw[i + 8];
+    const nchars = raw[i + 9];
     // 3 = 目录条目、页眉页脚里的回声：不是编辑正文的地方
     if (kind === 3) continue;
     const seg = segmentAt(segments, start);
     if (!seg) continue;
     let from: number, to: number;
-    if (seg.kind === 'node') {
+    if (seg.kind === 'node' || seg.raw === undefined) {
       from = seg.pmFrom; to = seg.pmTo;
-    } else if (seg.raw !== undefined && kind !== 0) {
-      const local = start - seg.typFrom;
-      const a = typToRawOffset(seg.raw, local);
-      const b = Math.max(a, typToRawOffset(seg.raw, Math.max(local, end - seg.typFrom)));
-      from = seg.pmFrom + a; to = seg.pmFrom + b;
-      if (to === from) to = Math.min(seg.pmTo, from + 1);
     } else {
-      // 文本段里冒出的非文本字形（罕见）：当整段
-      from = seg.pmFrom; to = seg.pmTo;
+      let cur = cursors.get(seg);
+      if (!cur) { cur = { k: 0, lastStart: -1, lastEnd: -1, lastCp: -1, lastFrom: 0, lastTo: 0 }; cursors.set(seg, cur); }
+      if (cur.lastStart === start && cur.lastEnd === end && cur.lastCp === cp && nchars > 0) {
+        // 同一个字符簇里的第二个字形（组合符号）：与前一个同位
+        from = cur.lastFrom; to = cur.lastTo;
+      } else {
+        const [a, b] = align(seg.raw, cur, cp, nchars);
+        from = seg.pmFrom + a; to = seg.pmFrom + b;
+        if (to === from && nchars > 0) to = Math.min(seg.pmTo, from + 1);
+        cur.lastStart = start; cur.lastEnd = end; cur.lastCp = cp; cur.lastFrom = from; cur.lastTo = to;
+      }
     }
     glyphs.push({ page: raw[i], x: raw[i + 1], y: raw[i + 2], w: raw[i + 3], h: raw[i + 4], key: seg.key, kind: seg.kind, seg, from, to });
   }
@@ -183,6 +215,21 @@ export function caretRect(index: GlyphIndex, key: string, pos: number, prefer: {
 }
 
 export interface SelRect { page: number; x: number; y: number; w: number; h: number }
+
+export interface ParaMark { page: number; x: number; y: number; h: number; blank: boolean }
+/** 编辑标记（Word 的 ¶）该画在哪：空回车段上是那个隐形的 ¶ 自己，有字的段落是最后一个字之后 */
+export function paragraphMarks(index: GlyphIndex, segments: Segment[]): ParaMark[] {
+  const out: ParaMark[] = [];
+  for (const lines of index.pages) if (lines) for (const l of lines) for (const g of l.glyphs) {
+    if (g.seg.attr === 'blank') out.push({ page: g.page, x: g.x, y: g.y, h: g.h, blank: true });
+  }
+  for (const s of segments) {
+    if (s.kind !== 'para') continue;
+    const r = caretRect(index, s.key, s.pmFrom, null);
+    if (r) out.push({ page: r.page, x: r.x, y: r.y, h: r.h, blank: false });
+  }
+  return out;
+}
 
 /** 选区高亮：一行一条。同一段字印了几处时只亮光标所在那一处附近的页 */
 export function selectionRects(index: GlyphIndex, key: string, from: number, to: number, prefer: { page: number; y: number } | null): SelRect[] {

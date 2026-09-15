@@ -17,11 +17,11 @@ import {
   BookmarkAdd20Regular, Spacebar20Regular, DocumentPageBreak20Regular, Omega20Regular, ArrowEnter20Regular, Book20Regular, Link20Regular, Library20Regular, DocumentTableSearch20Regular,
   TextGrammarSettings20Regular, TableStackAbove20Regular, TableStackBelow20Regular, TableDeleteRow20Regular, TableStackLeft20Regular, TableStackRight20Regular, TableDeleteColumn20Regular,
   TableCellsMerge20Regular, TableFreezeRow20Regular, TableDismiss20Regular, PanelLeftContract20Regular, PanelLeftExpand20Regular, PanelLeft20Regular, LayoutColumnTwo20Regular, PanelRight20Regular,
-  ZoomIn20Regular, ZoomOut20Regular, AutoFitWidth20Regular, Settings20Regular, Info20Regular, ChevronUp20Regular, ChevronDown20Regular, ChevronLeft20Regular, ChevronRight20Regular, Dismiss20Regular, Pin20Regular, Grid20Regular, Navigation20Regular,
+  ZoomIn20Regular, ZoomOut20Regular, AutoFitWidth20Regular, Settings20Regular, Info20Regular, ChevronUp20Regular, ChevronDown20Regular, ChevronLeft20Regular, ChevronRight20Regular, Dismiss20Regular, Pin20Regular, Grid20Regular, Navigation20Regular, TextParagraph20Regular,
 } from '@fluentui/react-icons';
 import { useStore, type RichKey } from '../model/store';
 import { getEditor, getEditorMeta, onRegistryChange } from '../editor/registry';
-import { usePreviewSurface } from './PreviewEditLayer';
+import { usePreviewSurface, usePreviewMarks } from './PreviewEditLayer';
 import { usePreviewZoom } from './previewZoom';
 import { B, Sep, useEditorTick, useInsertActions, TableAlignTools, FontSizeTool, refocusPreviewAfter } from '../editor/tools';
 import { searchKey, selectCurrentMatch } from '../editor/extensions/Search';
@@ -104,6 +104,8 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const blocks = meta?.blocks !== false;
   const none = !ed;
   const zoom = usePreviewZoom();
+  const marksOn = usePreviewMarks((s) => s.on);
+  const toggleMarks = usePreviewMarks((s) => s.toggle);
   const chain = () => ed!.chain().focus();
   const findOpen = useFindBar((s) => s.open);
   const tabReq = useRibbonTab((s) => s.req);
@@ -294,6 +296,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                     <B title="空一个汉字宽（#ccwd）" icon={<Spacebar20Regular />} disabled={none} run={() => ins.insertInline('ccwd', { n: 1 })} />
                     <B title="空回车段：连续空段落会排成 #enter(n)，真占一行" icon={<ArrowEnter20Regular />} disabled={none} run={() => chain().splitBlock().run()} />
                     <B title="分页" icon={<DocumentPageBreak20Regular />} disabled={none || !blocks} run={ins.insertPageBreak} />
+                    <B title="显示 / 隐藏编辑标记：预览里每段末尾与空回车段上画 ¶（只在预览里画，PDF 不受影响）" icon={<TextParagraph20Regular />} on={marksOn} run={toggleMarks} />
                   </Row>
                 </Rows>
               </Group>
@@ -427,6 +430,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                   <B title={layout.navOpen ? '收起左栏' : '展开左栏'} icon={layout.navOpen ? <PanelLeftContract20Regular /> : <PanelLeftExpand20Regular />} on={layout.navOpen} run={() => layout.setNavOpen(!layout.navOpen)}>导航栏</B>
                   <B title="论文设置（校区、学位、阶段……）在「论文」页" icon={<Settings20Regular />} run={() => useRibbonTab.getState().go('thesis')}>论文设置</B>
                   <B title="元信息（题目、作者、导师……）" icon={<Info20Regular />} run={() => useStore.getState().setSection('info')}>元信息</B>
+                  <B title="显示 / 隐藏编辑标记（Word 的 ¶）：预览里每段末尾与空回车段上画 ¶" icon={<TextParagraph20Regular />} on={marksOn} run={toggleMarks}>编辑标记</B>
                 </Stack>
               </Group>
               <Group label="编辑区字号">

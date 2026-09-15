@@ -187,7 +187,23 @@ ${indent(resolution, 4)}
 
 const indent = (s: string, n: number) => s.split('\n').map((l) => (l ? ' '.repeat(n) + l : l)).join('\n');
 
-export function serializeProject(doc: ThesisDoc): Project {
+/** 预览用的隐形段落标记：空回车段每段一个 ¶，只在站内预览编译（sys.inputs.preview）时真的排字 */
+const PREVIEW_PRELUDE = `// 站内预览用：空回车段上各放一个隐形的 ¶，预览里点空行才有落点。只在 sys.inputs.preview 下排字，
+// 正式排版（PDF）里这一句退化成 #enter(n)，与模板原样一致
+#let blanks(..marks) = {
+  if "preview" in sys.inputs {
+    context {
+      let h = measure(enter(1)).height
+      // 与 Word 一样，空段的 ¶ 站在首行缩进处
+      let ind = par.first-line-indent
+      let dx = if type(ind) == dictionary { ind.amount } else { ind }
+      for (k, m) in marks.pos().enumerate() { place(dx: dx, dy: k * h, text(fill: rgb(0, 0, 0, 0), m)) }
+    }
+  }
+  enter(marks.pos().len())
+}`;
+
+export function serializeProject(doc: ThesisDoc, { preview = false }: { preview?: boolean } = {}): Project {
   const s = doc.settings;
   const files: Record<string, string> = {};
   const parts: string[] = [];
@@ -195,6 +211,7 @@ export function serializeProject(doc: ThesisDoc): Project {
   const knownLabels = new Set<string>([...collectRefTargets(doc.body), ...collectRefTargets(doc.appendix)].map((r) => r.label));
 
   parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n// LaTeX 公式走 mitex 转成 Typst（包已随站内打包）\n#import "@preview/mitex:0.2.7": mitex, mi`);
+  if (preview) parts.push(PREVIEW_PRELUDE);
   parts.push(`#show: iota-hit.with(\n  ${[...settingsArgs(s), ...infoArgs(doc.info, s)].join(',\n  ')},\n)`);
 
   // ── 前置 ──
@@ -203,7 +220,7 @@ export function serializeProject(doc: ThesisDoc): Project {
   if (resolvePage(doc, 'cover').value) parts.push(`#cover(${coverArgs})`);
   if (resolvePage(doc, 'titlepage').value) parts.push(`#titlepage(${coverArgs})`);
 
-  const rich = (key: RichKey, opts: { headings: boolean; headingBase?: number }) => serializeDoc(doc[key], { ...opts, knownLabels, map: { key, posOf: indexPositions(doc[key] as any) } });
+  const rich = (key: RichKey, opts: { headings: boolean; headingBase?: number }) => serializeDoc(doc[key], { ...opts, knownLabels, preview, map: { key, posOf: indexPositions(doc[key] as any) } });
   const abstractZh = rich('abstractZh', { headings: false });
   const abstractEn = rich('abstractEn', { headings: false });
   if (resolvePage(doc, 'abstract').value && (abstractZh.trim() || abstractEn.trim())) {

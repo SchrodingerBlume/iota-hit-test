@@ -161,12 +161,12 @@ function whenIdle(): Promise<void> {
   });
 }
 
-export async function exportPdf(): Promise<{ pdf: ArrayBuffer | null; diagnostics: Diagnostic[] }> {
+export async function exportPdf(main: string): Promise<{ pdf: ArrayBuffer | null; diagnostics: Diagnostic[] }> {
   await whenIdle();
   return new Promise((resolve) => {
     const id = nextId++;
     pdfWaiters.set(id, resolve);
-    send({ type: 'pdf', id });
+    send({ type: 'pdf', id, main });
   });
 }
 

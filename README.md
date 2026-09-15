@@ -70,10 +70,16 @@ typst.ts 主分支已经升到 0.15.1，所以 `vendor/` 里的两颗 wasm 是�
 （提交号见 `vendor/*/COMMIT`）用 `wasm-pack` 编的，JS 胶水仍用 npm 上的 `@myriaddreamin/typst.ts@0.8.0-rc3`。
 等 typst.ts 发了基于 0.15.1 的正式版，把 `package.json` 里两个 `file:./vendor/…` 改回 npm 版本即可——
 但编译器那颗还带一个自己的小补丁（`scripts/wasm-patch/compiler-glyph-map.patch`，构建脚本自动打）：
-给 `TypstCompileWorld` 加了 `glyph_map()`，把排版结果里每个字形的页码、位置与它在 `main.typ` 里的
-字符区间列成一张表。预览区直接编辑靠它：序列化时给每段文字打上记号（`src/typst/sourcemap.ts`），
-字形 → 源码位置 → 编辑器里的 ProseMirror 位置就都对得上。目录条目（按 introspection 标签认）与
-页眉页脚（按页边距带认）标成回声，不当编辑入口。
+给 `TypstCompileWorld` 加了 `glyph_map()`，把排版结果里每个字形的页码、位置、它在 `main.typ` 里的
+字符区间，以及它是哪个字（首个码点、占几个字）列成一张表。预览区直接编辑靠它：序列化时给每段文字打上
+记号（`src/typst/sourcemap.ts`），字形 → 所在的那段原文 → 按字对齐 → 编辑器里的 ProseMirror 位置。
+按字对齐而不直接信源码偏移，是因为模板的 `show regex` 会把文本元素切片，切片后的偏移从 0 重新数，
+混排了英文、数字的段落一过第一个英文词就全错。目录条目（按 introspection 标签认）与页眉页脚
+（按页边距带认）标成回声，不当编辑入口。
+
+空回车段在预览里也能点：预览编译的 `main.typ`（与导出 PDF / 源码用的那份不同）开头多定义一个 `blanks`，
+每个空段放一个透明的 ¶（`place`，不占版面），只在 `sys.inputs.preview` 下排字。「显示编辑标记」
+（开始 → 段落，或视图页）把 Word 那样的 ¶ 画在覆盖层上，PDF 里没有。
 
 ## 开发
 

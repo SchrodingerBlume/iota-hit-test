@@ -10,10 +10,14 @@ export interface Diagnostic {
   range?: string;
 }
 
+/** 字形表每个字形占几个数；后两个（首个码点、占几个字）给主线程按原文对齐用——模板的 show regex 会把文本切片，切片后的源码偏移不可靠 */
+export const GLYPH_STRIDE = 10;
+
 export type ToWorker =
   | { type: 'init'; baseUrl: string }
   | { type: 'compile'; id: number; main: string; files: Record<string, string>; images: { name: string; data: ArrayBuffer }[]; removeImages: string[] }
-  | { type: 'pdf'; id: number }
+  /** main：正式排版用的 main.typ（不带预览记号），与预览编的那份不同 */
+  | { type: 'pdf'; id: number; main: string }
   /** 编一个 Typst 数学片段，给编辑器里的公式预览用 */
   | { type: 'snippet'; id: number; src: string; display: boolean }
   /** 增删用户字体（本机读的或自己选的文件），字节只住在 worker；改完整表重建 */
@@ -25,7 +29,7 @@ export type FromWorker =
   | { type: 'progress'; progress: Progress }
   | { type: 'ready'; ms: number; families: string[] }
   | { type: 'fatal'; message: string }
-  /** glyphs：字形表，每 8 个数一个字形——page, x, y, w, h, 源码起, 源码止（main.typ 的 UTF-16 下标）, kind */
+  /** glyphs：字形表，每 GLYPH_STRIDE 个数一个字形——page, x, y, w, h, 源码起, 源码止（main.typ 的 UTF-16 下标）, kind, 首个码点, 占几个字 */
   /** artifact 是与上一版的差（增量）；fresh = 增量服务刚建，这一份是完整的，渲染器要 reset */
   | { type: 'compiled'; id: number; artifact: ArrayBuffer | null; fresh: boolean; diagnostics: Diagnostic[]; ms: number; glyphs: ArrayBuffer | null }
   | { type: 'pdf'; id: number; pdf: ArrayBuffer | null; diagnostics: Diagnostic[] }

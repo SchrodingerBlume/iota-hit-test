@@ -1,13 +1,17 @@
 diff --git a/packages/compiler/src/lib.rs b/packages/compiler/src/lib.rs
-index b9de839b..1baccfbf 100644
+index b9de839..2d44a97 100644
 --- a/packages/compiler/src/lib.rs
 +++ b/packages/compiler/src/lib.rs
-@@ -475,6 +475,123 @@ impl TypstCompileWorld {
+@@ -475,6 +475,214 @@ impl TypstCompileWorld {
          })
      }
  
 +    /// Glyph map for in-preview editing (iota4web patch): a flat f64 array,
-+    /// 8 numbers per glyph — page, x, y, w, h, byte_start, byte_end, kind.
++    /// 10 numbers per glyph — page, x, y, w, h, byte_start, byte_end, kind,
++    /// first code point of the glyph's text, number of chars it covers
++    /// (0 for a glyph the shaper inserted, e.g. a hyphen). The last two let
++    /// the JS side align glyphs with the original text when spans are
++    /// unreliable (regex show rules re-slice text elements).
 +    /// kind: 1 = text / math text (glyph-precise offsets), 2 = string literal
 +    /// (offset inside the literal, approximate when it has escapes),
 +    /// 0 = anything else (offsets are the node's range), 3 = an echo of the
@@ -27,12 +31,93 @@ index b9de839b..1baccfbf 100644
 +        let main = world.main();
 +        let source: Source = world.source(main).map_err(|e| format!("{e:?}"))?;
 +
++        /// Where the piece of a text element that is currently being laid out
++        /// starts in the source. A `show regex` rule splits a text element into
++        /// pieces that all keep the element's span, with glyph offsets that
++        /// restart at 0 in every piece; pieces partition the element's text in
++        /// order, so a restart means the next piece starts where the previous
++        /// glyph ended (skipping a space the line breaker trimmed).
++        struct Piece {
++            /// Absolute byte offset in the source where the current piece starts
++            base: usize,
++            last_off: usize,
++            last_rel_end: usize,
++            last_text: String,
++            /// Absolute byte offset right after the last glyph seen
++            last_abs_end: usize,
++        }
++
 +        struct Walk<'a> {
 +            source: &'a Source,
 +            out: Vec<f64>,
 +            /// Open introspection tags: (location, is an outline entry)
 +            tags: Vec<(::typst::introspection::Location, bool)>,
 +            page_h: f64,
++            pieces: std::collections::HashMap<::typst::syntax::Span, Piece>,
++        }
++
++        /// Absolute source range of a text glyph, piece-aware (see `Piece`).
++        fn text_range(
++            wk: &mut Walk,
++            span: ::typst::syntax::Span,
++            r: std::ops::Range<usize>,
++            off: usize,
++            len: usize,
++            gtext: &str,
++            echo: bool,
++        ) -> (usize, usize) {
++            let plain = || {
++                let s = (r.start + off).min(r.end);
++                (s, (s + len).min(r.end))
++            };
++            // Echoes (outline entries, running headers) repeat text laid out elsewhere:
++            // they must not disturb the piece tracking of the real thing.
++            if echo {
++                return plain();
++            }
++            let rel_end = off + len;
++            let st = wk.pieces.entry(span).or_insert(Piece {
++                base: r.start,
++                last_off: usize::MAX,
++                last_rel_end: 0,
++                last_text: String::new(),
++                last_abs_end: r.start,
++            });
++            let first = st.last_off == usize::MAX;
++            let restart = !first
++                && (off < st.last_off
++                    || (off == st.last_off
++                        && (rel_end != st.last_rel_end || gtext != st.last_text)));
++            if restart {
++                // Next piece starts where the previous glyph ended; a trimmed space or
++                // an escape may sit in between, so look a few bytes ahead for the glyph.
++                let src = wk.source.text();
++                let mut b = st.last_abs_end;
++                let mut found = None;
++                if !gtext.is_empty() && b <= src.len() && src.is_char_boundary(b) {
++                    for (i, _) in src[b..].char_indices().take(4) {
++                        if src[b + i..].starts_with(gtext) {
++                            found = Some(b + i);
++                            break;
++                        }
++                    }
++                }
++                if let Some(f) = found {
++                    b = f.saturating_sub(off);
++                }
++                if b >= r.start && b + rel_end <= r.end {
++                    st.base = b;
++                } else {
++                    st.base = r.start;
++                }
++            }
++            let s = (st.base + off).min(r.end);
++            let e = (s + len).min(r.end);
++            st.last_off = off;
++            st.last_rel_end = rel_end;
++            st.last_text = gtext.to_string();
++            st.last_abs_end = e;
++            (s, e)
 +        }
 +
 +        fn walk(wk: &mut Walk, frame: &Frame, ts: Transform, page: usize) {
@@ -68,18 +153,6 @@ index b9de839b..1baccfbf 100644
 +                                if let Some(node) = source.find(span) {
 +                                    let r = node.range();
 +                                    let len = glyph.range().len();
-+                                    let (start, end, kind): (usize, usize, f64) = match node.kind() {
-+                                        SyntaxKind::Text | SyntaxKind::MathText => {
-+                                            let s = (r.start + off as usize).min(r.end);
-+                                            (s, (s + len).min(r.end), 1.0)
-+                                        }
-+                                        SyntaxKind::Str => {
-+                                            let inner_end = r.end.saturating_sub(1).max(r.start);
-+                                            let s = (r.start + 1 + off as usize).min(inner_end);
-+                                            (s, (s + len).min(inner_end), 2.0)
-+                                        }
-+                                        _ => (r.start, r.end, 0.0),
-+                                    };
 +                                    // Box from ascender to descender, like a caret in a word processor;
 +                                    // pos.y is the baseline.
 +                                    let fm = text.font.metrics();
@@ -93,7 +166,23 @@ index b9de839b..1baccfbf 100644
 +                                    let bottom = y1.max(y2);
 +                                    // Running headers / footers sit in the page margins: an echo, not the text itself.
 +                                    let in_margin = bottom < wk.page_h * 0.085 || top > wk.page_h * 0.93;
-+                                    let kind = if in_entry || in_margin { 3.0 } else { kind };
++                                    let echo = in_entry || in_margin;
++                                    let gtext = text.text.get(glyph.range()).unwrap_or("");
++                                    let cp = gtext.chars().next().map(|c| c as u32).unwrap_or(0);
++                                    let nchars = gtext.chars().count();
++                                    let (start, end, kind): (usize, usize, f64) = match node.kind() {
++                                        SyntaxKind::Text | SyntaxKind::MathText => {
++                                            let (s, e) = text_range(wk, span, r.clone(), off as usize, len, gtext, echo);
++                                            (s, e, 1.0)
++                                        }
++                                        SyntaxKind::Str => {
++                                            let inner_end = r.end.saturating_sub(1).max(r.start);
++                                            let s = (r.start + 1 + off as usize).min(inner_end);
++                                            (s, (s + len).min(inner_end), 2.0)
++                                        }
++                                        _ => (r.start, r.end, 0.0),
++                                    };
++                                    let kind = if echo { 3.0 } else { kind };
 +                                    wk.out.extend_from_slice(&[
 +                                        page as f64,
 +                                        x1.min(x2),
@@ -103,6 +192,8 @@ index b9de839b..1baccfbf 100644
 +                                        start as f64,
 +                                        end as f64,
 +                                        kind,
++                                        cp as f64,
++                                        nchars as f64,
 +                                    ]);
 +                                }
 +                            }
@@ -114,7 +205,7 @@ index b9de839b..1baccfbf 100644
 +            }
 +        }
 +
-+        let mut w = Walk { source: &source, out: Vec::new(), tags: Vec::new(), page_h: 842.0 };
++        let mut w = Walk { source: &source, out: Vec::new(), tags: Vec::new(), page_h: 842.0, pieces: Default::default() };
 +        for (i, page) in doc.pages().iter().enumerate() {
 +            w.page_h = page.frame.size().y.to_pt();
 +            w.tags.clear();

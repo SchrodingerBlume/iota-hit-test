@@ -21,7 +21,9 @@ export type SegKind =
   /** 节点的某个属性（题注、英文标题、脚注文字）：raw 是属性值 */
   | 'attr'
   /** 元信息字段：attr 是字段名 */
-  | 'info';
+  | 'info'
+  /** 段落结尾（零长，只记位置）：预览里画 ¶ 用 */
+  | 'para';
 
 export interface Segment {
   kind: SegKind;
@@ -129,6 +131,8 @@ export function segmentAt(segments: Segment[], typOffset: number): Segment | nul
     const mid = (lo + hi) >> 1;
     if (segments[mid].typFrom <= typOffset) { found = mid; lo = mid + 1; } else hi = mid - 1;
   }
+  // 零长的段（段落结尾记号）包不住任何偏移，跳过
+  while (found >= 0 && segments[found].typFrom === segments[found].typTo) found--;
   let k: number | undefined = found >= 0 ? found : undefined;
   while (k !== undefined) {
     const s = segments[k];

@@ -36,6 +36,11 @@ export interface SerializeOptions {
   knownLabels?: Set<string>;
   /** 打源码映射记号：这份富文本的 key，以及每个节点的 ProseMirror 位置 */
   map?: { key: RichKey; posOf: WeakMap<PMNode, number> };
+  /**
+   * 站内预览用：空回车段排成 #blanks[¶][¶]（每个空段一个隐形的 ¶，点击才有落点；main.typ 开头定义，
+   * 只在 sys.inputs.preview 下真的排字，落到 PDF 里仍是 #enter(n)），段落结尾另打零长记号，预览画 ¶ 用
+   */
+  preview?: boolean;
 }
 
 // ── ProseMirror 位置 ──────────────────────────────────────────────
@@ -263,13 +268,13 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
     case 'paragraph': {
       const s = escapeLineStart(serializeInline(n.content, opts));
       // 不缩进的续段：模板全篇 first-line-indent 两字，这一段单独归零
-      if (n.attrs?.noIndent && s.trim()) return `#par(first-line-indent: 0pt)[${s}]`;
-      return s;
+      if (n.attrs?.noIndent && s.trim()) return `#par(first-line-indent: 0pt)[${s}]` + paraEnd(opts, n);
+      return s + paraEnd(opts, n);
     }
     case 'heading': {
       if (opts.headings === false) {
         // 不许出标题的页里，退成加粗段落
-        return `#strong[${serializeInline(n.content, opts)}]`;
+        return `#strong[${serializeInline(n.content, opts)}]` + paraEnd(opts, n);
       }
       const level = Math.max(1, Math.min(4, (n.attrs?.level ?? 1) + ((opts.headingBase ?? 1) - 1)));
       const zh = serializeInline(n.content, opts).trim();
@@ -277,8 +282,8 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
       const en = enRaw ? `#en[${tag(opts, n, 'attr', escapeText(enRaw), { attr: 'en', raw: enRaw })}]` : '';
       const label = labelOf(n.attrs, 'sec');
       // 不编号的标题：走函数形式关掉 numbering（模板认 numbering: none）
-      if (n.attrs?.numbered === false) return `#heading(level: ${level}, numbering: none)[${zh}${en}]${label ? ` <${label}>` : ''}`;
-      return `${'='.repeat(level)} ${zh}${en}${label ? ` <${label}>` : ''}`;
+      if (n.attrs?.numbered === false) return `#heading(level: ${level}, numbering: none)[${zh}${en}]${label ? ` <${label}>` : ''}` + paraEnd(opts, n);
+      return `${'='.repeat(level)} ${zh}${en}${label ? ` <${label}>` : ''}` + paraEnd(opts, n);
     }
     case 'figure': {
       const img = String(n.attrs?.image ?? '');
@@ -345,16 +350,34 @@ export function parseDenoteRows(v: unknown): DenoteRow[] {
 
 const isEmptyParagraph = (n: PMNode) => n.type === 'paragraph' && !(n.content ?? []).some((c) => c.type !== 'text' || (c.text ?? '').trim() !== '');
 
+/** 段落结尾的零长记号（预览画 ¶ 用）：位置是段内最后一个位置 */
+function paraEnd(opts: SerializeOptions, n: PMNode): string {
+  const pos = opts.map?.posOf.get(n);
+  if (!opts.preview || !opts.map || pos === undefined) return '';
+  const end = pos + nodeSize(n) - 1;
+  return mark('para', opts.map.key, end, end, '');
+}
+
+/** 一串空回车段：正式排 #enter(n)；预览排 #blanks[¶]…，每个 ¶ 映射到那个空段里面的位置 */
+function blankRun(opts: SerializeOptions, blanks: PMNode[]): string {
+  if (opts.preview && opts.map) {
+    const key = opts.map.key;
+    const marks = blanks.map((b) => { const p = opts.map!.posOf.get(b); return p === undefined ? '[¶]' : `[${mark('text', key, p + 1, p + 1, '¶', { attr: 'blank', raw: '' })}]`; });
+    return `#blanks${marks.join('')}`;
+  }
+  return `#enter(${blanks.length})`;
+}
+
 export function serializeBlocks(nodes: PMNode[] = [], opts: SerializeOptions = {}, depth = 0): string {
   // 连着的空段落 = 用户敲的空回车，合成模板的 #enter(n)（真占一行的空段，Word 的写法）
   // 首尾的空段落是编辑器自带的（空文档、末尾那个光标位），不算；夹在内容中间的才算
   const out: string[] = [];
-  let blank = 0;
+  let blanks: PMNode[] = [];
   for (const n of nodes) {
-    if (isEmptyParagraph(n)) { if (out.length) blank++; continue; }
+    if (isEmptyParagraph(n)) { if (out.length) blanks.push(n); continue; }
     const s = serializeBlock(n, opts, depth);
     if (!unmarked(s).trim()) continue;
-    if (blank > 0) { out.push(`#enter(${blank})`); blank = 0; }
+    if (blanks.length) { out.push(blankRun(opts, blanks)); blanks = []; }
     out.push(s);
   }
   return out.join('\n\n');
