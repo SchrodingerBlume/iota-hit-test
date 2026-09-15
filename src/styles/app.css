@@ -748,11 +748,15 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .rb-collapse { border: 0; background: none; color: var(--muted); padding: 4px; margin: 0 0 4px 4px; border-radius: 4px; display: inline-flex; }
 .rb-collapse:hover { background: var(--panel-2); color: var(--ink); }
 .rb-collapse svg { width: 14px; height: 14px; }
-/* 抽屉：固定态用 grid 行的 0fr ↔ 1fr 做高度过渡，底下的内容跟着一起走；收起态点选项卡临时弹出来盖在内容上 */
-.rb-drawer { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 220ms var(--ease); }
+/* 抽屉：版面一步到位（不做高度过渡，那会让整页每帧重排）；收起 / 展开的动画由克隆的 .rb-ghost 用
+   clip-path 演，内容区整块平移，见 Ribbon.tsx。收起态点选项卡临时弹出来盖在内容上 */
+.rb-drawer { display: grid; grid-template-rows: 1fr; }
 .rb-drawer.is-closed { grid-template-rows: 0fr; }
 .rb-drawer-inner { min-height: 0; }
-.rb-drawer.is-closed .rb-drawer-inner, .rb-drawer.is-animating .rb-drawer-inner { overflow: hidden; }
+.rb-drawer.is-closed .rb-drawer-inner { overflow: hidden; }
+.rb-drawer.rb-ghost { position: absolute; left: 0; right: 0; top: 100%; z-index: 39; background: var(--panel); border-bottom: 1px solid var(--line); pointer-events: none; overflow: hidden; }
+.app { overflow: hidden; }
+.main { will-change: transform; }
 .rb-drawer.is-peek { position: absolute; left: 0; right: 0; top: 100%; z-index: 40; background: var(--panel); border-bottom: 1px solid var(--line); box-shadow: var(--shadow-2); transition: none; animation: rb-peek 180ms var(--ease) both; }
 @keyframes rb-peek { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 .rb-body { min-height: 84px; padding: 6px 8px 4px; }
