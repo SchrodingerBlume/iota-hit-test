@@ -219,8 +219,8 @@ function SymbolTable({ rows, onChange }: { rows: SymbolEntry[]; onChange: (r: Sy
                 <span className="row" style={{ flexWrap: 'nowrap' }}>
                   <input style={{ fontFamily: 'var(--mono)' }} value={r.symbol} placeholder={r.mode === 'latex' ? '\\eta' : 'eta'} onChange={(e) => set(i, { symbol: e.target.value })} />
                   <span className="seg" title="写法">
-                    <button type="button" className={r.mode !== 'latex' ? 'on' : ''} onClick={() => set(i, { mode: 'typst' })}>T</button>
                     <button type="button" className={r.mode === 'latex' ? 'on' : ''} onClick={() => set(i, { mode: 'latex' })}>L</button>
+                    <button type="button" className={r.mode !== 'latex' ? 'on' : ''} onClick={() => set(i, { mode: 'typst' })}>T</button>
                   </span>
                 </span>
               </td>
@@ -236,7 +236,7 @@ function SymbolTable({ rows, onChange }: { rows: SymbolEntry[]; onChange: (r: Sy
           <MathEditor value={rows[editing].symbol} mode={rows[editing].mode === 'latex' ? 'latex' : 'typst'} display={false} onChange={(v) => set(editing, { symbol: v })} onMode={(m) => set(editing, { mode: m })} />
         </div>
       )}
-      <button type="button" className="btn btn-xs" style={{ marginTop: 6 }} onClick={() => onChange([...rows, { symbol: '', mode: 'typst', meaning: '' }])}>＋ 添加一行</button>
+      <button type="button" className="btn btn-xs" style={{ marginTop: 6 }} onClick={() => onChange([...rows, { symbol: '', mode: 'latex', meaning: '' }])}>＋ 添加一行</button>
     </>
   );
 }

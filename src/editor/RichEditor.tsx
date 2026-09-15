@@ -8,6 +8,7 @@ import Superscript from '@tiptap/extension-superscript';
 import Subscript from '@tiptap/extension-subscript';
 import Placeholder from '@tiptap/extension-placeholder';
 import { TableKit, createTable } from '@tiptap/extension-table';
+import { AlignedTableCell, AlignedTableHeader, SizedTableRow, TableExtras, currentCellInfo } from './extensions/table';
 import { TextSelection, NodeSelection } from '@tiptap/pm/state';
 import type { RichDoc } from '../model/types';
 import { HeadingEn } from './extensions/HeadingEn';
@@ -17,7 +18,7 @@ import { Figure, TableFigure, Equation, PageBreak } from './extensions/blocks';
 import { useEditorEnv, NumberingContext } from './env';
 import { computeNumbering, type Part } from '../typst/numbering';
 import { useStore, type RichKey } from '../model/store';
-import { Undo2, Redo2, Pilcrow, Heading1, Heading2, Heading3, Heading4, Bold, Italic, Underline, Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Code, List, ListOrdered, CodeXml, Sigma, SquareFunction, BookMarked, Link2, MessageSquareQuote, BookmarkPlus, Space, Image, Table, SeparatorHorizontal, BetweenHorizontalStart, BetweenHorizontalEnd, BetweenVerticalStart, BetweenVerticalEnd, Rows3, Columns3, Minus, TableCellsMerge, PanelTop, Plus, ChevronDown } from 'lucide-react';
+import { AlignLeft, AlignCenter, AlignRight, AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, Rows2, Undo2, Redo2, Pilcrow, Heading1, Heading2, Heading3, Heading4, Bold, Italic, Underline, Superscript as SuperscriptIcon, Subscript as SubscriptIcon, Code, List, ListOrdered, CodeXml, Sigma, SquareFunction, BookMarked, Link2, MessageSquareQuote, BookmarkPlus, Space, Image, Table, SeparatorHorizontal, BetweenHorizontalStart, BetweenHorizontalEnd, BetweenVerticalStart, BetweenVerticalEnd, Rows3, Columns3, Minus, TableCellsMerge, PanelTop, Plus, ChevronDown } from 'lucide-react';
 
 export interface RichEditorProps {
   value: RichDoc;
@@ -49,7 +50,8 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
       ...(headings ? [HeadingEn] : []),
       Superscript, Subscript,
       Placeholder.configure({ placeholder: placeholder ?? '在这里写……' }),
-      TableKit.configure({ table: { resizable: false } }),
+      TableKit.configure({ table: { resizable: true, cellMinWidth: 40 }, tableCell: false, tableHeader: false, tableRow: false }),
+      AlignedTableCell, AlignedTableHeader, SizedTableRow, TableExtras,
       Figure, TableFigure, Equation, PageBreak,
       MathInline, Cite, Ref, Abbr, Footnote, Ccwd, Idx,
       UniqueId,
@@ -248,6 +250,8 @@ function Toolbar({ editor, headings, blocks }: { editor: Editor; headings: boole
           <Sep />
           <B title="合并 / 拆分单元格" run={() => editor.chain().focus().mergeOrSplit().run()}><TableCellsMerge /></B>
           <B title="表头行切换" run={() => editor.chain().focus().toggleHeaderRow().run()}><PanelTop /></B>
+          <Sep />
+          <TableAlignTools editor={editor} />
         </div>
       )}
     </div>
@@ -275,9 +279,38 @@ function Bubble({ editor }: { editor: Editor }) {
       <B title="下标" on={editor.isActive('subscript')} run={() => editor.chain().focus().toggleSubscript().run()}><SubscriptIcon /></B>
       <B title="等宽代码" on={editor.isActive('code')} run={() => editor.chain().focus().toggleCode().run()}><Code /></B>
       <Sep />
-      <B title="变成行内公式（Typst）" run={() => { const { from, to } = editor.state.selection; const text = editor.state.doc.textBetween(from, to, ' '); editor.chain().focus().insertContent({ type: 'mathInline', attrs: { src: text, mode: 'typst' } }).run(); }}><Sigma /></B>
+      <B title="变成行内公式（LaTeX）" run={() => { const { from, to } = editor.state.selection; const text = editor.state.doc.textBetween(from, to, ' '); editor.chain().focus().insertContent({ type: 'mathInline', attrs: { src: text, mode: 'latex' } }).run(); }}><Sigma /></B>
       <B title="在此引用文献" run={() => { editor.chain().focus().setTextSelection(editor.state.selection.to).run(); insertInline('cite'); }}><BookMarked /></B>
       <B title="登记为索引词" run={() => { const { from, to } = editor.state.selection; const text = editor.state.doc.textBetween(from, to, ' '); editor.chain().focus().insertContent({ type: 'idx', attrs: { text } }).run(); }}><BookmarkPlus /></B>
     </BubbleMenu>
+  );
+}
+
+/** 表格：对齐（单元格 / 整行）、列宽、行高 */
+function TableAlignTools({ editor }: { editor: Editor }) {
+  const [rowScope, setRowScope] = useState(false);
+  const info = currentCellInfo(editor.state);
+  const setAlign = (name: 'align' | 'valign', value: string | null) => {
+    if (rowScope) editor.chain().focus().setRowCellsAttribute(name, value).run();
+    else editor.chain().focus().setCellAttribute(name, value).run();
+  };
+  const cw = info.colwidth ? +(info.colwidth / 37.8).toFixed(1) : '';
+  return (
+    <>
+      <B title="左对齐" on={info.align === 'left'} run={() => setAlign('align', info.align === 'left' ? null : 'left')}><AlignLeft /></B>
+      <B title="居中" on={info.align === 'center'} run={() => setAlign('align', info.align === 'center' ? null : 'center')}><AlignCenter /></B>
+      <B title="右对齐" on={info.align === 'right'} run={() => setAlign('align', info.align === 'right' ? null : 'right')}><AlignRight /></B>
+      <B title="靠上" on={info.valign === 'top'} run={() => setAlign('valign', info.valign === 'top' ? null : 'top')}><AlignVerticalJustifyStart /></B>
+      <B title="垂直居中" on={info.valign === 'horizon'} run={() => setAlign('valign', info.valign === 'horizon' ? null : 'horizon')}><AlignVerticalJustifyCenter /></B>
+      <B title="靠下" on={info.valign === 'bottom'} run={() => setAlign('valign', info.valign === 'bottom' ? null : 'bottom')}><AlignVerticalJustifyEnd /></B>
+      <B title={rowScope ? '对齐作用于整行（点击改为只作用于当前 / 选中的单元格）' : '对齐只作用于当前 / 选中的单元格（点击改为整行）'} on={rowScope} run={() => setRowScope((r) => !r)}><Rows2 /><span className="tb-text">行</span></B>
+      <Sep />
+      <label className="tb-field" title="当前列的宽度（厘米）；也可以直接拖列线。留空 = 自动">
+        列宽 <input type="number" min={0.5} max={16} step={0.1} value={cw} placeholder="自动" onChange={(e) => { const v = parseFloat(e.target.value); editor.chain().focus().setColumnWidth(Number.isFinite(v) && v > 0 ? Math.round(v * 37.8) : null).run(); }} /> cm
+      </label>
+      <label className="tb-field" title="当前行的高度（厘米）。留空 = 自动">
+        行高 <input type="number" min={0.3} max={10} step={0.1} value={info.rowHeight ?? ''} placeholder="自动" onChange={(e) => { const v = parseFloat(e.target.value); editor.chain().focus().setRowAttribute('height', Number.isFinite(v) && v > 0 ? String(v) : null).run(); }} /> cm
+      </label>
+    </>
   );
 }

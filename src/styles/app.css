@@ -580,3 +580,26 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .sym-btn { border: 1px dashed var(--line-2); background: var(--panel); border-radius: var(--radius-s); min-width: 60px; min-height: 30px; padding: 2px 8px; cursor: pointer; transition: border-color var(--fast) var(--ease); }
 .sym-btn:hover { border-color: var(--accent); }
 .tbl.sym .seg button { padding: 3px 7px; font-size: 11px; font-family: var(--mono); }
+
+/* 文献分组 */
+.bib-groups { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.bib-group-chip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 2px 9px; font-size: 12px; color: var(--ink-2); cursor: pointer; transition: background-color var(--fast) var(--ease), border-color var(--fast) var(--ease); }
+.bib-group-chip svg { width: 12px; height: 12px; color: var(--orange); }
+.bib-group-chip:hover { border-color: var(--muted); }
+.bib-group-chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.bib-group-chip.is-add svg, .bib-group-chip.is-del svg { color: var(--muted); }
+.bib-group-chip.is-del:hover svg { color: var(--danger); }
+.bib-group-block > ul { list-style: none; margin: 0; padding: 0; }
+.bib-group-head { display: flex; align-items: center; gap: 4px; width: 100%; border: 0; background: none; padding: 6px 6px 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: var(--muted); cursor: pointer; text-transform: uppercase; }
+.bib-group-head svg { width: 12px; height: 12px; transition: transform var(--fast) var(--ease); }
+.bib-group-head svg.is-open { transform: rotate(90deg); }
+.pick-group > ul { list-style: none; margin: 0; padding: 0; }
+.pick-group-head { padding: 4px 8px 2px; font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.06em; background: var(--panel-2); }
+/* 表格工具栏里的数值框 */
+.tb-field { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); margin: 0 4px; }
+.tb-field input { width: 56px; border: 1px solid var(--line-2); border-radius: 4px; padding: 2px 5px; font-size: 12px; background: var(--panel); color: var(--ink); }
+/* 拖列线 */
+.tab-body .column-resize-handle { position: absolute; right: -2px; top: 0; bottom: 0; width: 4px; background: var(--accent); pointer-events: none; opacity: 0.6; }
+.tab-body .tableWrapper { overflow-x: auto; }
+.resize-cursor { cursor: col-resize; }
+.ref-dangling { color: var(--danger); font-weight: 700; }

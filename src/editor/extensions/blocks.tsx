@@ -177,7 +177,7 @@ export const Equation = Node.create({
   draggable: true,
   selectable: true,
   addAttributes() {
-    return { src: attr('src', ''), mode: attr('mode', 'typst'), numbered: { default: true, parseHTML: (el: HTMLElement) => el.getAttribute('data-numbered') !== 'false', renderHTML: (a: any) => ({ 'data-numbered': String(a.numbered) }) }, label: attr('label', ''), uid: attr('uid', null) };
+    return { src: attr('src', ''), mode: attr('mode', 'latex'), numbered: { default: true, parseHTML: (el: HTMLElement) => el.getAttribute('data-numbered') !== 'false', renderHTML: (a: any) => ({ 'data-numbered': String(a.numbered) }) }, label: attr('label', ''), uid: attr('uid', null) };
   },
   parseHTML() { return [{ tag: 'div[data-node="equation"]' }]; },
   renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { 'data-node': 'equation' })]; },

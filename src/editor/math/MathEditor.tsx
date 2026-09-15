@@ -75,8 +75,8 @@ export function MathEditor({ value, mode, display, onChange, onMode, autoFocus, 
           onKeyDown={onKey}
         />
         <span className="seg" title="公式语法">
-          <button type="button" className={mode === 'typst' ? 'on' : ''} onClick={() => onMode('typst')}>Typst</button>
           <button type="button" className={mode === 'latex' ? 'on' : ''} onClick={() => onMode('latex')}>LaTeX</button>
+          <button type="button" className={mode === 'typst' ? 'on' : ''} onClick={() => onMode('typst')}>Typst</button>
         </span>
         <button type="button" className={`btn btn-xs btn-icon ${palette ? 'on' : ''}`} title="符号面板" onClick={() => setPalette((p) => !p)}>{palette ? <ChevronUp /> : <LayoutGrid />}</button>
       </div>

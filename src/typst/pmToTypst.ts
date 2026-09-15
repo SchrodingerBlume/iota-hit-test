@@ -28,6 +28,8 @@ export interface SerializeOptions {
   headingBase?: number;
   /** 图片路径前缀 */
   imageDir?: string;
+  /** 全工程里存在的标签；引用了不存在的（比如公式取消了编号）就印红色 ??，别让整篇编译失败 */
+  knownLabels?: Set<string>;
 }
 
 // ── 文本转义 ────────────────────────────────────────────────────
@@ -106,7 +108,12 @@ export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {
         out += keys.map((k) => `#cite(<${k}>)`).join('');
         break;
       }
-      case 'ref': out += n.attrs?.target ? `#ref(<${n.attrs.target}>)` : ''; break;
+      case 'ref': {
+        const t = n.attrs?.target;
+        if (!t) break;
+        out += opts.knownLabels && !opts.knownLabels.has(t) ? '#text(red)[??]' : `#ref(<${t}>)`;
+        break;
+      }
       case 'abbr': out += n.attrs?.key ? `#ref(<${n.attrs.key}>)` : ''; break;
       case 'footnote': out += `#footnote[${escapeText(String(n.attrs?.text ?? ''))}]`; break;
       case 'ccwd': out += `#ccwd(${n.attrs?.n ?? 1})`; break;
@@ -138,15 +145,37 @@ function serializeTable(table: PMNode): string {
   if (!rows.length) return '';
   // 列数按第一行的 colspan 之和算
   const ncols = (rows[0].content ?? []).reduce((s, c) => s + (c.attrs?.colspan ?? 1), 0);
+  // 列宽：拖过列线的表在单元格 colwidth（像素）里；取每列出现过的最大值，折成 fr 比例
+  const widths: (number | null)[] = new Array(ncols).fill(null);
+  for (const r of rows) {
+    let col = 0;
+    for (const c of r.content ?? []) {
+      const span = c.attrs?.colspan ?? 1;
+      const cw: (number | null)[] = Array.isArray(c.attrs?.colwidth) ? c.attrs.colwidth : [];
+      for (let i = 0; i < span && col + i < ncols; i++) if (cw[i]) widths[col + i] = Math.max(widths[col + i] ?? 0, cw[i]!);
+      col += span;
+    }
+  }
+  let columns = String(ncols);
+  if (widths.some((w) => w)) {
+    if (widths.every((w) => w)) {
+      // 全部拖过 / 设过：按比例分，总宽由模板的版心定
+      const min = Math.min(...(widths as number[]));
+      columns = `(${widths.map((w) => `${(w! / min).toFixed(2)}fr`).join(', ')})`;
+    } else {
+      // 只设了几列：设了的按厘米，其余自动
+      columns = `(${widths.map((w) => (w ? `${(w / 37.8).toFixed(2)}cm` : 'auto')).join(', ')})`;
+    }
+  }
+  const rowHeights = rows.map((r) => (r.attrs?.height ? `${Number(r.attrs.height)}cm` : 'auto'));
+  const rowsArg = rowHeights.some((h) => h !== 'auto') ? `\n    rows: (${rowHeights.join(', ')}),` : '';
   const cell = (c: PMNode): string => {
     const body = (c.content ?? []).map((p) => serializeInline(p.content, {})).join(' \\ ');
     const colspan = c.attrs?.colspan ?? 1;
     const rowspan = c.attrs?.rowspan ?? 1;
-    if (colspan > 1 || rowspan > 1) {
-      const args = [colspan > 1 ? `colspan: ${colspan}` : '', rowspan > 1 ? `rowspan: ${rowspan}` : ''].filter(Boolean).join(', ');
-      return `table.cell(${args})[${body}]`;
-    }
-    return `[${body}]`;
+    const align = [c.attrs?.align, c.attrs?.valign].filter(Boolean).join(' + ');
+    const args = [colspan > 1 ? `colspan: ${colspan}` : '', rowspan > 1 ? `rowspan: ${rowspan}` : '', align ? `align: ${align}` : ''].filter(Boolean).join(', ');
+    return args ? `table.cell(${args})[${body}]` : `[${body}]`;
   };
   const lines: string[] = [];
   const headerRows: PMNode[] = [];
@@ -156,7 +185,7 @@ function serializeTable(table: PMNode): string {
     lines.push(`    table.header(${headerRows.map((r) => (r.content ?? []).map(cell).join(', ')).join(',\n      ')}),`);
   }
   for (; i < rows.length; i++) lines.push(`    ${(rows[i].content ?? []).map(cell).join(', ')},`);
-  return `table(\n    columns: ${ncols},\n    align: center + horizon,\n${lines.join('\n')}\n  )`;
+  return `table(\n    columns: ${columns},${rowsArg}\n    align: center + horizon,\n${lines.join('\n')}\n  )`;
 }
 
 function serializeList(node: PMNode, marker: '-' | '+', opts: SerializeOptions, depth: number): string {
@@ -207,8 +236,11 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
     case 'equation': {
       const src = String(n.attrs?.src ?? '').trim();
       if (!src) return '';
-      const label = n.attrs?.numbered === false ? '' : labelOf(n.attrs, 'eq');
+      const unnumbered = n.attrs?.numbered === false;
+      const label = unnumbered ? '' : labelOf(n.attrs, 'eq');
       const body = n.attrs?.mode === 'latex' ? `#mitex(${backtick(src)})` : `$ ${src} $`;
+      // 不编号：模板给所有块公式编号，要在局部把 numbering 关掉
+      if (unnumbered) return `#[#set math.equation(numbering: none)\n${body}]`;
       return `${body}${label ? ` <${label}>` : ''}`;
     }
     case 'codeBlock': {

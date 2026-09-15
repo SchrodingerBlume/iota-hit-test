@@ -8,6 +8,8 @@ export interface BibEntry {
   key: string;
   type: string;
   fields: Record<string, string>;
+  /** 编辑器里的分组（像 Zotero 的分类），不进 .bib */
+  group?: string;
 }
 
 export const newEntryId = () => Math.random().toString(36).slice(2, 10);

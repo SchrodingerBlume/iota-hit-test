@@ -39,7 +39,14 @@ function MathInlineView({ node, updateAttributes, selected, deleteNode, editor }
     </InlineChip>
   );
 }
-export const MathInline = inlineAtom('mathInline', { src: { default: '' }, mode: { default: 'typst' } }, MathInlineView);
+export const MathInline = inlineAtom('mathInline', { src: { default: '' }, mode: { default: 'latex' } }, MathInlineView);
+
+/** 按分组归堆，没分组的排最后 */
+function groupBy<T extends { group?: string }>(items: T[]): [string, T[]][] {
+  const m = new Map<string, T[]>();
+  for (const it of items) { const g = it.group?.trim() ?? ''; if (!m.has(g)) m.set(g, []); m.get(g)!.push(it); }
+  return [...m.entries()].sort((a, b) => (a[0] === '' ? 1 : b[0] === '' ? -1 : a[0].localeCompare(b[0], 'zh')));
+}
 
 // ── 文献引用 ────────────────────────────────────────────────────
 function CiteView({ node, updateAttributes, selected, deleteNode, editor }: NodeViewProps) {
@@ -59,9 +66,16 @@ function CiteView({ node, updateAttributes, selected, deleteNode, editor }: Node
             <input autoFocus value={q} placeholder="搜索 key 或标题" onChange={(e) => setQ(e.target.value)} />
           </Field>
           <ul className="pick-list">
-            {list.slice(0, 40).map((b) => (
-              <li key={b.key}>
-                <label><input type="checkbox" checked={keys.includes(b.key)} onChange={() => toggle(b.key)} /> <code>{b.key}</code> <span className="muted">{b.title}</span></label>
+            {groupBy(list.slice(0, 80)).map(([g, items]) => (
+              <li key={g} className="pick-group">
+                {g && <div className="pick-group-head">{g}</div>}
+                <ul>
+                  {items.map((b) => (
+                    <li key={b.key}>
+                      <label><input type="checkbox" checked={keys.includes(b.key)} onChange={() => toggle(b.key)} /> <code>{b.key}</code> <span className="muted">{b.title}</span></label>
+                    </li>
+                  ))}
+                </ul>
               </li>
             ))}
             {!list.length && <li className="muted">没有匹配的条目</li>}
@@ -82,7 +96,7 @@ function RefView({ node, updateAttributes, selected, deleteNode, editor }: NodeV
   const env = useEditorEnv();
   const target = String(node.attrs.target ?? '');
   const hit = env.refTargets.find((r) => r.label === target);
-  const text = hit ? (hit.ref ?? `${KIND_NAME[hit.kind]} ${hit.index}`) : target || <em>引用</em>;
+  const text = hit ? (hit.ref ?? `${KIND_NAME[hit.kind]} ${hit.index}`) : target ? <span className="ref-dangling" title="引用的对象不存在了（删了，或公式取消了编号）">??</span> : <em>引用</em>;
   return (
     <InlineChip kind="ref" text={text} title={hit ? `${KIND_NAME[hit.kind]}：${hit.title}` : '交叉引用'} selected={selected} editable={editor.isEditable} autoOpen={!target} onDelete={deleteNode}>
       {(close) => (

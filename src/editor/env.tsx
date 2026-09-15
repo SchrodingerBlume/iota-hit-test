@@ -4,7 +4,7 @@ import type { RefTarget } from '../typst/pmToTypst';
 import type { NumberInfo } from '../typst/numbering';
 
 export interface EditorEnv {
-  bibKeys: { key: string; title: string }[];
+  bibKeys: { key: string; title: string; group?: string }[];
   refTargets: (RefTarget & { number?: string; ref?: string })[];
   abbrs: { key: string; long: string }[];
   images: { name: string }[];

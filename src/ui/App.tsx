@@ -95,7 +95,7 @@ export function App() {
 
   // 编辑器周边：文献、可引用对象、缩略语、图片
   const env = useMemo<EditorEnv>(() => ({
-    bibKeys: doc.references.filter((r) => r.key.trim()).map((r) => ({ key: r.key, title: r.fields.title ?? '' })),
+    bibKeys: doc.references.filter((r) => r.key.trim()).map((r) => ({ key: r.key, title: r.fields.title ?? '', group: r.group })),
     refTargets: (() => {
       const nb = computeNumbering(doc.body as any, doc.settings, 'body');
       const na = computeNumbering(doc.appendix as any, doc.settings, 'appendix');

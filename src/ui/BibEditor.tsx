@@ -5,7 +5,7 @@ import { useMemo, useRef, useState } from 'react';
 import type { BibEntry } from '../bib/bibtex';
 import { parseBibtex, generateBibtex, newEntryId, splitNames, joinNames, suggestKey } from '../bib/bibtex';
 import { TYPES, ACHIEVEMENT_TYPES, ACHIEVEMENT_TYPE_KEYS, ANNOTE_FIELD, typeDef, type FieldDef, type TypeDef } from '../bib/schema';
-import { Plus, Trash2, Copy, Search, Upload, Download, Code2, Wand2, ChevronDown, ChevronUp, Check } from 'lucide-react';
+import { Plus, Trash2, Copy, Search, Upload, Download, Code2, Wand2, ChevronDown, ChevronUp, Check, FolderPlus, Folder, ChevronRight } from 'lucide-react';
 
 interface Props {
   entries: BibEntry[];
@@ -24,6 +24,13 @@ const previewOf = (e: BibEntry) => {
   return { who, year, title: e.fields.title ?? '（无题名）', mark: typeDef(e.type, ACHIEVEMENT_TYPES).mark };
 };
 
+/** 列表按分组归堆：有名字的组按名排，没分组的垫底 */
+function groupedList(items: BibEntry[]): [string, BibEntry[]][] {
+  const m = new Map<string, BibEntry[]>();
+  for (const e of items) { const g = e.group?.trim() ?? ''; if (!m.has(g)) m.set(g, []); m.get(g)!.push(e); }
+  return [...m.entries()].sort((a, b) => (a[0] === '' ? 1 : b[0] === '' ? -1 : a[0].localeCompare(b[0], 'zh')));
+}
+
 function download(name: string, text: string) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
@@ -40,6 +47,35 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
   const [rawError, setRawError] = useState<string | null>(null);
   const [showExtra, setShowExtra] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  /** 分组：条目上的 group 字段；这里另记一份空组（刚建还没条目的） */
+  const [emptyGroups, setEmptyGroups] = useState<string[]>([]);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const groups = useMemo(() => {
+    const set = new Set<string>(emptyGroups);
+    for (const e of entries) if (e.group?.trim()) set.add(e.group.trim());
+    return [...set].sort((a, b) => a.localeCompare(b, 'zh'));
+  }, [entries, emptyGroups]);
+  const [groupFilter, setGroupFilter] = useState<string | null>(null);
+  const newGroup = () => {
+    const name = prompt('新分组的名字（比如「第 2 章」「综述」「待读」）：')?.trim();
+    if (!name) return;
+    setEmptyGroups((g) => (g.includes(name) ? g : [...g, name]));
+    setGroupFilter(name);
+  };
+  const renameGroup = (g: string) => {
+    const name = prompt('分组改名：', g)?.trim();
+    if (!name || name === g) return;
+    onChange(entries.map((e) => (e.group === g ? { ...e, group: name } : e)));
+    setEmptyGroups((s) => s.map((x) => (x === g ? name : x)));
+    if (groupFilter === g) setGroupFilter(name);
+  };
+  const deleteGroup = (g: string) => {
+    if (!confirm(`解散分组「${g}」？里面的条目保留，只是不再分组。`)) return;
+    onChange(entries.map((e) => (e.group === g ? { ...e, group: undefined } : e)));
+    setEmptyGroups((s) => s.filter((x) => x !== g));
+    if (groupFilter === g) setGroupFilter(null);
+  };
+  const toggleCollapse = (g: string) => setCollapsed((s) => { const n = new Set(s); if (n.has(g)) n.delete(g); else n.add(g); return n; });
 
   const types: TypeDef[] = mode === 'achievements'
     ? [...ACHIEVEMENT_TYPE_KEYS.map((k) => typeDef(k, ACHIEVEMENT_TYPES))]
@@ -48,8 +84,9 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return entries.filter((e) => (!filter || typeDef(e.type, ACHIEVEMENT_TYPES).type === filter)
+      && (groupFilter === null || (groupFilter === '' ? !e.group?.trim() : e.group?.trim() === groupFilter))
       && (!needle || [e.key, e.type, ...Object.values(e.fields)].some((v) => String(v).toLowerCase().includes(needle))));
-  }, [entries, q, filter]);
+  }, [entries, q, filter, groupFilter]);
 
   const current = entries.find((e) => e.id === selected) ?? null;
   const taken = new Set(entries.map((e) => e.key));
@@ -58,7 +95,7 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
   const setField = (k: string, v: string) => current && patch(current.id, (e) => ({ ...e, fields: { ...e.fields, [k]: v } }));
 
   const add = (type: string) => {
-    const e: BibEntry = { id: newEntryId(), key: '', type, fields: {} };
+    const e: BibEntry = { id: newEntryId(), key: '', type, fields: {}, group: groupFilter || undefined };
     e.key = suggestKey(e, taken);
     onChange([e, ...entries]);
     setSelected(e.id);
@@ -75,7 +112,7 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
     setSelected(copy.id);
   };
   const importFile = async (f: File) => {
-    const parsed = parseBibtex(await f.text());
+    const parsed = parseBibtex(await f.text()).map((p) => ({ ...p, group: groupFilter || undefined }));
     if (!parsed.length) { alert('这个文件里没解析出条目'); return; }
     // 同 key 的当作更新，其余追加
     const byKey = new Map(entries.map((e) => [e.key, e]));
@@ -94,7 +131,8 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
       const parsed = parseBibtex(raw);
       // 尽量保留原 id，好让选中项不跳
       const byKey = new Map(entries.map((e) => [e.key, e.id]));
-      onChange(parsed.map((p) => ({ ...p, id: byKey.get(p.key) ?? p.id })));
+      const groupOf = new Map(entries.map((e) => [e.key, e.group]));
+      onChange(parsed.map((p) => ({ ...p, id: byKey.get(p.key) ?? p.id, group: groupOf.get(p.key) })));
       setRaw(null); setRawError(null);
     } catch (e) { setRawError(String((e as Error).message ?? e)); }
   };
@@ -123,20 +161,42 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
           </span>
           <input ref={fileInput} type="file" accept=".bib,text/plain" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importFile(f); e.target.value = ''; }} />
         </div>
+        <div className="bib-groups">
+          <button type="button" className={`bib-group-chip ${groupFilter === null ? 'on' : ''}`} onClick={() => setGroupFilter(null)}>全部 <span className="muted">{entries.length}</span></button>
+          {groups.map((g) => (
+            <button key={g} type="button" className={`bib-group-chip ${groupFilter === g ? 'on' : ''}`} onClick={() => setGroupFilter(g)} onDoubleClick={() => renameGroup(g)} title="双击改名"><Folder />{g} <span className="muted">{entries.filter((e) => e.group?.trim() === g).length}</span></button>
+          ))}
+          {entries.some((e) => !e.group?.trim()) && groups.length > 0 && <button type="button" className={`bib-group-chip ${groupFilter === '' ? 'on' : ''}`} onClick={() => setGroupFilter('')}>未分组 <span className="muted">{entries.filter((e) => !e.group?.trim()).length}</span></button>}
+          <button type="button" className="bib-group-chip is-add" title="新建分组" onClick={newGroup}><FolderPlus /></button>
+          {groupFilter && <button type="button" className="bib-group-chip is-del" title="解散这个分组" onClick={() => deleteGroup(groupFilter)}><Trash2 /></button>}
+        </div>
         <ul className="bib-items">
-          {list.map((e) => {
-            const p = previewOf(e);
-            const cited = citedKeys?.has(e.key);
-            return (
-              <li key={e.id} className={`bib-item ${e.id === selected ? 'on' : ''}`} onClick={() => setSelected(e.id)}>
-                <span className="bib-mark">[{p.mark}]</span>
-                <span className="bib-item-body">
-                  <span className="bib-title">{p.title}</span>
-                  <span className="bib-sub muted">{[p.who, p.year].filter(Boolean).join(' · ')}<code>{e.key}</code>{cited && <span className="bib-cited" title="正文里引用过"><Check /></span>}</span>
-                </span>
-              </li>
-            );
-          })}
+          {(groupFilter === null && groups.length ? groupedList(list) : [['', list] as [string, BibEntry[]]]).map(([g, items]) => (
+            <li key={g || '__none'} className="bib-group-block">
+              {groupFilter === null && groups.length > 0 && (
+                <button type="button" className="bib-group-head" onClick={() => toggleCollapse(g)}>
+                  <ChevronRight className={collapsed.has(g) ? '' : 'is-open'} />{g || '未分组'} <span className="muted">{items.length}</span>
+                </button>
+              )}
+              {!collapsed.has(g) && (
+                <ul>
+                  {items.map((e) => {
+                    const p = previewOf(e);
+                    const cited = citedKeys?.has(e.key);
+                    return (
+                      <li key={e.id} className={`bib-item ${e.id === selected ? 'on' : ''}`} onClick={() => setSelected(e.id)}>
+                        <span className="bib-mark">[{p.mark}]</span>
+                        <span className="bib-item-body">
+                          <span className="bib-title">{p.title}</span>
+                          <span className="bib-sub muted">{[p.who, p.year].filter(Boolean).join(' · ')}<code>{e.key}</code>{cited && <span className="bib-cited" title="正文里引用过"><Check /></span>}</span>
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </li>
+          ))}
           {!list.length && <li className="muted bib-empty">{entries.length ? '没有匹配的条目' : '还没有条目：点「添加」，或导入 .bib'}</li>}
         </ul>
         <div className="muted bib-count">{entries.length} 条{citedKeys ? ` · 已引用 ${entries.filter((e) => citedKeys.has(e.key)).length}` : ''}</div>
@@ -173,6 +233,13 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
                   <button type="button" className="btn btn-xs btn-icon" title="按作者+年份重新生成" onClick={() => patch(current.id, (x) => ({ ...x, key: suggestKey(x, new Set(entries.filter((o) => o.id !== x.id).map((o) => o.key))) }))}><Wand2 /></button>
                 </span>
                 {entries.some((o) => o.id !== current.id && o.key === current.key) && <span className="field-hint" style={{ color: 'var(--danger)' }}>key 与另一条重复</span>}
+              </label>
+              <label className="field" style={{ flex: '0 0 150px' }}>
+                <span className="field-label">分组</span>
+                <select value={current.group ?? ''} onChange={(e) => patch(current.id, (x) => ({ ...x, group: e.target.value || undefined }))}>
+                  <option value="">（不分组）</option>
+                  {groups.map((g) => <option key={g} value={g}>{g}</option>)}
+                </select>
               </label>
               <span className="join bib-actions" style={{ flex: 'none' }}>
                 <button type="button" className="btn btn-xs btn-icon" title="复制一条" onClick={() => duplicate(current)}><Copy /></button>

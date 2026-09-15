@@ -9,7 +9,7 @@
 - 模板里那些默认为 `auto` 的布尔选项走三态开关：`关 · A · 开`，自动档时滑块居中印 A、向映射到的那一端延伸一段影子，下面一行写明「自动 → 开 · 为什么」
 - 字体默认用模板的 `presets.webapp + (kaishu: "FandolKai")`，全部开源、随站分发；首次进站下载约 120 MB（wasm 30 MB + 字体 90 MB），之后存进 Cache API 离线可用
 - 项目管理：多个项目各自存在浏览器里，新建时起名、选学位/阶段/校区，空白或样例起头；打开、重命名、复制、删除
-- 参考文献与成果页像 Zotero 那样逐字段填：14 类条目（字段照 omni-gb7714 手册 §4.3）加 iota 成果页自造的 `@project` / `@award`；.bib 照样导入、导出，也能直接改源码
+- 参考文献与成果页像 Zotero 那样逐字段填，可按分组归档（编辑器与引用选择器都按组列）：14 类条目（字段照 omni-gb7714 手册 §4.3）加 iota 成果页自造的 `@project` / `@award`；.bib 照样导入、导出，也能直接改源码
 - 编辑区像一页文档：标题「编号 + 中文名」一行、英文名一行小字；图表公式默认只显示成品样子，悬停 / 选中才浮出工具条；选中文字弹气泡菜单；预览里双击一段字，左侧定位到对应位置
 - 公式可视化编辑：符号面板（结构 / 矩阵 / 希腊 / 运算 / 箭头 / 修饰，□ 占位、Tab 跳格）+ 实时预览——LaTeX 走 KaTeX，Typst 数学由页面里的 wasm 引擎编成小片段直接出 SVG
 - 编辑器里直接显示章节、图、表、公式的编号，按模板的「按章编号」开关（含自动档映射）算；交叉引用也显示成「图 2-1」「式 (2-1)」
@@ -91,8 +91,8 @@ npm run test:compile # 不开浏览器，在 Node 里用同一颗 wasm 编一份
 | --- | --- |
 | H1～H4 标题（右侧英文名） | `= 标题#en[English]` … `==== ` |
 | 插图（题注、英文题注、宽度、标签） | `#figure(image("images/x.png", width: 7cm), caption: [题#en[Caption]]) <fig:…>` |
-| 表（题注、表头行、合并单元格） | `#figure(caption: […], table(columns: n, table.header(…), …)) <tab:…>` |
-| 行间公式（Typst / LaTeX） | `$ … $ <eq:…>` / `#mitex(\`…\`) <eq:…>` |
+| 表（题注、表头行、合并单元格、列宽、行高、单元格对齐） | `#figure(caption: […], table(columns: (4cm, auto, …), rows: (auto, 1.2cm, …), table.header(…), table.cell(align: right + bottom)[…], …)) <tab:…>` |
+| 行间公式（LaTeX / Typst；不编号） | `#mitex(\`…\`) <eq:…>` / `$ … $ <eq:…>` / `#[#set math.equation(numbering: none) …]` |
 | 行内公式 | `$…$` / `#mi(\`…\`)` |
 | 文献引用、交叉引用、缩略语 | `#cite(<key>)` / `#ref(<label>)`（不用 `@key`：Typst 0.15 里 `@key` 会把紧跟的汉字吞进 label） |
 | 脚注、索引词、空一格 | `#footnote[…]` / `#idx[…]` / `#ccwd()` |

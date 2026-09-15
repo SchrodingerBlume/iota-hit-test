@@ -2,7 +2,7 @@
 // 结构照 iota-hit/template/example.typ：前置 → 主体 → 附录 → 后置。
 import type { ThesisDoc, Settings, Info } from '../model/types';
 import { INFO_FIELDS } from '../model/info';
-import { serializeDoc, escapeText, collectImages } from './pmToTypst';
+import { serializeDoc, escapeText, collectImages, collectRefTargets } from './pmToTypst';
 import { generateBibtex } from '../bib/bibtex';
 
 export const IOTA_HIT_VERSION = '0.1.0';
@@ -120,7 +120,7 @@ function nomenclature(doc: ThesisDoc): string {
   return `#list-of-symbols[\n${symbolLines}\n]\n\n#list-of-abbreviations(${abbrDict})`;
 }
 
-function defense(doc: ThesisDoc): string {
+function defense(doc: ThesisDoc, knownLabels: Set<string>): string {
   if (!doc.pages.defense) return '';
   const d = doc.defense;
   const person = (p: { name: string; title: string; affiliation: string; discipline: string }) =>
@@ -129,7 +129,7 @@ function defense(doc: ThesisDoc): string {
     const kept = ps.filter((p) => p.name.trim() || p.title.trim() || p.affiliation.trim());
     return kept.length ? `(\n    ${kept.map(person).join(',\n    ')},\n  )` : '()';
   };
-  const resolution = serializeDoc(d.resolution, { headings: false });
+  const resolution = serializeDoc(d.resolution, { headings: false, knownLabels });
   return `#defense(
   reviewers: ${list(d.reviewers)},
   chair: ${person(d.chair)},
@@ -147,6 +147,8 @@ export function serializeProject(doc: ThesisDoc): Project {
   const s = doc.settings;
   const files: Record<string, string> = {};
   const parts: string[] = [];
+  // 正文与附录里所有能被引用的标签（取消编号的公式不在内）
+  const knownLabels = new Set<string>([...collectRefTargets(doc.body), ...collectRefTargets(doc.appendix)].map((r) => r.label));
 
   parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n// LaTeX 公式走 mitex 转成 Typst（包已随站内打包）\n#import "@preview/mitex:0.2.7": mitex, mi`);
   parts.push(`#show: iota-hit.with(\n  ${[...settingsArgs(s), ...infoArgs(doc.info, s)].join(',\n  ')},\n)`);
@@ -157,8 +159,8 @@ export function serializeProject(doc: ThesisDoc): Project {
   parts.push(`#cover(${coverArgs})`);
   parts.push(`#titlepage(${coverArgs})`);
 
-  const abstractZh = serializeDoc(doc.abstractZh, { headings: false });
-  const abstractEn = serializeDoc(doc.abstractEn, { headings: false });
+  const abstractZh = serializeDoc(doc.abstractZh, { headings: false, knownLabels });
+  const abstractEn = serializeDoc(doc.abstractEn, { headings: false, knownLabels });
   if (abstractZh.trim() || abstractEn.trim()) {
     parts.push(`#abstract(en: [\n${indent(abstractEn, 2)}\n])[\n${indent(abstractZh, 2)}\n]`);
   }
@@ -173,10 +175,10 @@ export function serializeProject(doc: ThesisDoc): Project {
 
   // ── 主体 ──
   parts.push('#show: mainmatter');
-  const body = serializeDoc(doc.body, { headings: true, headingBase: 1 });
+  const body = serializeDoc(doc.body, { headings: true, headingBase: 1, knownLabels });
   parts.push(body || '= 绪论');
 
-  const conclusion = serializeDoc(doc.conclusion, { headings: false });
+  const conclusion = serializeDoc(doc.conclusion, { headings: false, knownLabels });
   if (conclusion.trim()) parts.push(`#conclusion[\n${indent(conclusion, 2)}\n]`);
 
   // ── 后置 ──
@@ -186,7 +188,7 @@ export function serializeProject(doc: ThesisDoc): Project {
     parts.push('#bibliography(read("refs.bib"), full: true)');
   }
 
-  const appendix = serializeDoc(doc.appendix, { headings: true, headingBase: 1 });
+  const appendix = serializeDoc(doc.appendix, { headings: true, headingBase: 1, knownLabels });
   if (doc.pages.appendix && appendix.trim()) {
     parts.push(`#appendix[\n${indent(appendix, 2)}\n]`);
   }
@@ -197,16 +199,16 @@ export function serializeProject(doc: ThesisDoc): Project {
     parts.push('#achievements(read("achievements.bib"))');
   }
 
-  const def = defense(doc);
+  const def = defense(doc, knownLabels);
   if (def) parts.push(def);
 
   if (doc.pages.declarations) parts.push('#declarations()');
   if (doc.pages.index) parts.push('#index()');
 
-  const ack = serializeDoc(doc.acknowledgement, { headings: false });
+  const ack = serializeDoc(doc.acknowledgement, { headings: false, knownLabels });
   if (ack.trim()) parts.push(`#acknowledgement[\n${indent(ack, 2)}\n]`);
 
-  const resume = serializeDoc(doc.resume, { headings: false });
+  const resume = serializeDoc(doc.resume, { headings: false, knownLabels });
   if (doc.pages.resume && resume.trim()) parts.push(`#resume[\n${indent(resume, 2)}\n]`);
 
   const images = new Set<string>();
