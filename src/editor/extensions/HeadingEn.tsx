@@ -1,4 +1,5 @@
-// 标题：中文在主行，英文名在右侧一个小输入框（博士论文目录与页眉要双语）。
+// 标题：编号 + 中文名一行（编号是模板算出来的样子，不可编辑），英文名在下面一行小字
+// （博士论文目录与页眉要双语；本硕可以空着）。看着就是文档里的一条标题。
 import Heading from '@tiptap/extension-heading';
 import { ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent, type NodeViewProps } from '@tiptap/react';
 import { useNumbering } from '../env';
@@ -8,23 +9,24 @@ const LEVEL_NAME = ['章', '节', '条', '款'];
 
 function HeadingView({ node, updateAttributes, editor }: NodeViewProps) {
   const level = node.attrs.level as number;
-    const editable = editor.isEditable;
-  const num = useNumbering().get(labelOf(node.attrs as any, 'sec'))?.number ?? '='.repeat(level);
+  const editable = editor.isEditable;
+  const num = useNumbering().get(labelOf(node.attrs as any, 'sec'))?.number;
+  const en = String(node.attrs.en ?? '');
   return (
-    <NodeViewWrapper className={`hd hd-${level}`} data-level={level}>
-      <span className="hd-badge" contentEditable={false} title={`${LEVEL_NAME[level - 1] ?? ''}标题（${level} 级）——编号按模板规则算，预览里的为准`}>
-        {num}
-      </span>
-      <NodeViewContent className="hd-zh" />
-      <span className="hd-en" contentEditable={false}>
+    <NodeViewWrapper className={`hd hd-${level} ${en ? 'has-en' : ''}`} data-level={level}>
+      <div className="hd-row">
+        <span className="hd-num" contentEditable={false} title={`${LEVEL_NAME[level - 1] ?? ''}标题（${level} 级）· 编号按模板规则算，预览为准`}>{num ?? ''}</span>
+        <NodeViewContent className="hd-zh" />
+      </div>
+      <div className="hd-en" contentEditable={false}>
         <input
-          value={node.attrs.en ?? ''}
-          placeholder="English title"
+          value={en}
+          placeholder="English title（博士双语目录用，可空）"
           disabled={!editable}
           onChange={(e) => updateAttributes({ en: e.target.value })}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
         />
-      </span>
+      </div>
     </NodeViewWrapper>
   );
 }

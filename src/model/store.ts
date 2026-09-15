@@ -93,8 +93,13 @@ export interface ProjectMeta {
 
 const metaOf = (d: ThesisDoc): ProjectMeta => ({ id: d.id, name: d.name, updatedAt: d.updatedAt, settings: d.settings, blocks: (d.body.content?.length ?? 0) });
 
+/** 预览里双击 → 编辑器里定位：哪一节、找哪段字 */
+export interface JumpRequest { richKey: RichKey; needle: string; nonce: number }
+
 interface State {
   doc: ThesisDoc;
+  jump: JumpRequest | null;
+  requestJump: (richKey: RichKey, needle: string) => void;
   section: Section;
   /** 项目管理界面还是编辑器 */
   view: 'projects' | 'editor';
@@ -160,6 +165,8 @@ export const useStore = create<State>((set, get) => {
   };
   return {
     doc: newDoc(),
+    jump: null,
+    requestJump: (richKey, needle) => set({ jump: { richKey, needle, nonce: Date.now() } }),
     section: 'body',
     view: 'editor',
     projects: [],

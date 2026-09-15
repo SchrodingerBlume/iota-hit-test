@@ -196,7 +196,7 @@ async function pdf(msg: Extract<ToWorker, { type: 'pdf' }>) {
 async function snippet(msg: Extract<ToWorker, { type: 'snippet' }>) {
   if (!compiler) return;
   const body = msg.display ? `$ ${msg.src} $` : `$${msg.src}$`;
-  const src = `#set page(width: auto, height: auto, margin: 3pt, fill: none)
+  const src = `#set page(width: auto, height: auto, margin: (x: 1pt, y: 2pt), fill: none)
 #set text(size: 11pt, font: ("Times New Roman", "TeX Gyre Termes", "Noto Serif CJK SC"))
 #show math.equation: set text(font: ("Cambria Math", "TeX Gyre Termes Math"))
 #set math.equation(numbering: none)

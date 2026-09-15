@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useCompileState } from '../compiler/client';
 import { renderArtifact } from '../compiler/renderer';
 import { Eye, ZoomIn, ZoomOut, Maximize2, Loader2 } from 'lucide-react';
+import { jumpToPreviewText } from './jump';
 
 const fmtMB = (n: number) => (n / 1024 / 1024).toFixed(1);
 
@@ -117,7 +118,7 @@ export function Preview() {
         )}
         {renderError && <div className="diag err" style={{ marginBottom: 12, padding: 8 }}>渲染失败：{renderError}</div>}
         {status === 'ready' && !artifact && !compiling && !errors.length && <div className="preview-empty">还没有内容</div>}
-        <div ref={containerRef} className="preview-doc" style={{ width: `${Math.round(zoom * 100)}%` }} />
+        <div ref={containerRef} className="preview-doc" style={{ width: `${Math.round(zoom * 100)}%` }} title="双击文字：在左侧编辑器里定位" onDoubleClick={(e) => jumpToPreviewText(e.target as Element)} />
       </div>
     </div>
   );

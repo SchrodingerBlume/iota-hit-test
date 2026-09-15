@@ -16,7 +16,7 @@ export function RichSection({ title, lead, richKey, headings, blocks, placeholde
     <>
       <h2>{title}</h2>
       {lead && <p className="lead">{lead}</p>}
-      <RichEditor instanceKey={richKey} value={value} onChange={(v) => setRich(richKey, v)} headings={headings} blocks={blocks ?? true} placeholder={placeholder} part={part} />
+      <RichEditor instanceKey={richKey} value={value} onChange={(v) => setRich(richKey, v)} headings={headings} blocks={blocks ?? true} placeholder={placeholder} part={part} richKey={richKey} />
     </>
   );
 }
@@ -30,9 +30,9 @@ export function AbstractPanel() {
       <h2>摘要</h2>
       <p className="lead">关键词在「元信息」里填。缩略语在摘要里也会首次展开、正文开头再重置一次。</p>
       <h3>中文摘要</h3>
-      <RichEditor instanceKey="abstractZh" value={zh} onChange={(v) => setRich('abstractZh', v)} headings={false} blocks={false} placeholder="中文摘要……" />
+      <RichEditor instanceKey="abstractZh" richKey="abstractZh" value={zh} onChange={(v) => setRich('abstractZh', v)} headings={false} blocks={false} placeholder="中文摘要……" />
       <h3 style={{ marginTop: 20 }}>Abstract</h3>
-      <RichEditor instanceKey="abstractEn" value={en} onChange={(v) => setRich('abstractEn', v)} headings={false} blocks={false} placeholder="English abstract…" />
+      <RichEditor instanceKey="abstractEn" richKey="abstractEn" value={en} onChange={(v) => setRich('abstractEn', v)} headings={false} blocks={false} placeholder="English abstract…" />
     </>
   );
 }

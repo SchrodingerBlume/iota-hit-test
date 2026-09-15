@@ -15,9 +15,9 @@ function KeywordsInput({ value, onChange, placeholder }: { value: string[]; onCh
 function FieldInput({ f, info, setInfo }: { f: InfoFieldDef; info: Info; setInfo: (p: Partial<Info>) => void }) {
   const v = info[f.key];
   if (f.kind === 'keywords') return <KeywordsInput value={v as string[]} onChange={(x) => setInfo({ [f.key]: x })} />;
-  if (f.kind === 'textarea') return <textarea value={v as string} placeholder={f.placeholder} rows={2} onChange={(e) => setInfo({ [f.key]: e.target.value })} />;
+  if (f.kind === 'textarea') return <textarea data-info={f.key} value={v as string} placeholder={f.placeholder} rows={2} onChange={(e) => setInfo({ [f.key]: e.target.value })} />;
   if (f.kind === 'month') return <input type="month" value={v as string} onChange={(e) => setInfo({ [f.key]: e.target.value })} />;
-  return <input value={v as string} placeholder={f.placeholder} onChange={(e) => setInfo({ [f.key]: e.target.value })} />;
+  return <input data-info={f.key} value={v as string} placeholder={f.placeholder} onChange={(e) => setInfo({ [f.key]: e.target.value })} />;
 }
 
 export function InfoPanel() {
