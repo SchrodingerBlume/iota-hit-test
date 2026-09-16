@@ -836,6 +836,37 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .rb-pop-menu button:hover { background: var(--panel-2); }
 .rb-pop-menu button svg { width: 18px; height: 18px; color: var(--muted); }
 .table-text-dialog { max-width: 640px; }
+/* 符号面板 */
+.sym-dialog { max-width: 720px; }
+.sym-cats { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+.sym-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 2px; max-height: 50vh; overflow: auto; }
+.sym-cell { height: 38px; border: 1px solid transparent; border-radius: var(--r-s); background: none; font-size: 19px; font-family: "STIX Two Math", "Cambria Math", "Times New Roman", "Noto Serif CJK SC", serif; cursor: pointer; color: var(--ink); }
+.sym-cell:hover { border-color: var(--line-2); background: var(--panel-2); }
+/* 伪代码 */
+.alg-head { display: flex; align-items: baseline; gap: 8px; padding: 4px 8px; border-bottom: 2px solid var(--ink); font-family: var(--serif); }
+.alg-body { padding: 4px 8px; font-family: var(--serif); font-size: 15px; }
+.alg-line { display: flex; align-items: center; gap: 6px; padding: 1px 0; }
+.alg-line input { flex: 1; border: 0; border-bottom: 1px dashed transparent; background: none; font: inherit; color: var(--ink); padding: 2px 4px; min-width: 0; }
+.alg-line input:focus { outline: none; border-bottom-color: var(--accent); }
+.alg-no { width: 1.6em; text-align: right; color: var(--muted); font-size: 12px; font-family: var(--sans); flex: none; }
+.alg-io input { font-style: italic; }
+.alg-tools { display: none; gap: 0; flex: none; }
+.alg-line:hover .alg-tools, .alg-line:focus-within .alg-tools { display: inline-flex; }
+.alg-btn { border: 0; background: none; color: var(--muted); padding: 2px; border-radius: var(--r-xs); display: inline-flex; cursor: pointer; }
+.alg-btn:hover:not(:disabled) { background: var(--panel-2); color: var(--ink); }
+.alg-btn:disabled { opacity: 0.3; cursor: default; }
+.alg-btn svg { width: 13px; height: 13px; }
+.blk.alg { border-bottom: 1px solid var(--ink); }
+/* 代码清单：题注在上、代码在下（模板 tabular 那一档的样子） */
+.blk.lst .lst-body pre { margin: 0; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--ink); border-radius: 0; }
+/* 分图 */
+.subfig-grid { display: grid; gap: 10px 14px; align-items: end; }
+.subfig { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.subfig img { display: block; }
+.subfig-cap { display: flex; align-items: baseline; gap: 4px; font-family: var(--serif); font-size: 14px; }
+.subfig-tools { display: none; align-items: center; gap: 4px; }
+.subfig:hover .subfig-tools, .subfig:focus-within .subfig-tools { display: inline-flex; }
+.fig-drop-sm { min-height: 70px; padding: 8px; font-size: 12px; }
 .dlg-fs { border: 1px solid var(--line); border-radius: var(--r-s); padding: 8px 12px 10px; margin: 0 0 10px; }
 .dlg-fs legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
 .dlg-fs .style-field { margin-bottom: 6px; }

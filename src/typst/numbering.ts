@@ -12,7 +12,7 @@ import { labelOf } from './pmToTypst';
 export type Part = 'body' | 'appendix' | 'other';
 
 export interface NumberInfo {
-  kind: 'sec' | 'fig' | 'tab' | 'eq';
+  kind: 'sec' | 'fig' | 'tab' | 'eq' | 'alg' | 'lst';
   label: string;
   /** 印在节点旁边的：第 2 章 / 2.1 / 图 2-1 / (2-1) */
   number: string;
@@ -71,7 +71,7 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
   const hass = s.category === 'hass';
 
   const counters = [0, 0, 0, 0];
-  let fig = 0, tab = 0, eq = 0;
+  let fig = 0, tab = 0, eq = 0, alg = 0, lst = 0;
   const text = (n: PMNode): string => (n.content ?? []).map((c) => (c.type === 'text' ? c.text ?? '' : c.content ? text(c) : '')).join('');
 
   /** 章那一位的记号：正文是数字，附录按 A / 1 / 一 */
@@ -115,7 +115,7 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
       }
       counters[level - 1]++;
       for (let i = level; i < 4; i++) counters[i] = 0;
-      if (level === 1) { fig = 0; tab = 0; eq = 0; }
+      if (level === 1) { fig = 0; tab = 0; eq = 0; alg = 0; lst = 0; }
       const label = labelOf(n.attrs, 'sec');
       const num = headingNumber(level);
       if (label) out.set(label, { kind: 'sec', label, number: num, ref: level === 1 || /^(第|Chapter|Appendix|附录)/.test(num) ? num : en ? `Section ${num}` : `${num} 节`, title: text(n), level });
@@ -133,6 +133,20 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
       const label = labelOf(n.attrs, 'tab');
       const num = `${en ? 'Table ' : '表 '}${numbered(figByChapter, tab)}`;
       if (label) out.set(label, { kind: 'tab', label, number: num, ref: num, title: n.attrs?.caption ?? '' });
+      return;
+    }
+    if (n.type === 'algorithm') {
+      alg++;
+      const label = labelOf(n.attrs, 'alg');
+      const num = `${en ? 'Algo. ' : '算法 '}${numbered(figByChapter, alg)}`;
+      if (label) out.set(label, { kind: 'alg', label, number: num, ref: num, title: n.attrs?.caption ?? '' });
+      return;
+    }
+    if (n.type === 'codeFigure') {
+      lst++;
+      const label = labelOf(n.attrs, 'lst');
+      const num = `${en ? 'Listing ' : '代码 '}${numbered(figByChapter, lst)}`;
+      if (label) out.set(label, { kind: 'lst', label, number: num, ref: num, title: n.attrs?.caption ?? '' });
       return;
     }
     if (n.type === 'equation' && n.attrs?.numbered !== false) {

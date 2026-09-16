@@ -19,7 +19,7 @@ import {
   TableCellsMerge20Regular, TableFreezeRow20Regular, TableDismiss20Regular, PanelLeftContract20Regular, PanelLeftExpand20Regular, PanelLeft20Regular, LayoutColumnTwo20Regular, PanelRight20Regular,
   ZoomIn20Regular, ZoomOut20Regular, AutoFitWidth20Regular, AutoFitHeight20Regular, Settings20Regular, Info20Regular, ChevronUp20Regular, ChevronDown20Regular, ChevronLeft20Regular, ChevronRight20Regular, Dismiss20Regular, Pin20Regular, Grid20Regular, Navigation20Regular, TextParagraph20Regular,
   Document20Regular, DocumentMultiple20Regular, Translate20Regular, ImageEdit20Regular, Delete20Regular, TableSimple20Regular, ClipboardTextLtr20Regular,
-  CommentAdd20Regular, CommentDismiss20Regular, Comment20Regular,
+  CommentAdd20Regular, CommentDismiss20Regular, Comment20Regular, TextBulletListSquare20Regular,
 } from '@fluentui/react-icons';
 import { useStore, type RichKey } from '../model/store';
 import { getEditor, getEditorMeta, onRegistryChange } from '../editor/registry';
@@ -39,6 +39,7 @@ import { useLinkDialog } from './LinkDialog';
 import { useComments, newCommentId } from '../editor/comments';
 import { commentRange } from './CommentsPane';
 import { wordAt } from '../editor/wordAt';
+import { SymbolPicker, useSymbolPicker, QUICK_SYMBOLS, SYMBOL_BY_CHAR } from './SymbolPicker';
 const FITS = [{ value: 'content', label: '根据内容', hint: '列宽按内容定' }, { value: 'window', label: '根据窗口', hint: '撑满版心，各列均分' }, { value: 'fixed', label: '固定列宽', hint: '每列同宽（厘米在插入表格对话框里定）' }];
 
 /** 图 / 表的浮动与跨页选项（模板：placement 交给 Typst；跨页走 show figure.where(kind:): set block(breakable:)） */
@@ -90,7 +91,6 @@ export interface RibbonLayout {
 }
 
 /** 常用符号：论文里常打的（破折号、间隔号、单位、希腊字母、上下标数字…） */
-const SYMBOLS = ['—', '–', '·', '…', '「', '」', '『', '』', '《', '》', '〈', '〉', '【', '】', '×', '÷', '±', '≈', '≠', '≤', '≥', '∞', '°', '℃', 'µ', 'Ω', '‰', '′', '″', '²', '³', '½', '→', '←', '↔', '⇒', '√', '∑', '∫', '∂', '∇', 'α', 'β', 'γ', 'δ', 'ε', 'θ', 'λ', 'μ', 'π', 'ρ', 'σ', 'τ', 'φ', 'ω', 'Δ', 'Σ', 'Φ', 'Ψ', '©', '®', '™', '§', '¶', '€', '£', '¥'];
 
 export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonLayout; leading?: ReactNode; trailing?: ReactNode; minimal?: boolean }) {
   const activeKey = usePreviewSurface((s) => s.activeKey);
@@ -290,13 +290,15 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
         <span className="rb-keep"><B title="插入符号" big={big} menu icon={<Omega20Regular />} disabled={none} run={() => setPop(pop === id ? null : id)}>{big ? '符号' : undefined}</B></span>
       </PopoverTrigger>
       <PopoverSurface className="rb-symbols">
-        {SYMBOLS.map((ch) => <button key={ch} type="button" className="rb-sym" title={ch} onMouseDown={(e) => e.preventDefault()} onClick={() => { chain().insertContent(ch).run(); setPop(null); afterCommand(); }}>{ch}</button>)}
+        {QUICK_SYMBOLS.map((ch) => <button key={ch} type="button" className="rb-sym" title={`${ch}${SYMBOL_BY_CHAR.get(ch) ? `  sym.${SYMBOL_BY_CHAR.get(ch)!.n}${SYMBOL_BY_CHAR.get(ch)!.l ? ' · ' + SYMBOL_BY_CHAR.get(ch)!.l : ''}` : ''}`} onMouseDown={(e) => e.preventDefault()} onClick={() => { chain().insertContent(ch).run(); setPop(null); afterCommand(); }}>{ch}</button>)}
+        <div className="rb-pop-menu"><button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setPop(null); useSymbolPicker.getState().setOpen(true); }}><Omega20Regular />更多符号…<span className="muted">（Typst 全表，可搜）</span></button></div>
       </PopoverSurface>
     </Popover>
   );
 
   return (
     <div ref={root} className={`ribbon ${none ? 'is-idle' : ''} ${collapsed ? 'is-collapsed' : ''} ${peek ? 'is-peek' : ''}`} onClick={(e) => { const t = e.target as HTMLElement; if (t.closest('.rb-btn') && !t.closest('.rb-keep')) afterCommand(); }}>
+      <SymbolPicker onPick={(ch) => { chain().insertContent(ch).run(); }} />
       <div className="rb-tabs">
         {leading}
         {!minimal && (
@@ -419,7 +421,13 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                 <Stack>
                   <B title="行内公式" icon={<MathSymbols20Regular />} disabled={none} run={() => ins.insertInline('mathInline')}>行内公式</B>
                   <B title="公式底下的「式中 x——…」" icon={<TextDescription20Regular />} disabled={none || !blocks} run={ins.insertDenote}>式中</B>
-                  <B title="代码块" icon={<Braces20Regular />} disabled={none || !blocks} run={() => chain().toggleCodeBlock().run()}>代码块</B>
+                </Stack>
+              </Group>
+              <Group label="算法与代码">
+                <B title="伪代码（模板的 lovelace 排法：一行一条，Tab 缩进；题注「算法 1-1」，可引用）" big icon={<TextBulletListSquare20Regular />} disabled={none || !blocks} run={ins.insertAlgorithm}>算法</B>
+                <Stack>
+                  <B title="代码块（不带题注，按模板的代码样式排）" icon={<Braces20Regular />} disabled={none || !blocks} run={() => chain().toggleCodeBlock().run()}>代码块</B>
+                  <B title="代码清单：带题注「代码 1-1」、可引用的代码块（光标在代码块里就给它加题注）" icon={<Code20Regular />} disabled={none || !blocks} run={ins.insertCodeFigure}>代码清单</B>
                 </Stack>
               </Group>
               <Group label="符号">
@@ -545,6 +553,14 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                   <Rows>
                     <Row><ChoiceMenu label="浮动" hint="浮动：图不跟着文字走，Typst 把它放到本页或下页的顶 / 底（figure(placement:)）；浮动的图不跨页" choices={PLACEMENTS} value={placement} onChange={(v) => chain().updateAttributes('figure', { placement: v }).run()} /></Row>
                     <Row><ChoiceMenu label="跨页" hint="图默认整块不拆（指南 2.13.2）；允许后分图多的图按指南排成「续图」" choices={BREAK_IMAGE} value={(a.breakable as string) || 'auto'} disabled={placement !== 'none'} onChange={(v) => chain().updateAttributes('figure', { breakable: v }).run()} /></Row>
+                  </Rows>
+                </span>
+              </Group>
+              <Group label="分图">
+                <span className="rb-keep rb-inline">
+                  <Rows>
+                    <Row><ChoiceMenu label="每行" choices={[1, 2, 3, 4].map((n) => ({ value: String(n), label: `${n} 张` }))} value={String(Math.max(1, Math.min(4, Number(a.columns) || 2)))} onChange={(v) => chain().updateAttributes('figure', { columns: Number(v) }).run()} /></Row>
+                    <Row><ChoiceMenu label="分图题" hint="分图题排在分图之下（#subfigure），或跟在图题之下连排（#subs）——指南 2.13.1 的两种" choices={[{ value: 'under', label: '分图之下' }, { value: 'caption', label: '图题之下连排' }]} value={(a.subMode as string) || 'under'} onChange={(v) => chain().updateAttributes('figure', { subMode: v }).run()} /></Row>
                   </Rows>
                 </span>
               </Group>

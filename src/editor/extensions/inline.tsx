@@ -95,8 +95,8 @@ export const Cite = inlineAtom('cite', { keys: { default: '' } }, CiteView);
 
 // ── 交叉引用 ────────────────────────────────────────────────────
 const KIND_NAME: Record<string, string> = { fig: '图', tab: '表', eq: '式', sec: '节' };
-const KIND_GROUP: Record<string, string> = { fig: '图', tab: '表', eq: '公式', sec: '章节' };
-const KIND_ORDER = ['fig', 'tab', 'eq', 'sec'];
+const KIND_GROUP: Record<string, string> = { fig: '图', tab: '表', eq: '公式', alg: '算法', lst: '代码', sec: '章节' };
+const KIND_ORDER = ['fig', 'tab', 'eq', 'alg', 'lst', 'sec'];
 
 /** 交叉引用选择器：按图 / 表 / 公式 / 章节分组，可搜索 */
 function RefPicker({ env, target, onPick }: { env: ReturnType<typeof useEditorEnv>; target: string; onPick: (label: string) => void }) {

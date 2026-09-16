@@ -54,8 +54,41 @@ function LabelField({ node, updateAttributes, prefix, editable }: { node: NodeVi
 }
 
 // ── 插图 ────────────────────────────────────────────────────────
+/** 分图：每张一个 {image, width, caption, captionEn} */
+export interface SubFig { image: string; width: string | number; caption: string; captionEn?: string }
+export function parseSubs(v: unknown): SubFig[] {
+  if (Array.isArray(v)) return v as SubFig[];
+  if (typeof v !== 'string' || !v) return [];
+  try { const a = JSON.parse(v); return Array.isArray(a) ? a : []; } catch { return []; }
+}
+
+function SubFigureCell({ sub, index, editable, onChange, onRemove, letter, labelBase }: { sub: SubFig; index: number; editable: boolean; onChange: (p: Partial<SubFig>) => void; onRemove: () => void; letter: string; labelBase: string }) {
+  const env = useEditorEnv();
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => { let alive = true; void imageUrl(sub.image).then((u) => { if (alive) setUrl(u); }); return () => { alive = false; }; }, [sub.image, env.images]);
+  const pick = async (file: File) => { const r = await env.addImage(file); onChange({ image: r.name, width: r.width && r.height ? `${Math.min(7, Math.max(3, Math.round((r.width / 96) * 2.54 * 10) / 10))}cm` : sub.width }); };
+  return (
+    <div className="subfig" title={`分图 (${letter})，标签 ${labelBase}-${letter}`}>
+      {url ? <img src={url} alt="" style={{ width: figurePx(sub.width), maxWidth: '100%' }} draggable={false} /> : (
+        <label className="fig-drop fig-drop-sm"><ImageUp /><span>{sub.image ? `找不到 ${sub.image}` : '选图'}</span><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>
+      )}
+      <div className="subfig-cap"><span className="cap-num">({letter})</span><AutoInput className="cap-input" disabled={!editable} value={sub.caption} placeholder="分图题" minWidth={40} onChange={(e) => onChange({ caption: e.target.value })} /></div>
+      <div className="subfig-tools">
+        <LengthInput value={sub.width} defaultUnit="cm" disabled={!editable} onChange={(v) => onChange({ width: v ?? '6cm' })} width={70} />
+        <label className="blk-tool is-btn" title="换图"><ImageUp /><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>
+        <button type="button" className="blk-tool is-btn is-danger" title={`删掉分图 (${letter})`} disabled={!editable} onClick={onRemove}><Trash2 /></button>
+        <span className="muted" style={{ fontSize: 11 }}>#{index + 1}</span>
+      </div>
+    </div>
+  );
+}
+
 function FigureView({ node, updateAttributes, selected, deleteNode, editor, getPos }: NodeViewProps) {
   const env = useEditorEnv();
+  const subs = parseSubs(node.attrs.subs);
+  const setSubs = (s: SubFig[]) => updateAttributes({ subs: JSON.stringify(s) });
+  const columns = Math.max(1, Math.min(4, Number(node.attrs.columns) || 2));
+  const letters = 'abcdefghijklmnopqrstuvwxyz';
   const wrap = useRef<HTMLDivElement>(null);
   const open = useOpenNonce(getPos);
   useEffect(() => { if (open.nonce) requestAnimationFrame(() => focusAttrInput(wrap.current, open.attr ?? 'caption', open.offset)); }, [open]);
@@ -71,9 +104,13 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
     updateAttributes(patch);
   };
   return (
-    <NodeViewWrapper className={`blk fig ${selected ? 'is-selected' : ''}`} data-drag-handle ref={wrap}>
+    <NodeViewWrapper className={`blk fig ${selected ? 'is-selected' : ''} ${subs.length ? 'has-subs' : ''}`} data-drag-handle ref={wrap}>
       <div className="fig-body" contentEditable={false}>
-        {url ? <img src={url} alt="" style={{ width: figurePx(node.attrs.width), maxWidth: '100%' }} draggable={false} /> : (
+        {subs.length ? (
+          <div className="subfig-grid" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+            {subs.map((s, i) => <SubFigureCell key={i} sub={s} index={i} letter={letters[i] ?? String(i + 1)} labelBase={labelOf(node.attrs as any, 'fig')} editable={editable} onChange={(p) => setSubs(subs.map((x, k) => (k === i ? { ...x, ...p } : x)))} onRemove={() => setSubs(subs.filter((_, k) => k !== i))} />)}
+          </div>
+        ) : url ? <img src={url} alt="" style={{ width: figurePx(node.attrs.width), maxWidth: '100%' }} draggable={false} /> : (
           <label className="fig-drop">
             <ImageUp />
             <span>{name ? `找不到图片 ${name}，点击重新选择` : '选择图片（PNG / JPG / SVG）'}</span>
@@ -88,7 +125,8 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
           <LengthInput value={node.attrs.width ?? 8} defaultUnit="cm" disabled={!editable} onChange={(v) => updateAttributes({ width: v ?? 8 })} width={84} />
         </label>
         <LabelField node={node} updateAttributes={updateAttributes} prefix="fig" editable={editable} />
-        <label className="blk-tool is-btn" title="换一张图"><ImageUp /><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>
+        <button type="button" className="blk-tool is-btn" title="加一张分图（多张分图排成一张母图，分图题 (a)(b)…）" disabled={!editable} onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.onchange = async () => { const files = [...(input.files ?? [])]; const add: SubFig[] = []; for (const f of files) { const r = await env.addImage(f); add.push({ image: r.name, width: r.width && r.height ? `${Math.min(7, Math.max(3, Math.round((r.width / 96) * 2.54 * 10) / 10))}cm` : '6cm', caption: '' }); } const base = subs.length ? subs : (name ? [{ image: name, width: node.attrs.width ?? '6cm', caption: '' }] : []); setSubs([...base, ...add]); }; input.click(); }}><PencilLine />分图</button>
+        {!subs.length && <label className="blk-tool is-btn" title="换一张图"><ImageUp /><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>}
         <button type="button" className="blk-tool is-btn is-danger" title="删除插图" disabled={!editable} onClick={deleteNode}><Trash2 /></button>
       </Tools>
     </NodeViewWrapper>
@@ -103,7 +141,9 @@ export const Figure = Node.create({
   selectable: true,
   addAttributes() {
     // placement：浮动（none / auto / top / bottom，Typst 的 figure(placement:)）；breakable：跨页三态（auto 按模板：图不拆、表可拆）
-    return { image: attr('image', ''), width: attr('width', 8), caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null), placement: attr('placement', 'none'), breakable: attr('breakable', 'auto') };
+    // subs：分图（JSON），非空时母图由分图组成；columns 每行几张；subMode under = 分图题排在分图之下（#subfigure），
+    // caption = 分图题跟在图题之下连排（#subs）
+    return { image: attr('image', ''), width: attr('width', 8), caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null), placement: attr('placement', 'none'), breakable: attr('breakable', 'auto'), subs: attr('subs', '[]'), columns: attr('columns', 2), subMode: attr('subMode', 'under') };
   },
   parseHTML() { return [{ tag: 'div[data-node="figure"]' }]; },
   renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { 'data-node': 'figure' })]; },
@@ -129,6 +169,37 @@ function TableFigureView({ node, updateAttributes, selected, deleteNode, editor,
     </NodeViewWrapper>
   );
 }
+
+// ── 代码清单（figure 壳 + 代码块）：模板按 raw-style 排（框、行号），这里只给题注与标签 ──
+function CodeFigureView({ node, updateAttributes, selected, deleteNode, editor }: NodeViewProps) {
+  const editable = editor.isEditable;
+  const num = useNumbering().get(labelOf(node.attrs as any, 'lst'))?.number;
+  return (
+    <NodeViewWrapper className={`blk lst ${selected ? 'is-selected' : ''}`}>
+      <Caption node={node} updateAttributes={updateAttributes} kindName="代码" editable={editable} prefix={num} />
+      <NodeViewContent className="lst-body" />
+      <Tools>
+        <LabelField node={node} updateAttributes={updateAttributes} prefix="lst" editable={editable} />
+        <span className="blk-hint">框与行号按模板的 raw-style 排，不另设</span>
+        <button type="button" className="blk-tool is-btn is-danger" title="删除代码清单" disabled={!editable} onClick={deleteNode}><Trash2 /></button>
+      </Tools>
+    </NodeViewWrapper>
+  );
+}
+
+export const CodeFigure = Node.create({
+  name: 'codeFigure',
+  group: 'block',
+  content: 'codeBlock',
+  isolating: true,
+  defining: true,
+  addAttributes() {
+    return { caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null) };
+  },
+  parseHTML() { return [{ tag: 'div[data-node="codeFigure"]' }]; },
+  renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { 'data-node': 'codeFigure' }), 0]; },
+  addNodeView() { return ReactNodeViewRenderer(CodeFigureView); },
+});
 
 export const TableFigure = Node.create({
   name: 'tableFigure',

@@ -16,6 +16,12 @@
 // 带 map 选项时，文本与节点外面套上源码映射的记号（见 sourcemap.ts），预览区直接编辑靠它。
 import { mark, unmarked } from './sourcemap';
 import { lengthTypst } from '../model/length';
+
+/** 分图 / 伪代码的属性都是 JSON 串（与 eqdenote 的 rows 同一套路） */
+function parseJsonArr<T>(v: unknown): T[] { if (Array.isArray(v)) return v as T[]; if (typeof v !== 'string' || !v) return []; try { const a = JSON.parse(v); return Array.isArray(a) ? a : []; } catch { return []; } }
+const parseSubs = (v: unknown) => parseJsonArr<{ image: string; width: string | number; caption: string }>(v);
+const parseIo = (v: unknown) => parseJsonArr<string>(v);
+const parseLines = (v: unknown) => parseJsonArr<{ text: string; level: number }>(v);
 import type { RichKey } from '../model/store';
 
 export interface PMNode {
@@ -297,10 +303,23 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
       return `${'='.repeat(level)} ${zh}${en}${label ? ` <${label}>` : ''}` + paraEnd(opts, n);
     }
     case 'figure': {
+      const subs = parseSubs(n.attrs?.subs);
+      const label = labelOf(n.attrs, 'fig');
+      if (subs.length) {
+        // 分图：grid 里一张张排，分图题两档（模板：#subfigure 排在分图之下，#subs 连排在图题之下）
+        const cols = Math.max(1, Math.min(4, Number(n.attrs?.columns) || 2));
+        const under = n.attrs?.subMode !== 'caption';
+        const letter = (i: number) => 'abcdefghijklmnopqrstuvwxyz'[i] ?? String(i + 1);
+        const subLabel = (i: number) => (label ? ` <${label}-${letter(i)}>` : '');
+        const img = (s: { image: string; width: string | number }) => `image(${JSON.stringify(`${opts.imageDir ?? 'images'}/${s.image}`)}, width: ${lengthTypst(s.width, 'cm', '6cm')})`;
+        const cells = subs.filter((s) => s.image).map((s, i) => (under ? `    [#subfigure(${img(s)}, caption: [${escapeText(s.caption ?? '')}])${subLabel(i)}],` : `    ${img(s)},`));
+        const subsArg = under ? '' : `#subs(${subs.map((s, i) => `[${escapeText(s.caption ?? '')}${subLabel(i)}]`).join(', ')},)`;
+        const body = `#figure(\n  grid(\n    columns: ${cols}, column-gutter: 1cm, row-gutter: 12pt,\n${cells.join('\n')}\n  ),\n  caption: [${caption(n, opts)}${subsArg}],${placementArg(n)}\n)`;
+        return floatWrap(n, 'image', tag(opts, n, 'node', body) + (label ? ` <${label}>` : ''));
+      }
       const img = String(n.attrs?.image ?? '');
       if (!img) return '';
       const width = lengthTypst(n.attrs?.width ?? 8, 'cm', '8cm');
-      const label = labelOf(n.attrs, 'fig');
       return floatWrap(n, 'image', tag(opts, n, 'node', `#figure(\n  image(${JSON.stringify(`${opts.imageDir ?? 'images'}/${img}`)}, width: ${width}),\n  caption: [${caption(n, opts)}],${placementArg(n)}\n)`) + (label ? ` <${label}>` : ''));
     }
     case 'tableFigure': {
@@ -338,6 +357,21 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
       let fence = '```';
       while (text.includes(fence)) fence += '`';
       return `${fence}${lang}\n${text}\n${fence}`;
+    }
+    case 'codeFigure': {
+      // 代码清单：进了 figure 的代码块，模板按 raw-style 排框与行号、题注「代码 1-1」
+      const code = (n.content ?? []).find((c) => c.type === 'codeBlock');
+      if (!code) return '';
+      const label = labelOf(n.attrs, 'lst');
+      return tag(opts, n, 'node', `#figure(\n${serializeBlock(code, opts, depth)},\n  caption: [${caption(n, opts)}],\n)`) + (label ? ` <${label}>` : '');
+    }
+    case 'algorithm': {
+      // 伪代码：模板的 lovelace 那一路——`-` 不编号（输入输出），`+` 编号，嵌套就是缩进；行里是 Typst 标记
+      const io = parseIo(n.attrs?.io).map((t) => `  - ${t.trim()}`);
+      const lines = parseLines(n.attrs?.lines).filter((l) => l.text.trim()).map((l) => `  ${'  '.repeat(Math.max(0, l.level))}+ ${l.text.trim()}`);
+      if (!lines.length) return '';
+      const label = labelOf(n.attrs, 'alg');
+      return tag(opts, n, 'node', `#figure(lovelace[\n${[...io, ...lines].join('\n')}\n], caption: [${caption(n, opts)}])`) + (label ? ` <${label}>` : '');
     }
     case 'blockquote':
       return `#quote(block: true)[\n${serializeBlocks(n.content, opts, depth + 1)}\n]`;
@@ -415,14 +449,14 @@ export function serializeDoc(doc: PMNode | undefined | null, opts: SerializeOpti
 /** 文档里所有能被引用的东西：图、表、公式、标题（带 uid 的） */
 export interface RefTarget {
   label: string;
-  kind: 'fig' | 'tab' | 'eq' | 'sec';
+  kind: 'fig' | 'tab' | 'eq' | 'sec' | 'alg' | 'lst';
   title: string;
   index: number;
 }
 
 export function collectRefTargets(doc: PMNode | undefined | null): RefTarget[] {
   const out: RefTarget[] = [];
-  const counters = { fig: 0, tab: 0, eq: 0, sec: 0 };
+  const counters = { fig: 0, tab: 0, eq: 0, sec: 0, alg: 0, lst: 0 };
   const walk = (n: PMNode) => {
     let kind: RefTarget['kind'] | null = null;
     let title = '';
@@ -430,6 +464,8 @@ export function collectRefTargets(doc: PMNode | undefined | null): RefTarget[] {
     else if (n.type === 'tableFigure') { kind = 'tab'; title = n.attrs?.caption ?? ''; }
     else if (n.type === 'equation' && n.attrs?.numbered !== false) { kind = 'eq'; title = n.attrs?.src ?? ''; }
     else if (n.type === 'heading') { kind = 'sec'; title = (n.content ?? []).map((t) => t.text ?? '').join(''); }
+    else if (n.type === 'algorithm') { kind = 'alg'; title = n.attrs?.caption ?? ''; }
+    else if (n.type === 'codeFigure') { kind = 'lst'; title = n.attrs?.caption ?? ''; }
     if (kind) {
       const label = labelOf(n.attrs, kind);
       if (label) { counters[kind]++; out.push({ label, kind, title, index: counters[kind] }); }
@@ -444,7 +480,7 @@ export function collectRefTargets(doc: PMNode | undefined | null): RefTarget[] {
 export function collectImages(doc: PMNode | undefined | null): string[] {
   const out = new Set<string>();
   const walk = (n: PMNode) => {
-    if (n.type === 'figure' && n.attrs?.image) out.add(String(n.attrs.image));
+    if (n.type === 'figure') { const subs = parseSubs(n.attrs?.subs); if (subs.length) subs.forEach((s) => { if (s.image) out.add(String(s.image)); }); else if (n.attrs?.image) out.add(String(n.attrs.image)); }
     for (const c of n.content ?? []) walk(c);
   };
   if (doc) walk(doc);

@@ -19,7 +19,8 @@ import type { RichDoc } from '../model/types';
 import { HeadingEn } from './extensions/HeadingEn';
 import { UniqueId } from './extensions/UniqueId';
 import { MathInline, Cite, Ref, Abbr, Footnote, Ccwd, Idx } from './extensions/inline';
-import { Figure, TableFigure, Equation, PageBreak } from './extensions/blocks';
+import { Figure, TableFigure, CodeFigure, Equation, PageBreak } from './extensions/blocks';
+import { Algorithm } from './extensions/algorithm';
 import { EqDenote } from './extensions/eqdenote';
 import { useEditorEnv, NumberingContext, RichKeyContext } from './env';
 import { computeNumbering, type Part } from '../typst/numbering';
@@ -86,7 +87,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
       Placeholder.configure({ placeholder: placeholder ?? '在这里写……' }),
       TableKit.configure({ table: { resizable: true, cellMinWidth: 40 }, tableCell: false, tableHeader: false, tableRow: false }),
       AlignedTableCell, AlignedTableHeader, SizedTableRow, TableExtras,
-      Figure, TableFigure, Equation, PageBreak, EqDenote,
+      Figure, TableFigure, CodeFigure, Algorithm, Equation, PageBreak, EqDenote,
       MathInline, Cite, Ref, Abbr, Footnote, Ccwd, Idx,
       UniqueId, MirrorCaret, Search,
     ],

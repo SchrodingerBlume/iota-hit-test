@@ -119,7 +119,28 @@ export function useInsertActions(editor: Editor | null) {
   const insertEquation = () => ed().chain().focus().insertContent({ type: 'equation', attrs: {} }).run();
   const insertDenote = () => ed().chain().focus().insertContent({ type: 'eqdenote', attrs: { rows: JSON.stringify([{ symbol: '', mode: 'latex', meaning: '' }]), lead: 'auto' } }).run();
   const insertPageBreak = () => ed().chain().focus().insertContent({ type: 'pageBreak' }).run();
-  return { insertInline, insertTable, insertTableFromText, insertFigure, insertEquation, insertDenote, insertPageBreak };
+  /** 伪代码（模板的 lovelace 那一路） */
+  const insertAlgorithm = () => ed().chain().focus().insertContent({ type: 'algorithm', attrs: { io: JSON.stringify(['input: ', 'output: ']), lines: JSON.stringify([{ text: '', level: 0 }]) } }).run();
+  /** 代码清单：光标在代码块里就给它套上题注壳，否则插一个新的 */
+  const insertCodeFigure = () => {
+    const e = ed();
+    const $p = e.state.selection.$from;
+    for (let d = $p.depth; d > 0; d--) {
+      if ($p.node(d).type.name === 'codeBlock' && $p.node(d - 1).type.name !== 'codeFigure') {
+        const pos = $p.before(d);
+        const code = $p.node(d);
+        e.view.dispatch(e.state.tr.replaceWith(pos, pos + code.nodeSize, e.schema.nodes.codeFigure.create({}, code)));
+        return;
+      }
+    }
+    const at = e.state.selection.from;
+    e.chain().focus().insertContent({ type: 'codeFigure', attrs: {}, content: [{ type: 'codeBlock', attrs: { language: 'python' } }] }).run();
+    // 光标放进代码块
+    let inside = -1;
+    e.state.doc.nodesBetween(at, e.state.doc.content.size, (node, pos) => { if (inside >= 0) return false; if (node.type.name === 'codeFigure') { inside = pos + 2; return false; } return true; });
+    if (inside >= 0) e.commands.setTextSelection(inside);
+  };
+  return { insertInline, insertTable, insertTableFromText, insertFigure, insertEquation, insertDenote, insertPageBreak, insertAlgorithm, insertCodeFigure };
 }
 
 /** 表格：九宫格对齐（像 Word）、作用于单元格或整行、列宽、行高 */

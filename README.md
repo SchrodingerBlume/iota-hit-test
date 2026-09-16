@@ -84,6 +84,18 @@ typst.ts 主分支已经升到 0.15.1，所以 `vendor/` 里的两颗 wasm 是�
 「表格工具」页：浮动交给 Typst 的 `figure(placement:)`，跨页在局部套一层
 `show figure.where(kind: …): set block(breakable:)`（模板默认图不拆、表可拆）。
 
+插入页里：链接（⌘K，`#link`）；伪代码走模板的 lovelace 那一路（一行一条，Tab 缩进，题注「算法 1-1」，
+可引用；lovelace 与 algorithmic 两个包里挑了列表式的 lovelace，逐行编辑天然对得上）；代码清单是带题注的
+代码块（`#figure(```…```)`，框与行号照模板的 `raw-style`，不另设）；插图可以加分图（`figure.subs`），分图题
+排在分图之下（`#subfigure`）或跟在图题之下连排（`#subs`），每行几张可选；插入表格有 Word 那样的对话框
+（表格尺寸、“自动调整”操作、为新表格记住此尺寸）与「从文本 / Markdown 插入」。符号面板是 Typst 的整张
+符号表（codex 的 `sym.txt`，1200 多个）配 unicode-math 的 LaTeX 命令，`src/data/symbols.json` 记着字 ↔
+`sym.名` ↔ `\命令` 的对照，以后导出 LaTeX / Typst 按表换写法（`scripts/build-symbols.mjs` 生成）。
+
+审阅页：批注（`@sereneinserenade/tiptap-comment-extension` 的标记圈范围，本体存在工程文件里），老师导入、
+写批注、再导出，学生导入就看得见；编辑区与预览都加亮，PDF 不印。长度输入统一收 Typst 单位
+（cm / mm / in / pt / em / % / fr / 行）。
+
 预览可以每行排 1 / 2 / 3 页（视图页或预览栏），「整页」把一页缩进视口。窄屏（≤ 900px）单栏或上下叠、
 左栏变抽屉、底部一条模式切换；横屏仍左右分、矮屏（≤ 520px 高）功能区默认收起；触屏两指捏合缩放。
 布局只用 CSS 媒体查询（宽度 / 方向 / 高度）与 `100dvh`，没有引第三方布局库。

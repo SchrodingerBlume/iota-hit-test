@@ -15,3 +15,14 @@
 | DejaVu Sans Mono | DejaVu Fonts License（Bitstream Vera 派生） | typst-assets |
 
 字体文件不进仓库，`scripts/fetch-fonts.sh` 从上述来源现拉。
+
+## 符号表（scripts/data/）
+
+- `codex-sym.txt`：来自 Typst 的 [codex](https://github.com/typst/codex) 包 0.3.0（Apache-2.0），Typst 的 `sym` 模块就是从它生成的。
+- `unicode-math-table.tex`：来自 LaTeX 的 [unicode-math](https://ctan.org/pkg/unicode-math) 宏包（LPPL 1.3c），只用于生成每个符号的 LaTeX 命令名。
+
+两者由 `scripts/build-symbols.mjs` 合成 `src/data/symbols.json`。
+
+## 批注
+
+- [@sereneinserenade/tiptap-comment-extension](https://github.com/sereneinserenade/tiptap-comment-extension)（MIT）：正文里圈出批注范围的 TipTap 标记。
