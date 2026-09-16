@@ -1,4 +1,4 @@
-# typst-with-msword-linebreaks c995202e8628df11d274c5ebb2d017e30727f05d 合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1 之上（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
+# typst-with-msword-linebreaks a21cb4c5ebb7528967fe74a83311167bfd4deaae 合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1 之上（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
 diff --git a/crates/typst-layout/src/inline/line.rs b/crates/typst-layout/src/inline/line.rs
 index 3d7f3a28c..e25d98f05 100644
 --- a/crates/typst-layout/src/inline/line.rs
@@ -160,10 +160,10 @@ index 259be8101..50f73975d 100644
          cjk_latin_spacing: shared.get(TextElem::cjk_latin_spacing).is_auto(),
 diff --git a/crates/typst-layout/src/inline/msword.rs b/crates/typst-layout/src/inline/msword.rs
 new file mode 100644
-index 000000000..e67bdbb52
+index 000000000..52c1eacba
 --- /dev/null
 +++ b/crates/typst-layout/src/inline/msword.rs
-@@ -0,0 +1,1463 @@
+@@ -0,0 +1,1474 @@
 +// 本文件基于 Typst（typst/typst）与 typst-with-msword-linebreaks 修改（iota4web 合并到 Myriad-Dreamin/typst 之上，见 scripts/wasm-patch/typst-msword.patch）
 +//! Line breaking that emulates Microsoft Word.
 +//!
@@ -1427,8 +1427,16 @@ index 000000000..e67bdbb52
 +
 +    // Compression.
 +    if d.over > Abs::zero() && !d.forced {
++        // An opener at the start of the text (also after the indent or
++        // other leading spacing) keeps its blank, as in the fit decision;
++        // measured with `（1）学校…` after a two-character indent: Word
++        // compresses the two closers and hangs the comma at the line end.
++        let mut start = first;
++        while start < last && toks[start].kind == Kind::Space {
++            start += 1;
++        }
 +        let spot_idx: Vec<usize> = (first..=last)
-+            .filter(|&k| toks[k].spot && !(toks[k].kind == Kind::Open && k == first))
++            .filter(|&k| toks[k].spot && !(toks[k].kind == Kind::Open && k == start))
 +            .filter(|&k| !(d.deep && k == last))
 +            .collect();
 +        let need = d.over;
@@ -1568,13 +1576,16 @@ index 000000000..e67bdbb52
 +                    }
 +                    let base = if it.paired && k == last { it.full } else { it.nw };
 +                    let target = base + delta[idx] + extra;
-+                    let natural = it.w;
 +                    let glyph = &mut glyphs[g];
 +                    glyph.adjustability = Default::default();
 +                    glyph.is_justifiable = false;
 +                    glyph.x_advance = Em::from_abs(target, size);
++                    // An opener's blank is on its left, so compression
++                    // shifts the glyph left; the grid excess stays after the
++                    // glyph like everywhere else (Word draws `（` right at
++                    // the pen position).
 +                    glyph.x_offset = if it.kind == Kind::Open {
-+                        Em::from_abs(target - natural - extra, size)
++                        Em::from_abs(delta[idx], size)
 +                    } else {
 +                        Em::zero()
 +                    };
