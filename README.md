@@ -132,7 +132,9 @@ npm run test:compile # 不开浏览器，在 Node 里用同一颗 wasm 编一份
 预览用的编译器 wasm 是 Typst 0.15.1 加上本机 fork `typst-with-msword-linebreaks` 的 `#set par(linebreaks: "msword")`：
 按 Word（2003 / 2007 / 2010 / 2013+ 兼容模式）的规则断行、排字符网格、压缩标点、标点悬挂。设置里「排版引擎」一组
 （兼容模式、字符网格、网格跨度、字体紧缩、网格右缩进）只进预览的 main.typ；**导出的 .typ 不带这些**，只把改过的字符网格
-折成模板的 `layout: (char-pitch: …)`，原版 Typst 照编。预览里模板自己的字距网格关掉（`layout: (char-pitch: none)`），由引擎排。
+折成模板的 `layout: (char-pitch: …)`，原版 Typst 照编。预览里网格按部件动态取：模板把版面记在 state `iota-hit-layout`
+里（封面、声明、正文各不同），预览在 `#show: iota-hit` 与每个部件的 show 之后各发一条 `show: it => context { … }`，读出该部件的
+字距增量 tracking，把模板自己发的 `text(tracking:)` 清零，换成引擎的 `char-pitch: 1em + tracking`。
 
 构建：typst.ts 钉的 typst 带它自己的 `content_hint` 改动，与 fork 在 `line.rs` / `linebreak.rs` 有冲突，所以
 `scripts/wasm-patch/typst-msword.patch` 是 fork 合并到 typst.ts 那份 typst 之上的结果（首行记着 fork 的提交号）；
