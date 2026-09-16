@@ -137,8 +137,8 @@ npm run test:compile # 不开浏览器，在 Node 里用同一颗 wasm 编一份
 
 构建：typst.ts 钉的 typst 带它自己的 `content_hint` 改动，与 fork 在 `line.rs` / `linebreak.rs` 有冲突，所以
 `scripts/wasm-patch/typst-msword.patch` 是 fork 合并到 typst.ts 那份 typst 之上的结果（首行记着 fork 的提交号）；
-`build-wasm.sh` 克隆 typst.ts 钉的 typst、打这个补丁、把 `[patch.crates-io]` 里的 typst* 指过去。fork 更新后重做一次三方合并、
-重新导出补丁（`git diff typst.ts/v0.8.1 HEAD -- crates`），或 `MSWORD_TYPST=/path/to/merged-tree` 直接指向合并好的树。
+`build-wasm.sh` 克隆 typst.ts 钉的 typst、打这个补丁、把 `[patch.crates-io]` 里的 typst* 指过去。fork 更新后跑 `scripts/merge-msword.sh [fork 目录] [工作目录]`：克隆 fork、合并、解那两处已知冲突、导出补丁、编 wasm 一条龙；
+或 `MSWORD_TYPST=/path/to/merged-tree` 直接指向合并好的树。
 
 `scripts/bundle-packages.mjs` 默认从 `../iota-hit` 取模板，也可以 `IOTA_HIT=/path/to/iota-hit npm run packages`。
 `@preview/*` 依赖从 `~/Library/Caches/typst/packages/preview` 取，本机没有的从 packages.typst.org 下载。

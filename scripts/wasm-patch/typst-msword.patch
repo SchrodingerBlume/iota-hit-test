@@ -1,4 +1,4 @@
-# typst-with-msword-linebreaks 19d8113fcb2e52a33931d8cac526b451ff7c4920 合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1 之上（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
+# typst-with-msword-linebreaks ffd89251be0343f4b6cf9a03981e283d56621a49 合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1 之上（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
 diff --git a/crates/typst-layout/src/inline/line.rs b/crates/typst-layout/src/inline/line.rs
 index 3d7f3a2..e2c672a 100644
 --- a/crates/typst-layout/src/inline/line.rs
@@ -150,10 +150,10 @@ index 259be81..50f7397 100644
          cjk_latin_spacing: shared.get(TextElem::cjk_latin_spacing).is_auto(),
 diff --git a/crates/typst-layout/src/inline/msword.rs b/crates/typst-layout/src/inline/msword.rs
 new file mode 100644
-index 0000000..f72fa62
+index 0000000..f90de9b
 --- /dev/null
 +++ b/crates/typst-layout/src/inline/msword.rs
-@@ -0,0 +1,1421 @@
+@@ -0,0 +1,1462 @@
 +//! Line breaking that emulates Microsoft Word.
 +//!
 +//! Word fills a paragraph greedily, one line at a time: it puts as many
@@ -212,6 +212,8 @@ index 0000000..f72fa62
 +
 +/// ASCII punctuation that may not start a line.
 +const ASCII_CLOSE: &[char] = &['.', ',', ';', ':', '!', '?', ')', ']', '}', '%'];
++const ASCII_BRACKET_OPEN: &[char] = &['(', '[', '{'];
++const ASCII_BRACKET_CLOSE: &[char] = &[')', ']', '}'];
 +
 +/// ASCII punctuation that may not end a line.
 +const ASCII_OPEN: &[char] = &['(', '[', '{'];
@@ -312,6 +314,9 @@ index 0000000..f72fa62
 +    adjust_right_indent: bool,
 +    /// Whether Word's font kerning is on (halves adjacent punctuation).
 +    kern: bool,
++    /// Latin glyphs get half the grid excess (Word's "balance SBCS and DBCS
++    /// widths" option) or, without the option, all of it.
++    balance: bool,
 +    justify: bool,
 +    /// Whether CJK-Latin spacing is enabled.
 +    autospace: bool,
@@ -322,7 +327,13 @@ index 0000000..f72fa62
 +    /// context) is widened under a character grid. Measured: half the excess
 +    /// of the cell over the font size, independent of the glyph's width.
 +    fn latin_add(&self) -> Abs {
-+        if self.grid { self.excess / 2.0 } else { Abs::zero() }
++        if !self.grid {
++            Abs::zero()
++        } else if self.balance {
++            self.excess / 2.0
++        } else {
++            self.excess
++        }
 +    }
 +
 +    /// The automatic spacing between a CJK character and Latin text: a
@@ -385,6 +396,7 @@ index 0000000..f72fa62
 +        cell: base + excess,
 +        adjust_right_indent: config.adjust_right_indent,
 +        kern: config.kern,
++        balance: config.balance_widths,
 +        justify: p.config.justify,
 +        autospace: p.config.cjk_latin_spacing,
 +    };
@@ -469,7 +481,10 @@ index 0000000..f72fa62
 +                breaks.push(i + 1);
 +            }
 +        }
-+        if c == '/' && before.is_some_and(|b| b.is_ascii_digit()) {
++        if c == '/'
++            && before.is_some_and(|b| b.is_ascii_digit())
++            && text[i + 1..].chars().next().is_some_and(|n| n.is_ascii_digit())
++        {
 +            breaks.push(i);
 +        }
 +        // Word breaks between two em dashes (`——`), UAX #14 does not.
@@ -486,13 +501,15 @@ index 0000000..f72fa62
 +        let before = text[..offset].chars().next_back();
 +        let after = text[offset..].chars().next();
 +        let hyphen_break =
-+            before == Some('-') && after.is_some_and(|c| c.is_alphanumeric());
++            before == Some('-') && after.is_some_and(|c| c.is_ascii_alphanumeric());
 +        // Word does not break after a slash inside a word (`GB/T`, URLs),
 +        // nor before one that follows a letter, nor after a period followed
-+        // by a letter (`www.example`).
-+        let slash = (before == Some('/') && after.is_some_and(|c| c.is_alphanumeric()))
-+            || (after == Some('/') && before.is_some_and(|c| c.is_alphabetic()))
-+            || (before == Some('.') && after.is_some_and(|c| c.is_alphanumeric()));
++        // by a letter (`www.example`). A CJK character after the slash or
++        // period is a break opportunity (`.cn/云`).
++        let slash = (before == Some('/')
++            && after.is_some_and(|c| c.is_ascii_alphanumeric()))
++            || (after == Some('/') && before.is_some_and(|c| c.is_ascii_alphabetic()))
++            || (before == Some('.') && after.is_some_and(|c| c.is_ascii_alphanumeric()));
 +        let dash_digit = (matches!(before, Some('—' | '–'))
 +            && after.is_some_and(|c| c.is_ascii_digit()))
 +            || (matches!(after, Some('—' | '–'))
@@ -533,14 +550,17 @@ index 0000000..f72fa62
 +                        .map(|adv| adv.at(size))
 +                        .unwrap_or(shaped_w);
 +                    // A symbol the font renders full width (Word with the
-+                    // eastAsia hint draws ×, °, ■, α... with the CJK font)
-+                    // behaves like a CJK character.
++                    // eastAsia hint draws ×, °, ■... with the CJK font) is
++                    // still a Latin glyph to Word 2013+: measured `××××年`
++                    // at 12.23 pt per × under a 12.45 pt grid (glyph + half
++                    // the excess), no automatic spacing next to it. Word
++                    // 2003 mode gave it a whole cell.
++                    let symbol_wide = !is_alnum(c)
++                        && !c.is_ascii()
++                        && !super::shaping::is_space(c)
++                        && natural >= size * 0.9;
 +                    let wide = !LATINISH.contains(&c)
-+                        && (is_wide(c)
-+                            || (!is_alnum(c)
-+                                && !c.is_ascii()
-+                                && !super::shaping::is_space(c)
-+                                && natural >= size * 0.9));
++                        && (is_wide(c) || (params.compat != 15 && symbol_wide));
 +                    let fullwidth_punct = (CLOSERS.contains(&c) || OPENERS.contains(&c))
 +                        && natural >= size * 0.9;
 +                    let cjk_kind = if fullwidth_punct {
@@ -576,7 +596,7 @@ index 0000000..f72fa62
 +                            paired: false,
 +                            full: Abs::zero(),
 +                            tail_hang: Abs::zero(),
-+                        });
++                                });
 +                    } else if let Some(kind) = cjk_kind {
 +                        toks.push(Tok {
 +                            kind,
@@ -598,7 +618,7 @@ index 0000000..f72fa62
 +                            paired: false,
 +                            full: Abs::zero(),
 +                            tail_hang: Abs::zero(),
-+                        });
++                                });
 +                    } else {
 +                        // Latin: extend the current run unless a break
 +                        // opportunity separates them.
@@ -616,11 +636,10 @@ index 0000000..f72fa62
 +                            last.w += shaped_w;
 +                            last.tail = Some(c);
 +                            last.glyph_count += cluster.len();
-+                            last.tail_hang = if ASCII_CLOSE.contains(&c) {
-+                                last.tail_hang + shaped_w
-+                            } else {
-+                                Abs::zero()
-+                            };
++                            // Only the last mark hangs (measured: `(word),`
++                            // and `[12].` hang 3 pt, `(2019)` 4 pt).
++                            last.tail_hang =
++                                if ASCII_CLOSE.contains(&c) { shaped_w } else { Abs::zero() };
 +                        } else {
 +                            toks.push(Tok {
 +                                kind: Kind::Latin,
@@ -855,7 +874,10 @@ index 0000000..f72fa62
 +fn width_of(toks: &[Tok], first: usize, last: usize) -> Abs {
 +    let mut w = Abs::zero();
 +    for (k, it) in toks.iter().enumerate().take(last + 1).skip(first) {
-+        if it.kind == Kind::Space && !it.user && (k == first || k == last) {
++        // A space at a line edge is absorbed, except at the paragraph start
++        // (measured: four leading spaces in a 16 pt paragraph kept 33 pt).
++        if it.kind == Kind::Space && !it.user && ((k == first && first > 0) || k == last)
++        {
 +            continue;
 +        }
 +        if it.kind == Kind::Space && it.weak && (k == first || k == last) {
@@ -975,7 +997,12 @@ index 0000000..f72fa62
 +        }
 +        // A Latin run after CJK text gets a little more (measured 0.2-0.7
 +        // pt) unless closers follow it.
-+        if toks[j].kind == Kind::Latin && toks[j].glyphs && toks[j].gap > Abs::zero() && m == j {
++        if toks[j].kind == Kind::Latin
++            && toks[j].glyphs
++            && toks[j].gap > Abs::zero()
++            && m == j
++            && toks[j].tail_hang.is_zero()
++        {
 +            u += Abs::pt(0.4);
 +        }
 +        u
@@ -1004,6 +1031,13 @@ index 0000000..f72fa62
 +        } else {
 +            Abs::zero()
 +        };
++        // A closing bracket whose opener is in the unit (`(x)`, `(2019)`)
++        // earns no free space, it only hangs up to the cap; `24)` after a
++        // hyphen break earns it like any closer.
++        let paired_bracket = m == core
++            && latin
++            && toks[core].tail.is_some_and(|c| ASCII_BRACKET_CLOSE.contains(&c))
++            && toks[core].head.is_some_and(|c| ASCII_BRACKET_OPEN.contains(&c));
 +        let closers = if m > core && toks[m].kind == Kind::Latin { 0 } else { m - core };
 +        // Closers inside the chain that were not halved (font kerning off)
 +        // are ordinary spots; only the last one hangs.
@@ -1026,17 +1060,24 @@ index 0000000..f72fa62
 +            }
 +        }
 +        let mut pen = penalty(k, gaps);
-+        if closers > 0 {
++        if closers > 0 && k == 1 {
++            // Measured (`龙，` after one spot): about a point per automatic
++            // spacing, half that for a longer chain.
++            pen = Abs::pt(if closers == 1 { 1.0 } else { 0.5 }) * gaps.max(0.0);
++        } else if closers > 0 {
 +            pen *= 2.0;
 +        }
-+        let hang = if closers > 0 {
++        let ex2 = params.latin_add();
++        let hang_cap = if closers > 0 {
 +            toks[m].full
 +        } else if ascii_tail > Abs::zero() {
-+            ascii_tail + if params.grid { params.excess / 2.0 } else { Abs::zero() }
++            ascii_tail + ex2
 +        } else {
 +            Abs::zero()
 +        };
-+        let cap = half * k as f64 + hang + auto_cap(n_all - (adjacent as usize), adjacent);
++        let hang = if paired_bracket { Abs::zero() } else { hang_cap };
++        let cap =
++            half * k as f64 + hang_cap + auto_cap(n_all - (adjacent as usize), adjacent);
 +        if k == 0 {
 +            return cap - pen;
 +        }
@@ -1557,7 +1598,7 @@ index 0000000..f72fa62
 +                    let glyph = &mut glyphs[g];
 +                    glyph.adjustability = Default::default();
 +                    glyph.is_justifiable = false;
-+                    let target = if k == first || k == last {
++                    let target = if (k == first && first > 0) || k == last {
 +                        Abs::zero()
 +                    } else {
 +                        it.nw + delta[idx] + extra
@@ -1604,7 +1645,7 @@ index 36e6698..0ccf884 100644
  }
  
 diff --git a/crates/typst-library/src/model/par.rs b/crates/typst-library/src/model/par.rs
-index 77ec28c..f580ccf 100644
+index 77ec28c..1243212 100644
 --- a/crates/typst-library/src/model/par.rs
 +++ b/crates/typst-library/src/model/par.rs
 @@ -5,8 +5,8 @@ use crate::diag::{HintedStrResult, SourceResult, StrResult, bail};
@@ -1645,7 +1686,7 @@ index 77ec28c..f580ccf 100644
  pub enum Linebreaks {
      /// Determine the line breaks in a simple first-fit style.
      Simple,
-@@ -632,6 +643,156 @@ pub enum Linebreaks {
+@@ -632,6 +643,175 @@ pub enum Linebreaks {
      /// Typst will try to produce more evenly filled lines of text by
      /// considering the whole paragraph when calculating line breaks.
      Optimized,
@@ -1721,7 +1762,17 @@ index 77ec28c..f580ccf 100644
 +        if let Some(kern) = take::<bool>(&mut dict, "kern")? {
 +            config.kern = kern;
 +        }
-+        dict.finish(&["mode", "compat", "char-pitch", "adjust-right-indent", "kern"])?;
++        if let Some(balance) = take::<bool>(&mut dict, "balance-widths")? {
++            config.balance_widths = balance;
++        }
++        dict.finish(&[
++            "mode",
++            "compat",
++            "char-pitch",
++            "adjust-right-indent",
++            "kern",
++            "balance-widths",
++        ])?;
 +        Self::Msword(config)
 +    },
 +}
@@ -1757,6 +1808,11 @@ index 77ec28c..f580ccf 100644
 +///   as it is in the default style of Chinese Word documents. With it, Word
 +///   halves the first of two adjacent full-width punctuation marks (for
 +///   example the closing parenthesis in `），`), which makes lines hold more.
++/// - `balance-widths`: Word's "balance SBCS characters and DBCS characters"
++///   compatibility option (`balanceSingleByteDoubleByteWidth` in
++///   `settings.xml`, on in documents created by Chinese Word). With it, a
++///   Latin glyph under a character grid is widened by half of the grid's
++///   excess over the font size; without it, by the whole excess.
 +#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 +pub struct MswordLinebreaks {
 +    /// The emulated compatibility mode: 11, 12, 14 or 15.
@@ -1767,6 +1823,8 @@ index 77ec28c..f580ccf 100644
 +    pub adjust_right_indent: bool,
 +    /// Whether Word's font kerning is on, which halves adjacent punctuation.
 +    pub kern: bool,
++    /// Whether Latin glyphs get half the grid excess (on) or all of it.
++    pub balance_widths: bool,
 +}
 +
 +impl Default for MswordLinebreaks {
@@ -1776,6 +1834,7 @@ index 77ec28c..f580ccf 100644
 +            char_pitch: None,
 +            adjust_right_indent: true,
 +            kern: true,
++            balance_widths: true,
 +        }
 +    }
 +}
@@ -1797,6 +1856,7 @@ index 77ec28c..f580ccf 100644
 +            config.adjust_right_indent.into_value(),
 +        );
 +        dict.insert("kern".into(), config.kern.into_value());
++        dict.insert("balance-widths".into(), config.balance_widths.into_value());
 +        dict
 +    }
  }
