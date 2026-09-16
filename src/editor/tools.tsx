@@ -181,10 +181,10 @@ export function TableAlignTools({ editor }: { editor: Editor }) {
       <B title={rowScope ? '对齐作用于整行（点击改为只作用于当前 / 选中的单元格）' : '对齐只作用于当前 / 选中的单元格（点击改为整行）'} on={rowScope} icon={<TableCellEdit20Regular />} run={() => setRowScope((r) => !r)}>整行</B>
       <Sep />
       <label className="tb-field" title="当前列的宽度：cm / mm / in / pt（列线可拖，拖的是像素）。留空 = 自动">
-        列宽 <LengthInput value={cw === '' ? '' : `${cw}cm`} defaultUnit="cm" allowed={['cm', 'mm', 'in', 'pt']} placeholder="自动" width={84} onChange={(v) => { const l = v ? parseLength(v, 'cm') : null; const px = l ? toPx(l) : null; editor.chain().focus().setColumnWidth(px && px > 0 ? Math.round(px) : null).run(); }} />
+        列宽 <LengthInput value={cw === '' ? '' : `${cw}cm`} defaultUnit="cm" allowed={['cm', 'mm', 'in', 'pt']} placeholder="自动" width={84} onChange={(v) => { const l = v ? parseLength(v, 'cm') : null; const px = l ? toPx(l) : null; editor.chain().setColumnWidth(px && px > 0 ? Math.round(px) : null).run(); }} />
       </label>
       <label className="tb-field" title="当前行的高度：cm / mm / pt / em。留空 = 自动">
-        行高 <LengthInput value={info.rowHeight ?? ''} defaultUnit="cm" placeholder="自动" width={84} onChange={(v) => editor.chain().focus().setRowAttribute('height', v ?? null).run()} />
+        行高 <LengthInput value={info.rowHeight ?? ''} defaultUnit="cm" placeholder="自动" width={84} onChange={(v) => editor.chain().setRowAttribute('height', v ?? null).run()} />
       </label>
     </>
   );

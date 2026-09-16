@@ -224,6 +224,7 @@ async function compile(msg: Extract<ToWorker, { type: 'compile' }>) {
     try { world?.free(); } catch { /* 已经释放过 */ }
     // sys.inputs.preview：main.typ 里预览专用的东西（空行上的隐形 ¶）只在这儿生效，PDF 不带
     world = raw.snapshot(undefined, '/main.typ', [['preview', '1']]);
+    if (msg.force && incr) { incr.free(); incr = null; }
     if (!incr) { incr = raw.create_incr_server(); incrFresh = true; }
     const res = world.incr_compile(incr, 3); // 3 = full diagnostics；结果是与上一版的差
     // 成功那一支只带 result，诊断（警告）另问一次——编译结果是缓存的，不重编

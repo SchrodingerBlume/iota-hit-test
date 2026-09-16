@@ -17,19 +17,18 @@ import {
   BookmarkAdd20Regular, Spacebar20Regular, DocumentPageBreak20Regular, Omega20Regular, ArrowEnter20Regular, Book20Regular, Link20Regular, Library20Regular, DocumentTableSearch20Regular,
   TextGrammarSettings20Regular, TableStackAbove20Regular, TableStackBelow20Regular, TableDeleteRow20Regular, TableStackLeft20Regular, TableStackRight20Regular, TableDeleteColumn20Regular,
   TableCellsMerge20Regular, TableFreezeRow20Regular, TableDismiss20Regular, PanelLeftContract20Regular, PanelLeftExpand20Regular, PanelLeft20Regular, LayoutColumnTwo20Regular, PanelRight20Regular,
-  ZoomIn20Regular, ZoomOut20Regular, AutoFitWidth20Regular, AutoFitHeight20Regular, Settings20Regular, Info20Regular, ChevronUp20Regular, ChevronDown20Regular, ChevronLeft20Regular, ChevronRight20Regular, Dismiss20Regular, Pin20Regular, Grid20Regular, Navigation20Regular, TextParagraph20Regular,
-  Document20Regular, DocumentMultiple20Regular, Translate20Regular, ImageEdit20Regular, Delete20Regular, TableSimple20Regular, ClipboardTextLtr20Regular,
+  ChevronUp20Regular, ChevronDown20Regular, ChevronLeft20Regular, ChevronRight20Regular, Dismiss20Regular, Pin20Regular, Grid20Regular, TextParagraph20Regular,
+  Translate20Regular, ImageEdit20Regular, Delete20Regular, TableSimple20Regular, ClipboardTextLtr20Regular,
   CommentAdd20Regular, CommentDismiss20Regular, Comment20Regular, TextBulletListSquare20Regular,
 } from '@fluentui/react-icons';
-import { useStore, type RichKey } from '../model/store';
+import { useStore } from '../model/store';
 import { getEditor, getEditorMeta, onRegistryChange } from '../editor/registry';
 import { usePreviewSurface, usePreviewMarks } from './PreviewEditLayer';
 import { useBlockMenu } from '../editor/BlockMenu';
-import { usePreviewZoom } from './previewZoom';
 import { B, Sep, useEditorTick, useInsertActions, TableAlignTools, FontSizeTool, refocusPreviewAfter } from '../editor/tools';
 import { searchKey, selectCurrentMatch } from '../editor/extensions/Search';
 import { levelLabels } from '../typst/numbering';
-import { ThesisTab, LayoutTab, PagesTab, ChoiceMenu } from './RibbonSettings';
+import { ChoiceMenu } from './RibbonSettings';
 import { useEditorEnv } from '../editor/env';
 import { useOpenRequest } from '../editor/openRequest';
 import { useMedia, SHORT } from './useMedia';
@@ -44,26 +43,21 @@ const FITS = [{ value: 'content', label: '根据内容', hint: '列宽按内容�
 
 /** 图 / 表的浮动与跨页选项（模板：placement 交给 Typst；跨页走 show figure.where(kind:): set block(breakable:)） */
 const PLACEMENTS = [{ value: 'none', label: '不浮动', hint: '跟着文字排' }, { value: 'auto', label: '自动', hint: '本页顶或底，就近' }, { value: 'top', label: '页顶' }, { value: 'bottom', label: '页底' }];
-const BREAK_IMAGE = [{ value: 'auto', label: 'Auto→不拆', hint: '模板默认，图与题注一整块' }, { value: 'true', label: '允许', hint: '按指南排「续图」' }, { value: 'false', label: '不允许' }];
-const BREAK_TABLE = [{ value: 'auto', label: 'Auto→允许', hint: '模板默认，续页注「续表」' }, { value: 'true', label: '允许' }, { value: 'false', label: '不允许', hint: '整张不拆，放不下就整张挪到下页' }];
+const BREAK_IMAGE = [{ value: 'auto', label: '自动：不拆', hint: '模板默认，图与题注一整块' }, { value: 'true', label: '允许', hint: '按指南排「续图」' }, { value: 'false', label: '不允许' }];
+const BREAK_TABLE = [{ value: 'auto', label: '自动：允许', hint: '模板默认，续页注「续表」' }, { value: 'true', label: '允许' }, { value: 'false', label: '不允许', hint: '整张不拆，放不下就整张挪到下页' }];
 
 type LayoutMode = 'editor' | 'split' | 'preview';
-type TabKey = 'home' | 'insert' | 'thesis' | 'layout' | 'pages' | 'cite' | 'review' | 'table' | 'figure' | 'view';
+type TabKey = 'home' | 'insert' | 'cite' | 'review' | 'table' | 'figure' | 'view';
 const CTX_TABS: TabKey[] = ['table', 'figure'];
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'home', label: '开始' },
   { key: 'insert', label: '插入' },
-  { key: 'thesis', label: '论文' },
-  { key: 'layout', label: '版式' },
-  { key: 'pages', label: '页面' },
   { key: 'cite', label: '引用' },
   { key: 'review', label: '审阅' },
   { key: 'table', label: '表格工具' },
   { key: 'figure', label: '图片工具' },
   { key: 'view', label: '视图' },
 ];
-/** 外面（视图页的按钮、文件菜单）要切到某一页 */
-export const useRibbonTab = create<{ req: TabKey | null; go: (t: TabKey) => void }>((set) => ({ req: null, go: (t) => set({ req: t }) }));
 const COLLAPSE_KEY = 'iota4web-ribbon-collapsed-v2';
 
 /** 查找栏开关，⌘F 也从这儿开 */
@@ -94,7 +88,6 @@ export interface RibbonLayout {
 
 export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonLayout; leading?: ReactNode; trailing?: ReactNode; minimal?: boolean }) {
   const activeKey = usePreviewSurface((s) => s.activeKey);
-  const section = useStore((s) => s.section);
   const settings = useStore((s) => s.doc.settings);
   const levels = levelLabels(settings);
   const [editor, setEditor] = useState<Editor | null>(null);
@@ -151,11 +144,11 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
     const list = comments.filter((c) => c.key === activeKey);
     if (!list.length) return;
     const i = list.findIndex((c) => c.id === activeCommentId);
-    const next = list[(i + dir + list.length) % list.length];
+    const next = list[i < 0 ? (dir === 1 ? 0 : list.length - 1) : (i + dir + list.length) % list.length];
     const r = commentRange(next.key, next.id);
     if (r && ed) { ed.chain().focus().setTextSelection(r).run(); useComments.getState().setActive(next.id); }
   };
-  /** 换一张图（图片工具页） */
+  /** 更改图片（图片工具页） */
   const replaceImage = () => {
     const input = document.createElement('input');
     input.type = 'file'; input.accept = 'image/png,image/jpeg,image/svg+xml,image/gif';
@@ -172,13 +165,10 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const headings = !!ed?.schema.nodes.heading;
   const blocks = meta?.blocks !== false;
   const none = !ed;
-  const zoom = usePreviewZoom();
   const marksOn = usePreviewMarks((s) => s.on);
   const toggleMarks = usePreviewMarks((s) => s.toggle);
   const chain = () => ed!.chain().focus();
   const findOpen = useFindBar((s) => s.open);
-  const tabReq = useRibbonTab((s) => s.req);
-  useEffect(() => { if (tabReq) { setTab(tabReq); setAutoTable(false); if (collapsed) setPeek(true); useRibbonTab.setState({ req: null }); } /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [tabReq]);
 
   // 收起 / 展开：单击选项卡只切页（Word 也是），收起靠双击或右端的箭头
   const toggleCollapsed = (v: boolean) => { setCollapsed(v); setPeek(false); try { localStorage.setItem(COLLAPSE_KEY, v ? '1' : '0'); } catch { /* */ } };
@@ -278,12 +268,6 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bodyVisible]);
 
-  const where = tab === 'thesis' || tab === 'layout' || tab === 'pages'
-    ? '改的是整份论文的设置，即时重排'
-    : none
-      ? (section === 'info' ? '这一页是表单，功能区管不着' : '点一下正文或预览里的字，功能区就活了')
-      : `编辑：${KEY_NAME[activeKey!] ?? ''}${usePreviewSurface.getState().focused ? '（在预览里）' : ''}`;
-
   const symbolPop = (id: 'symbol' | 'symbol2', big: boolean) => (
     <Popover open={pop === id} onOpenChange={(_, d) => setPop(d.open ? id : null)} positioning="below-start" trapFocus={false}>
       <PopoverTrigger disableButtonEnhancement>
@@ -291,7 +275,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
       </PopoverTrigger>
       <PopoverSurface className="rb-symbols">
         {QUICK_SYMBOLS.map((ch) => <button key={ch} type="button" className="rb-sym" title={`${ch}${SYMBOL_BY_CHAR.get(ch) ? `  sym.${SYMBOL_BY_CHAR.get(ch)!.n}${SYMBOL_BY_CHAR.get(ch)!.l ? ' · ' + SYMBOL_BY_CHAR.get(ch)!.l : ''}` : ''}`} onMouseDown={(e) => e.preventDefault()} onClick={() => { chain().insertContent(ch).run(); setPop(null); afterCommand(); }}>{ch}</button>)}
-        <div className="rb-pop-menu"><button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setPop(null); useSymbolPicker.getState().setOpen(true); }}><Omega20Regular />更多符号…<span className="muted">（Typst 全表，可搜）</span></button></div>
+        <div className="rb-pop-menu"><button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setPop(null); useSymbolPicker.getState().setOpen(true); }}><Omega20Regular />更多符号…</button></div>
       </PopoverSurface>
     </Popover>
   );
@@ -308,7 +292,6 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
             ))}
           </TabList>
         )}
-        <span className="rb-where">{minimal ? '' : where}</span>
         {trailing}
         {collapsed && peek && !shortScreen && <Button size="small" appearance="primary" icon={<Pin20Regular />} className="rb-pin" onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(false)}>固定</Button>}
         {!minimal && !shortScreen && (
@@ -351,8 +334,6 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                     <B title="等宽代码" icon={<Code20Regular />} on={!!ed?.isActive('code')} disabled={none} run={() => chain().toggleCode().run()} />
                     <B title="清除格式" icon={<ClearFormatting20Regular />} disabled={none} run={() => chain().unsetAllMarks().run()} />
                     <Sep />
-                    <B title="行内公式" icon={<MathFormula20Regular />} disabled={none} run={() => ins.insertInline('mathInline')} />
-                    {symbolPop('symbol', false)}
                   </Row>
                 </Rows>
               </Group>
@@ -414,7 +395,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                 <B title="插图…（也可以直接把图片粘贴进正文）" big icon={<Image20Regular />} disabled={none || !blocks} run={ins.insertFigure}>图片</B>
               </Group>
               <Group label="链接">
-                <B title="插入 / 编辑链接（⌘K）：网址与显示的文本，排成 #link" big icon={<Link20Regular />} disabled={none} run={() => useLinkDialog.getState().open()}>链接</B>
+                <B title="插入链接（⌘K）" big icon={<Link20Regular />} disabled={none} run={() => useLinkDialog.getState().open()}>链接</B>
               </Group>
               <Group label="公式">
                 <B title="行间公式（编号）" big icon={<MathFormula20Regular />} disabled={none || !blocks} run={ins.insertEquation}>公式</B>
@@ -435,43 +416,37 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               </Group>
               <Group label="文本">
                 <Stack>
-                  <B title="脚注" icon={<TextFootnote20Regular />} disabled={none} run={() => ins.insertInline('footnote')}>脚注</B>
-                  <B title="索引词（登记进索引页）" icon={<BookmarkAdd20Regular />} disabled={none} run={() => ins.insertInline('idx')}>索引词</B>
                   <B title="空一个汉字宽" icon={<Spacebar20Regular />} disabled={none} run={() => ins.insertInline('ccwd', { n: 1 })}>空格</B>
                 </Stack>
               </Group>
             </>
           )}
-          {tab === 'thesis' && <ThesisTab />}
-          {tab === 'layout' && <LayoutTab />}
-          {tab === 'pages' && <PagesTab />}
           {tab === 'cite' && (
             <>
               <Group label="目录">
-                <B title="目录由模板自动生成；排不排在「页面」页里设" big icon={<DocumentTableSearch20Regular />} run={() => useRibbonTab.getState().go('pages')}>目录</B>
+                <B title="目录设置" big icon={<DocumentTableSearch20Regular />} run={() => useStore.getState().setSection('pages')}>目录</B>
               </Group>
               <Group label="引文与书目">
                 <B title="引用参考文献" big icon={<Book20Regular />} disabled={none} run={() => ins.insertInline('cite')}>插入引文</B>
                 <Stack>
-                  <B title="到「参考文献」页登记条目（像 Zotero 那样逐字段填，或导入 .bib）" icon={<Library20Regular />} run={() => useStore.getState().setSection('bibliography')}>管理文献</B>
+                  <B title="管理参考文献" icon={<Library20Regular />} run={() => useStore.getState().setSection('bibliography')}>管理源</B>
                   <B title="到「成果」页登记攻读期间的成果" icon={<TextGrammarSettings20Regular />} run={() => useStore.getState().setSection('achievements')}>成果</B>
                 </Stack>
               </Group>
               <Group label="题注">
                 <B title="交叉引用图 / 表 / 式 / 节" big icon={<Link20Regular />} disabled={none} run={() => ins.insertInline('ref')}>交叉引用</B>
-                <span className="rb-note">题注在图、表底下直接写；编号由模板算</span>
               </Group>
               <Group label="缩略语与符号">
                 <B title="缩略语（首次出现自动展开）" big icon={<span className="rb-glyph">Ab</span>} disabled={none} run={() => ins.insertInline('abbr')}>缩略语</B>
                 <Stack>
-                  <B title="到「符号与缩略语」页登记" icon={<MathSymbols20Regular />} run={() => useStore.getState().setSection('nomenclature')}>登记</B>
+                  <B title="到「符号与缩略语」页登记" icon={<MathSymbols20Regular />} run={() => useStore.getState().setSection('nomenclature')}>管理缩略语</B>
                   <B title="脚注" icon={<TextFootnote20Regular />} disabled={none} run={() => ins.insertInline('footnote')}>脚注</B>
                 </Stack>
               </Group>
               <Group label="索引">
                 <B title="标记索引词（登记进索引页）" big icon={<BookmarkAdd20Regular />} disabled={none} run={() => ins.insertInline('idx')}>标记条目</B>
                 <Stack>
-                  <B title="索引页排不排在「页面」页里设" icon={<Grid20Regular />} run={() => useRibbonTab.getState().go('pages')}>插入索引</B>
+                  <B title="索引设置" icon={<Grid20Regular />} run={() => useStore.getState().setSection('index')}>索引设置</B>
                 </Stack>
               </Group>
             </>
@@ -479,23 +454,20 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
           {tab === 'review' && (
             <>
               <Group label="批注">
-                <B title="给选中的文字加一条批注（Word 的「新建批注」）；没选中就批注光标所在的词" big icon={<CommentAdd20Regular />} disabled={none} run={newComment}>新建批注</B>
+                <B title="新建批注" big icon={<CommentAdd20Regular />} disabled={none} run={newComment}>新建批注</B>
                 <Stack>
                   <B title="删除光标所在的批注" icon={<CommentDismiss20Regular />} disabled={!activeComment} run={() => { const c = activeComment; if (c) { chain().unsetComment(c.id).run(); useStore.getState().setComments(comments.filter((x) => x.id !== c.id)); } }}>删除</B>
-                  <B title="上一条批注" icon={<ChevronUp20Regular />} disabled={!comments.length} run={() => stepComment(-1)}>上一条</B>
-                  <B title="下一条批注" icon={<ChevronDown20Regular />} disabled={!comments.length} run={() => stepComment(1)}>下一条</B>
+                  <B title="上一条批注" icon={<ChevronUp20Regular />} disabled={!comments.some((c) => c.key === activeKey)} run={() => stepComment(-1)}>上一条</B>
+                  <B title="下一条批注" icon={<ChevronDown20Regular />} disabled={!comments.some((c) => c.key === activeKey)} run={() => stepComment(1)}>下一条</B>
                 </Stack>
               </Group>
               <Group label="面板">
-                <B title="显示 / 隐藏批注面板（右侧一栏，像 Word 的批注窗格）" big icon={<Comment20Regular />} on={commentsOpen} run={() => useComments.getState().setOpen(!commentsOpen)}>批注面板</B>
+                <B title="显示或隐藏批注窗格" big icon={<Comment20Regular />} on={commentsOpen} run={() => useComments.getState().setOpen(!commentsOpen)}>批注窗格</B>
               </Group>
               <Group label="审阅者">
                 <span className="rb-keep rb-inline">
-                  <Input size="small" value={reviewer} placeholder="姓名（写进批注）" onChange={(_, d) => useComments.getState().setAuthor(d.value)} style={{ width: 140 }} />
+                  <Input size="small" value={reviewer} placeholder="审阅者姓名" onChange={(_, d) => useComments.getState().setAuthor(d.value)} style={{ width: 140 }} />
                 </span>
-              </Group>
-              <Group label="提示">
-                <span className="rb-hint"><Navigation20Regular />批注随工程文件（文件 → 保存工程）一起走：老师导入、写批注、再导出，学生导入就看得见；PDF 里不印</span>
               </Group>
             </>
           )}
@@ -504,21 +476,21 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               <Group label="行与列">
                 <Rows>
                   <Row>
-                    <B title="上方插行" icon={<TableStackAbove20Regular />} disabled={!inTable} run={() => chain().addRowBefore().run()} />
-                    <B title="下方插行" icon={<TableStackBelow20Regular />} disabled={!inTable} run={() => chain().addRowAfter().run()} />
-                    <B title="删行" icon={<TableDeleteRow20Regular />} disabled={!inTable} run={() => chain().deleteRow().run()} />
+                    <B title="在上方插入行" icon={<TableStackAbove20Regular />} disabled={!inTable} run={() => chain().addRowBefore().run()} />
+                    <B title="在下方插入行" icon={<TableStackBelow20Regular />} disabled={!inTable} run={() => chain().addRowAfter().run()} />
+                    <B title="删除行" icon={<TableDeleteRow20Regular />} disabled={!inTable} run={() => chain().deleteRow().run()} />
                   </Row>
                   <Row>
-                    <B title="左侧插列" icon={<TableStackLeft20Regular />} disabled={!inTable} run={() => chain().addColumnBefore().run()} />
-                    <B title="右侧插列" icon={<TableStackRight20Regular />} disabled={!inTable} run={() => chain().addColumnAfter().run()} />
-                    <B title="删列" icon={<TableDeleteColumn20Regular />} disabled={!inTable} run={() => chain().deleteColumn().run()} />
+                    <B title="在左侧插入列" icon={<TableStackLeft20Regular />} disabled={!inTable} run={() => chain().addColumnBefore().run()} />
+                    <B title="在右侧插入列" icon={<TableStackRight20Regular />} disabled={!inTable} run={() => chain().addColumnAfter().run()} />
+                    <B title="删除列" icon={<TableDeleteColumn20Regular />} disabled={!inTable} run={() => chain().deleteColumn().run()} />
                   </Row>
                 </Rows>
               </Group>
               <Group label="合并">
                 <Stack>
                   <B title="合并 / 拆分单元格" icon={<TableCellsMerge20Regular />} disabled={!inTable} run={() => chain().mergeOrSplit().run()}>合并 / 拆分</B>
-                  <B title="表头行切换" icon={<TableFreezeRow20Regular />} disabled={!inTable} run={() => chain().toggleHeaderRow().run()}>表头行</B>
+                  <B title="标题行" icon={<TableFreezeRow20Regular />} disabled={!inTable} run={() => chain().toggleHeaderRow().run()}>标题行</B>
                   <B title="删除整张表" icon={<TableDismiss20Regular />} disabled={!inTable} run={() => chain().deleteTable().run()}>删除表格</B>
                 </Stack>
               </Group>
@@ -567,12 +539,12 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               <Group label="题注">
                 <Stack>
                   <B title="编辑题注" icon={<TextDescription20Regular />} run={() => { const pos = ed.state.selection.from; useOpenRequest.getState().request({ key: activeKey!, pos, attr: 'caption' }); }}>题注</B>
-                  <B title="编辑英文题注" icon={<Translate20Regular />} run={() => { const pos = ed.state.selection.from; useOpenRequest.getState().request({ key: activeKey!, pos, attr: 'captionEn' }); }}>English</B>
+                  <B title="编辑英文题注" icon={<Translate20Regular />} run={() => { const pos = ed.state.selection.from; useOpenRequest.getState().request({ key: activeKey!, pos, attr: 'captionEn' }); }}>英文题注</B>
                 </Stack>
               </Group>
               <Group label="图片">
                 <Stack>
-                  <B title="换一张图" icon={<ImageEdit20Regular />} run={replaceImage}>换图</B>
+                  <B title="更改图片" icon={<ImageEdit20Regular />} run={replaceImage}>更改图片</B>
                   <B title="删除插图" icon={<Delete20Regular />} run={() => chain().deleteSelection().run()}>删除</B>
                 </Stack>
               </Group>
@@ -582,36 +554,17 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
             <>
               <Group label="视图">
                 <B title="只看编辑" big icon={<PanelLeft20Regular />} on={layout.mode === 'editor'} run={() => layout.setMode('editor')}>编辑</B>
-                <B title="编辑 + 预览" big icon={<LayoutColumnTwo20Regular />} on={layout.mode === 'split'} run={() => layout.setMode('split')}>分栏</B>
+                <B title="编辑 + 预览" big icon={<LayoutColumnTwo20Regular />} on={layout.mode === 'split'} run={() => layout.setMode('split')}>并排查看</B>
                 <B title="只看预览" big icon={<PanelRight20Regular />} on={layout.mode === 'preview'} run={() => layout.setMode('preview')}>预览</B>
               </Group>
               <Group label="显示">
                 <Stack>
-                  <B title={layout.navOpen ? '收起左栏' : '展开左栏'} icon={layout.navOpen ? <PanelLeftContract20Regular /> : <PanelLeftExpand20Regular />} on={layout.navOpen} run={() => layout.setNavOpen(!layout.navOpen)}>导航栏</B>
-                  <B title="论文设置（校区、学位、阶段……）在「论文」页" icon={<Settings20Regular />} run={() => useRibbonTab.getState().go('thesis')}>论文设置</B>
-                  <B title="元信息（题目、作者、导师……）" icon={<Info20Regular />} run={() => useStore.getState().setSection('info')}>元信息</B>
+                  <B title={layout.navOpen ? '收起左栏' : '展开左栏'} icon={layout.navOpen ? <PanelLeftContract20Regular /> : <PanelLeftExpand20Regular />} on={layout.navOpen} run={() => layout.setNavOpen(!layout.navOpen)}>导航窗格</B>
                 </Stack>
-                <B title="显示 / 隐藏编辑标记（Word 的 ¶）：编辑区与预览里每段末尾、空回车段上画 ¶" big icon={<TextParagraph20Regular />} on={marksOn} run={toggleMarks}>编辑标记</B>
+                <B title="显示或隐藏段落标记" big icon={<TextParagraph20Regular />} on={marksOn} run={toggleMarks}>显示/隐藏 ¶</B>
               </Group>
               <Group label="编辑区字号">
                 <span className="rb-keep rb-inline"><FontSizeTool /></span>
-              </Group>
-              <Group label="预览缩放">
-                <span className="rb-keep rb-inline">
-                  <B title="缩小（触控板捏合、⌘/Ctrl + 滚轮也行）" icon={<ZoomOut20Regular />} run={() => zoom.zoomBy(1 / 1.1)} />
-                  <B title="回到 100%" run={() => zoom.zoomTo(1)}><span style={{ minWidth: 40, display: 'inline-block', textAlign: 'center' }}>{Math.round(zoom.zoom * 100)}%</span></B>
-                  <B title="放大" icon={<ZoomIn20Regular />} run={() => zoom.zoomBy(1.1)} />
-                  <B title="适宽" icon={<AutoFitWidth20Regular />} run={() => zoom.zoomTo(1)} />
-                  <B title="整页：一页正好放进视口" icon={<AutoFitHeight20Regular />} run={() => zoom.fitPage()} />
-                </span>
-              </Group>
-              <Group label="页面布局">
-                <B title="每行一页" big icon={<Document20Regular />} on={zoom.perRow === 1} run={() => zoom.setPerRow(1)}>单页</B>
-                <B title="每行两页（像翻开的书）" big icon={<DocumentMultiple20Regular />} on={zoom.perRow === 2} run={() => zoom.setPerRow(2)}>双页</B>
-                <B title="每行三页" big icon={<Grid20Regular />} on={zoom.perRow === 3} run={() => zoom.setPerRow(3)}>三页</B>
-              </Group>
-              <Group label="提示">
-                <span className="rb-hint"><Navigation20Regular />预览里点哪儿光标落哪儿，直接打字；功能区的按钮对预览里的选区同样生效</span>
               </Group>
             </>
           )}
@@ -672,21 +625,19 @@ function FindBar({ editor }: { editor: Editor | null }) {
     editor.view.dispatch(tr);
   };
   return (
-    <div className="findbar" onKeyDown={(e) => { if (e.key === 'Escape') close(); }}>
-      <Input ref={input} size="small" contentBefore={<Search20Regular />} value={q} placeholder="查找" onChange={(_, d) => setQ(d.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); step(e.shiftKey ? -1 : 1); } }} className="findbar-input" />
+    <div className="findbar" onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Escape') close(); }}>
+      <Input ref={input} size="small" contentBefore={<Search20Regular />} value={q} placeholder="查找" onChange={(_, d) => setQ(d.value)} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); step(e.shiftKey ? -1 : 1); } }} className="findbar-input" />
       <span className="findbar-count">{q ? (n ? `${(st!.current % n) + 1} / ${n}` : '无结果') : ''}</span>
       <Button size="small" appearance="subtle" icon={<ChevronLeft20Regular />} title="上一个 (⇧Enter)" disabled={!n} onClick={() => step(-1)} />
       <Button size="small" appearance="subtle" icon={<ChevronRight20Regular />} title="下一个 (Enter)" disabled={!n} onClick={() => step(1)} />
       <Checkbox size="medium" label="区分大小写" checked={cs} onChange={(_, d) => setCs(!!d.checked)} />
       <Sep />
-      <Input size="small" contentBefore={<ArrowSwap20Regular />} value={rep} placeholder="替换为" onChange={(_, d) => setRep(d.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); replaceOne(); } }} className="findbar-input" />
+      <Input size="small" contentBefore={<ArrowSwap20Regular />} value={rep} placeholder="替换为" onChange={(_, d) => setRep(d.value)} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); replaceOne(); } }} className="findbar-input" />
       <Button size="small" disabled={!n} onClick={replaceOne}>替换</Button>
       <Button size="small" disabled={!n} onClick={replaceAll}>全部替换</Button>
       <span className="spacer" />
-      {!editor && <span className="muted" style={{ fontSize: 12 }}>先点一下正文</span>}
+      {!editor && <span className="muted" style={{ fontSize: 12 }}>请先选择要查找的文本区域</span>}
       <Button size="small" appearance="subtle" icon={<Dismiss20Regular />} title="关闭 (Esc)" onClick={close} />
     </div>
   );
 }
-
-const KEY_NAME: Record<RichKey, string> = { body: '正文', appendix: '附录', conclusion: '结论', abstractZh: '中文摘要', abstractEn: '英文摘要', acknowledgement: '致谢', resume: '个人简历' };

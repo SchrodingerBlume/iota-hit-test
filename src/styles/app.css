@@ -1019,3 +1019,12 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .rb-tri.is-auto .rb-tri-val.is-on, .rb-tri.is-auto .rb-tri-val.is-off { color: #b55e00; }
 .rb-dialog { max-width: 720px; }
 .rb-dialog .card { box-shadow: none; margin-bottom: 0; }
+
+/* Preview controls wrap instead of clipping on narrow panes. */
+.preview { grid-template-rows: auto minmax(0, 1fr); }
+.preview .pane-bar { position: relative; flex-wrap: wrap; padding-block: 6px; min-height: 38px; }
+.preview .pane-bar .btn { flex-shrink: 0; }
+.triseg-seg button.auto.on,
+.triseg-seg button.on.t-on,
+.triseg-seg button.on.t-off { background: var(--accent); color: #fff; }
+.preview .pane-bar .preview-progress { top: auto; bottom: 0; }

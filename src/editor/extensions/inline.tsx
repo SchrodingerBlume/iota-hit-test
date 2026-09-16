@@ -200,7 +200,7 @@ function IdxView({ node, updateAttributes, selected, deleteNode, editor, getPos 
     <InlineChip kind="idx" openNonce={open.nonce} text={text || <em>索引词</em>} title="登记进索引页的词（正文里照常印出）" selected={selected} editable={editor.isEditable} autoOpen={!text} onDelete={deleteNode}>
       {(close) => (
         <Field label="索引词" hint="印在正文里，同时登记进索引页（要排索引页记得在「页面开关」里打开）">
-          <input autoFocus value={text} onChange={(e) => updateAttributes({ text: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); close(); } }} />
+          <input autoFocus value={text} onChange={(e) => updateAttributes({ text: e.target.value })} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); close(); } }} />
         </Field>
       )}
     </InlineChip>

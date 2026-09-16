@@ -78,7 +78,7 @@ export function TableTextDialog({ onInsert, onClose }: { onInsert: (text: string
         <DialogBody>
           <DialogTitle action={<DialogTrigger action="close"><Button appearance="subtle" icon={<Dismiss20Regular />} /></DialogTrigger>}>从文本 / Markdown 插入表格</DialogTitle>
           <DialogContent>
-            <p className="muted style-hint">粘一段 Markdown 表格（GFM，`|` 分列、`---` 分隔行、`:---:` 定对齐），或 Excel 复制来的制表符分隔行、CSV。单元格里的 **粗体**、*斜体*、`代码`、$公式$ 会照样转。</p>
+            <p className="muted style-hint">粘贴 Excel 单元格、CSV 或 Markdown 表格。</p>
             <Textarea value={text} onChange={(_, d) => setText(d.value)} placeholder={EXAMPLE} rows={9} resize="vertical" className="table-text-input" autoFocus spellCheck={false} />
             <div className="style-row" style={{ marginTop: 8, justifyContent: 'space-between' }}>
               <Checkbox label="第一行是表头" checked={parsed ? (parsed.header || header) : header} disabled={!!parsed?.header} onChange={(_, d) => setHeader(!!d.checked)} />

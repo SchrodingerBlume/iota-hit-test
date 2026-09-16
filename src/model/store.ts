@@ -4,6 +4,7 @@ import { emptyDoc } from './types';
 import { defaultSettings } from './options';
 import { defaultInfo } from './info';
 import { saveProject, loadProject, deleteProjectRecord, allProjects, getActiveProjectId, setActiveProjectId, loadLegacyDoc, clearLegacyDoc, setImageNamespace, saveImage, loadImage, listImageKeys, copyImageRaw, deleteImageKey } from './persist';
+import { clearImageCache } from '../editor/imageCache';
 import { sampleDoc, SAMPLE_IMAGE } from './sample';
 import { parseBibtex, type BibEntry } from '../bib/bibtex';
 
@@ -120,6 +121,7 @@ interface State {
   setImages: (images: ImageAsset[]) => void;
   /** 打开工程文件：并入当前项目（保留 id） */
   replaceDoc: (doc: ThesisDoc) => void;
+  importProject: (doc: ThesisDoc, images: { name: string; blob: Blob }[]) => Promise<void>;
   load: () => Promise<void>;
   refreshProjects: () => Promise<void>;
   openProject: (id: string) => Promise<void>;
@@ -159,6 +161,7 @@ export const useStore = create<State>((set, get) => {
     scheduleSave(doc);
   };
   const activate = async (doc: ThesisDoc) => {
+    clearImageCache();
     setImageNamespace(doc.id);
     await setActiveProjectId(doc.id);
     set({ doc, view: 'editor', section: 'body', loaded: true });
@@ -166,7 +169,7 @@ export const useStore = create<State>((set, get) => {
   return {
     doc: newDoc(),
     section: 'body',
-    view: 'editor',
+    view: 'projects',
     projects: [],
     loaded: false,
     dirty: false,
@@ -188,6 +191,21 @@ export const useStore = create<State>((set, get) => {
       const cur = get().doc;
       const doc = normalizeDoc({ ...incoming, id: cur.id, name: incoming.name || cur.name });
       update(() => doc);
+    },
+
+    importProject: async (incoming, images) => {
+      await flushSave();
+      const doc = normalizeDoc({ ...incoming, id: crypto.randomUUID(), updatedAt: new Date().toISOString() });
+      try {
+        for (const image of images) await saveImage(image.name, image.blob, doc.id);
+        await saveProject(doc.id, doc);
+      } catch (error) {
+        await deleteProjectRecord(doc.id);
+        for (const key of await listImageKeys()) if (key.startsWith(`${doc.id}/`)) await deleteImageKey(key);
+        throw error;
+      }
+      await get().refreshProjects();
+      await activate(doc);
     },
 
     refreshProjects: async () => {
@@ -212,24 +230,21 @@ export const useStore = create<State>((set, get) => {
           await clearLegacyDoc();
         }
         await get().refreshProjects();
-        let projects = get().projects;
+        const projects = get().projects;
         if (!projects.length) {
-          // 第一次来：给一个样例项目
-          const sample = sampleDoc();
-          await saveProject(sample.id, sample);
-          await get().refreshProjects();
-          projects = get().projects;
+          set({ loaded: true, view: 'projects' });
+          return;
         }
         const activeId = (await getActiveProjectId()) ?? projects[0].id;
         const doc = (await loadProject<ThesisDoc>(activeId)) ?? (await loadProject<ThesisDoc>(projects[0].id));
         if (!doc) { set({ loaded: true, view: 'projects' }); return; }
         setImageNamespace(doc.id);
         if (doc.images.some((i) => i.name === SAMPLE_IMAGE)) await ensureSampleImage();
-        set({ doc: normalizeDoc(doc), loaded: true, view: 'editor' });
+        set({ doc: normalizeDoc(doc), loaded: true, view: 'projects' });
         await setActiveProjectId(doc.id);
       } catch (e) {
         console.error('[iota4web] 读取工程失败', e);
-        set({ doc: sampleDoc(), loaded: true, view: 'projects' });
+        set({ loaded: true, view: 'projects' });
       }
       })();
       return loadOnce;
@@ -258,6 +273,7 @@ export const useStore = create<State>((set, get) => {
     },
 
     renameProject: async (id, name) => {
+      await flushSave();
       const doc = id === get().doc.id ? get().doc : await loadProject<ThesisDoc>(id);
       if (!doc) return;
       const next = { ...doc, name: name.trim() || doc.name, updatedAt: new Date().toISOString() };
@@ -267,13 +283,14 @@ export const useStore = create<State>((set, get) => {
     },
 
     deleteProject: async (id) => {
+      await flushSave();
       await deleteProjectRecord(id);
       for (const key of await listImageKeys()) if (key.startsWith(`${id}/`)) await deleteImageKey(key);
       await get().refreshProjects();
       if (id === get().doc.id) {
         const next = get().projects[0];
         if (next) await get().openProject(next.id);
-        else { set({ view: 'projects' }); }
+        else { clearImageCache(); set({ doc: newDoc(), view: 'projects', dirty: false }); }
       }
     },
 

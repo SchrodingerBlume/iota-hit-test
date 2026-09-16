@@ -63,6 +63,8 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   /** 上下方向键记住的横坐标 */
   const goalX = useRef<number | null>(null);
   const [cursor, setCursor] = useState('');
+  const compositionActive = useRef(false);
+  const compositionCommit = useRef<string | null>(null);
   const [composing, setComposing] = useState<string | null>(null);
   const [pending, setPending] = useState<{ key: RichKey; version: number; text: string; fading?: boolean } | null>(null);
   const [geom, setGeom] = useState<PageGeom[]>([]);
@@ -245,7 +247,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
 
   const focusInput = () => inputRef.current?.focus({ preventScroll: true });
 
-  /** 一个「属性」字形（题注、脚注文字、元信息）：把对应的输入框打开、光标放到那个字 */
+  /** 一个「属性」字形（题注、脚注文字、论文信息）：把对应的输入框打开、光标放到那个字 */
   const openAttr = async (g: Glyph, side: 'before' | 'after') => {
     const offset = side === 'before' ? g.from : g.to;
     if (g.kind === 'info') {
@@ -444,16 +446,16 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (!editor || !activeKey) return;
-    if (e.nativeEvent.isComposing || composing !== null) return;
+    if (e.nativeEvent.isComposing || e.keyCode === 229 || composing !== null) return;
     const mod = isMac ? e.metaKey : e.ctrlKey;
     const ed = editor;
     const k = e.key;
     if (k !== 'ArrowUp' && k !== 'ArrowDown') goalX.current = null;
     if (k === 'Escape') { inputRef.current?.blur(); return; }
-    if (k === 'ArrowLeft' || k === 'ArrowRight') { e.preventDefault(); moveH(ed, k === 'ArrowLeft' ? -1 : 1, e.shiftKey, e.altKey || (!isMac && e.ctrlKey)); return; }
-    if (k === 'ArrowUp' || k === 'ArrowDown') { e.preventDefault(); moveV(ed, k === 'ArrowUp' ? -1 : 1, e.shiftKey); return; }
     if (k === 'Home' || (isMac && mod && k === 'ArrowLeft')) { e.preventDefault(); lineEdge(ed, 'start', e.shiftKey); return; }
     if (k === 'End' || (isMac && mod && k === 'ArrowRight')) { e.preventDefault(); lineEdge(ed, 'end', e.shiftKey); return; }
+    if (k === 'ArrowLeft' || k === 'ArrowRight') { e.preventDefault(); moveH(ed, k === 'ArrowLeft' ? -1 : 1, e.shiftKey, e.altKey || (!isMac && e.ctrlKey)); return; }
+    if (k === 'ArrowUp' || k === 'ArrowDown') { e.preventDefault(); moveV(ed, k === 'ArrowUp' ? -1 : 1, e.shiftKey); return; }
     if (k === 'PageUp' || k === 'PageDown') return; // 让滚动容器自己滚
     if (mod && (k === 'c' || k === 'x' || k === 'v')) return; // 交给 copy / cut / paste 事件
     if (mod && k === 'a') { e.preventDefault(); ed.commands.selectAll(); return; }
@@ -479,16 +481,26 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   const onInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
     const el = e.currentTarget;
     const ne = e.nativeEvent as InputEvent;
-    if (ne.isComposing || /Composition/i.test(ne.inputType ?? '')) return;
+    if (compositionActive.current || ne.isComposing) return;
+    // Some browsers emit one final input event after compositionend.
+    if (compositionCommit.current !== null && (ne.data === compositionCommit.current || /Composition/i.test(ne.inputType ?? ''))) {
+      compositionCommit.current = null;
+      el.value = '';
+      return;
+    }
+    compositionCommit.current = null;
     const text = el.value;
     el.value = '';
     if (!text || !editor || !activeKey) return;
     insertText(editor, text);
   };
-  const onCompositionStart = () => setComposing('');
+  const onCompositionStart = () => { compositionActive.current = true; compositionCommit.current = null; setComposing(''); };
   const onCompositionUpdate = (e: React.CompositionEvent<HTMLTextAreaElement>) => setComposing(e.data ?? '');
   const onCompositionEnd = (e: React.CompositionEvent<HTMLTextAreaElement>) => {
     const text = e.data ?? '';
+    compositionActive.current = false;
+    compositionCommit.current = text;
+    window.setTimeout(() => { compositionCommit.current = null; }, 0);
     setComposing(null);
     if (inputRef.current) inputRef.current.value = '';
     if (text && editor && activeKey) insertText(editor, text);
@@ -538,6 +550,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
         <div className={`pv-caret ${focused ? '' : 'is-idle'}`} style={{ left: caretLeft, top: caretPx.top, height: caretH }} />
       )}
       <textarea
+        key="preview-input"
         ref={inputRef}
         className="pv-input"
         style={caretPx ? { left: caretLeft, top: caretPx.top, height: Math.max(1, caretH) } : { left: 0, top: 0 }}

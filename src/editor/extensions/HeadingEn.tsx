@@ -41,7 +41,7 @@ function HeadingView({ node, updateAttributes, editor, getPos }: NodeViewProps) 
           placeholder="English title（博士双语目录用，可空）"
           disabled={!editable}
           onChange={(e) => updateAttributes({ en: e.target.value })}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
+          onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
         />
       </div>
     </NodeViewWrapper>

@@ -1,4 +1,4 @@
-// 批注面板（Word 右边那一栏）：每条批注一张卡，点卡片选中正文里那段；能回复、标记已解决、删除。
+// 批注窗格（Word 右边那一栏）：每条批注一张卡，点卡片选中正文里那段；能回复、标记已解决、删除。
 // 批注本体在 doc.comments，正文里的圈定是 comment 标记（data-comment-id）。
 import { useMemo, useState } from 'react';
 import { Button, Textarea, Input, Tooltip } from '@fluentui/react-components';
@@ -54,19 +54,19 @@ export function CommentsPane() {
       <div className="comments-head">
         <span><Comment20Regular />批注 <span className="muted">{here.length}</span></span>
         <Input size="small" value={author} placeholder="审阅者姓名" onChange={(_, d) => setAuthor(d.value)} style={{ width: 110 }} />
-        <Tooltip content="收起批注面板" relationship="label"><Button size="small" appearance="subtle" icon={<Dismiss20Regular />} onClick={() => setOpen(false)} /></Tooltip>
+        <Tooltip content="收起批注窗格" relationship="label"><Button size="small" appearance="subtle" icon={<Dismiss20Regular />} onClick={() => setOpen(false)} /></Tooltip>
       </div>
       {resolvedCount > 0 && <button type="button" className="comments-toggle" onClick={() => setShowResolved((v) => !v)}>{showResolved ? '隐藏' : '显示'}已解决的 {resolvedCount} 条</button>}
-      {!here.length && <p className="muted comments-empty">选中一段文字，按「审阅 → 新建批注」。批注随工程文件（.iota.json）一起保存，别人导入后也看得见。</p>}
+      {!here.length && <p className="muted comments-empty">此部分没有批注。</p>}
       {here.map((c) => (
         <div key={c.id} className={`comment-card ${active === c.id ? 'is-active' : ''} ${c.resolved ? 'is-resolved' : ''}`} onClick={() => jump(c)}>
           <div className="comment-meta"><b>{c.author || '（未署名）'}</b><span className="muted">{fmtTime(c.createdAt)}</span></div>
-          <Textarea className="comment-text" value={c.text} placeholder="写批注…" resize="vertical" rows={2} onClick={(e) => e.stopPropagation()} onChange={(_, d) => patch(c.id, { text: d.value })} />
+          <Textarea className="comment-text" value={c.text} placeholder="输入批注…" resize="vertical" rows={2} onClick={(e) => e.stopPropagation()} onChange={(_, d) => patch(c.id, { text: d.value })} />
           {c.replies?.map((r, i) => (
             <div key={i} className="comment-reply"><div className="comment-meta"><b>{r.author || '（未署名）'}</b><span className="muted">{fmtTime(r.createdAt)}</span></div><div>{r.text}</div></div>
           ))}
           <div className="comment-actions" onClick={(e) => e.stopPropagation()}>
-            <Input size="small" value={reply[c.id] ?? ''} placeholder="回复…" onChange={(_, d) => setReply({ ...reply, [c.id]: d.value })} onKeyDown={(e) => { if (e.key === 'Enter' && (reply[c.id] ?? '').trim()) { patch(c.id, { replies: [...(c.replies ?? []), { author, text: reply[c.id].trim(), createdAt: new Date().toISOString() }] }); setReply({ ...reply, [c.id]: '' }); } }} />
+            <Input size="small" value={reply[c.id] ?? ''} placeholder="回复…" onChange={(_, d) => setReply({ ...reply, [c.id]: d.value })} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter' && (reply[c.id] ?? '').trim()) { patch(c.id, { replies: [...(c.replies ?? []), { author, text: reply[c.id].trim(), createdAt: new Date().toISOString() }] }); setReply({ ...reply, [c.id]: '' }); } }} />
             <Tooltip content={c.resolved ? '重新打开' : '标为已解决'} relationship="label"><Button size="small" appearance="subtle" icon={c.resolved ? <ArrowUndo20Regular /> : <Checkmark20Regular />} onClick={() => patch(c.id, { resolved: !c.resolved })} /></Tooltip>
             <Tooltip content="删除批注" relationship="label"><Button size="small" appearance="subtle" icon={<Delete20Regular />} onClick={() => remove(c)} /></Tooltip>
           </div>

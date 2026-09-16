@@ -57,7 +57,7 @@ export const clearLegacyDoc = () => kv.del('doc', 'current');
 let activeProject = '';
 export const setImageNamespace = (projectId: string) => { activeProject = projectId; };
 const imgKey = (name: string) => `${activeProject}/${name}`;
-export const saveImage = (name: string, blob: Blob) => kv.set('images', imgKey(name), blob);
+export const saveImage = (name: string, blob: Blob, projectId = activeProject) => kv.set('images', `${projectId}/${name}`, blob);
 export const loadImage = (name: string) => kv.get<Blob>('images', imgKey(name));
 export const deleteImage = (name: string) => kv.del('images', imgKey(name));
 export const listImages = async () => (await kv.keys('images') as string[]).filter((k) => k.startsWith(`${activeProject}/`)).map((k) => k.slice(activeProject.length + 1));

@@ -25,7 +25,7 @@ import { EqDenote } from './extensions/eqdenote';
 import { useEditorEnv, NumberingContext, RichKeyContext } from './env';
 import { computeNumbering, type Part } from '../typst/numbering';
 import { useStore, type RichKey } from '../model/store';
-import { registerEditor, unregisterEditor } from './registry';
+import { registerEditor, unregisterEditor, getEditor } from './registry';
 import { B, Sep, useEditorTick, useInsertActions, useRichSize } from './tools';
 import { MirrorCaret, mirrorCaretKey } from './extensions/MirrorCaret';
 import { Search } from './extensions/Search';
@@ -84,7 +84,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
       NoIndentParagraph,
       ...(headings ? [HeadingEn] : []),
       Superscript, Subscript,
-      Placeholder.configure({ placeholder: placeholder ?? '在这里写……' }),
+      Placeholder.configure({ placeholder: placeholder ?? '输入文本…' }),
       TableKit.configure({ table: { resizable: true, cellMinWidth: 40 }, tableCell: false, tableHeader: false, tableRow: false }),
       AlignedTableCell, AlignedTableHeader, SizedTableRow, TableExtras,
       Figure, TableFigure, CodeFigure, Algorithm, Equation, PageBreak, EqDenote,
@@ -146,6 +146,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     if (lastEmitted.current === null) { lastEmitted.current = value; return; }
     if (value === lastEmitted.current) return;
     invalidatePositions();
+    lastEmitted.current = value;
     editor.commands.setContent(value, { emitUpdate: false });
   }, [editor, value]);
 
@@ -155,7 +156,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     registerEditor(richKey, editor, { blocks, headings });
     // 没有当前编辑器（或它已经没了）就把这份当作当前的，功能区才有东西可作用
     const cur = usePreviewSurface.getState().activeKey;
-    if (!cur || cur === richKey) usePreviewSurface.getState().set({ activeKey: richKey });
+    if (!cur || cur === richKey || !getEditor(cur)) usePreviewSurface.getState().set({ activeKey: richKey });
     const onFocus = () => usePreviewSurface.getState().set({ activeKey: richKey });
     editor.on('focus', onFocus);
     return () => { editor.off('focus', onFocus); unregisterEditor(richKey, editor); };

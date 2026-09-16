@@ -306,7 +306,7 @@ function ExtraAdder({ onAdd }: { onAdd: (k: string) => void }) {
   const [k, setK] = useState('');
   return (
     <span className="row">
-      <input className="input" style={{ width: 160 }} value={k} placeholder="字段名，如 series" onChange={(e) => setK(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))} onKeyDown={(e) => { if (e.key === 'Enter' && k) { onAdd(k); setK(''); } }} />
+      <input className="input" style={{ width: 160 }} value={k} placeholder="字段名，如 series" onChange={(e) => setK(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter' && k) { onAdd(k); setK(''); } }} />
       <button type="button" className="btn btn-xs" disabled={!k} onClick={() => { onAdd(k); setK(''); }}><Plus />加字段</button>
     </span>
   );

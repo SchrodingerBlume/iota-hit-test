@@ -15,7 +15,7 @@ export const GLYPH_STRIDE = 10;
 
 export type ToWorker =
   | { type: 'init'; baseUrl: string }
-  | { type: 'compile'; id: number; main: string; files: Record<string, string>; images: { name: string; data: ArrayBuffer }[]; removeImages: string[] }
+  | { type: 'compile'; id: number; force?: boolean; main: string; files: Record<string, string>; images: { name: string; data: ArrayBuffer }[]; removeImages: string[] }
   /** main：正式排版用的 main.typ（不带预览记号），与预览编的那份不同 */
   | { type: 'pdf'; id: number; main: string }
   /** 编一个 Typst 数学片段，给编辑器里的公式预览用 */

@@ -14,10 +14,11 @@ export function TagInput({ value, onChange, placeholder, dataInfo }: { value: st
 
   const commit = () => {
     const parts = draft.split(/[;；,，]/).map((s) => s.trim()).filter(Boolean);
-    if (parts.length) onChange([...value, ...parts.filter((p) => !value.includes(p))]);
+    if (parts.length) onChange([...value, ...new Set(parts.filter((p) => !value.includes(p)))]);
     setDraft('');
   };
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter' || e.key === ',' || e.key === '，' || e.key === ';' || e.key === '；') { e.preventDefault(); commit(); }
     else if (e.key === 'Backspace' && !draft && value.length) onChange(value.slice(0, -1));
   };

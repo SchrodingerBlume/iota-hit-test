@@ -1,4 +1,4 @@
-// 「字体方案」卡：站内开源字体 / 本机字体（windows 档）/ 本机字体（macos 档）。
+// 「字体方案」卡：内置字体 / 本机字体（windows 档）/ 本机字体（macos 档）。
 // 后两档要先把字读进来——Chromium 走 Local Font Access API 一键读，其余浏览器选文件。
 import { useStore } from '../model/store';
 import { useCompileState } from '../compiler/client';
@@ -6,9 +6,9 @@ import { useFontState, roleAvailability } from '../fonts/userFonts';
 import type { Fontset } from '../model/types';
 
 const CHOICES: { value: Fontset; label: string; hint: string }[] = [
-  { value: 'webapp', label: '站内开源字体', hint: 'Noto Serif/Sans CJK、FandolKai、TeX Gyre——随站分发，哪儿都能编，但不是模板对拍用的那套字' },
-  { value: 'windows', label: '本机字体 · Windows 档', hint: '中易宋黑楷仿 + Times New Roman / Arial / Consolas / Cambria Math。模板全部标定常数按这套量，与 Word 逐条对拍' },
-  { value: 'macos', label: '本机字体 · macOS 档', hint: 'Songti / Heiti / Kaiti SC + STFangsong + Times New Roman / Arial / Menlo / STIX Two Math' },
+  { value: 'webapp', label: '内置字体', hint: 'Noto CJK、FandolKai、TeX Gyre，无需另行安装' },
+  { value: 'windows', label: 'Windows 字体', hint: '宋体、黑体、楷体、Times New Roman 等，需加载本机字体' },
+  { value: 'macos', label: 'macOS 字体', hint: 'Songti / Heiti / Kaiti SC + STFangsong + Times New Roman / Arial / Menlo / STIX Two Math' },
 ];
 
 const fmtMB = (n: number) => (n / 1024 / 1024).toFixed(1);
@@ -40,7 +40,7 @@ export function FontCard() {
           <div className="row" style={{ marginTop: 10 }}>
             {canQuery
               ? <button type="button" className="btn btn-primary" disabled={!!busy || status !== 'ready'} onClick={() => void readLocal()}>读取本机字体</button>
-              : <span className="muted" style={{ fontSize: 12 }}>这个浏览器不能直接读系统字体（Chrome / Edge 桌面版才行），请选文件：</span>}
+              : <span className="muted" style={{ fontSize: 12 }}>当前浏览器不支持读取系统字体，请选择字体文件。</span>}
             <label className="btn">
               选择字体文件…
               <input type="file" hidden multiple accept=".otf,.ttf,.ttc,.otc" disabled={!!busy} onChange={(e) => { if (e.target.files?.length) void addFiles(e.target.files); e.target.value = ''; }} />
@@ -49,8 +49,7 @@ export function FontCard() {
           </div>
           {error && <div className="diag err" style={{ marginTop: 8, padding: '6px 10px', borderRadius: 'var(--r-s)', border: '1px solid' }}>{error}</div>}
           <p className="muted" style={{ fontSize: 12, margin: '8px 0 6px' }}>
-            字节只进这台浏览器的内存，交给页面里的排版引擎，不上传。本机读到的每次进站点一下就有；自己选的文件会存在浏览器里，下次自动装上。
-            {fontset === 'windows' && ' macOS 上装了 Office 的话，SimSun / SimHei / KaiTi / FangSong 一般在 Office 的字体目录里，选文件那条路也能装。'}
+            字体仅在本机使用。选择的字体文件会保存在此浏览器中。
           </p>
 
           <table className="tbl roles">
@@ -60,16 +59,16 @@ export function FontCard() {
                   <td className="mark">{r.ok ? '✓' : r.optional ? '–' : '✗'}</td>
                   <td>{r.label}</td>
                   <td><code>{r.family}</code></td>
-                  <td className="muted">{r.ok ? '已装上' : r.optional ? '可选，没有就由模板回落' : '缺，模板会用回落字体，版面不再逐字对拍'}</td>
+                  <td className="muted">{r.ok ? '已加载' : r.optional ? '可选' : '缺失，使用替代字体'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           {missing.length > 0 && fonts.length === 0 && !busy && (
-            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>本机字体还没读进来，上面的表暂时都是缺；在此之前预览用回落字体排。</div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>尚未加载本机字体，当前使用替代字体。</div>
           )}
           {missing.length > 0 && fonts.length > 0 && (
-            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>还缺 {missing.map((m) => m.family).join('、')}；模板本身认得这种情况，会接回落链继续排。</div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>缺少 {missing.map((m) => m.family).join('、')}，当前使用替代字体。</div>
           )}
 
           {fonts.length > 0 && (

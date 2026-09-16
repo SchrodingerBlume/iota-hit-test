@@ -52,7 +52,7 @@ function AlgorithmView({ node, updateAttributes, selected, deleteNode, editor }:
         {io.map((t, i) => (
           <div key={`io${i}`} className="alg-line alg-io">
             <span className="alg-no">–</span>
-            <input value={t} disabled={!editable} placeholder="input: …" onChange={(e) => setIo(io.map((x, k) => (k === i ? e.target.value : x)))} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); const l = [...io]; l.splice(i + 1, 0, ''); setIo(l); } else if (e.key === 'Backspace' && !t) { e.preventDefault(); setIo(io.filter((_, k) => k !== i)); } }} />
+            <input value={t} disabled={!editable} placeholder="input: …" onChange={(e) => setIo(io.map((x, k) => (k === i ? e.target.value : x)))} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); const l = [...io]; l.splice(i + 1, 0, ''); setIo(l); } else if (e.key === 'Backspace' && !t) { e.preventDefault(); setIo(io.filter((_, k) => k !== i)); } }} />
             <button type="button" className="alg-btn" title="删掉这行" disabled={!editable} onClick={() => setIo(io.filter((_, k) => k !== i))}><Trash2 /></button>
           </div>
         ))}

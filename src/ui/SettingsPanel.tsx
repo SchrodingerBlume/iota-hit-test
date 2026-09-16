@@ -9,17 +9,15 @@ export function SettingsPanel() {
   return (
     <>
       <h2>论文设置</h2>
-      <p className="lead">校区、学位、阶段这几根轴决定整份版面；其余开关默认交给模板按档位映射，下面每一条都写着自动档现在等于什么。</p>
       <div className="card">
-        <h3>档位</h3>
-        {AXES.map((a) => (
+        <h3>论文类型</h3>
+        {AXES.filter((a) => !a.applies || a.applies(settings)).map((a) => (
           <div className="axis" key={a.key}>
-            <div className="lab">{a.label}</div>
+            <div className="lab" title={a.hint}>{a.label}</div>
             <div>
               <select value={settings[a.key] as string} onChange={(e) => setSettings({ [a.key]: e.target.value } as any)}>
                 {a.choices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
-              <div className="hint">{a.hint}</div>
             </div>
           </div>
         ))}

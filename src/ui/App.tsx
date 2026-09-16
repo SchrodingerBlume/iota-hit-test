@@ -12,7 +12,7 @@ import { computeNumbering } from '../typst/numbering';
 import { docVersion } from '../editor/versions';
 import { resolvePage } from '../model/pages';
 import { EditorEnvContext, type EditorEnv } from '../editor/env';
-import { imageBytes, putImage, safeImageName, imageDimensions, clearImageCache } from '../editor/imageCache';
+import { imageBytes, putImage, safeImageName, imageDimensions } from '../editor/imageCache';
 import { ProjectsView } from './ProjectsView';
 import { useFontState } from '../fonts/userFonts';
 import { SettingsPanel } from './SettingsPanel';
@@ -28,7 +28,9 @@ import { fluentLight, fluentDark } from './fluent';
 import { SlidersHorizontal, BookText, PenLine, Library } from 'lucide-react';
 
 const NAV: { key: Section; label: string; group: string; k?: string }[] = [
-  { key: 'info', label: '元信息', group: '设置' },
+  { key: 'info', label: '论文信息', group: '设置' },
+  { key: 'settings', label: '论文设置', group: '设置' },
+  { key: 'pages', label: '页面设置', group: '设置' },
   { key: 'abstract', label: '摘要', group: '前置' },
   { key: 'nomenclature', label: '符号与缩略语', group: '前置' },
   { key: 'body', label: '正文', group: '主体' },
@@ -43,37 +45,44 @@ const NAV: { key: Section; label: string; group: string; k?: string }[] = [
 ];
 
 /** 文档一变就（防抖后）重新生成 Typst 并交给 worker */
-function useAutoCompile(doc: ThesisDoc, loaded: boolean) {
+function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number) {
   const status = useCompileState((s) => s.status);
   const fontsVersion = useCompileState((s) => s.fontsVersion);
   const sent = useRef(new Map<string, number>());
   const lastProject = useRef<string | null>(null);
+  const lastRefresh = useRef(refresh);
   useEffect(() => {
     if (!loaded || status !== 'ready') return;
+    let cancelled = false;
+    const force = refresh !== lastRefresh.current;
     const t = window.setTimeout(async () => {
       const project = serializeProject(doc, { preview: true });
       // 换了项目：图片名字空间变了，worker 里映射的旧图全撤掉，重新发
       let stale: string[] = [];
+      const nextSent = new Map(sent.current);
       if (lastProject.current !== doc.id) {
         stale = [...sent.current.keys()];
-        sent.current.clear();
-        clearImageCache();
-        lastProject.current = doc.id;
+        nextSent.clear();
       }
       const images: { name: string; data: ArrayBuffer }[] = [];
       for (const name of project.images) {
-        if (sent.current.has(name)) continue;
+        if (nextSent.has(name)) continue;
         const buf = await imageBytes(name);
+        if (cancelled) return;
         if (!buf) continue;
         images.push({ name, data: buf.slice(0) });
-        sent.current.set(name, buf.byteLength);
+        nextSent.set(name, buf.byteLength);
       }
-      const removeImages = [...new Set([...stale, ...[...sent.current.keys()].filter((n) => !project.images.includes(n))])].filter((n) => !images.some((i) => i.name === n));
-      for (const n of removeImages) sent.current.delete(n);
-      requestCompile({ main: project.main, files: project.files, images, removeImages, segments: project.segments, version: docVersion() });
-    }, 130);
-    return () => window.clearTimeout(t);
-  }, [doc, loaded, status, fontsVersion]);
+      const removeImages = [...new Set([...stale, ...[...nextSent.keys()].filter((n) => !project.images.includes(n))])].filter((n) => !images.some((i) => i.name === n));
+      for (const n of removeImages) nextSent.delete(n);
+      if (cancelled) return;
+      sent.current = nextSent;
+      lastProject.current = doc.id;
+      lastRefresh.current = refresh;
+      requestCompile({ force, main: project.main, files: project.files, images, removeImages, segments: project.segments, version: docVersion() });
+    }, force ? 0 : 130);
+    return () => { cancelled = true; window.clearTimeout(t); };
+  }, [doc, loaded, status, fontsVersion, refresh]);
   return sent;
 }
 
@@ -86,23 +95,34 @@ function download(name: string, data: BlobPart, type: string) {
 }
 
 export function App() {
-  const { doc, section, loaded, view, setView, setSection, load, replaceDoc, setImages } = useStore();
+  const { doc, section, loaded, view, setView, setSection, load, importProject, setImages } = useStore();
   const compile = useCompileState();
-  useAutoCompile(doc, loaded);
+  const [refresh, setRefresh] = useState(0);
+  useAutoCompile(doc, loaded && view === 'editor', refresh);
   const [busy, setBusy] = useState<string | null>(null);
   const [theme, setTheme] = useTheme();
   const { navOpen, setNavOpen, mode, setMode, ratio, startDrag, mainRef, gridColumns, gridRows, compact, stacked } = useLayoutPrefs();
+  const lastSection = useRef(section);
+  useEffect(() => {
+    if (lastSection.current !== section && mode === 'preview' && ['info', 'settings', 'pages', 'bibliography', 'achievements', 'nomenclature', 'defense', 'index'].includes(section)) setMode('split');
+    lastSection.current = section;
+  }, [section, mode, setMode]);
+  const hasDocument = loaded && useStore.getState().projects.some((p) => p.id === doc.id);
   const commentsOpen = useComments((s) => s.open);
 
   useEffect(() => {
-    startCompiler();
-    void (async () => {
-      await load();
-      // 上次自己选的字体文件：装回引擎（引擎没就绪会等它）
-      void useFontState.getState().loadStored();
-      if (useStore.getState().doc.settings.fontset !== 'webapp') void useFontState.getState().autoReadLocal();
-    })();
+    void load();
   }, []);
+
+  const fontsLoaded = useRef(false);
+  useEffect(() => {
+    if (!loaded || view !== 'editor') return;
+    startCompiler();
+    if (!fontsLoaded.current) {
+      fontsLoaded.current = true;
+      void useFontState.getState().loadStored();
+    }
+  }, [loaded, view]);
 
   // 编辑器周边：文献、可引用对象、缩略语、图片
   const env = useMemo<EditorEnv>(() => ({
@@ -138,7 +158,7 @@ export function App() {
     const images: Record<string, string> = {};
     for (const img of doc.images) {
       const buf = await imageBytes(img.name);
-      if (buf) images[img.name] = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      if (buf) images[img.name] = btoa(Array.from(new Uint8Array(buf), (byte) => String.fromCharCode(byte)).join(''));
     }
     download(`${doc.info.title.split('\n')[0] || '论文'}.iota.json`, JSON.stringify({ ...doc, imageData: images }, null, 1), 'application/json');
   };
@@ -149,16 +169,23 @@ export function App() {
     input.onchange = async () => {
       const f = input.files?.[0];
       if (!f) return;
-      const raw = JSON.parse(await f.text());
-      const imageData: Record<string, string> = raw.imageData ?? {};
-      delete raw.imageData;
-      for (const [name, b64] of Object.entries(imageData)) {
-        const bin = atob(b64);
-        const bytes = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-        await putImage(name, new Blob([bytes]));
+      try {
+        const raw = JSON.parse(await f.text());
+        if (!raw || typeof raw !== 'object' || !raw.info || !raw.settings || raw.body?.type !== 'doc') {
+          throw new Error('请选择有效的 .iota.json 文档。');
+        }
+        const imageData: Record<string, string> = raw.imageData ?? {};
+        const images: { name: string; blob: Blob }[] = [];
+        for (const [name, b64] of Object.entries(imageData)) {
+          if (typeof b64 !== 'string') throw new Error('文档中的图片数据无效。');
+          const bin = atob(b64);
+          images.push({ name, blob: new Blob([Uint8Array.from(bin, (c) => c.charCodeAt(0))]) });
+        }
+        delete raw.imageData;
+        await importProject(raw, images);
+      } catch (error) {
+        alert(`无法打开文档：${error instanceof Error ? error.message : '文件读取失败。'}`);
       }
-      replaceDoc(raw);
     };
     input.click();
   };
@@ -176,20 +203,20 @@ export function App() {
       case 'pages': return <PagesPanel />;
       case 'abstract': return <AbstractPanel />;
       case 'nomenclature': return <NomenclaturePanel />;
-      case 'body': return <RichSection title="正文" lead="H1 是章、H2 是节……章前自动分页、目录自动生成；右侧那一栏英文名给博士的双语目录与页眉用。" richKey="body" headings placeholder="= 绪论……" />;
-      case 'conclusion': return <RichSection title="结论" lead="不带章号的一章，排在正文之后、参考文献之前。" richKey="conclusion" headings={false} />;
+      case 'body': return <RichSection title="正文" richKey="body" headings placeholder="输入正文…" />;
+      case 'conclusion': return <RichSection title="结论" richKey="conclusion" headings={false} />;
       case 'bibliography': return <BibPanel which="bibliography" />;
-      case 'appendix': return <RichSection title="附录" lead="H1 是一个附录（附录 A / 附录 1），里面的图表公式跟着编成 A-1。" richKey="appendix" headings />;
+      case 'appendix': return <RichSection title="附录" richKey="appendix" headings />;
       case 'achievements': return <BibPanel which="achievements" />;
       case 'defense': return <DefensePanel />;
       case 'acknowledgement': return <RichSection title="致谢" richKey="acknowledgement" headings={false} blocks={false} />;
       case 'index': return <IndexPanel />;
-      case 'resume': return <RichSection title="个人简历" lead="出生、本科、硕士、博士、获奖情况、工作经历，一段一段写。要排这一页记得在「页面开关」里打开。" richKey="resume" headings={false} blocks={false} />;
+      case 'resume': return <RichSection title="个人简历" richKey="resume" headings={false} blocks={false} />;
     }
   })();
 
   const dot = compile.status === 'error' ? 'err' : compile.status === 'booting' || compile.compiling ? 'busy' : 'ok';
-  const statusText = compile.status === 'booting' ? '准备引擎…' : compile.status === 'error' ? '引擎故障' : compile.compiling ? '排版中…' : busy ?? '已排版';
+  const statusText = compile.status === 'booting' ? '正在准备预览…' : compile.status === 'error' ? '预览不可用' : busy ?? (compile.compiling ? '正在更新预览…' : compile.diagnostics.some((d) => d.severity === 'error') ? '排版失败' : '预览已更新');
   const GROUP_ICON: Record<string, React.ReactNode> = { 设置: <SlidersHorizontal />, 前置: <BookText />, 主体: <PenLine />, 后置: <Library /> };
 
   return (
@@ -206,26 +233,26 @@ export function App() {
               </MenuTrigger>
               <MenuPopover className="rb-file-menu">
                 <MenuList>
-                  <MenuItem icon={<Apps20Regular />} onClick={() => setView(view === 'projects' ? 'editor' : 'projects')}>{view === 'projects' ? '回到编辑' : '项目管理'}</MenuItem>
-                  <MenuItem icon={<DocumentAdd20Regular />} onClick={onNew}>新建项目…</MenuItem>
+                  <MenuItem icon={<Apps20Regular />} disabled={view === 'projects' && !hasDocument} onClick={() => setView(view === 'projects' ? 'editor' : 'projects')}>{view === 'projects' ? '返回文档' : '我的文档'}</MenuItem>
+                  <MenuItem icon={<DocumentAdd20Regular />} onClick={onNew}>新建文档…</MenuItem>
                   <MenuDivider />
-                  <MenuItem icon={<Save20Regular />} onClick={onSaveProject}>保存工程（.iota.json）</MenuItem>
-                  <MenuItem icon={<FolderOpen20Regular />} onClick={onOpenProject}>导入文件（并入当前项目）</MenuItem>
+                  <MenuItem icon={<Save20Regular />} disabled={!hasDocument} onClick={onSaveProject}>下载副本（.iota.json）</MenuItem>
+                  <MenuItem icon={<FolderOpen20Regular />} disabled={!loaded} onClick={onOpenProject}>打开…</MenuItem>
                   <MenuDivider />
-                  <MenuItem icon={<DocumentPdf20Regular />} disabled={compile.status !== 'ready' || !!busy} onClick={() => void onExportPdf()}>导出 PDF</MenuItem>
-                  <MenuItem icon={<Document20Regular />} onClick={onExportTypst}>导出 Typst 源码（main.typ + .bib）</MenuItem>
+                  <MenuItem icon={<DocumentPdf20Regular />} disabled={!hasDocument || compile.status !== 'ready' || !!busy} onClick={() => void onExportPdf()}>导出 PDF</MenuItem>
+                  <MenuItem icon={<Document20Regular />} disabled={!hasDocument} onClick={onExportTypst}>导出 Typst 源文件</MenuItem>
                   <MenuDivider />
-                  <MenuItem icon={<Info20Regular />} onClick={() => alert('iota-hit 在线编辑器\n\n排版：iota-hit 0.1.0（hithesis 的 Typst 复刻）\n引擎：Typst 0.15.1，经 typst.ts 编成 wasm 在浏览器里运行\n字体：Noto Serif/Sans CJK SC、FandolKai、TeX Gyre Termes/Heros、DejaVu Sans Mono；也可读本机字体切到 Windows / macOS 档\n\n整站静态，没有服务器；工程与图片只存在这台浏览器里，记得定期「保存工程」。')}>关于</MenuItem>
+                  <MenuItem icon={<Info20Regular />} onClick={() => alert('iota-hit\n哈尔滨工业大学学位论文编辑器\n\n文档和图片保存在此浏览器中。可通过“文件 → 下载副本”备份。')}>关于</MenuItem>
                 </MenuList>
               </MenuPopover>
             </Menu>
-            <Button appearance="subtle" size="small" className={`rb-proj ${view === 'projects' ? 'on' : ''}`} title="项目管理" onClick={() => setView(view === 'projects' ? 'editor' : 'projects')}>{loaded ? doc.name : '项目'}</Button>
+            {view === 'editor' && <span className="rb-proj">{doc.name}</span>}
           </span>
         ); const trailing = (
           <span className="rb-trailing">
-            <span className="status"><i className={`dot ${dot}`} />{statusText}</span>
-            <Button appearance="primary" size="small" icon={<DocumentPdf20Regular />} disabled={compile.status !== 'ready' || !!busy} onClick={onExportPdf}>导出 PDF</Button>
-            <Tooltip content={theme === 'dark' ? '切到浅色' : '切到深色'} relationship="label" positioning="below">
+            {view === 'editor' && <span className="status"><i className={`dot ${dot}`} />{statusText}</span>}
+
+            <Tooltip content={theme === 'dark' ? '浅色模式' : '深色模式'} relationship="label" positioning="below">
               <Button appearance="subtle" size="small" className="theme-btn" icon={theme === 'dark' ? <WeatherSunny20Regular /> : <WeatherMoon20Regular />} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
             </Tooltip>
           </span>
@@ -239,26 +266,26 @@ export function App() {
                 <h4>{GROUP_ICON[g]}{g}</h4>
                 {NAV.filter((n) => n.group === g).map((n) => {
                   const off = loaded && ((n.key === 'abstract' && !resolvePage(doc, 'abstract').value) || (n.key === 'nomenclature' && !resolvePage(doc, 'symbolsPage').value && !resolvePage(doc, 'abbreviationsPage').value) || (n.key === 'appendix' && !resolvePage(doc, 'appendix').value) || (n.key === 'achievements' && !resolvePage(doc, 'achievements').value) || (n.key === 'defense' && !resolvePage(doc, 'defense').value) || (n.key === 'resume' && !resolvePage(doc, 'resume').value) || (n.key === 'index' && !resolvePage(doc, 'index').value));
-                  return <button key={n.key} type="button" className={`${section === n.key ? 'on' : ''} ${off ? 'off' : ''}`} onClick={() => setSection(n.key)}>{n.label}{off && <span className="k">关</span>}</button>;
+                  return <button key={n.key} type="button" className={`${section === n.key ? 'on' : ''} ${off ? 'off' : ''}`} aria-current={section === n.key ? 'page' : undefined} onClick={() => { setSection(n.key); if (mode === 'preview') setMode('split'); }}>{n.label}{off && <span className="k">不显示</span>}</button>;
                 })}
               </div>
             ))}
           </nav>
           <section className={`work ${commentsOpen ? 'has-comments' : ''}`} hidden={mode === 'preview'}>
-            {loaded ? <div className="work-inner" key={section}>{panel}</div> : <div className="muted">读取工程…</div>}
+            {loaded ? <div className="work-inner" key={`${doc.id}:${section}`}>{panel}</div> : <div className="muted">正在打开文档…</div>}
             {commentsOpen && loaded && <CommentsPane />}
           </section>
           <LinkDialogHost />
           {mode === 'split' && <div className="splitter" title={`拖动调整比例（${Math.round(ratio * 100)}% : ${Math.round((1 - ratio) * 100)}%）`} onPointerDown={startDrag} />}
-          <div className="preview-slot" hidden={mode === 'editor'}><Preview /></div>
+          <div className="preview-slot" hidden={mode === 'editor'}><Preview onRefresh={() => setRefresh((n) => n + 1)} refreshDisabled={!hasDocument} /></div>
           <BlockMenu />
         </div>
         {/* 手机：底部一条切换 编辑 / 分栏 / 预览 与目录抽屉，够不着功能区「视图」页时用 */}
         {compact && (
           <div className="mobile-bar" role="toolbar">
-            <button type="button" className={navOpen ? 'on' : ''} onClick={() => setNavOpen(!navOpen)} title="目录"><Navigation20Regular />目录</button>
+            <button type="button" className={navOpen ? 'on' : ''} onClick={() => setNavOpen(!navOpen)} title="导航窗格"><Navigation20Regular />导航</button>
             <button type="button" className={mode === 'editor' ? 'on' : ''} onClick={() => setMode('editor')}>编辑</button>
-            <button type="button" className={mode === 'split' ? 'on' : ''} onClick={() => setMode('split')}>分栏</button>
+            <button type="button" className={mode === 'split' ? 'on' : ''} onClick={() => setMode('split')}>并排查看</button>
             <button type="button" className={mode === 'preview' ? 'on' : ''} onClick={() => setMode('preview')}>预览</button>
           </div>
         )}

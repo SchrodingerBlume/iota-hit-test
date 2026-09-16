@@ -3,12 +3,12 @@ import { useCompileState } from '../compiler/client';
 import { renderArtifact, relayoutPages } from '../compiler/renderer';
 import { flipBefore, flipAfter } from './flip';
 import { usePreviewZoom } from './previewZoom';
-import { Eye, ZoomIn, ZoomOut, Maximize2, Minimize2, Loader2 } from 'lucide-react';
+import { Eye, ZoomIn, ZoomOut, Maximize2, Minimize2, Loader2, RefreshCw } from 'lucide-react';
 import { PreviewEditLayer } from './PreviewEditLayer';
 
 const fmtMB = (n: number) => (n / 1024 / 1024).toFixed(1);
 
-export function Preview() {
+export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () => void; refreshDisabled?: boolean }) {
   // 只订阅要画的几项：glyphs / segments 那些大数组换了不必重画这里
   const status = useCompileState((s) => s.status);
   const progress = useCompileState((s) => s.progress);
@@ -219,7 +219,8 @@ export function Preview() {
     <div className={`preview ${compiling ? 'is-compiling' : ''}`}>
       <div className="pane-bar">
         <span className="pane-title"><Eye />预览</span>
-        {status === 'ready' && lastMs !== null && <span className="muted">{pages} 页 · {lastMs} ms{compiling ? ' · 排版中…' : ''}</span>}
+        <button type="button" className="btn btn-xs" title="重新排版当前文档" disabled={refreshDisabled || status !== 'ready' || compiling} onMouseDown={(e) => e.preventDefault()} onClick={onRefresh}><RefreshCw />{compiling ? '正在刷新…' : '刷新预览'}</button>
+        {status === 'ready' && lastMs !== null && <span className="muted">{pages} 页{compiling ? ' · 排版中…' : ''}</span>}
         {status === 'ready' && errors.length > 0 && <span className="err-badge" title="下面列了出错的位置">{errors.length} 个错误</span>}
         <span className="spacer" />
         <span className="join">
@@ -232,13 +233,13 @@ export function Preview() {
         <span className="join" title="每行几页（Word 的「多页」视图）">
           {([1, 2, 3] as const).map((n) => <button key={n} type="button" className={`btn btn-xs per-row ${perRow === n ? 'on' : ''}`} title={`每行 ${n} 页`} onClick={() => setPerRow(n)}>{n}</button>)}
         </span>
+        <div className="preview-progress" aria-hidden />
       </div>
-      <div className="preview-progress" aria-hidden />
       <div className="preview-scroll" ref={scrollRef}>
         {status === 'booting' && (
           <div className="boot">
             <h3><Loader2 />正在准备排版引擎</h3>
-            <div className="muted">Typst 0.15.1 编译器（wasm）、Noto CJK 等开源字体与 iota-hit 模板包，共约 120 MB。只下载这一次，之后存在浏览器里离线可用。</div>
+            <div className="muted">首次使用需要下载排版资源，可能需要一些时间。</div>
             <div className="bar"><i style={{ width: progress && progress.total ? `${Math.min(100, (progress.loaded / progress.total) * 100)}%` : '2%' }} /></div>
             <div className="detail">{progress ? `${progress.phase} · ${fmtMB(progress.loaded)} / ${fmtMB(progress.total)} MB${progress.detail ? ' · ' + progress.detail : ''}` : '…'}</div>
           </div>
@@ -247,7 +248,7 @@ export function Preview() {
           <div className="boot">
             <h3>排版引擎启动失败</h3>
             <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{fatal}</pre>
-            <div className="muted">刷新重试；若反复失败，检查浏览器是否支持 WebAssembly 与 Web Worker，或存储配额是否被占满。</div>
+            <div className="muted">请刷新页面重试。</div>
           </div>
         )}
         {status === 'ready' && shown.length > 0 && (

@@ -1,4 +1,4 @@
-// 其余的节：摘要、符号与缩略语、正文类富文本、参考文献、成果、答辩、页面开关。
+// 其余的节：摘要、符号与缩略语、正文类富文本、参考文献、成果、答辩、页面设置。
 import { useMemo } from 'react';
 import { useStore, type RichKey } from '../model/store';
 import { PAGE_DEFS, resolvePage } from '../model/pages';
@@ -9,7 +9,6 @@ import { BibEditor } from './BibEditor';
 import { MathPreview } from '../editor/math/MathPreview';
 import { MathEditor } from '../editor/math/MathEditor';
 import { useState } from 'react';
-import { SWITCHES } from '../model/options';
 import { indexPositions, type PMNode } from '../typst/pmToTypst';
 import { getEditor, whenEditorReady } from '../editor/registry';
 import { useOpenRequest } from '../editor/openRequest';
@@ -86,9 +85,7 @@ export function IndexPanel() {
   return (
     <>
       <h2>索引</h2>
-      <p className="lead">正文里用「插入 → 索引词」标过的词都在这儿（模板的 #idx，印成一页「索引」，规范 2.18 说可选）。在这里改名会改全篇同名的登记；「不登记」只去掉标记、正文里的字留着。</p>
-      <div style={{ marginBottom: 12 }}><PageSwitch pageKey="index" /></div>
-      {!terms.length && <p className="muted">还没有索引词。把光标放到正文里的词上，插入页 → 文本 → 索引词。</p>}
+      {!terms.length && <p className="muted">没有索引项。选择文字后，单击“引用”中的“标记条目”。</p>}
       {terms.length > 0 && (
         <table className="idx-table">
           <thead><tr><th>词</th><th>出现</th><th>位置</th><th /></tr></thead>
@@ -97,7 +94,7 @@ export function IndexPanel() {
               <tr key={term}>
                 <td>
                   {editing === term
-                    ? <input className="idx-rename" value={draft} autoFocus onChange={(e) => setDraft(e.target.value)} onBlur={() => rename(term, draft)} onKeyDown={(e) => { if (e.key === 'Enter') rename(term, draft); if (e.key === 'Escape') setEditing(null); }} />
+                    ? <input className="idx-rename" value={draft} autoFocus onChange={(e) => setDraft(e.target.value)} onBlur={() => rename(term, draft)} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') rename(term, draft); if (e.key === 'Escape') setEditing(null); }} />
                     : <button type="button" className="idx-term" title="改名（全篇同名的一起改）" onClick={() => { setEditing(term); setDraft(term); }}>{term || <em className="muted">（空）</em>}</button>}
                 </td>
                 <td className="muted">{list.length} 处</td>
@@ -106,7 +103,7 @@ export function IndexPanel() {
                     {list.map((h, i) => <li key={i}><button type="button" className="idx-jump" title="跳到这一处" onClick={() => void jump(h)}>{KEY_LABEL[h.key]}</button><span className="muted"> {h.context}</span></li>)}
                   </ul>
                 </td>
-                <td><button type="button" className="btn btn-xs" onClick={() => unregister(term)}>不登记</button></td>
+                <td><button type="button" className="btn btn-xs" onClick={() => unregister(term)}>取消标记</button></td>
               </tr>
             ))}
           </tbody>
@@ -129,29 +126,22 @@ export function RichSection({ title, lead, richKey, headings, blocks, placeholde
   );
 }
 
-/** 某一页排不排：三态，auto 照指南 */
+/** 某一页页面设置：三态，auto 照指南 */
 export function PageSwitch({ pageKey }: { pageKey: keyof Pages }) {
   const doc = useStore((s) => s.doc);
   const setPages = useStore((s) => s.setPages);
   const def = PAGE_DEFS.find((d) => d.key === pageKey)!;
   const r = resolvePage(doc, pageKey);
-  return <TriSeg label={def.label} hint={def.hint} choices={ON_OFF} value={r.isAuto ? 'auto' : r.value} auto={r.auto} onChange={(v) => setPages({ [pageKey]: v } as any)} />;
+  return <TriSeg label={def.label} hint={def.hint} choices={[{ value: false, label: '不显示' }, { value: true, label: '显示' }]} value={r.isAuto ? 'auto' : r.value} auto={r.auto} onChange={(v) => setPages({ [pageKey]: v } as any)} />;
 }
 
 export function AbstractPanel() {
   const zh = useStore((s) => s.doc.abstractZh);
   const en = useStore((s) => s.doc.abstractEn);
-  const settings = useStore((s) => s.doc.settings);
-  const setSettings = useStore((s) => s.setSettings);
   const setRich = useStore((s) => s.setRich);
-  const def = SWITCHES.find((d) => d.key === 'abstractKeywordsAbove')!;
   return (
     <>
       <h2>摘要</h2>
-      <p className="lead">关键词在「元信息」里填。缩略语在摘要里也会首次展开、正文开头再重置一次。</p>
-      <div className="field-row" style={{ marginBottom: 12 }}>
-        <TriSeg label="正文与关键词之间" hint={def.hint} choices={[{ value: 'none', label: '不空' }, { value: 'line', label: '空一行' }, { value: 'bottom', label: '关键词置于页底' }]} value={settings.abstractKeywordsAbove === 'auto' ? 'auto' : settings.abstractKeywordsAbove} auto={{ value: 'line', reason: '指南：关键词在正文之后隔一行顶格书写' }} onChange={(v) => setSettings({ abstractKeywordsAbove: v as any })} />
-      </div>
       <h3>中文摘要</h3>
       <RichEditor instanceKey="abstractZh" richKey="abstractZh" value={zh} onChange={(v) => setRich('abstractZh', v)} headings={false} blocks={false} placeholder="中文摘要……" />
       <h3 style={{ marginTop: 20 }}>Abstract</h3>
@@ -173,17 +163,10 @@ export function NomenclaturePanel() {
   return (
     <>
       <h2>符号与缩略语</h2>
-      <p className="lead">物理量名称及符号表（规范 2.4 点名的前置表，可略）与缩略语表（hithesis 加的一页）。正文里用工具栏「Ab」插入缩写，首次出现自动展开成「有限元方法（Finite Element Method，FEM）」——不排表也照常展开。</p>
-      <div className="card">
-        <h3>排不排</h3>
-        <PageSwitch pageKey="symbolsPage" />
-        <PageSwitch pageKey="abbreviationsPage" />
-        {both && <PageSwitch pageKey="nomenclatureMerged" />}
-      </div>
       <div className="card">
         <h3>缩略语</h3>
         <table className="tbl">
-          <thead><tr><th style={{ width: 110 }}>缩写（键）</th><th>中文全称</th><th>英文全称</th>{advanced && <><th style={{ width: 100 }}>印成</th><th style={{ width: 100 }}>复数</th><th style={{ width: 60 }}>进索引</th></>}<th /></tr></thead>
+          <thead><tr><th style={{ width: 110 }}>缩写</th><th>中文全称</th><th>英文全称</th>{advanced && <><th style={{ width: 100 }}>显示文字</th><th style={{ width: 100 }}>复数</th><th style={{ width: 60 }}>加入索引</th></>}<th /></tr></thead>
           <tbody>
             {abbreviations.map((r, i) => {
               const set = (patch: Partial<Abbreviation>) => setAbbreviations(abbreviations.map((x, j) => (j === i ? { ...x, ...patch } : x)));
@@ -205,7 +188,7 @@ export function NomenclaturePanel() {
         </table>
         <div className="row" style={{ marginTop: 6 }}>
           <button type="button" className="btn btn-xs" onClick={() => setAbbreviations([...abbreviations, { key: '', long: '', longEn: '' }])}>＋ 添加一行</button>
-          <button type="button" className="btn btn-xs btn-ghost" onClick={() => setAdvanced((a) => !a)}>{advanced ? '收起' : '更多字段'}（印成什么、复数、进索引）</button>
+          <button type="button" className="btn btn-xs btn-ghost" onClick={() => setAdvanced((a) => !a)}>{advanced ? '收起高级选项' : '高级选项'}</button>
         </div>
       </div>
       <div className="card">
@@ -213,14 +196,14 @@ export function NomenclaturePanel() {
         <SymbolTable rows={symbols} onChange={setSymbols} />
       </div>
       <div className="card">
-        <h3>表的排法</h3>
-        <TriSeg label="缩略语的次序" hint="hithesis 按缩写字母序；也可以照你登记的顺序" choices={[{ value: 'alpha', label: '字母序' }, { value: 'declared', label: '照登记顺序' }]} value={opts.sort ?? 'auto'} auto={{ value: 'alpha', reason: 'hithesis 按缩写字母序（不分大小写）' }} onChange={(v) => setOpts({ sort: v as any })} />
-        <TriSeg label="缩略语列哪些" hint="只列正文里用过的，还是登记的全列" choices={[{ value: 'used', label: '只列用过的' }, { value: 'all', label: '全列' }]} value={opts.usedOnly ?? 'auto'} auto={{ value: 'used', reason: '只列正文里用过的（hithesis 同）' }} onChange={(v) => setOpts({ usedOnly: v as any })} />
-        <TriSeg label="列头" hint="「符号 / 说明」「缩写 / 全称」那一行" choices={ON_OFF} value={opts.header === 'auto' ? 'auto' : opts.header === 'on'} auto={{ value: false, reason: '跟模板：hithesis 与 thuthesis 都不印列头' }} onChange={(v) => setOpts({ header: v === 'auto' ? 'auto' : v ? 'on' : 'off' })} />
+        <h3>表格格式</h3>
+        <TriSeg label="排序方式" hint="hithesis 按缩写字母序；也可以照你登记的顺序" choices={[{ value: 'alpha', label: '字母序' }, { value: 'declared', label: '添加顺序' }]} value={opts.sort ?? 'auto'} auto={{ value: 'alpha', reason: 'hithesis 按缩写字母序（不分大小写）' }} onChange={(v) => setOpts({ sort: v as any })} />
+        <TriSeg label="显示范围" hint="只列正文里用过的，还是登记的全部缩略语" choices={[{ value: 'used', label: '已使用的缩略语' }, { value: 'all', label: '全部缩略语' }]} value={opts.usedOnly ?? 'auto'} auto={{ value: 'used', reason: '只列正文里用过的（hithesis 同）' }} onChange={(v) => setOpts({ usedOnly: v as any })} />
+        <TriSeg label="显示标题行" hint="「符号 / 说明」「缩写 / 全称」那一行" choices={ON_OFF} value={opts.header === 'auto' ? 'auto' : opts.header === 'on'} auto={{ value: false, reason: '跟模板：hithesis 与 thuthesis 都不印列头' }} onChange={(v) => setOpts({ header: v === 'auto' ? 'auto' : v ? 'on' : 'off' })} />
         <div className="triseg">
           <div className="triseg-lab" title="说明列从左边多远起，两张表共用；留空按内容自动">说明列起点</div>
           <span className="row"><input className="input" style={{ width: 90 }} type="number" min={1} max={8} step={0.1} value={opts.hangingIndent} placeholder="自动" onChange={(e) => setOpts({ hangingIndent: e.target.value })} /><span className="muted">cm</span></span>
-          <div className="triseg-note">{opts.hangingIndent ? `说明列从 ${opts.hangingIndent} cm 起` : '自动 → 按最宽的符号 / 缩写定（hithesis 的 labelwidth）'}</div>
+          <div className="triseg-note">{opts.hangingIndent ? `说明列从 ${opts.hangingIndent} cm 起` : '自动适应符号和缩写的宽度'}</div>
         </div>
         {both && (
           <TriSeg label="合并页的小标题" hint="一页两段时，「符号」「缩略语」两个小标题照哪一页的样子" choices={[{ value: 'achievements', label: '照成果页' }, { value: 'declarations', label: '照声明页' }, { value: 'no-subheadings', label: '不印' }]} value={opts.form === 'auto' ? 'auto' : opts.form} auto={{ value: 'achievements', reason: '宋体小四加粗顶格（成果页的组名样式）' }} onChange={(v) => setOpts({ form: v as any })} />
@@ -253,12 +236,6 @@ export function BibPanel({ which }: { which: 'bibliography' | 'achievements' }) 
   return (
     <>
       <h2>{isBib ? '参考文献' : '攻读学位期间取得的成果'}</h2>
-      <p className="lead">
-        {isBib
-          ? '像 Zotero 那样逐条填；条目由 omni-gb7714 按 GB/T 7714—2025 排，正文里用工具栏「引用」插入。也能导入 / 导出 .bib，或直接改源码。'
-          : '本人的论文、专利、项目与获奖，按类型分三组排；收录情况、影响因子、对应章节写在「附注」里。也能导入 / 导出 .bib。'}
-      </p>
-      {!isBib && <div className="card"><PageSwitch pageKey="achievements" /></div>}
       {isBib
         ? <BibEditor mode="references" entries={references} onChange={setReferences} citedKeys={cited} fileName="refs.bib" />
         : <BibEditor mode="achievements" entries={achievementEntries} onChange={setAchievementEntries} fileName="achievements.bib" />}
@@ -285,8 +262,6 @@ export function DefensePanel() {
   return (
     <>
       <h2>评阅人、答辩委员会与决议</h2>
-      <p className="lead">新版研究生范例加的一页，博士有；一人一条记录，留空的行不排。</p>
-      <div className="card"><PageSwitch pageKey="defense" /></div>
       <div className="card">
         <h3>评阅人</h3>
         {defense.reviewers.map((p, i) => <PersonRow key={i} p={p} onChange={(x) => setList('reviewers', i, x)} />)}
@@ -310,8 +285,7 @@ export function DefensePanel() {
 export function PagesPanel() {
   return (
     <>
-      <h2>页面开关</h2>
-      <p className="lead">前置与后置的每一页都能开关。自动档照两份指南与范例的说法：谁有这一页、谁没有，或者有没有内容。终稿专有的页在开题、中期档里由模板静默跳过；正文、结论、参考文献、致谢总是有。</p>
+      <h2>页面设置</h2>
       {(['前置', '后置'] as const).map((g) => (
         <div className="card" key={g}>
           <h3>{g}</h3>

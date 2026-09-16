@@ -15,12 +15,11 @@ export function LinkDialog({ initialHref, initialText, textLocked, onSubmit, onR
         <DialogBody>
           <DialogTitle action={<DialogTrigger action="close"><Button appearance="subtle" icon={<Dismiss20Regular />} /></DialogTrigger>}>{initialHref ? '编辑链接' : '插入链接'}</DialogTitle>
           <DialogContent>
-            <div className="style-field"><Label className="style-label">地址</Label><Input value={href} placeholder="https://… 或 doi:10.…" onChange={(_, d) => setHref(d.value)} autoFocus onKeyDown={(e) => { if (e.key === 'Enter' && ok) onSubmit(normalized(), text.trim() || url); }} /></div>
-            <div className="style-field"><Label className="style-label">显示文本</Label><Input value={text} placeholder={textLocked ? '（选中的文字）' : '留空就显示地址'} disabled={textLocked} onChange={(_, d) => setText(d.value)} onKeyDown={(e) => { if (e.key === 'Enter' && ok) onSubmit(normalized(), text.trim() || url); }} /></div>
-            <p className="muted style-hint">排成 Typst 的 #link("地址")[文本]；PDF 里可点，印出来按模板的样式。</p>
+            <div className="style-field"><Label className="style-label">地址</Label><Input value={href} placeholder="https://… 或 doi:10.…" onChange={(_, d) => setHref(d.value)} autoFocus onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter' && ok) onSubmit(normalized(), text.trim() || url); }} /></div>
+            <div className="style-field"><Label className="style-label">显示文本</Label><Input value={text} placeholder={textLocked ? '（选中的文字）' : '留空就显示地址'} disabled={textLocked} onChange={(_, d) => setText(d.value)} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter' && ok) onSubmit(normalized(), text.trim() || url); }} /></div>
           </DialogContent>
           <DialogActions>
-            {onRemove && <Button appearance="subtle" onClick={onRemove}>去掉链接</Button>}
+            {onRemove && <Button appearance="subtle" onClick={onRemove}>取消超链接</Button>}
             <Button appearance="secondary" onClick={onClose}>取消</Button>
             <Button appearance="primary" disabled={!ok} onClick={() => onSubmit(normalized(), text.trim() || url)}>确定</Button>
           </DialogActions>

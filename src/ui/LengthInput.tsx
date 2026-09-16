@@ -42,7 +42,7 @@ export function LengthInput({ value, defaultUnit, allowed, onChange, placeholder
       title={title ?? `单位：${units}；光写数按 ${UNIT_LABEL[defaultUnit]}`}
       onChange={(_, d) => { setText(d.value); if (bad) setBad(!parseLength(d.value.trim() || '0', defaultUnit, allowed)); }}
       onBlur={() => commit(text)}
-      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(text); (e.target as HTMLInputElement).blur(); } }}
+      onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); commit(text); (e.target as HTMLInputElement).blur(); } }}
       style={{ width }}
     />
   );

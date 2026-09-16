@@ -47,6 +47,8 @@ export const useCompileState = create<CompileState>(() => ({
 }));
 
 export interface CompileInput {
+  /** 手动刷新时重建完整预览。 */
+  force?: boolean;
   main: string;
   files: Record<string, string>;
   images: { name: string; data: ArrayBuffer }[];
@@ -145,8 +147,9 @@ export function requestCompile(input: CompileInput) {
     // 合并：图片增删累积，源码取最新
     input = {
       ...input,
-      images: [...pending.images.filter((p) => !input.images.some((i) => i.name === p.name)), ...input.images],
-      removeImages: [...new Set([...pending.removeImages, ...input.removeImages])],
+      force: input.force || pending.force,
+      images: [...pending.images.filter((p) => !input.removeImages.includes(p.name) && !input.images.some((i) => i.name === p.name)), ...input.images],
+      removeImages: [...new Set([...pending.removeImages, ...input.removeImages])].filter((name) => !input.images.some((i) => i.name === name)),
     };
   }
   pending = input;
