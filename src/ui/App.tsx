@@ -3,6 +3,7 @@ import { useStore, type Section } from '../model/store';
 import type { ThesisDoc } from '../model/types';
 import { startCompiler, requestCompile, exportPdf, useCompileState } from '../compiler/client';
 import { serializeProject } from '../typst/serialize';
+import { BlockMenu } from '../editor/BlockMenu';
 import { collectRefTargets } from '../typst/pmToTypst';
 import { computeNumbering } from '../typst/numbering';
 import { docVersion } from '../editor/versions';
@@ -241,6 +242,7 @@ export function App() {
           </section>
           {mode === 'split' && <div className="splitter" title={`拖动调整比例（${Math.round(ratio * 100)}% : ${Math.round((1 - ratio) * 100)}%）`} onPointerDown={startDrag} />}
           <div className="preview-slot" hidden={mode === 'editor'}><Preview /></div>
+          <BlockMenu />
         </div>
         </>)}
       </div>

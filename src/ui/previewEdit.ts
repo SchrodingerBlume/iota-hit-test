@@ -62,17 +62,35 @@ function align(text: string, cur: Cursor, cp: number, nchars: number): [number, 
   let j = -1;
   if (c && text.startsWith(c, k)) j = k;
   else if (c) { const f = text.indexOf(c, k); if (f >= 0 && f <= k + 8) j = f; }
-  if (j < 0) { const a = Math.min(k, text.length); const b = Math.min(text.length, a + 1); cur.k = b; return [a, b]; }
+  // 对不上（弯引号、破折号、章标题前模板加的「第 1 章」）：零宽地站在当前位置，不吃原文的字，
+  // 后面对得上的字自己会往前找
+  if (j < 0) { const a = Math.min(k, text.length); return [a, a]; }
   let e = j;
   for (let q = 0; q < nchars && e < text.length; q++) e += (text.codePointAt(e) ?? 0) > 0xffff ? 2 : 1;
   cur.k = e;
   return [j, e];
 }
 
+/** 标题节点区间 [start, end) 里的那段标题正文（第一段 text） */
+function headingText(segments: Segment[], start: number, end: number, cache: Map<number, Segment | null>): Segment | null {
+  const hit = cache.get(start);
+  if (hit !== undefined) return hit;
+  let lo = 0, hi = segments.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (segments[mid].typFrom < start) lo = mid + 1; else hi = mid; }
+  let found: Segment | null = null;
+  for (let i = lo; i < segments.length && segments[i].typFrom < end; i++) {
+    const s = segments[i];
+    if (s.kind === 'text' && s.raw !== undefined && s.typTo <= end) { found = s; break; }
+  }
+  cache.set(start, found);
+  return found;
+}
+
 export function buildIndex(raw: Float64Array | null, segments: Segment[], version: number): GlyphIndex {
   if (!raw || !segments.length) return { ...EMPTY_INDEX, version };
   const glyphs: Glyph[] = [];
   const cursors = new Map<Segment, Cursor>();
+  const headingCache = new Map<number, Segment | null>();
   for (let i = 0; i + GLYPH_STRIDE - 1 < raw.length; i += GLYPH_STRIDE) {
     const start = raw[i + 5];
     const end = raw[i + 6];
@@ -81,7 +99,8 @@ export function buildIndex(raw: Float64Array | null, segments: Segment[], versio
     const nchars = raw[i + 9];
     // 3 = 目录条目、页眉页脚里的回声：不是编辑正文的地方
     if (kind === 3) continue;
-    const seg = segmentAt(segments, start);
+    // 4 = 标题里模板自己重排的字（章标题）：给的是标题节点的区间，对到里面那段标题文字上
+    const seg = kind === 4 ? headingText(segments, start, end, headingCache) : segmentAt(segments, start);
     if (!seg) continue;
     let from: number, to: number;
     if (seg.kind === 'node' || seg.raw === undefined) {
@@ -95,7 +114,6 @@ export function buildIndex(raw: Float64Array | null, segments: Segment[], versio
       } else {
         const [a, b] = align(seg.raw, cur, cp, nchars);
         from = seg.pmFrom + a; to = seg.pmFrom + b;
-        if (to === from && nchars > 0) to = Math.min(seg.pmTo, from + 1);
         cur.lastStart = start; cur.lastEnd = end; cur.lastCp = cp; cur.lastFrom = from; cur.lastTo = to;
       }
     }

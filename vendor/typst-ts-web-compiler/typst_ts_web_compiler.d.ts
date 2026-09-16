@@ -46,7 +46,10 @@ export class TypstCompileWorld {
      * unreliable (regex show rules re-slice text elements).
      * kind: 1 = text / math text (glyph-precise offsets), 2 = string literal
      * (offset inside the literal, approximate when it has escapes),
-     * 0 = anything else (offsets are the node's range), 3 = an echo of the
+     * 0 = anything else (offsets are the node's range), 4 = a glyph inside a
+     * heading of the main file that carries no main-file span itself (the
+     * template re-typesets chapter titles; offsets are the heading node's
+     * range, the JS side aligns the glyph text), 3 = an echo of the
      * source that is not the place to edit it (outline entries, running
      * headers / footers in the page margins). Only glyphs whose span lives
      * in the main file are listed; coordinates are page pt.
@@ -177,8 +180,8 @@ export interface InitOutput {
     readonly proxycontext_context: (a: number) => number;
     readonly proxycontext_untar: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly proxycontext_new: (a: number) => number;
-    readonly __wasm_bindgen_func_elem_39834: (a: number, b: number, c: number, d: number) => void;
-    readonly __wasm_bindgen_func_elem_39828: (a: number, b: number, c: number, d: number) => void;
+    readonly __wasm_bindgen_func_elem_39835: (a: number, b: number, c: number, d: number) => void;
+    readonly __wasm_bindgen_func_elem_39829: (a: number, b: number, c: number, d: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number) => void;

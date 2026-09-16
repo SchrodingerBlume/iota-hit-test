@@ -1,8 +1,8 @@
 diff --git a/packages/compiler/src/lib.rs b/packages/compiler/src/lib.rs
-index b9de839..2d44a97 100644
+index b9de839..5f0d2cb 100644
 --- a/packages/compiler/src/lib.rs
 +++ b/packages/compiler/src/lib.rs
-@@ -475,6 +475,214 @@ impl TypstCompileWorld {
+@@ -475,6 +475,277 @@ impl TypstCompileWorld {
          })
      }
  
@@ -14,7 +14,10 @@ index b9de839..2d44a97 100644
 +    /// unreliable (regex show rules re-slice text elements).
 +    /// kind: 1 = text / math text (glyph-precise offsets), 2 = string literal
 +    /// (offset inside the literal, approximate when it has escapes),
-+    /// 0 = anything else (offsets are the node's range), 3 = an echo of the
++    /// 0 = anything else (offsets are the node's range), 4 = a glyph inside a
++    /// heading of the main file that carries no main-file span itself (the
++    /// template re-typesets chapter titles; offsets are the heading node's
++    /// range, the JS side aligns the glyph text), 3 = an echo of the
 +    /// source that is not the place to edit it (outline entries, running
 +    /// headers / footers in the page margins). Only glyphs whose span lives
 +    /// in the main file are listed; coordinates are page pt.
@@ -50,8 +53,9 @@ index b9de839..2d44a97 100644
 +        struct Walk<'a> {
 +            source: &'a Source,
 +            out: Vec<f64>,
-+            /// Open introspection tags: (location, is an outline entry)
-+            tags: Vec<(::typst::introspection::Location, bool)>,
++            /// Open introspection tags: (location, is an outline entry, range of a
++            /// heading in the main file whose text the template re-typesets)
++            tags: Vec<(::typst::introspection::Location, bool, Option<std::ops::Range<usize>>)>,
 +            page_h: f64,
 +            pieces: std::collections::HashMap<::typst::syntax::Span, Piece>,
 +        }
@@ -120,6 +124,24 @@ index b9de839..2d44a97 100644
 +            (s, e)
 +        }
 +
++        /// First span inside `c` that lives in the given file (walking sequences and styled wrappers).
++        fn main_span(c: &::typst::foundations::Content, id: ::typst::syntax::FileId) -> Option<::typst::syntax::Span> {
++            if c.span().id() == Some(id) {
++                return Some(c.span());
++            }
++            if let Some(seq) = c.to_packed::<::typst::foundations::SequenceElem>() {
++                for ch in seq.children.iter() {
++                    if let Some(s) = main_span(ch, id) {
++                        return Some(s);
++                    }
++                }
++            }
++            if let Some(st) = c.to_packed::<::typst::foundations::StyledElem>() {
++                return main_span(&st.child, id);
++            }
++            None
++        }
++
 +        fn walk(wk: &mut Walk, frame: &Frame, ts: Transform, page: usize) {
 +            let source = wk.source;
 +            for (pos, item) in frame.items() {
@@ -128,11 +150,29 @@ index b9de839..2d44a97 100644
 +                        Tag::Start(elem, _) => {
 +                            if let Some(loc) = elem.location() {
 +                                let name = elem.func().name();
-+                                wk.tags.push((loc, name == "entry"));
++                                // A heading written in the main file: glyphs inside it that carry
++                                // no main-file span (the template rebuilds chapter titles from
++                                // strings) are reported against the heading itself (kind 4).
++                                // The heading may be created by a template function
++                                // (#chapter(..)[body]); then its own span is in the template and
++                                // the first main-file span inside its body names the place.
++                                let hr = if name == "heading" {
++                                    let id = wk.source.id();
++                                    let sp = if elem.span().id() == Some(id) {
++                                        Some(elem.span())
++                                    } else {
++                                        elem.to_packed::<::typst::model::HeadingElem>()
++                                            .and_then(|h| main_span(&h.body, id))
++                                    };
++                                    sp.and_then(|s| wk.source.find(s)).map(|n| n.range())
++                                } else {
++                                    None
++                                };
++                                wk.tags.push((loc, name == "entry", hr));
 +                            }
 +                        }
 +                        Tag::End(loc, _, _) => {
-+                            if let Some(i) = wk.tags.iter().rposition(|(l, _)| l == loc) {
++                            if let Some(i) = wk.tags.iter().rposition(|(l, _, _)| l == loc) {
 +                                wk.tags.truncate(i);
 +                            }
 +                        }
@@ -144,11 +184,34 @@ index b9de839..2d44a97 100644
 +                        walk(wk, &g.frame, t, page);
 +                    }
 +                    FrameItem::Text(text) => {
-+                        let in_entry = wk.tags.iter().any(|(_, e)| *e);
++                        let in_entry = wk.tags.iter().any(|(_, e, _)| *e);
++                        let heading = wk.tags.iter().rev().find_map(|(_, _, h)| h.clone());
 +                        let mut x = pos.x;
 +                        for glyph in &text.glyphs {
 +                            let w = glyph.x_advance.at(text.size);
 +                            let (span, off) = glyph.span;
++                            if span.id() != Some(source.id()) && !in_entry {
++                                if let Some(hr) = &heading {
++                                    let gtext = text.text.get(glyph.range()).unwrap_or("");
++                                    let cp = gtext.chars().next().map(|c| c as u32).unwrap_or(0);
++                                    let nchars = gtext.chars().count();
++                                    let fm = text.font.metrics();
++                                    let asc = fm.ascender.at(text.size);
++                                    let desc = fm.descender.at(text.size);
++                                    let p1 = Point::new(x, pos.y - asc).transform(ts);
++                                    let p2 = Point::new(x + w, pos.y - desc).transform(ts);
++                                    let (x1, y1) = (p1.x.to_pt(), p1.y.to_pt());
++                                    let (x2, y2) = (p2.x.to_pt(), p2.y.to_pt());
++                                    let top = y1.min(y2);
++                                    let bottom = y1.max(y2);
++                                    let in_margin = bottom < wk.page_h * 0.085 || top > wk.page_h * 0.93;
++                                    let kind = if in_margin { 3.0 } else { 4.0 };
++                                    wk.out.extend_from_slice(&[
++                                        page as f64, x1.min(x2), top, (x2 - x1).abs(), bottom - top,
++                                        hr.start as f64, hr.end as f64, kind, cp as f64, nchars as f64,
++                                    ]);
++                                }
++                            }
 +                            if span.id() == Some(source.id()) {
 +                                if let Some(node) = source.find(span) {
 +                                    let r = node.range();

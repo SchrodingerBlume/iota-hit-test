@@ -1,6 +1,6 @@
 // 整份工程 → main.typ（以及要一起交给编译器的旁文件）。
 // 结构照 iota-hit/template/example.typ：前置 → 主体 → 附录 → 后置。
-import type { ThesisDoc, Settings, Info } from '../model/types';
+import type { ThesisDoc, Settings, Info, StyleEntry } from '../model/types';
 import { INFO_FIELDS } from '../model/info';
 import { serializeDoc, escapeText, collectImages, collectRefTargets, indexPositions } from './pmToTypst';
 import { generateBibtex } from '../bib/bibtex';
@@ -85,11 +85,32 @@ function settingsArgs(s: Settings): string[] {
     if (v !== 'auto') args.push(`${param}: ${tri(v as boolean)}`);
   }
   if (s.emDash !== 'auto') args.push(`em-dash: ${JSON.stringify(s.emDash)}`);
+  const styles = stylesArg(s.styles ?? {});
+  if (styles) args.push(styles);
   if (s.appendixNumbering !== 'auto') {
     const pattern = { letters: 'A', numbers: '1', hanzi: '一' }[s.appendixNumbering];
     args.push(`appendix-numbering: ${JSON.stringify(pattern)}`);
   }
   return args;
+}
+
+/** 样式表覆盖 → iota-hit(styles: (chapter: (align: left, …), …))；空项不发 */
+export function styleEntryArgs(e: StyleEntry): string[] {
+  const out: string[] = [];
+  if (e.fontZh) out.push(`font-zh: ${JSON.stringify(e.fontZh)}`);
+  if (e.size !== undefined && e.size !== '') out.push(`size: ${typeof e.size === 'number' ? `${e.size}pt` : `zihao.${e.size}`}`);
+  if (e.bold !== undefined) out.push(`bold: ${e.bold}`);
+  if (e.align) out.push(`align: ${e.align}`);
+  if (e.lineSpacing !== undefined) out.push(`line-spacing: ${typeof e.lineSpacing === 'number' ? e.lineSpacing : `(exactly: ${e.lineSpacing.exactly}pt)`}`);
+  if (e.above !== undefined) out.push(`above: (lines: ${e.above})`);
+  if (e.below !== undefined) out.push(`below: (lines: ${e.below})`);
+  if (e.tracking !== undefined) out.push(`tracking: ${e.tracking}pt`);
+  return out;
+}
+function stylesArg(styles: Settings['styles']): string {
+  const entries = Object.entries(styles).map(([k, e]) => [k, styleEntryArgs(e ?? {})] as const).filter(([, a]) => a.length);
+  if (!entries.length) return '';
+  return `styles: (\n    ${entries.map(([k, a]) => `${k}: (${a.join(', ')})`).join(',\n    ')},\n  )`;
 }
 
 function infoArgs(info: Info, s: Settings): string[] {

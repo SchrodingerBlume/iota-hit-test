@@ -303,6 +303,7 @@ export function resolveSwitch<V>(def: SwitchDef<any>, s: Settings): { effective:
 export const SWITCH_GROUPS = ['题注与编号', '标题与页面', '缩略语与列表', '字体'] as const;
 
 export const defaultSettings = (): Settings => ({
+  styles: {},
   fontset: 'webapp',
   campus: 'harbin',
   degreeLevel: 'master',

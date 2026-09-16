@@ -13,6 +13,7 @@ import { useStore, type RichKey, type Section } from '../model/store';
 import { getEditor, onRegistryChange, whenEditorReady } from '../editor/registry';
 import { docVersion, mappingSince, toNewPos, toOldPos } from '../editor/versions';
 import { useOpenRequest } from '../editor/openRequest';
+import { useBlockMenu } from '../editor/BlockMenu';
 import { buildIndex, caretRect, hitPos, hitTest, lineStep, selectionRects, paragraphMarks, EMPTY_INDEX, type CaretRect, type Glyph, type Hit, type Line } from './previewEdit';
 
 const KEY_SECTION: Record<RichKey, Section> = {
@@ -249,6 +250,30 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     useOpenRequest.getState().request({ key: g.key as RichKey, pos, attr: g.seg.attr, offset });
   };
 
+  /** 右键：落到那一段 / 那条标题，弹块级菜单（编辑区那份同一个） */
+  const onContextMenu = async (e: React.MouseEvent<HTMLDivElement>) => {
+    const hit = hitAt(e.clientX, e.clientY);
+    if (!hit) return;
+    e.preventDefault();
+    const g = hit.glyph;
+    if (g.kind === 'info' || g.kind === 'attr') return;
+    const key = g.key as RichKey;
+    const ed = await activate(key);
+    if (!ed) return;
+    const pos = nowPos(key, g.kind === 'node' ? g.from : hitPos(hit), hit.side === 'before' ? 1 : -1);
+    if (pos === null) return;
+    const $p = ed.state.doc.resolve(Math.min(pos, ed.state.doc.content.size));
+    for (let d = $p.depth; d >= 1; d--) {
+      const n = $p.node(d);
+      if (n.type.name === 'paragraph' || n.type.name === 'heading') {
+        if (ed.state.selection.empty) setSelection(ed, pos, pos);
+        prefer.current = { page: g.page, y: g.y };
+        useBlockMenu.getState().open({ key, pos: $p.before(d), x: e.clientX, y: e.clientY });
+        return;
+      }
+    }
+  };
+
   const onPointerDown = async (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     const hit = hitAt(e.clientX, e.clientY);
@@ -483,7 +508,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   const caretLeft = caretPx ? caretPx.left + overlayW : 0;
 
   return (
-    <div ref={layerRef} data-active={activeKey ?? ''} data-focused={focused ? 1 : 0} className={`pv-layer ${cursor} ${focused ? 'is-focused' : ''}`} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerLeave={() => setCursor('')}>
+    <div ref={layerRef} data-active={activeKey ?? ''} data-focused={focused ? 1 : 0} className={`pv-layer ${cursor} ${focused ? 'is-focused' : ''}`} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerLeave={() => setCursor('')} onContextMenu={(e) => { void onContextMenu(e); }}>
       {rects.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <div key={i} className="pv-sel" style={{ left: p.left, top: p.top, width: r.w * p.scale, height: r.h * p.scale }} /> : null; })}
       {gone.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <div key={`g${i}`} className="pv-gone" style={{ left: p.left, top: p.top, width: r.w * p.scale + 0.5, height: r.h * p.scale }} /> : null; })}
       {marks.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <span key={`m${i}`} className={`pv-mark ${r.blank ? 'is-blank' : ''}`} style={{ left: p.left, top: p.top, height: r.h * p.scale, fontSize: r.h * p.scale * 0.8, lineHeight: `${r.h * p.scale}px` }}>¶</span> : null; })}

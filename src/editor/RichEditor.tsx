@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
+import { useBlockMenu } from './BlockMenu';
 import StarterKit from '@tiptap/starter-kit';
 import Paragraph from '@tiptap/extension-paragraph';
 import Superscript from '@tiptap/extension-superscript';
@@ -98,6 +99,25 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
       handleKeyDown: (_view, event) => {
         if ((event.metaKey || event.ctrlKey) && (event.key === 'f' || event.key === 'h')) { event.preventDefault(); useFindBar.getState().set(true); return true; }
         return false;
+      },
+      // 右键一段 / 一条标题：块级样式菜单（Word 右键的「段落」「样式」那一组）
+      handleDOMEvents: {
+        contextmenu: (view, event) => {
+          if (!richKey || !view.editable) return false;
+          const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
+          if (!at) return false;
+          const $p = view.state.doc.resolve(at.pos);
+          // 找最近的段落 / 标题块
+          for (let d = $p.depth; d >= 0; d--) {
+            const n = $p.node(d);
+            if (n.type.name === 'paragraph' || n.type.name === 'heading') {
+              event.preventDefault();
+              useBlockMenu.getState().open({ key: richKey, pos: d === 0 ? 0 : $p.before(d), x: event.clientX, y: event.clientY });
+              return true;
+            }
+          }
+          return false;
+        },
       },
       handlePaste: (view, event) => {
         // 直接粘贴图片：存库、插图

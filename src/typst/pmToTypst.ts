@@ -281,8 +281,17 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
       const enRaw = String(n.attrs?.en ?? '').trim();
       const en = enRaw ? `#en[${tag(opts, n, 'attr', escapeText(enRaw), { attr: 'en', raw: enRaw })}]` : '';
       const label = labelOf(n.attrs, 'sec');
-      // 不编号的标题：走函数形式关掉 numbering（模板认 numbering: none）
-      if (n.attrs?.numbered === false) return `#heading(level: ${level}, numbering: none)[${zh}${en}]${label ? ` <${label}>` : ''}` + paraEnd(opts, n);
+      // 带参数的标题走模板的函数式写法 #chapter(numbering: none, openright: true, spread: false)[…]
+      // （section / subsection / subsubsection 同形，只收 numbering）；什么都不改就是 = 标题
+      const fnArgs: string[] = [];
+      if (n.attrs?.numbered === false) fnArgs.push('numbering: none');
+      if (level === 1) {
+        for (const k of ['openright', 'spread'] as const) {
+          const v = n.attrs?.[k];
+          if (v === 'true' || v === 'false' || v === true || v === false) fnArgs.push(`${k}: ${v}`);
+        }
+      }
+      if (fnArgs.length) return `#${['chapter', 'section', 'subsection', 'subsubsection'][level - 1]}(${fnArgs.join(', ')})[${zh}${en}]${label ? ` <${label}>` : ''}` + paraEnd(opts, n);
       return `${'='.repeat(level)} ${zh}${en}${label ? ` <${label}>` : ''}` + paraEnd(opts, n);
     }
     case 'figure': {

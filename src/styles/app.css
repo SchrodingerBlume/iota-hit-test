@@ -303,7 +303,8 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .rich pre { font-family: var(--mono); font-size: 13px; background: var(--panel-2); padding: 12px 14px; border-radius: var(--r-s); line-height: 1.55; white-space: pre-wrap; margin: 0.6em 0; }
 .rich blockquote { border-left: 3px solid var(--line-2); margin: 0; padding-left: 12px; color: var(--muted); }
 .rich strong { font-weight: 700; }
-.rich em { font-style: normal; font-family: "Kaiti SC", "STKaiti", KaiTi, "FandolKai", serif; }
+/* 强调：西文真斜体（Times 的斜体面），汉字换楷体不伪斜——与模板的排法一致（fake-italic 管的是没楷体时怎么办） */
+.rich em { font-style: italic; font-synthesis: none; font-family: "Times New Roman", "Kaiti SC", "STKaiti", KaiTi, "FandolKai", serif; }
 .rich code { background: var(--panel-2); padding: 0 4px; border-radius: var(--r-xs); font-size: 0.88em; }
 .rich .is-flash { animation: flash 1.2s var(--ease) both; }
 @keyframes flash { 0% { background: var(--orange-soft-2); box-shadow: 0 0 0 6px var(--orange-soft-2); } 100% { background: transparent; box-shadow: 0 0 0 6px transparent; } }
@@ -686,6 +687,17 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .pv-overlay.is-composing { border-bottom: 2px solid var(--accent); background: var(--accent-soft); }
 .pv-overlay.is-fading { opacity: 0; background: transparent; transition: opacity 200ms ease-out; }
 .pv-gone { position: absolute; background: var(--paper); pointer-events: none; z-index: 1; }
+/* 右键菜单的锚点：0×0 的定位元素，Fluent 的菜单挂在它底下 */
+.ctx-anchor { position: fixed; width: 0; height: 0; pointer-events: none; }
+.ctx-menu { min-width: 220px; }
+.ctx-menu .muted { font-size: 12px; }
+.style-dialog { max-width: 520px; }
+.style-hint { margin: 0 0 10px; font-size: 12.5px; line-height: 1.5; }
+.style-field { display: grid; grid-template-columns: 88px 1fr; align-items: start; gap: 8px; margin-bottom: 10px; }
+.style-label { padding-top: 5px; font-weight: 600; }
+.style-control { display: flex; flex-direction: column; gap: 3px; }
+.style-control small { font-size: 11.5px; line-height: 1.4; }
+.style-row { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 /* 编辑标记（Word 的 ¶）：只在覆盖层上画，不进排版结果 */
 .pv-mark { position: absolute; pointer-events: none; user-select: none; z-index: 2; font-family: "Times New Roman", "Noto Serif CJK SC", serif; color: var(--accent); opacity: 0.55; white-space: pre; }
 .pv-input { position: absolute; width: 1px; min-width: 1px; padding: 0; margin: 0; border: 0; outline: 0; opacity: 0.01; resize: none; overflow: hidden; background: transparent; color: transparent; caret-color: transparent; font-size: 16px; z-index: 0; }

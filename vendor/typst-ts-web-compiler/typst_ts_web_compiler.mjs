@@ -180,7 +180,10 @@ export class TypstCompileWorld {
      * unreliable (regex show rules re-slice text elements).
      * kind: 1 = text / math text (glyph-precise offsets), 2 = string literal
      * (offset inside the literal, approximate when it has escapes),
-     * 0 = anything else (offsets are the node's range), 3 = an echo of the
+     * 0 = anything else (offsets are the node's range), 4 = a glyph inside a
+     * heading of the main file that carries no main-file span itself (the
+     * template re-typesets chapter titles; offsets are the heading node's
+     * range, the JS side aligns the glyph text), 3 = an echo of the
      * source that is not the place to edit it (outline entries, running
      * headers / footers in the page margins). Only glyphs whose span lives
      * in the main file are listed; coordinates are page pt.
@@ -1124,7 +1127,7 @@ function __wbg_get_imports() {
                     const a = state0.a;
                     state0.a = 0;
                     try {
-                        return __wasm_bindgen_func_elem_39828(a, state0.b, arg0, arg1);
+                        return __wasm_bindgen_func_elem_39829(a, state0.b, arg0, arg1);
                     } finally {
                         state0.a = a;
                     }
@@ -1224,7 +1227,7 @@ function __wbg_get_imports() {
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
             // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 16627, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_39834);
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_39835);
             return addHeapObject(ret);
         },
         __wbindgen_cast_0000000000000002: function(arg0) {
@@ -1261,10 +1264,10 @@ function __wbg_get_imports() {
     };
 }
 
-function __wasm_bindgen_func_elem_39834(arg0, arg1, arg2) {
+function __wasm_bindgen_func_elem_39835(arg0, arg1, arg2) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        wasm.__wasm_bindgen_func_elem_39834(retptr, arg0, arg1, addHeapObject(arg2));
+        wasm.__wasm_bindgen_func_elem_39835(retptr, arg0, arg1, addHeapObject(arg2));
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         if (r1) {
@@ -1275,8 +1278,8 @@ function __wasm_bindgen_func_elem_39834(arg0, arg1, arg2) {
     }
 }
 
-function __wasm_bindgen_func_elem_39828(arg0, arg1, arg2, arg3) {
-    wasm.__wasm_bindgen_func_elem_39828(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
+function __wasm_bindgen_func_elem_39829(arg0, arg1, arg2, arg3) {
+    wasm.__wasm_bindgen_func_elem_39829(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
 
 const IncrServerFinalization = (typeof FinalizationRegistry === 'undefined')

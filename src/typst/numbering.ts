@@ -4,7 +4,7 @@
 //   图表：caption-numbering-by-chapter（图 1-1 或图 1），公式：equation-numbering-by-chapter
 // 两个「按章编号」开关走 options.ts 里的 auto 映射，所以这里显示的就是模板最终会印的。
 // 预览里的才是准的；这里只是让人写的时候心里有数。
-import type { Settings } from '../model/types';
+import type { Settings, StyleKey } from '../model/types';
 import { SWITCHES, resolveSwitch } from '../model/options';
 import type { PMNode } from './pmToTypst';
 import { labelOf } from './pmToTypst';
@@ -42,6 +42,13 @@ function sw<V>(key: keyof Settings, s: Settings): V {
  * 论文是 章 / 节 / 条 / 款 四级；开题、中期报告没有「章」，第一级就是节（1 / 1.1 / 1.1.1）。
  * 款底下的「项」（（1）接排）是段落写法不是标题，模板不做，编辑器里对应编号列表。
  */
+/** 某一级标题在模板样式表里叫什么（报告没有章，四级整体上移一格：section / subsection / subsubsection） */
+export function styleKeyOfLevel(s: Settings, level: number): StyleKey {
+  const isReport = s.stage !== 'final' && !(s.campus === 'shenzhen' && s.degreeLevel === 'bachelor');
+  const names: StyleKey[] = isReport ? ['section', 'subsection', 'subsubsection', 'subsubsection'] : ['chapter', 'section', 'subsection', 'subsubsection'];
+  return names[Math.max(0, Math.min(3, level - 1))];
+}
+
 export function levelLabels(s: Settings): { level: number; name: string; sample: string }[] {
   const isReport = s.stage !== 'final' && !(s.campus === 'shenzhen' && s.degreeLevel === 'bachelor');
   const en = s.lang === 'en';

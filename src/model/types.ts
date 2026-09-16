@@ -23,7 +23,27 @@ export type RichDoc = { type: 'doc'; content?: any[] };
 
 export type Fontset = 'webapp' | 'windows' | 'macos';
 
+/** 模板样式表（iota-hit(styles:)）里一条能改的项：Word 的「修改样式」对话框。缺省 = 用模板的数 */
+export interface StyleEntry {
+  /** 中文字体角色：songti / heiti / kaishu / fangsong / lishu / xinwei */
+  fontZh?: string;
+  /** 字号：zihao 键名（xiaosi）或磅数 */
+  size?: string | number;
+  bold?: boolean;
+  align?: 'left' | 'center' | 'right';
+  /** 行距：倍数，或固定值（磅） */
+  lineSpacing?: number | { exactly: number };
+  /** 段前 / 段后，行 */
+  above?: number;
+  below?: number;
+  /** 字符间距，磅 */
+  tracking?: number;
+}
+export type StyleKey = 'body' | 'chapter' | 'section' | 'subsection' | 'subsubsection';
+
 export interface Settings {
+  /** 样式表的局部覆盖，键与模板 styles: 同名；空 = 全按模板 */
+  styles: Partial<Record<StyleKey, StyleEntry>>;
   /** 字体方案：站内开源字体（webapp 档 + FandolKai），或本机字体走模板的 windows / macos 档 */
   fontset: Fontset;
   campus: Campus;
