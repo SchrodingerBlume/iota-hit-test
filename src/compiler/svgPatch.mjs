@@ -1,5 +1,5 @@
-// 抄自 @myriaddreamin/typst.ts（dist/esm/render/svg/patch.mjs，Apache-2.0）：包没把它导出，
-// 增量 SVG 补丁（按 data-tid 复用没变的 <g>）要靠它。见 LICENSES.md。
+// 本文件基于 @myriaddreamin/typst.ts 的 dist/esm/render/svg/patch.mjs 修改（Apache-2.0，见 LICENSES.md 与 public/licenses.txt）：
+// 包没把它导出，增量 SVG 补丁（按 data-tid 复用没变的 <g>）要靠它。
 /// Semantic attributes attached to SVG elements.
 var TypstSvgAttrs;
 (function (TypstSvgAttrs) {

@@ -306,9 +306,10 @@ export function App() {
               <DialogBody>
                 <DialogTitle><span className="about-title"><Logo size={40} />iota-hit</span></DialogTitle>
                 <DialogContent>
-                  <p>{tx("哈尔滨工业大学学位论文在线编辑器。排版用 iota-hit 模板（hithesis 的 Typst 复刻），Typst 0.15.1 经 typst.ts 编成 wasm 在浏览器里运行。")}</p>
+                  <p>{tx("哈尔滨工业大学学位论文在线编辑器。排版用 iota-hit 模板（hithesis 的 Typst 复刻），引擎是本站基于 Typst 0.15.1 修改的非官方版本（加了 Word 式断行），经 typst.ts 编成 wasm 在浏览器里运行。")}</p>
                   <p>{tx("字体：Noto Serif / Sans CJK SC、FandolKai、TeX Gyre Termes / Heros、DejaVu Sans Mono；也可读本机字体切到 Windows / macOS 档。")}</p>
                   <p className="muted">{tx("整站静态，没有服务器；工程与图片只存在这台浏览器里，记得定期「文件 → 保存工程」。")}</p>
+                  <p className="muted">{tx("Typst 是 Typst GmbH 的商标；本站与 Typst GmbH、typst.ts 及各项目作者无关。随站分发的软件、字体、Typst 包的版权与许可证全文见")}<a href={`${import.meta.env.BASE_URL}licenses.txt`} target="_blank" rel="noopener">{tx("开源许可与声明")}</a>{tx("。")}</p>
                 </DialogContent>
                 <DialogActions><Button appearance="primary" onClick={() => setAbout(false)}>{tx("好")}</Button></DialogActions>
               </DialogBody>

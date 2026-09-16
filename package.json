@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && node scripts/build-licenses.mjs && vite build",
     "preview": "vite preview",
     "test:projects": "node scripts/test-projects.mjs",
     "test:compile": "node scripts/test-compile.mjs",
     "fonts": "bash scripts/fetch-fonts.sh && node scripts/font-manifest.mjs",
-    "packages": "node scripts/bundle-packages.mjs",
+    "packages": "node scripts/bundle-packages.mjs && node scripts/build-licenses.mjs",
+    "licenses": "node scripts/build-licenses.mjs",
     "wasm": "bash scripts/build-wasm.sh",
     "typecheck": "tsc --noEmit"
   },

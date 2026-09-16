@@ -1,5 +1,8 @@
 # 随站分发的第三方内容
 
+给访客看的整页在站上 `licenses.txt`（`npm run licenses` 由 scripts/build-licenses.mjs 生成：项目清单、修改声明、各许可证全文、Typst 的 NOTICE、各 Typst 包自己的 LICENSE；全文存 scripts/data/licenses/）。
+本站的排版引擎是基于 Typst 修改的非官方版本，改过的源文件头部都注明「本文件基于 XX 修改」（typst.ts 的 lib.rs、合并的 line.rs / linebreak.rs / msword.rs、src/compiler/svgPatch.mjs）；Typst 是 Typst GmbH 的商标，站名与站标不用它。
+
 | 内容 | 许可 | 来源 |
 | --- | --- | --- |
 | iota-hit 模板（`public/packages/local-iota-hit-*.tar.gz`） | LPPL-1.3c | 本机 `../iota-hit`，原样打包 |

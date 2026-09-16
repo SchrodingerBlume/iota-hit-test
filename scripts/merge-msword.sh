@@ -46,6 +46,11 @@ if 'HashMap<usize, char>' not in s:
     s = s[:i] + blk2 + s[j:]
     open(p, 'w').write(s)
 PY
+# Apache-2.0 §4(b)：合并时改过的文件头部注明
+for f in line.rs linebreak.rs msword.rs; do
+  p="$tree/crates/typst-layout/src/inline/$f"
+  grep -q "^// 本文件基于" "$p" || { printf '%s\n' "// 本文件基于 Typst（typst/typst）与 typst-with-msword-linebreaks 修改（iota4web 合并到 Myriad-Dreamin/typst 之上，见 scripts/wasm-patch/typst-msword.patch）" | cat - "$p" > "$p.tmp" && mv "$p.tmp" "$p"; }
+done
 if grep -rl "^<<<<<<< " "$tree/crates" >/dev/null 2>&1; then echo "还有没解的冲突：" >&2; grep -rl "^<<<<<<< " "$tree/crates" >&2; exit 1; fi
 (cd "$tree" && cargo check -q -p typst-layout)
 git -C "$tree" add -A

@@ -178,4 +178,6 @@ npm run test:compile # 不开浏览器，在 Node 里用同一颗 wasm 编一份
 
 ## 许可
 
+站上 `licenses.txt`（关于对话框与起始页页脚有链接）列出随站分发的全部第三方项目、修改声明、许可证全文与 NOTICE，由 `npm run licenses` 生成（`build` 与 `packages` 都会顺带跑）。排版引擎是基于 Typst 修改的非官方版本，改过的文件头部有「本文件基于 XX 修改」。
+
 编辑器代码 MIT。iota-hit 模板 LPPL-1.3c；随站分发的字体见 `LICENSES.md`。

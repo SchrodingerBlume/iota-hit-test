@@ -110,6 +110,9 @@ export function ProjectsView() {
           {projects.map((p) => <ProjectCard key={p.id} p={p} active={p.id === doc.id && loaded} />)}
         </div>
       </div>
+      <footer className="projects-foot muted">
+        {tx("排版引擎是基于 Typst 修改的非官方版本。")}<a href={`${import.meta.env.BASE_URL}licenses.txt`} target="_blank" rel="noopener">{tx("开源许可与声明")}</a>
+      </footer>
     </div>
   );
 }

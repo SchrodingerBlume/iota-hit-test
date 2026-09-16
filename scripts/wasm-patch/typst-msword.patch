@@ -1,9 +1,14 @@
-# typst-with-msword-linebreaks ffd89251be0343f4b6cf9a03981e283d56621a49 合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1 之上（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
+# typst-with-msword-linebreaks c995202e8628df11d274c5ebb2d017e30727f05d 合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1 之上（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
 diff --git a/crates/typst-layout/src/inline/line.rs b/crates/typst-layout/src/inline/line.rs
-index 3d7f3a2..e2c672a 100644
+index 3d7f3a28c..e25d98f05 100644
 --- a/crates/typst-layout/src/inline/line.rs
 +++ b/crates/typst-layout/src/inline/line.rs
-@@ -40,6 +40,11 @@ pub struct Line<'a> {
+@@ -1,3 +1,4 @@
++// 本文件基于 Typst（typst/typst）与 typst-with-msword-linebreaks 修改（iota4web 合并到 Myriad-Dreamin/typst 之上，见 scripts/wasm-patch/typst-msword.patch）
+ use std::fmt::{self, Debug, Formatter};
+ use std::ops::{Deref, DerefMut};
+ 
+@@ -40,6 +41,11 @@ pub struct Line<'a> {
      /// Whether the line ends with a hyphen or dash, either naturally or through
      /// hyphenation.
      pub dash: Option<Dash>,
@@ -15,7 +20,7 @@ index 3d7f3a2..e2c672a 100644
  }
  
  impl Line<'_> {
-@@ -51,6 +56,7 @@ impl Line<'_> {
+@@ -51,6 +57,7 @@ impl Line<'_> {
              justify: false,
              eaten: '\0',
              dash: None,
@@ -23,7 +28,7 @@ index 3d7f3a2..e2c672a 100644
          }
      }
  
-@@ -194,7 +200,7 @@ pub fn line<'a>(
+@@ -194,7 +201,7 @@ pub fn line<'a>(
      // Compute the line's width.
      let width = items.iter().map(Item::natural_width).sum();
  
@@ -32,7 +37,7 @@ index 3d7f3a2..e2c672a 100644
  }
  
  /// Collects / reshapes all items for the line with the given `range`.
-@@ -507,7 +513,8 @@ pub fn commit(
+@@ -507,7 +514,8 @@ pub fn commit(
      }
  
      // Handle hanging punctuation to the left.
@@ -42,7 +47,7 @@ index 3d7f3a2..e2c672a 100644
          && let Some(glyph) = text.glyphs.first()
          && !text.dir.is_positive()
          && text.styles.get(TextElem::overhang)
-@@ -519,7 +526,8 @@ pub fn commit(
+@@ -519,7 +527,8 @@ pub fn commit(
      }
  
      // Handle hanging punctuation to the right.
@@ -52,7 +57,7 @@ index 3d7f3a2..e2c672a 100644
          && let Some(glyph) = text.glyphs.last()
          && text.dir.is_positive()
          && text.styles.get(TextElem::overhang)
-@@ -540,7 +548,10 @@ pub fn commit(
+@@ -540,7 +549,10 @@ pub fn commit(
  
      let shrinkability = line.shrinkability();
      let stretchability = line.stretchability();
@@ -64,7 +69,7 @@ index 3d7f3a2..e2c672a 100644
          // Attempt to reduce the length of the line, using shrinkability.
          justification_ratio = (remaining / shrinkability).max(-1.0);
          remaining = (remaining + shrinkability).min(Abs::zero());
-@@ -812,7 +823,7 @@ pub enum ItemEntry<'a> {
+@@ -812,7 +824,7 @@ pub enum ItemEntry<'a> {
  }
  
  impl<'a> ItemEntry<'a> {
@@ -74,10 +79,15 @@ index 3d7f3a2..e2c672a 100644
              Self::Ref(item) => {
                  let text = item.text()?;
 diff --git a/crates/typst-layout/src/inline/linebreak.rs b/crates/typst-layout/src/inline/linebreak.rs
-index 0a89318..c19b5d8 100644
+index 0a893187a..ab6f0cb7b 100644
 --- a/crates/typst-layout/src/inline/linebreak.rs
 +++ b/crates/typst-layout/src/inline/linebreak.rs
-@@ -157,6 +157,9 @@ pub fn linebreak<'a>(
+@@ -1,3 +1,4 @@
++// 本文件基于 Typst（typst/typst）与 typst-with-msword-linebreaks 修改（iota4web 合并到 Myriad-Dreamin/typst 之上，见 scripts/wasm-patch/typst-msword.patch）
+ use std::ops::{Add, Sub};
+ use std::sync::LazyLock;
+ 
+@@ -157,6 +158,9 @@ pub fn linebreak<'a>(
      match p.config.linebreaks {
          Linebreaks::Simple => linebreak_simple(engine, p, width),
          Linebreaks::Optimized => linebreak_optimized(engine, p, width),
@@ -87,7 +97,7 @@ index 0a89318..c19b5d8 100644
      }
  }
  
-@@ -164,7 +167,7 @@ pub fn linebreak<'a>(
+@@ -164,7 +168,7 @@ pub fn linebreak<'a>(
  /// lines greedily, always taking the longest possible line. This may lead to
  /// very unbalanced line, but is fast and simple.
  #[typst_macros::time]
@@ -96,7 +106,7 @@ index 0a89318..c19b5d8 100644
      engine: &Engine,
      p: &'a Preparation<'a>,
      width: Abs,
-@@ -694,7 +697,7 @@ fn raw_cost(
+@@ -694,7 +698,7 @@ fn raw_cost(
  /// This is an internal instead of an external iterator because it makes the
  /// code much simpler and the consumers of this function don't need the
  /// composability and flexibility of external iteration anyway.
@@ -106,7 +116,7 @@ index 0a89318..c19b5d8 100644
  
      // Single breakpoint at the end for empty text.
 diff --git a/crates/typst-layout/src/inline/mod.rs b/crates/typst-layout/src/inline/mod.rs
-index 259be81..50f7397 100644
+index 259be8101..50f73975d 100644
 --- a/crates/typst-layout/src/inline/mod.rs
 +++ b/crates/typst-layout/src/inline/mod.rs
 @@ -5,6 +5,7 @@ mod deco;
@@ -150,10 +160,11 @@ index 259be81..50f7397 100644
          cjk_latin_spacing: shared.get(TextElem::cjk_latin_spacing).is_auto(),
 diff --git a/crates/typst-layout/src/inline/msword.rs b/crates/typst-layout/src/inline/msword.rs
 new file mode 100644
-index 0000000..f90de9b
+index 000000000..e67bdbb52
 --- /dev/null
 +++ b/crates/typst-layout/src/inline/msword.rs
-@@ -0,0 +1,1462 @@
+@@ -0,0 +1,1463 @@
++// 本文件基于 Typst（typst/typst）与 typst-with-msword-linebreaks 修改（iota4web 合并到 Myriad-Dreamin/typst 之上，见 scripts/wasm-patch/typst-msword.patch）
 +//! Line breaking that emulates Microsoft Word.
 +//!
 +//! Word fills a paragraph greedily, one line at a time: it puts as many
@@ -1617,7 +1628,7 @@ index 0000000..f90de9b
 +    let _ = measure;
 +}
 diff --git a/crates/typst-layout/src/inline/prepare.rs b/crates/typst-layout/src/inline/prepare.rs
-index b98ffcb..1c7366c 100644
+index b98ffcba9..1c7366cae 100644
 --- a/crates/typst-layout/src/inline/prepare.rs
 +++ b/crates/typst-layout/src/inline/prepare.rs
 @@ -106,7 +106,9 @@ pub fn prepare<'a>(
@@ -1632,7 +1643,7 @@ index b98ffcb..1c7366c 100644
      }
  
 diff --git a/crates/typst-layout/src/inline/shaping.rs b/crates/typst-layout/src/inline/shaping.rs
-index 36e6698..0ccf884 100644
+index 36e66987b..0ccf884f3 100644
 --- a/crates/typst-layout/src/inline/shaping.rs
 +++ b/crates/typst-layout/src/inline/shaping.rs
 @@ -1411,7 +1411,7 @@ pub fn cjk_punct_style(lang: Lang, region: Option<Region>) -> CjkPunctStyle {
@@ -1645,7 +1656,7 @@ index 36e6698..0ccf884 100644
  }
  
 diff --git a/crates/typst-library/src/model/par.rs b/crates/typst-library/src/model/par.rs
-index 77ec28c..1243212 100644
+index 77ec28c79..1243212f2 100644
 --- a/crates/typst-library/src/model/par.rs
 +++ b/crates/typst-library/src/model/par.rs
 @@ -5,8 +5,8 @@ use crate::diag::{HintedStrResult, SourceResult, StrResult, bail};
@@ -1863,7 +1874,7 @@ index 77ec28c..1243212 100644
  
  /// Configuration for first line indent.
 diff --git a/crates/typst-library/src/text/mod.rs b/crates/typst-library/src/text/mod.rs
-index 7246b2c..7e68bdc 100644
+index 7246b2c7a..7e68bdcef 100644
 --- a/crates/typst-library/src/text/mod.rs
 +++ b/crates/typst-library/src/text/mod.rs
 @@ -101,6 +101,9 @@ pub struct TextElem {

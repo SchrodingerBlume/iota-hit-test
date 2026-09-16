@@ -1,8 +1,13 @@
 diff --git a/packages/compiler/src/lib.rs b/packages/compiler/src/lib.rs
-index b9de839..8b892dc 100644
+index b9de839..65bfd20 100644
 --- a/packages/compiler/src/lib.rs
 +++ b/packages/compiler/src/lib.rs
-@@ -475,6 +475,303 @@ impl TypstCompileWorld {
+@@ -1,3 +1,4 @@
++// 本文件基于 Myriad-Dreamin/typst.ts 的 packages/compiler/src/lib.rs 修改（iota4web：加了 glyph_map 字形表接口，见 scripts/wasm-patch/compiler-glyph-map.patch）
+ pub mod builder;
+ 
+ #[cfg(feature = "incr")]
+@@ -475,6 +476,303 @@ impl TypstCompileWorld {
          })
      }
  
