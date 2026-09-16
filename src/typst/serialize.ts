@@ -54,27 +54,19 @@ function tri(v: 'auto' | boolean | string): string {
 
 /** 字符网格：预览里模板自己的字距网格关掉（引擎来排）；导出时用户改过的折成模板的 char-pitch */
 const msword = (s: Settings) => (s.linebreaker === 'auto' ? 'msword' : s.linebreaker) === 'msword';
-/** 字符网格：用户改过的折成模板的 layout: (char-pitch: …)，预览与导出同一份 */
-function layoutArg(s: Settings): string[] {
-  const grid = s.charGrid === 'auto' ? s.stage === 'final' : s.charGrid;
-  if (!grid) return s.charGrid === false ? ['layout: (char-pitch: none)'] : [];
-  return typeof s.charPitch === 'number' ? [`layout: (char-pitch: ${s.charPitch}pt)`] : [];
-}
-
 /** 预览引擎独有（Typst fork 的 par(linebreaks: "msword")），不进导出的 .typ。
  *  网格按部件动态取：模板把版面记在 state "iota-hit-layout" 里（每个部件各更新一次），
  *  读出字距增量 tracking（= 跨度 − 字号），把模板自己发的 text(tracking:) 清零，
  *  换成引擎的 char-pitch: 1em + tracking。这段规则在 iota-hit 与每个部件的 show 之后各发一次 */
 function mswordRule(s: Settings): string {
   if (!msword(s)) return '';
+  // 紧缩与右缩进照中文 Word 的默认
   const compat = s.wordCompat === 'auto' ? '11' : s.wordCompat;
-  const kern = s.wordKern === 'auto' ? true : s.wordKern;
-  const right = s.wordRightIndent === 'auto' ? true : s.wordRightIndent;
   return `#show: it => context {
   let l = state("iota-hit-layout", none).get()
   let tr = if l == none { 0pt } else { l.docgrid.tracking }
   set text(tracking: 0pt)
-  set par(linebreaks: (mode: "msword", compat: ${compat}, char-pitch: if tr == 0pt { auto } else { 1em + tr }, kern: ${kern}, adjust-right-indent: ${right}))
+  set par(linebreaks: (mode: "msword", compat: ${compat}, char-pitch: if tr == 0pt { auto } else { 1em + tr }, kern: true, adjust-right-indent: true))
   it
 }`;
 }
@@ -270,7 +262,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false }: { preview?
 
   parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n// LaTeX 公式走 mitex 转成 Typst（包已随站内打包）\n#import "@preview/mitex:0.2.7": mitex, mi`);
   if (preview) parts.push(PREVIEW_PRELUDE);
-  parts.push(`#show: iota-hit.with(\n  ${[...settingsArgs(s), ...layoutArg(s), ...infoArgs(doc.info, s)].join(',\n  ')},\n)`);
+  parts.push(`#show: iota-hit.with(\n  ${[...settingsArgs(s), ...infoArgs(doc.info, s)].join(',\n  ')},\n)`);
   if (preview) parts.push(mswordPrelude(s));
   // 西文断字：模板在 show 规则里 set text(hyphenate: false)，之后再 set 一句就压回来（模板自己这么说明的）
   if (s.hyphenate === true) parts.push('// 西文断字：模板默认关，这里打开\n#set text(hyphenate: true)');

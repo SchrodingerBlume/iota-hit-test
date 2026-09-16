@@ -56,7 +56,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number) {
   const lastProject = useRef<string | null>(null);
   const lastRefresh = useRef(refresh);
   // 换断行引擎 / 网格这类全篇生效的设置，增量编译会留下旧版面的碎片，整个重来
-  const engineKey = [doc.settings.linebreaker, doc.settings.wordCompat, doc.settings.charGrid, doc.settings.charPitch, doc.settings.wordKern, doc.settings.wordRightIndent].join('|');
+  const engineKey = `${doc.settings.linebreaker}|${doc.settings.wordCompat}`;
   const lastEngine = useRef(engineKey);
   const restoring = useFontState((s) => s.restoring);
   useEffect(() => {

@@ -1,6 +1,5 @@
 import { useStore } from '../model/store';
-import { AXES, SWITCHES, SWITCH_GROUPS, resolveSwitch } from '../model/options';
-import { LengthInput } from './LengthInput';
+import { AXES, SWITCHES, SWITCH_GROUPS } from '../model/options';
 import { TriSwitch } from './TriSwitch';
 import { FontCard } from './FontCard';
 import { t } from '../i18n';
@@ -32,11 +31,6 @@ export function SettingsPanel() {
           <div className="card" key={g}>
             <h3>{g}</h3>
             {defs.map((d) => <TriSwitch key={d.key} def={d} settings={settings} onChange={(v) => setSettings({ [d.key]: v } as any)} />)}
-            {g === t("排版引擎") && resolveSwitch<boolean>(SWITCHES.find((d) => d.key === 'charGrid')!, settings).effective && (
-              <label className="tb-field" title={t("一格的宽度（Word 页面设置里的「字符间距」）。留空 = 模板本档的值，终稿 12.45 pt；导出时写成 layout: (char-pitch: …)")}>
-                {t("网格跨度")} <LengthInput value={settings.charPitch === 'auto' ? '' : `${settings.charPitch}pt`} defaultUnit="pt" allowed={['pt']} placeholder={t("模板")} width={110} onChange={(v) => setSettings({ charPitch: v ? parseFloat(v) : 'auto' })} />
-              </label>
-            )}
           </div>
         );
       })}

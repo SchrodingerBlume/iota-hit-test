@@ -77,15 +77,10 @@ export interface Settings {
   appendixNumbering: Tri<'letters' | 'numbers' | 'hanzi'>;
   /** 英文题目强制小二号（封面与内封的 title-en-xiaoer） */
   titleEnXiaoer: TriBool;
-  /** 预览引擎（Typst fork 的 Word 式断行）：兼容模式、字符网格、字体紧缩、网格右缩进；导出的 .typ 只带字符网格那一条 */
-  /** 断行引擎：Word 式（fork）或 Typst 原版的两种 */
+  /** 预览的断行引擎：Word 式（本站 fork，只进预览）或 Typst 原版的两种 */
   linebreaker: Tri<'msword' | 'optimized' | 'simple'>;
+  /** Word 式断行按哪一版 Word 的规则；紧缩、右缩进按中文 Word 默认写死 */
   wordCompat: Tri<'11' | '12' | '14' | '15'>;
-  charGrid: TriBool;
-  /** 字符网格的跨度（pt），auto = 模板那一档 */
-  charPitch: number | 'auto';
-  wordKern: TriBool;
-  wordRightIndent: TriBool;
 }
 
 export interface Info {

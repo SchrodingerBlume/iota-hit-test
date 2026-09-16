@@ -130,9 +130,8 @@ npm run test:compile # 不开浏览器，在 Node 里用同一颗 wasm 编一份
 ## 预览引擎：Word 式断行
 
 预览用的编译器 wasm 是 Typst 0.15.1 加上本机 fork `typst-with-msword-linebreaks` 的 `#set par(linebreaks: "msword")`：
-按 Word（2003 / 2007 / 2010 / 2013+ 兼容模式）的规则断行、排字符网格、压缩标点、标点悬挂。设置里「排版引擎」一组
-（兼容模式、字符网格、网格跨度、字体紧缩、网格右缩进）只进预览的 main.typ；**导出的 .typ 不带这些**，只把改过的字符网格
-折成模板的 `layout: (char-pitch: …)`，原版 Typst 照编。预览里网格按部件动态取：模板把版面记在 state `iota-hit-layout`
+按 Word 2003 兼容模式的规则断行、排字符网格、压缩标点、标点悬挂（兼容模式、紧缩、右缩进按学校范例与中文 Word 的默认写死，不给用户改）。
+设置里只有「断行引擎」（Word 式 / Typst 最优 / Typst 贪心）与「Word 兼容模式」两项，只进预览的 main.typ；**导出的 .typ 不带这些**，原版 Typst 照编。预览里网格按部件动态取：模板把版面记在 state `iota-hit-layout`
 里（封面、声明、正文各不同），预览在 `#show: iota-hit` 与每个部件的 show 之后各发一条 `show: it => context { … }`，读出该部件的
 字距增量 tracking，把模板自己发的 `text(tracking:)` 清零，换成引擎的 `char-pitch: 1em + tracking`。
 
