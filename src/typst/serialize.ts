@@ -52,6 +52,25 @@ function tri(v: 'auto' | boolean | string): string {
   return JSON.stringify(v);
 }
 
+/** 字符网格：预览里模板自己的字距网格关掉（引擎来排）；导出时用户改过的折成模板的 char-pitch */
+function layoutArg(s: Settings, preview: boolean): string[] {
+  const grid = s.charGrid === 'auto' ? s.stage === 'final' : s.charGrid;
+  if (preview || !grid) return preview || s.charGrid === false ? ['layout: (char-pitch: none)'] : [];
+  return typeof s.charPitch === 'number' ? [`layout: (char-pitch: ${s.charPitch}pt)`] : [];
+}
+
+/** 预览引擎独有：Word 式断行与字符网格（Typst fork 的 par(linebreaks: "msword")）。不进导出的 .typ */
+function mswordPrelude(s: Settings): string {
+  const grid = s.charGrid === 'auto' ? s.stage === 'final' : s.charGrid;
+  const compat = s.wordCompat === 'auto' ? '11' : s.wordCompat;
+  const pitch = !grid ? 'auto' : typeof s.charPitch === 'number' ? `1em + (${s.charPitch}pt - zihao.xiaosi)` : 'if _grid.tracking == 0pt { auto } else { 1em + _grid.tracking }';
+  const kern = s.wordKern === 'auto' ? true : s.wordKern;
+  const right = s.wordRightIndent === 'auto' ? true : s.wordRightIndent;
+  return `// 预览引擎（Typst fork）：按 Word 的规则断行、排字符网格；网格跨度取模板本档的默认
+#let _grid = _layout.fold(_layout.default-inputs(degree-level: ${JSON.stringify(s.degreeLevel)}, stage: ${JSON.stringify(s.stage)}, campus: ${JSON.stringify(s.campus)})).docgrid
+#set par(linebreaks: (mode: "msword", compat: ${compat}, char-pitch: ${pitch}, kern: ${kern}, adjust-right-indent: ${right}))`;
+}
+
 function settingsArgs(s: Settings): string[] {
   const args: string[] = [];
   args.push(`campus: ${JSON.stringify(s.campus)}`);
@@ -240,7 +259,8 @@ export function serializeProject(doc: ThesisDoc, { preview = false }: { preview?
 
   parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n// LaTeX 公式走 mitex 转成 Typst（包已随站内打包）\n#import "@preview/mitex:0.2.7": mitex, mi`);
   if (preview) parts.push(PREVIEW_PRELUDE);
-  parts.push(`#show: iota-hit.with(\n  ${[...settingsArgs(s), ...infoArgs(doc.info, s)].join(',\n  ')},\n)`);
+  parts.push(`#show: iota-hit.with(\n  ${[...settingsArgs(s), ...layoutArg(s, preview), ...infoArgs(doc.info, s)].join(',\n  ')},\n)`);
+  if (preview) parts.push(mswordPrelude(s));
   // 西文断字：模板在 show 规则里 set text(hyphenate: false)，之后再 set 一句就压回来（模板自己这么说明的）
   if (s.hyphenate === true) parts.push('// 西文断字：模板默认关，这里打开\n#set text(hyphenate: true)');
   else if (s.hyphenate === false) parts.push('#set text(hyphenate: false)');

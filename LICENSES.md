@@ -10,6 +10,7 @@
 | `src/compiler/svgPatch.mjs`（typst.ts 的增量 SVG 补丁算法，包没导出，抄了一份） | Apache-2.0 | github.com/Myriad-Dreamin/typst.ts |
 | typst.ts 编译器 / 渲染器 wasm（`vendor/`） | Apache-2.0 | github.com/Myriad-Dreamin/typst.ts 主分支自建，提交号见 `vendor/*/COMMIT` |
 | Typst | Apache-2.0 | 编进 wasm 里，0.15.1 |
+| typst-with-msword-linebreaks（Typst 的 Word 式断行 fork） | Apache-2.0 | 本机 `~/typst-with-msword-linebreaks`，合并补丁 `scripts/wasm-patch/typst-msword.patch` |
 | Noto Serif CJK SC、Noto Sans CJK SC | SIL Open Font License 1.1 | github.com/notofonts/noto-cjk |
 | FandolKai | GPL-3.0-or-later with font exception | CTAN fonts/fandol |
 | TeX Gyre Termes、TeX Gyre Heros、TeX Gyre Termes Math | GUST Font License | GUST e-foundry / CTAN |

@@ -34,7 +34,7 @@ public/
   packages/     iota-hit 与它的全部依赖包，tar.gz（npm run packages 从本机 typst 缓存打；进 git）
   sample/       样例工程用的一张图
 vendor/
-  typst-ts-web-compiler/   typst.ts 主分支自建的编译器 wasm（Typst 0.15.1）
+  typst-ts-web-compiler/   typst.ts 主分支自建的编译器 wasm（Typst 0.15.1 + Word 式断行 fork，见下）
   typst-ts-renderer/       同一提交的渲染器 wasm；COMMIT 文件记提交号
 scripts/
   bundle-packages.mjs      收集依赖闭包 → public/packages
@@ -126,6 +126,18 @@ npm run test:compile # 不开浏览器，在 Node 里用同一颗 wasm 编一份
 界面上的所有文字在 `src/i18n/zh.ts`：左边是代码里的原文（键），改右边的值界面就变，`{{name}}` 是代入的变量。代码里新写文字用 `t("…")`
 （`src/i18n`，i18next），`node scripts/i18n-extract.mjs --write` 会把没包的中文字符串包上并补进 `zh.ts`（已改过的值保留）。
 样例文档（`src/model/sample.ts`）与生成的 Typst 源码里的文字不在此列。
+
+## 预览引擎：Word 式断行
+
+预览用的编译器 wasm 是 Typst 0.15.1 加上本机 fork `typst-with-msword-linebreaks` 的 `#set par(linebreaks: "msword")`：
+按 Word（2003 / 2007 / 2010 / 2013+ 兼容模式）的规则断行、排字符网格、压缩标点、标点悬挂。设置里「排版引擎」一组
+（兼容模式、字符网格、网格跨度、字体紧缩、网格右缩进）只进预览的 main.typ；**导出的 .typ 不带这些**，只把改过的字符网格
+折成模板的 `layout: (char-pitch: …)`，原版 Typst 照编。预览里模板自己的字距网格关掉（`layout: (char-pitch: none)`），由引擎排。
+
+构建：typst.ts 钉的 typst 带它自己的 `content_hint` 改动，与 fork 在 `line.rs` / `linebreak.rs` 有冲突，所以
+`scripts/wasm-patch/typst-msword.patch` 是 fork 合并到 typst.ts 那份 typst 之上的结果（首行记着 fork 的提交号）；
+`build-wasm.sh` 克隆 typst.ts 钉的 typst、打这个补丁、把 `[patch.crates-io]` 里的 typst* 指过去。fork 更新后重做一次三方合并、
+重新导出补丁（`git diff typst.ts/v0.8.1 HEAD -- crates`），或 `MSWORD_TYPST=/path/to/merged-tree` 直接指向合并好的树。
 
 `scripts/bundle-packages.mjs` 默认从 `../iota-hit` 取模板，也可以 `IOTA_HIT=/path/to/iota-hit npm run packages`。
 `@preview/*` 依赖从 `~/Library/Caches/typst/packages/preview` 取，本机没有的从 packages.typst.org 下载。

@@ -112,7 +112,7 @@ async function init(base: string) {
   progress.phase = t("下载排版引擎");
   report('typst 0.15.1 · wasm');
   let wasmLoaded = 0;
-  const wasm = wasmBytes = await fetchCached(wasmUrl, null, (n) => { wasmLoaded += n; progress.loaded += n; report('typst 0.15.1 · wasm'); });
+  const wasm = wasmBytes = await fetchCached(wasmUrl, import.meta.env.DEV ? (await fetch(wasmUrl, { method: 'HEAD' })).headers.get('etag') : null, (n) => { wasmLoaded += n; progress.loaded += n; report('typst 0.15.1 · wasm'); });
   progress.loaded += Math.max(0, wasmSize - wasmLoaded);
 
   progress.phase = t("下载字体");

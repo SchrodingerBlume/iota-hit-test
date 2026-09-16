@@ -1,0 +1,1727 @@
+# typst-with-msword-linebreaks 292d9988100968ff7233574fd15c5b0e340b3066 合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1 之上（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
+diff --git a/crates/typst-layout/src/inline/line.rs b/crates/typst-layout/src/inline/line.rs
+index 3d7f3a2..e2c672a 100644
+--- a/crates/typst-layout/src/inline/line.rs
++++ b/crates/typst-layout/src/inline/line.rs
+@@ -40,6 +40,11 @@ pub struct Line<'a> {
+     /// Whether the line ends with a hyphen or dash, either naturally or through
+     /// hyphenation.
+     pub dash: Option<Dash>,
++    /// Whether the glyph advances of the line were already fixed up by the
++    /// line breaker (in the Microsoft Word emulation mode), so that no
++    /// justification, shrinking or hanging punctuation must be applied when
++    /// the line is committed.
++    pub fixed: bool,
+ }
+ 
+ impl Line<'_> {
+@@ -51,6 +56,7 @@ impl Line<'_> {
+             justify: false,
+             eaten: '\0',
+             dash: None,
++            fixed: false,
+         }
+     }
+ 
+@@ -194,7 +200,7 @@ pub fn line<'a>(
+     // Compute the line's width.
+     let width = items.iter().map(Item::natural_width).sum();
+ 
+-    Line { items, eaten, width, justify, dash }
++    Line { items, eaten, width, justify, dash, fixed: false }
+ }
+ 
+ /// Collects / reshapes all items for the line with the given `range`.
+@@ -507,7 +513,8 @@ pub fn commit(
+     }
+ 
+     // Handle hanging punctuation to the left.
+-    if let Some(text) = line.items.leading_text()
++    if !line.fixed
++        && let Some(text) = line.items.leading_text()
+         && let Some(glyph) = text.glyphs.first()
+         && !text.dir.is_positive()
+         && text.styles.get(TextElem::overhang)
+@@ -519,7 +526,8 @@ pub fn commit(
+     }
+ 
+     // Handle hanging punctuation to the right.
+-    if let Some(text) = line.items.trailing_text()
++    if !line.fixed
++        && let Some(text) = line.items.trailing_text()
+         && let Some(glyph) = text.glyphs.last()
+         && text.dir.is_positive()
+         && text.styles.get(TextElem::overhang)
+@@ -540,7 +548,10 @@ pub fn commit(
+ 
+     let shrinkability = line.shrinkability();
+     let stretchability = line.stretchability();
+-    if remaining < Abs::zero() && shrinkability > Abs::zero() {
++    if line.fixed {
++        // The Word emulation already distributed all space; the line keeps
++        // its width even if it hangs into the margin.
++    } else if remaining < Abs::zero() && shrinkability > Abs::zero() {
+         // Attempt to reduce the length of the line, using shrinkability.
+         justification_ratio = (remaining / shrinkability).max(-1.0);
+         remaining = (remaining + shrinkability).min(Abs::zero());
+@@ -812,7 +823,7 @@ pub enum ItemEntry<'a> {
+ }
+ 
+ impl<'a> ItemEntry<'a> {
+-    fn text_mut(&mut self) -> Option<&mut ShapedText<'a>> {
++    pub(super) fn text_mut(&mut self) -> Option<&mut ShapedText<'a>> {
+         match self {
+             Self::Ref(item) => {
+                 let text = item.text()?;
+diff --git a/crates/typst-layout/src/inline/linebreak.rs b/crates/typst-layout/src/inline/linebreak.rs
+index 0a89318..c19b5d8 100644
+--- a/crates/typst-layout/src/inline/linebreak.rs
++++ b/crates/typst-layout/src/inline/linebreak.rs
+@@ -157,6 +157,9 @@ pub fn linebreak<'a>(
+     match p.config.linebreaks {
+         Linebreaks::Simple => linebreak_simple(engine, p, width),
+         Linebreaks::Optimized => linebreak_optimized(engine, p, width),
++        Linebreaks::Msword(config) => {
++            super::msword::linebreak_msword(engine, p, width, config)
++        }
+     }
+ }
+ 
+@@ -164,7 +167,7 @@ pub fn linebreak<'a>(
+ /// lines greedily, always taking the longest possible line. This may lead to
+ /// very unbalanced line, but is fast and simple.
+ #[typst_macros::time]
+-fn linebreak_simple<'a>(
++pub(super) fn linebreak_simple<'a>(
+     engine: &Engine,
+     p: &'a Preparation<'a>,
+     width: Abs,
+@@ -694,7 +697,7 @@ fn raw_cost(
+ /// This is an internal instead of an external iterator because it makes the
+ /// code much simpler and the consumers of this function don't need the
+ /// composability and flexibility of external iteration anyway.
+-fn breakpoints(p: &Preparation, mut f: impl FnMut(usize, Breakpoint, char)) {
++pub(super) fn breakpoints(p: &Preparation, mut f: impl FnMut(usize, Breakpoint, char)) {
+     let text = p.text;
+ 
+     // Single breakpoint at the end for empty text.
+diff --git a/crates/typst-layout/src/inline/mod.rs b/crates/typst-layout/src/inline/mod.rs
+index 259be81..50f7397 100644
+--- a/crates/typst-layout/src/inline/mod.rs
++++ b/crates/typst-layout/src/inline/mod.rs
+@@ -5,6 +5,7 @@ mod deco;
+ mod finalize;
+ mod line;
+ mod linebreak;
++mod msword;
+ mod prepare;
+ mod shaping;
+ 
+@@ -187,13 +188,18 @@ fn configuration(
+     let justify = base.justify;
+     let font_size = shared.resolve(TextElem::size);
+     let dir = shared.resolve(TextElem::dir);
++    let linebreaks = base.linebreaks.unwrap_or_else(|| {
++        if justify { Linebreaks::Optimized } else { Linebreaks::Simple }
++    });
++
++    // Word does not hyphenate unless asked to, so in the Word emulation mode
++    // an `auto` hyphenation setting means no hyphenation.
++    let hyphenate_default = justify && linebreaks.msword().is_none();
+ 
+     Config {
+         justify,
+         justification_limits: shared.get(ParElem::justification_limits),
+-        linebreaks: base.linebreaks.unwrap_or_else(|| {
+-            if justify { Linebreaks::Optimized } else { Linebreaks::Simple }
+-        }),
++        linebreaks,
+         first_line_indent: {
+             let amount = base.first_line_indent.amount();
+             let all = base.first_line_indent.all();
+@@ -233,7 +239,7 @@ fn configuration(
+         font_size,
+         dir,
+         hyphenate: shared_get(children, shared, |s| s.get(TextElem::hyphenate))
+-            .map(|uniform| uniform.unwrap_or(justify)),
++            .map(|uniform| uniform.unwrap_or(hyphenate_default)),
+         lang: shared_get(children, shared, |s| s.get(TextElem::lang)),
+         fallback: shared.get(TextElem::fallback),
+         cjk_latin_spacing: shared.get(TextElem::cjk_latin_spacing).is_auto(),
+diff --git a/crates/typst-layout/src/inline/msword.rs b/crates/typst-layout/src/inline/msword.rs
+new file mode 100644
+index 0000000..f38529d
+--- /dev/null
++++ b/crates/typst-layout/src/inline/msword.rs
+@@ -0,0 +1,1271 @@
++//! Line breaking that emulates Microsoft Word.
++//!
++//! Word fills a paragraph greedily, one line at a time: it puts as many
++//! characters on the line as fit, and when the next one does not, it first
++//! tries to squeeze it in by compressing the CJK punctuation already on the
++//! line. Closing punctuation may not start a line and opening punctuation may
++//! not end one; where Word cannot avoid that by compression, it lets the
++//! closing punctuation hang into the margin.
++//!
++//! The rules below were measured from Word itself (Word 16.89 for Mac): probe
++//! documents were generated for each compatibility mode, with and without a
++//! character grid, exported to PDF and read back glyph by glyph. hithesis'
++//! `hit-linebreak.lua`, which does the same for LuaTeX, was the starting
++//! point. Widths are taken from the shaped glyphs, so the fonts decide what
++//! is fullwidth punctuation: a curly quote is only treated as CJK
++//! punctuation when the font renders it fullwidth.
++//!
++//! Terminology: the *cell* of a character is its width on the page; with a
++//! character grid every CJK character occupies one grid cell, otherwise its
++//! natural advance. A *spot* is a punctuation mark whose blank half can be
++//! compressed. The *need* of a line is by how much it overflows the measure.
++//!
++//! Word 2013+ squeezes a *unit* (openers, a character or Latin run, and the
++//! closers after it) onto a justified line by a free-space rule, measured
++//! with indent sweeps: every spot before the unit (and the unit's own
++//! openers) gives up at most half a cell and at most the free space left
++//! before the unit, the last closer may hang a whole cell, and the automatic
++//! CJK-Latin spacings on the line lower the result a little. The older
++//! versions use half a cell per spot. See `tools/msword-probe/README.md`.
++
++use std::collections::HashMap;
++use typst_library::engine::Engine;
++use typst_library::layout::{Abs, Em};
++use typst_library::model::MswordLinebreaks;
++use unicode_script::{Script, UnicodeScript};
++
++use super::linebreak::{Breakpoint, breakpoints};
++use super::*;
++
++/// Full-width closing punctuation that may not start a line.
++const CLOSERS: &[char] = &[
++    '。', '，', '、', '；', '：', '？', '！', '）', '》', '〉', '”', '’', '」', '』',
++    '】', '］', '．', '｝', '〕', '〗', '〙', '〛',
++];
++
++/// Full-width opening punctuation that may not end a line.
++const OPENERS: &[char] =
++    &['（', '《', '〈', '「', '『', '【', '“', '‘', '［', '｛', '〔', '〖', '〘', '〚'];
++
++/// Closing punctuation that Word never compresses (measured: 0 of 68 cases).
++const NEVER_COMPRESSED: &[char] = &['？'];
++
++/// Full-width symbols that Word treats like Latin text: no automatic spacing
++/// around them.
++const LATINISH: &[char] = &['～', '—', '–', '·'];
++
++/// ASCII punctuation that may not start a line.
++const ASCII_CLOSE: &[char] = &['.', ',', ';', ':', '!', '?', ')', ']', '}', '%'];
++
++/// ASCII punctuation that may not end a line.
++const ASCII_OPEN: &[char] = &['(', '[', '{'];
++
++/// Tolerance for width comparisons.
++const EPS: Abs = Abs::raw(0.03);
++
++/// By how much Word 2013+ lets a squeezed character's need exceed the
++/// free-space rule with `k` spots. Measured: about a fifth of a point with
++/// two spots, half of that with three, nothing from four on (a line with six
++/// spots was refused at 0.001 pt over the rule); with one spot the rule only
++/// matters next to a Latin run, where almost half a point is allowed.
++fn slop(k: usize) -> Abs {
++    match k {
++        1 => Abs::pt(0.45),
++        2 => Abs::pt(0.5),
++        3 => Abs::pt(0.4),
++        _ => Abs::zero(),
++    }
++}
++
++/// The kind of a token.
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++enum Kind {
++    /// A CJK character (or another full-width character) occupying a cell.
++    Cjk,
++    /// Full-width closing punctuation.
++    Close,
++    /// Full-width opening punctuation.
++    Open,
++    /// A run of Latin (non-CJK) glyphs, an inline frame, or other rigid
++    /// content.
++    Latin,
++    /// A space or explicit horizontal spacing.
++    Space,
++}
++
++/// A unit of the paragraph for the purposes of Word's line breaking.
++#[derive(Debug, Clone)]
++struct Tok {
++    kind: Kind,
++    /// The byte range in the paragraph's text.
++    range: Range,
++    /// The first character (for CJK kinds, the character itself).
++    c: char,
++    /// First and last character of a Latin run.
++    head: Option<char>,
++    tail: Option<char>,
++    /// The font size of the token's glyphs.
++    size: Abs,
++    /// The raw width: the natural advance of a CJK glyph, the sum of the
++    /// shaped advances of a Latin run, the shaped width of a space, or the
++    /// width of a frame.
++    w: Abs,
++    /// Whether the token's width cannot be changed (frames, explicit spacing).
++    rigid: bool,
++    /// Explicit spacing (`h(..)`) rather than a space character.
++    user: bool,
++    /// Weak explicit spacing that vanishes at line boundaries.
++    weak: bool,
++    /// The natural width in the line (computed by `natural`).
++    nw: Abs,
++    /// The automatic spacing before this token (computed by `natural`).
++    gap: Abs,
++    /// Whether this token is a compression spot.
++    spot: bool,
++    /// Whether the token is a Latin run with glyphs (as opposed to a frame).
++    glyphs: bool,
++    /// The number of glyphs in a Latin run.
++    glyph_count: usize,
++    /// Whether the token is an inline frame (an equation, a box, ...).
++    frame: bool,
++    /// Whether this punctuation mark is halved because another full-width
++    /// punctuation mark follows (Word with font kerning on). At the end of a
++    /// line it is full width again.
++    paired: bool,
++    /// The full natural width, for a paired mark that ends a line.
++    full: Abs,
++}
++
++/// Paragraph-level parameters.
++struct Params {
++    compat: u8,
++    /// Whether a character grid is in effect.
++    grid: bool,
++    /// The excess of a grid cell over the font size.
++    excess: Abs,
++    /// The cell width at the paragraph's font size.
++    cell: Abs,
++    adjust_right_indent: bool,
++    /// Whether Word's font kerning is on (halves adjacent punctuation).
++    kern: bool,
++    justify: bool,
++    /// Whether CJK-Latin spacing is enabled.
++    autospace: bool,
++}
++
++impl Params {
++    /// The amount by which every Latin glyph (and every space in Latin
++    /// context) is widened under a character grid. Measured: half the excess
++    /// of the cell over the font size, independent of the glyph's width.
++    fn latin_add(&self) -> Abs {
++        if self.grid { self.excess / 2.0 } else { Abs::zero() }
++    }
++
++    /// The automatic spacing between a CJK character and Latin text: a
++    /// quarter of the font size, plus a fifth of the grid excess (measured
++    /// with indent sweeps: a block's two gaps together carry two fifths).
++    fn auto_at(&self, size: Abs) -> Abs {
++        if self.autospace { size / 4.0 + self.excess / 5.0 } else { Abs::zero() }
++    }
++}
++
++/// Whether a character is written in a CJK script or is otherwise full-width.
++fn is_wide(c: char) -> bool {
++    let o = c as u32;
++    matches!(
++        c.script(),
++        Script::Han
++            | Script::Hiragana
++            | Script::Katakana
++            | Script::Hangul
++            | Script::Bopomofo
++    ) || (0x2E80..=0x2FDF).contains(&o)
++        || (0x3000..=0x30FF).contains(&o)
++        || (0x3190..=0x33FF).contains(&o)
++        || (0xF900..=0xFAFF).contains(&o)
++        || (0xFE30..=0xFE4F).contains(&o)
++        || (0xFF00..=0xFF60).contains(&o)
++        || (0xFFE0..=0xFFE6).contains(&o)
++        || (0x20000..=0x3134F).contains(&o)
++        || c == '…'
++}
++
++/// Whether a Latin character gets automatic spacing next to CJK text.
++fn is_alnum(c: char) -> bool {
++    matches!(c.script(), Script::Latin | Script::Greek | Script::Cyrillic)
++        || c.is_ascii_digit()
++}
++
++/// Breaks the paragraph into lines the way Microsoft Word does.
++#[typst_macros::time]
++pub fn linebreak_msword<'a>(
++    engine: &Engine,
++    p: &'a Preparation<'a>,
++    width: Abs,
++    config: MswordLinebreaks,
++) -> Vec<Line<'a>> {
++    // Bidirectional text is not emulated.
++    if p.bidi.is_some() {
++        return super::linebreak::linebreak_simple(engine, p, width);
++    }
++
++    let base = p.config.font_size;
++    let excess = config
++        .char_pitch
++        .map(|pitch| pitch.at(base) - base)
++        .unwrap_or(Abs::zero());
++    let params = Params {
++        compat: config.compat,
++        grid: config.char_pitch.is_some(),
++        excess,
++        cell: base + excess,
++        adjust_right_indent: config.adjust_right_indent,
++        kern: config.kern,
++        justify: p.config.justify,
++        autospace: p.config.cjk_latin_spacing,
++    };
++
++    let (breaks, mandatory, eaten) = collect_breaks(p, &params);
++    let mut toks = tokenize(p, &params, &breaks);
++    if toks.is_empty() {
++        return vec![line(engine, p, 0..p.text.len(), Breakpoint::Mandatory, None, '\0')];
++    }
++    natural(&mut toks, &params);
++    if std::env::var_os("MSWORD_DEBUG").is_some() {
++        for (k, t) in toks.iter().enumerate() {
++            eprintln!(
++                "tok {} {:?} {:?} nw={:.3} gap={:.3} spot={} paired={} w={:.3}",
++                k,
++                t.kind,
++                t.c,
++                t.nw.to_pt(),
++                t.gap.to_pt(),
++                t.spot,
++                t.paired,
++                t.w.to_pt()
++            );
++        }
++    }
++
++    let decided = decide(&toks, &params, width, &breaks, &mandatory, p.text.len());
++
++    let mut lines = Vec::with_capacity(decided.len());
++    let mut start = 0;
++    for d in decided {
++        let ate = eaten.get(&d.end).copied().unwrap_or('\0');
++        let mut built = line(engine, p, start..d.end, d.breakpoint, lines.last(), ate);
++        render(&mut built, &toks, &d, &params, width);
++        start = d.end;
++        lines.push(built);
++    }
++    lines
++}
++
++/// Collects the legal break offsets (sorted) and the mandatory ones.
++fn collect_breaks(
++    p: &Preparation,
++    params: &Params,
++) -> (Vec<usize>, Vec<usize>, HashMap<usize, char>) {
++    let mut breaks = Vec::new();
++    let mut mandatory = Vec::new();
++    let mut eaten = HashMap::new();
++    breakpoints(p, |offset, bp, ate| match bp {
++        Breakpoint::Normal => {
++            breaks.push(offset);
++            eaten.insert(offset, ate);
++        }
++        Breakpoint::Mandatory => {
++            breaks.push(offset);
++            mandatory.push(offset);
++            eaten.insert(offset, ate);
++        }
++        // Hyphenation is not part of the emulation.
++        Breakpoint::Hyphen(..) => {}
++    });
++
++    // Word 2003/2007/2010 do not break after a hyphen inside a word; Word 2013
++    // and later do. No version breaks a dash away from a following digit
++    // (`13—93`).
++    let text = p.text;
++    breaks.retain(|&offset| {
++        let before = text[..offset].chars().next_back();
++        let after = text[offset..].chars().next();
++        let hyphen_break =
++            before == Some('-') && after.is_some_and(|c| c.is_alphanumeric());
++        let dash_digit = (matches!(before, Some('—' | '–'))
++            && after.is_some_and(|c| c.is_ascii_digit()))
++            || (matches!(after, Some('—' | '–'))
++                && before.is_some_and(|c| c.is_ascii_digit()));
++        !((params.compat != 15 && hyphen_break) || dash_digit)
++    });
++
++    breaks.sort_unstable();
++    breaks.dedup();
++    (breaks, mandatory, eaten)
++}
++
++/// Splits the paragraph into tokens.
++fn tokenize(p: &Preparation, params: &Params, breaks: &[usize]) -> Vec<Tok> {
++    let mut toks: Vec<Tok> = Vec::new();
++    let is_break = |offset: usize| breaks.binary_search(&offset).is_ok();
++
++    for (range, item) in p.items.iter() {
++        match item {
++            Item::Text(shaped) => {
++                let glyphs = &shaped.glyphs[..];
++                let mut i = 0;
++                while i < glyphs.len() {
++                    // A cluster: all glyphs with the same range.
++                    let mut j = i + 1;
++                    while j < glyphs.len() && glyphs[j].range == glyphs[i].range {
++                        j += 1;
++                    }
++                    let g = &glyphs[i];
++                    let cluster = &glyphs[i..j];
++                    let size = g.size;
++                    let shaped_w: Abs =
++                        cluster.iter().map(|g| g.x_advance.at(g.size)).sum();
++                    let c = g.c;
++                    let natural = g
++                        .font
++                        .x_advance(g.glyph_id)
++                        .map(|adv| adv.at(size))
++                        .unwrap_or(shaped_w);
++                    // A symbol the font renders full width (Word with the
++                    // eastAsia hint draws ×, °, ■, α... with the CJK font)
++                    // behaves like a CJK character.
++                    let wide = !LATINISH.contains(&c)
++                        && (is_wide(c)
++                            || (!is_alnum(c)
++                                && !c.is_ascii()
++                                && !super::shaping::is_space(c)
++                                && natural >= size * 0.9));
++                    let fullwidth_punct = (CLOSERS.contains(&c) || OPENERS.contains(&c))
++                        && natural >= size * 0.9;
++                    let cjk_kind = if fullwidth_punct {
++                        Some(if CLOSERS.contains(&c) { Kind::Close } else { Kind::Open })
++                    } else if wide && !CLOSERS.contains(&c) && !OPENERS.contains(&c) {
++                        Some(Kind::Cjk)
++                    } else if wide {
++                        // Wide but rendered narrow (a font without the
++                        // full-width glyph): treat like Latin.
++                        None
++                    } else {
++                        None
++                    };
++
++                    if super::shaping::is_space(c) {
++                        toks.push(Tok {
++                            kind: Kind::Space,
++                            range: g.range.clone(),
++                            c,
++                            head: None,
++                            tail: None,
++                            size,
++                            w: shaped_w,
++                            rigid: false,
++                            user: false,
++                            weak: false,
++                            nw: Abs::zero(),
++                            gap: Abs::zero(),
++                            spot: false,
++                            glyphs: true,
++                            glyph_count: 1,
++                            frame: false,
++                            paired: false,
++                            full: Abs::zero(),
++                        });
++                    } else if let Some(kind) = cjk_kind {
++                        toks.push(Tok {
++                            kind,
++                            range: g.range.clone(),
++                            c,
++                            head: None,
++                            tail: None,
++                            size,
++                            w: natural,
++                            rigid: false,
++                            user: false,
++                            weak: false,
++                            nw: Abs::zero(),
++                            gap: Abs::zero(),
++                            spot: false,
++                            glyphs: true,
++                            glyph_count: 1,
++                            frame: false,
++                            paired: false,
++                            full: Abs::zero(),
++                        });
++                    } else {
++                        // Latin: extend the current run unless a break
++                        // opportunity separates them.
++                        let extend = matches!(
++                            toks.last(),
++                            Some(last) if last.kind == Kind::Latin
++                                && last.glyphs
++                                && last.range.end == g.range.start
++                                && !is_break(g.range.start)
++                                && !LATINISH.contains(&last.tail.unwrap_or(' '))
++                        );
++                        if extend {
++                            let last = toks.last_mut().unwrap();
++                            last.range.end = g.range.end;
++                            last.w += shaped_w;
++                            last.tail = Some(c);
++                            last.glyph_count += cluster.len();
++                        } else {
++                            toks.push(Tok {
++                                kind: Kind::Latin,
++                                range: g.range.clone(),
++                                c,
++                                head: Some(c),
++                                tail: Some(c),
++                                size,
++                                w: shaped_w,
++                                rigid: false,
++                                user: false,
++                                weak: false,
++                                nw: Abs::zero(),
++                                gap: Abs::zero(),
++                                spot: false,
++                                glyphs: true,
++                                glyph_count: 1,
++                                frame: false,
++                                paired: false,
++                                full: Abs::zero(),
++                            });
++                        }
++                    }
++                    i = j;
++                }
++            }
++            Item::Absolute(amount, weak) => {
++                toks.push(Tok {
++                    kind: Kind::Space,
++                    range: range.clone(),
++                    c: ' ',
++                    head: None,
++                    tail: None,
++                    size: params.cell,
++                    w: *amount,
++                    rigid: true,
++                    user: true,
++                    weak: *weak,
++                    nw: Abs::zero(),
++                    gap: Abs::zero(),
++                    spot: false,
++                    glyphs: false,
++                    glyph_count: 0,
++                    frame: false,
++                    paired: false,
++                    full: Abs::zero(),
++                });
++            }
++            Item::Frame(frame) => {
++                toks.push(Tok {
++                    kind: Kind::Latin,
++                    range: range.clone(),
++                    c: '\u{FFFC}',
++                    head: None,
++                    tail: None,
++                    size: params.cell,
++                    w: frame.width(),
++                    rigid: true,
++                    user: false,
++                    weak: false,
++                    nw: Abs::zero(),
++                    gap: Abs::zero(),
++                    spot: false,
++                    glyphs: false,
++                    glyph_count: 0,
++                    frame: true,
++                    paired: false,
++                    full: Abs::zero(),
++                });
++            }
++            Item::Fractional(..) => {
++                toks.push(Tok {
++                    kind: Kind::Latin,
++                    range: range.clone(),
++                    c: ' ',
++                    head: None,
++                    tail: None,
++                    size: params.cell,
++                    w: Abs::zero(),
++                    rigid: true,
++                    user: false,
++                    weak: false,
++                    nw: Abs::zero(),
++                    gap: Abs::zero(),
++                    spot: false,
++                    glyphs: false,
++                    glyph_count: 0,
++                    frame: false,
++                    paired: false,
++                    full: Abs::zero(),
++                });
++            }
++            Item::Tag(_) | Item::Skip(_) => {}
++        }
++    }
++
++    toks
++}
++
++/// Computes the natural widths, gaps and compression spots of the tokens.
++fn natural(toks: &mut [Tok], params: &Params) {
++    for k in 0..toks.len() {
++        let prev = if k > 0 { Some(toks[k - 1].clone()) } else { None };
++        // Whether a space at `k` sits next to CJK text or an inline frame
++        // (Word: an equation), looking past neighbouring spaces.
++        let wide = |t: &Tok| t.kind != Kind::Latin || t.frame;
++        let space_ctx = (0..k)
++            .rev()
++            .map(|i| &toks[i])
++            .find(|t| t.kind != Kind::Space || t.user)
++            .is_some_and(wide)
++            || (k + 1..toks.len())
++                .map(|i| &toks[i])
++                .find(|t| t.kind != Kind::Space || t.user)
++                .is_some_and(wide);
++        // With font kerning on, Word halves a full-width closer that is
++        // directly followed by another closer or an opener, and an opener
++        // followed by another opener (an opener before a closer keeps its
++        // width), except around a question mark, which Word never
++        // compresses.
++        let paired = params.kern
++            && !NEVER_COMPRESSED.contains(&toks[k].c)
++            && toks.get(k + 1).is_some_and(|n| {
++                let ok = match toks[k].kind {
++                    Kind::Close => matches!(n.kind, Kind::Close | Kind::Open),
++                    Kind::Open => n.kind == Kind::Open,
++                    _ => false,
++                };
++                ok && !NEVER_COMPRESSED.contains(&n.c)
++            });
++        let it = &mut toks[k];
++        let mut gap = Abs::zero();
++        match it.kind {
++            Kind::Cjk => {
++                it.nw = it.w + params.excess;
++            }
++            Kind::Close => {
++                it.full = it.w + params.excess;
++                it.paired = paired;
++                // Halved: half the cell (measured under a grid: half the
++                // size plus half the excess).
++                it.nw = if paired { it.full / 2.0 } else { it.full };
++                it.spot = !paired && !NEVER_COMPRESSED.contains(&it.c);
++            }
++            Kind::Open => {
++                it.full = it.w + params.excess;
++                it.paired = paired;
++                it.nw = if paired { it.full / 2.0 } else { it.full };
++                // An opener right after other full-width punctuation has no
++                // blank of its own to give up, unless that mark was halved
++                // (then the opener keeps its blank).
++                it.spot = !paired
++                    && !prev.as_ref().is_some_and(|t| {
++                        matches!(t.kind, Kind::Close | Kind::Open) && !t.paired
++                    });
++            }
++            Kind::Latin => {
++                it.nw = if it.rigid {
++                    it.w
++                } else {
++                    it.w + params.latin_add() * it.glyph_count as f64
++                };
++                if let Some(prev) = &prev
++                    && prev.kind == Kind::Cjk
++                    && it.head.is_some_and(is_alnum)
++                {
++                    gap = params.auto_at(prev.size);
++                }
++            }
++            Kind::Space => {
++                if it.user {
++                    it.nw = it.w;
++                } else {
++                    // A space next to CJK text (or an inline frame) is half
++                    // a cell wide and rigid, also in a run of spaces
++                    // (measured: 15 spaces in a title blank took 94 pt
++                    // under a 12.454 pt grid).
++                    if space_ctx {
++                        it.nw = (it.size + params.excess) / 2.0;
++                        it.rigid = true;
++                    } else {
++                        it.nw = it.w + params.latin_add();
++                    }
++                }
++            }
++        }
++        if let Some(prev) = &prev
++            && prev.kind == Kind::Latin
++            && it.kind == Kind::Cjk
++            && prev.tail.is_some_and(is_alnum)
++        {
++            // Measured with mixed sizes: the spacing follows the size of the
++            // character before it, in both directions.
++            gap = params.auto_at(prev.size);
++        }
++        it.gap = gap;
++    }
++}
++
++/// A decided line.
++struct Decided {
++    /// The first and last token of the line.
++    first: usize,
++    last: usize,
++    /// The byte offset at which the line ends (the next line starts there).
++    end: usize,
++    breakpoint: Breakpoint,
++    /// The width the line is justified to.
++    target: Abs,
++    /// How much the natural width exceeds the capacity.
++    over: Abs,
++    /// Whether the line ends with hanging closing punctuation.
++    deep: bool,
++    /// Whether the line could not be broken legally and overflows.
++    forced: bool,
++    /// Whether the line is the last of the paragraph or ends at a forced
++    /// break.
++    ragged: bool,
++}
++
++/// The natural width of the tokens `first..=last` of a line.
++fn width_of(toks: &[Tok], first: usize, last: usize) -> Abs {
++    let mut w = Abs::zero();
++    for (k, it) in toks.iter().enumerate().take(last + 1).skip(first) {
++        if it.kind == Kind::Space && !it.user && (k == first || k == last) {
++            continue;
++        }
++        if it.kind == Kind::Space && it.weak && (k == first || k == last) {
++            continue;
++        }
++        w += if it.paired && k == last { it.full } else { it.nw };
++        if k > first {
++            w += it.gap;
++        }
++    }
++    w
++}
++
++/// Greedy line breaking with Word's rules.
++fn decide(
++    toks: &[Tok],
++    params: &Params,
++    measure: Abs,
++    breaks: &[usize],
++    mandatory: &[usize],
++    text_len: usize,
++) -> Vec<Decided> {
++    let n = toks.len();
++    let p = params.cell;
++    let compat = params.compat;
++    let half = p / 2.0;
++
++    // The compression spots among the tokens `first..last` (exclusive).
++    let spots = |first: usize, last: usize| -> usize {
++        (first..last)
++            .filter(|&k| toks[k].spot && !(toks[k].kind == Kind::Open && k == first))
++            .count()
++    };
++
++    // Word 2013 only compresses punctuation and hangs closers in justified
++    // paragraphs (measured: none of either with left alignment), while the
++    // Word 2003 layout does so regardless of the alignment.
++    let justify = params.justify || compat != 15;
++
++    // The grid excess of a cell (zero without a grid).
++    let ex = params.excess;
++    // The automatic CJK-Latin spacing at the paragraph's size.
++    let auto = params.auto_at(p - ex);
++
++    // The number of automatic spacings (gaps) among the tokens `first+1..=upto`.
++    let autos_in = |first: usize, upto: usize| -> usize {
++        (first + 1..=upto).filter(|&k| toks[k].gap > Abs::zero()).count()
++    };
++
++    // Word 2013+: the automatic spacings of a line lower the compression
++    // budget. Measured with indent sweeps at 12 pt: 0.85, 1.35, 1.7, 2.0 and
++    // 2.4 pt for 1, 2, 3, 4 and 6 gaps with two spots, half of that with one
++    // spot, and slowly less with more spots.
++    let penalty = |k: usize, gaps: f64| -> Abs {
++        if gaps <= 0.0 || k == 0 {
++            return Abs::zero();
++        }
++        let base = Abs::pt(1.35) * ((1.0 + gaps).ln() / 3f64.ln());
++        let factor = if k == 1 { 0.5 } else { (1.5 - 0.07 * k as f64).max(0.6) / 1.36 };
++        base * factor
++    };
++
++    // How much the automatic spacings of a line can shrink in total: half a
++    // gap for one gap, a whole gap for four or more (or two around a run
++    // right before the character).
++    let auto_cap = |gaps: usize, adjacent: bool| -> Abs {
++        if gaps == 0 {
++            Abs::zero()
++        } else if adjacent {
++            auto
++        } else {
++            (auto / 2.0 + Abs::pt((gaps - 1) as f64)).min(auto)
++        }
++    };
++
++    // The start of the Latin run ending right before token `j`, if any.
++    let run_before = |first: usize, j: usize| -> Option<usize> {
++        if j == 0 || j <= first || !matches!(toks[j - 1].kind, Kind::Latin | Kind::Space) {
++            return None;
++        }
++        let mut b = j - 1;
++        while b > first && matches!(toks[b - 1].kind, Kind::Latin | Kind::Space) {
++            b -= 1;
++        }
++        Some(b)
++    };
++
++    // The width of the unit `j..=m` as Word fits it: its tokens, the
++    // automatic spacing before it, and half a point more for a Latin run.
++    let unit_width = |first: usize, j: usize, m: usize| -> Abs {
++        let mut u = toks[j].gap;
++        for k in j..=m {
++            let it = &toks[k];
++            u += if it.paired && k == m { it.full } else { it.nw };
++            if k > j {
++                u += it.gap;
++            }
++        }
++        // Spaces right before the unit belong to it (measured: a space and
++        // a digit after CJK text were squeezed like one cell).
++        let mut b = j;
++        while b > first + 1 && toks[b - 1].kind == Kind::Space {
++            b -= 1;
++            u += toks[b].nw;
++        }
++        // A Latin run after CJK text gets a little more (measured 0.2-0.7
++        // pt) unless closers follow it.
++        if toks[j].kind == Kind::Latin && toks[j].glyphs && toks[j].gap > Abs::zero() && m == j {
++            u += Abs::pt(0.4);
++        }
++        u
++    };
++
++    // Word 2013+'s rule for squeezing the unit `j..=m` (openers, a
++    // character or Latin run at `core`, closers) onto a line whose spots are
++    // those before `j` plus the unit's own openers: every spot gives up at
++    // most half a cell and at most the free space left before the unit, the
++    // last closer may hang a whole cell, and the automatic spacings shrink a
++    // little. Measured with indent sweeps; see the probe README.
++    let budget15 = |first: usize, j: usize, core: usize, m: usize| -> Abs {
++        let openers = if toks[j].kind == Kind::Open && j > first { core - j } else { 0 };
++        let closers = m - core;
++        let k = spots(first, j) + openers;
++        let latin = toks[core].kind == Kind::Latin;
++        let adjacent = !latin && toks[core].gap > Abs::zero() && core == j;
++        let n_all = autos_in(first, core);
++        let mut gaps = n_all as f64;
++        if toks[core].gap > Abs::zero() && core == j {
++            // The unit's own gap is not a gap of the line.
++            gaps -= 1.0;
++            if !latin
++                && let Some(b) = run_before(first, j)
++                && toks[b].gap > Abs::zero()
++                && k > 0
++            {
++                // The other gap of the run right before the character
++                // weighs less.
++                gaps -= 1.0 / k as f64;
++            }
++        }
++        let mut pen = penalty(k, gaps);
++        if closers > 0 {
++            pen *= 2.0;
++        }
++        let hang = if closers > 0 { toks[m].full } else { Abs::zero() };
++        let cap = half * k as f64 + hang + auto_cap(n_all - (adjacent as usize), adjacent);
++        if k == 0 {
++            return cap - pen;
++        }
++        let u = unit_width(first, j, m);
++        let forgiven = if closers == 0 && (k >= 2 || adjacent || latin) {
++            slop(k)
++        } else {
++            Abs::zero()
++        };
++        // k * (u - over) + hang + forgiven >= over
++        let t_f = (u * k as f64 + hang + forgiven) / (k as f64 + 1.0);
++        // A single trailing closer: measured a little below the rule.
++        let deficit = if closers == 1 {
++            Abs::pt(match k {
++                0 | 1 => 0.0,
++                2 => 0.5,
++                3 => 0.75,
++                _ => 0.8,
++            })
++        } else {
++            Abs::zero()
++        };
++        t_f.min(cap) - pen - deficit
++    };
++
++    // Word 2003-2010: half a cell per spot (at most two around an opener),
++    // closers hang half a cell (2003) or up to a cell.
++    let budget_old = |first: usize, j: usize, core: usize, m: usize| -> Abs {
++        let k = spots(first, j);
++        let opener = toks[j].kind == Kind::Open && core > j;
++        let own = if opener {
++            half + half * (k.min(2) as f64)
++        } else if k == 0 {
++            Abs::zero()
++        } else {
++            half
++        };
++        if m == core {
++            return own;
++        }
++        let hang = if NEVER_COMPRESSED.contains(&toks[m].c) {
++            if compat == 11 { Abs::zero() } else { p }
++        } else {
++            half
++        };
++        let k_all = spots(first, m);
++        let chain = if compat == 11 { hang + half * k_all as f64 } else { half * k_all as f64 + p.max(hang) };
++        // The character itself must fit with the ordinary budget before
++        // its closers may hang.
++        let closers_w = width_of(toks, first, m) - width_of(toks, first, core);
++        chain.min(own + closers_w)
++    };
++
++    let unit_budget = |first: usize, j: usize, core: usize, m: usize| -> Abs {
++        if !justify {
++            return Abs::zero();
++        }
++        if compat == 15 { budget15(first, j, core, m) } else { budget_old(first, j, core, m) }
++    };
++
++    // Whether a legal break exists after token `k`, and where the next line
++    // then starts.
++    let break_after = |k: usize| -> Option<usize> {
++        if k + 1 >= n {
++            return Some(text_len);
++        }
++        let mut m = k;
++        while m + 1 < n && toks[m + 1].kind == Kind::Space {
++            m += 1;
++        }
++        let lo = toks[k].range.end;
++        let hi = toks[m].range.end.max(lo);
++        // The largest break offset in `lo..=hi`.
++        let idx = breaks.partition_point(|&b| b <= hi);
++        if idx == 0 {
++            return None;
++        }
++        let b = breaks[idx - 1];
++        (b >= lo).then_some(b)
++    };
++
++    // The mandatory break after token `k`, if any.
++    let mandatory_after = |k: usize| -> Option<usize> {
++        let lo = toks[k].range.end;
++        let hi = if k + 1 < n { toks[k + 1].range.start } else { text_len };
++        mandatory.iter().copied().find(|&m| m >= lo && m <= hi)
++    };
++
++    // Word 2013 shrinks the spaces of a justified line by up to a quarter.
++    let space_shrink = |first: usize, last: usize| -> Abs {
++        if compat != 15 || !params.justify {
++            return Abs::zero();
++        }
++        (first + 1..last)
++            .filter(|&k| toks[k].kind == Kind::Space && !toks[k].rigid && !toks[k].user)
++            .map(|k| toks[k].nw * 0.25)
++            .sum()
++    };
++
++    let mut lines = Vec::new();
++    let mut i = 0;
++    while i < n {
++        let mut capacity = measure;
++        let cellcap = if params.grid {
++            let cells = ((measure + EPS) / p).floor();
++            p * cells
++        } else {
++            measure
++        };
++        if params.grid && compat != 15 && params.adjust_right_indent {
++            capacity = cellcap;
++        }
++
++        let first = i;
++        let mut last = i;
++        let mut j = i;
++        let mut deep = false;
++        let mut forced_end: Option<usize> = None;
++        let mut have = false;
++
++        while j < n {
++            let it = &toks[j];
++            // The unit starting at `j`: openers, a character or run, and the
++            // closers after it, which may not be separated.
++            let mut m = j;
++            if it.kind == Kind::Open {
++                while m + 1 < n && toks[m + 1].kind == Kind::Open {
++                    m += 1;
++                }
++                if m + 1 < n && !matches!(toks[m + 1].kind, Kind::Close | Kind::Space) {
++                    m += 1;
++                }
++            }
++            let core = m;
++            while m + 1 < n && toks[m + 1].kind == Kind::Close {
++                m += 1;
++            }
++            let w = width_of(toks, first, m);
++            if w <= capacity + EPS {
++                last = m;
++                have = true;
++                if let Some(mm) = mandatory_after(m) {
++                    forced_end = Some(mm);
++                    break;
++                }
++                j = m + 1;
++                continue;
++            }
++            let need = w - capacity;
++            if it.kind == Kind::Close {
++                // A closer at the start of a unit (after a space, or at the
++                // line start) cannot be squeezed in.
++                break;
++            }
++            if it.kind == Kind::Latin && it.head.is_some_and(|c| ASCII_CLOSE.contains(&c))
++            {
++                break;
++            }
++            if it.kind == Kind::Open && core == j {
++                // Only openers up to the end of the paragraph.
++                break;
++            }
++            let mut t = unit_budget(first, j, core, m);
++            t += space_shrink(first, m);
++            if std::env::var_os("MSWORD_DEBUG").is_some() {
++                eprintln!(
++                    "unit {}..={} {:?} {:?} need={:.3} budget={:.3} k={} autos={}",
++                    j,
++                    m,
++                    it.kind,
++                    toks[j..=m].iter().map(|t| t.c).collect::<String>(),
++                    need.to_pt(),
++                    t.to_pt(),
++                    spots(first, j),
++                    autos_in(first, j)
++                );
++            }
++            if need <= t + EPS {
++                last = m;
++                have = true;
++                deep = m > core;
++                if let Some(mm) = mandatory_after(m) {
++                    forced_end = Some(mm);
++                    break;
++                }
++                j = m + 1;
++            } else {
++                break;
++            }
++        }
++        if !have {
++            last = first;
++        }
++
++        // A line may not end with a space, an opener or Latin opening
++        // punctuation, nor where no break is legal.
++        let legal = |k: usize| break_after(k).is_some();
++        let bad_end = |k: usize| {
++            let t = &toks[k];
++            (t.kind == Kind::Space && !t.user)
++                || t.kind == Kind::Open
++                || (t.kind == Kind::Latin
++                    && t.tail.is_some_and(|c| ASCII_OPEN.contains(&c)))
++        };
++        if forced_end.is_none() {
++            while last > first && (bad_end(last) || !legal(last)) {
++                last -= 1;
++            }
++        }
++        let mut forced = false;
++        if forced_end.is_none() && !legal(last) {
++            while last + 1 < n && !legal(last) {
++                last += 1;
++            }
++            forced = true;
++        }
++        // Trailing spaces at the end of the paragraph join the last line.
++        if forced_end.is_none() && last + 1 < n {
++            let mut k = last + 1;
++            while k < n && toks[k].kind == Kind::Space {
++                k += 1;
++            }
++            if k >= n {
++                last = n - 1;
++            }
++        }
++
++        let (end, breakpoint) = match forced_end {
++            Some(m) => (m, Breakpoint::Mandatory),
++            None => match break_after(last) {
++                Some(b) if last + 1 < n => (b, Breakpoint::Normal),
++                _ => (text_len, Breakpoint::Mandatory),
++            },
++        };
++        let ragged = breakpoint == Breakpoint::Mandatory;
++        let w = width_of(toks, first, last);
++        let target = if params.grid && compat != 15 && params.adjust_right_indent {
++            cellcap
++        } else {
++            measure
++        };
++        lines.push(Decided {
++            first,
++            last,
++            end,
++            breakpoint,
++            target,
++            over: w - capacity,
++            deep: deep && toks[last].kind == Kind::Close,
++            forced,
++            ragged,
++        });
++
++        i = last + 1;
++        // Spaces at the break are trimmed at the end of this line.
++        while i < n
++            && toks[i].kind == Kind::Space
++            && !toks[i].user
++            && toks[i].range.start < end
++        {
++            i += 1;
++        }
++        if end >= text_len {
++            break;
++        }
++    }
++    lines
++}
++
++/// Applies Word's glyph widths, compression and justification to a line.
++fn render(built: &mut Line, toks: &[Tok], d: &Decided, params: &Params, measure: Abs) {
++    let compat = params.compat;
++    let p = params.cell;
++    let half = p / 2.0;
++    let first = d.first;
++    let last = d.last;
++
++    // Per-token adjustment of the width (compression, negative) and the
++    // slack added after the token.
++    let count = last - first + 1;
++    let mut delta = vec![Abs::zero(); count];
++    let mut after = vec![Abs::zero(); count];
++
++    // Compression.
++    if d.over > Abs::zero() && !d.forced {
++        let spot_idx: Vec<usize> = (first..=last)
++            .filter(|&k| toks[k].spot && !(toks[k].kind == Kind::Open && k == first))
++            .filter(|&k| !(d.deep && k == last))
++            .collect();
++        let need = d.over;
++        let k = spot_idx.len();
++        let cap = half;
++        let mut hang = Abs::zero();
++        let mut inline = need;
++        if d.deep {
++            let h = if NEVER_COMPRESSED.contains(&toks[last].c) {
++                if compat == 15 { p } else { Abs::zero() }
++            } else if compat == 11 || compat == 15 {
++                half
++            } else {
++                p
++            };
++            if compat == 11 {
++                // Word 2003 hangs first, then compresses.
++                hang = h.min(need);
++                inline = need - hang;
++            } else if need > cap * k as f64 {
++                // Later versions compress first and hang the rest, at least
++                // half a cell and at most a whole one.
++                hang = h.max(need - cap * k as f64).min(p).min(need);
++                inline = need - hang;
++            }
++        }
++        if k > 0 {
++            let each = (inline / k as f64).min(cap);
++            for &s in &spot_idx {
++                delta[s - first] -= each;
++            }
++            inline -= each * k as f64;
++        }
++        let _ = (hang, inline);
++    }
++
++    // Slack distribution for justified lines.
++    let natural_w = width_of(toks, first, last);
++    let compressed: Abs = delta.iter().copied().sum();
++    let mut slack = d.target - (natural_w + compressed);
++    if params.justify
++        && !d.ragged
++        && !d.forced
++        && slack > Abs::zero()
++        && d.over <= Abs::zero()
++    {
++        let mut autos = Vec::new();
++        let mut spaces = Vec::new();
++        let mut cjkgaps = Vec::new();
++        for (k, it) in toks.iter().enumerate().take(last + 1).skip(first) {
++            if k > first && it.gap > Abs::zero() {
++                autos.push(k - 1);
++            }
++            if it.kind == Kind::Space && !it.rigid && !it.user && k > first && k < last {
++                spaces.push(k);
++            }
++            if matches!(it.kind, Kind::Cjk | Kind::Close | Kind::Open) && k < last {
++                cjkgaps.push(k);
++            }
++        }
++        let autostretch = Abs::pt(2.8);
++        let n1 = autos.len() + spaces.len();
++        if n1 > 0 {
++            let mut each = slack / n1 as f64;
++            if !cjkgaps.is_empty() {
++                each = each.min(autostretch);
++            }
++            for &k in &autos {
++                after[k - first] += each;
++            }
++            for &k in &spaces {
++                after[k - first] += each;
++            }
++            slack -= each * n1 as f64;
++        }
++        if slack > Abs::zero() && !cjkgaps.is_empty() {
++            let mut each = slack / cjkgaps.len() as f64;
++            if !spaces.is_empty() {
++                each = each.min(autostretch);
++            }
++            for &k in &cjkgaps {
++                after[k - first] += each;
++            }
++            slack -= each * cjkgaps.len() as f64;
++        }
++        if slack > Abs::zero() {
++            let pool: &[usize] = if !spaces.is_empty() {
++                &spaces
++            } else if !cjkgaps.is_empty() {
++                &cjkgaps
++            } else {
++                &autos
++            };
++            if !pool.is_empty() {
++                let each = slack / pool.len() as f64;
++                for &k in pool {
++                    after[k - first] += each;
++                }
++            }
++        }
++    }
++
++    // Now apply to the glyphs of the line.
++    let tok_at = |offset: usize| -> Option<usize> {
++        let idx = toks.partition_point(|t| t.range.start <= offset);
++        if idx == 0 {
++            return None;
++        }
++        let k = idx - 1;
++        (offset < toks[k].range.end.max(toks[k].range.start + 1)).then_some(k)
++    };
++
++    for (_, entry) in built.items.iter_mut() {
++        let Some(shaped) = entry.text_mut() else { continue };
++        let glyphs = shaped.glyphs.to_mut();
++        let mut g = 0;
++        while g < glyphs.len() {
++            let Some(k) = tok_at(glyphs[g].range.start) else {
++                g += 1;
++                continue;
++            };
++            if k < first || k > last {
++                g += 1;
++                continue;
++            }
++            let it = &toks[k];
++            let idx = k - first;
++            let size = glyphs[g].size;
++            // Extra width due to the gap before the next token and the slack.
++            let extra = after[idx] + if k < last { toks[k + 1].gap } else { Abs::zero() };
++            match it.kind {
++                Kind::Cjk | Kind::Close | Kind::Open => {
++                    // The cluster of this character.
++                    let mut e = g + 1;
++                    while e < glyphs.len() && glyphs[e].range == glyphs[g].range {
++                        e += 1;
++                    }
++                    let base = if it.paired && k == last { it.full } else { it.nw };
++                    let target = base + delta[idx] + extra;
++                    let natural = it.w;
++                    let glyph = &mut glyphs[g];
++                    glyph.adjustability = Default::default();
++                    glyph.is_justifiable = false;
++                    glyph.x_advance = Em::from_abs(target, size);
++                    glyph.x_offset = if it.kind == Kind::Open {
++                        Em::from_abs(target - natural - extra, size)
++                    } else {
++                        Em::zero()
++                    };
++                    for extra_glyph in &mut glyphs[g + 1..e] {
++                        extra_glyph.x_advance = Em::zero();
++                        extra_glyph.adjustability = Default::default();
++                        extra_glyph.is_justifiable = false;
++                    }
++                    g = e;
++                }
++                Kind::Latin => {
++                    // All glyphs of this run that are in this text item.
++                    let mut e = g;
++                    while e < glyphs.len() && tok_at(glyphs[e].range.start) == Some(k) {
++                        e += 1;
++                    }
++                    let add = if it.rigid { Abs::zero() } else { params.latin_add() };
++                    for glyph in &mut glyphs[g..e] {
++                        glyph.adjustability = Default::default();
++                        glyph.is_justifiable = false;
++                        glyph.x_advance += Em::from_abs(add, size);
++                    }
++                    // The gap and slack go after the last glyph of the run.
++                    if let Some(glyph) = glyphs[g..e].last_mut()
++                        && glyph.range.end >= it.range.end
++                    {
++                        glyph.x_advance += Em::from_abs(extra, size);
++                    }
++                    g = e;
++                }
++                Kind::Space => {
++                    let glyph = &mut glyphs[g];
++                    glyph.adjustability = Default::default();
++                    glyph.is_justifiable = false;
++                    let target = if k == first || k == last {
++                        Abs::zero()
++                    } else {
++                        it.nw + delta[idx] + extra
++                    };
++                    glyph.x_advance = Em::from_abs(target, size);
++                    g += 1;
++                }
++            }
++        }
++    }
++
++    // Explicit spacing and frames are not touched; the line width follows.
++    built.width = built.items.iter().map(Item::natural_width).sum();
++    built.fixed = true;
++    built.justify = false;
++    let _ = measure;
++}
+diff --git a/crates/typst-layout/src/inline/prepare.rs b/crates/typst-layout/src/inline/prepare.rs
+index b98ffcb..1c7366c 100644
+--- a/crates/typst-layout/src/inline/prepare.rs
++++ b/crates/typst-layout/src/inline/prepare.rs
+@@ -106,7 +106,9 @@ pub fn prepare<'a>(
+         indices.extend(range.clone().map(|_| i));
+     }
+ 
+-    if config.cjk_latin_spacing {
++    // In the Word emulation mode, the spacing between CJK and Latin text is
++    // handled by the line breaker itself.
++    if config.cjk_latin_spacing && config.linebreaks.msword().is_none() {
+         add_cjk_latin_spacing(&mut items);
+     }
+ 
+diff --git a/crates/typst-layout/src/inline/shaping.rs b/crates/typst-layout/src/inline/shaping.rs
+index 36e6698..0ccf884 100644
+--- a/crates/typst-layout/src/inline/shaping.rs
++++ b/crates/typst-layout/src/inline/shaping.rs
+@@ -1411,7 +1411,7 @@ pub fn cjk_punct_style(lang: Lang, region: Option<Region>) -> CjkPunctStyle {
+ }
+ 
+ /// Whether the glyph is a space.
+-fn is_space(c: char) -> bool {
++pub(super) fn is_space(c: char) -> bool {
+     matches!(c, ' ' | '\u{00A0}' | '　')
+ }
+ 
+diff --git a/crates/typst-library/src/model/par.rs b/crates/typst-library/src/model/par.rs
+index 77ec28c..f580ccf 100644
+--- a/crates/typst-library/src/model/par.rs
++++ b/crates/typst-library/src/model/par.rs
+@@ -5,8 +5,8 @@ use crate::diag::{HintedStrResult, SourceResult, StrResult, bail};
+ use crate::engine::Engine;
+ use crate::foundations::{
+     AlternativeFold, Args, Cast, CastInfo, Construct, Content, Dict, Fold, FromValue,
+-    IntoValue, NativeElement, Packed, Reflect, Smart, Unlabellable, Value, cast, dict,
+-    elem, scope,
++    IntoValue, NativeElement, Packed, Reflect, Smart, Str, Unlabellable, Value, cast,
++    dict, elem, scope,
+ };
+ use crate::introspection::{Count, CounterUpdate, Locatable, Tagged, Unqueriable};
+ use crate::layout::{Abs, Em, HAlignment, Length, OuterHAlignment, Ratio, Rel};
+@@ -358,6 +358,17 @@ pub struct ParElem {
+     /// breaks for ragged paragraphs may also be worthwhile to improve the
+     /// appearance of the text.
+     ///
++    /// The `{"msword"}` mode emulates Microsoft Word's greedy line breaking,
++    /// so that a paragraph breaks at the same places as in a Word document
++    /// with the same fonts, font size and text width. It fills each line as
++    /// far as possible, then squeezes one more character in by compressing
++    /// the CJK punctuation on the line if Word would, and lets closing
++    /// punctuation hang into the margin where Word does. The mode can be
++    /// configured with a dictionary, see @par.linebreaks-msword. In this
++    /// mode, hyphenation is disabled unless explicitly enabled, and the
++    /// spacing between CJK and Latin text follows Word's rules instead of
++    /// Typst's when @text.cjk-latin-spacing is `{auto}`.
++    ///
+     /// ```example
+     /// #set page(width: 207pt)
+     /// #set par(linebreaks: "simple")
+@@ -623,7 +634,7 @@ impl Limit for Rel<Length> {
+ }
+ 
+ /// How to determine line breaks in a paragraph.
+-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Cast)]
++#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+ pub enum Linebreaks {
+     /// Determine the line breaks in a simple first-fit style.
+     Simple,
+@@ -632,6 +643,156 @@ pub enum Linebreaks {
+     /// Typst will try to produce more evenly filled lines of text by
+     /// considering the whole paragraph when calculating line breaks.
+     Optimized,
++    /// Emulate Microsoft Word's greedy line breaking, including its
++    /// compression of CJK punctuation and hanging of closing punctuation.
++    Msword(MswordLinebreaks),
++}
++
++impl Linebreaks {
++    /// The Microsoft Word emulation settings, if that mode is active.
++    pub fn msword(self) -> Option<MswordLinebreaks> {
++        match self {
++            Self::Msword(config) => Some(config),
++            _ => None,
++        }
++    }
++}
++
++cast! {
++    Linebreaks,
++    self => match self {
++        Self::Simple => "simple".into_value(),
++        Self::Optimized => "optimized".into_value(),
++        Self::Msword(config) => Value::Dict(config.into()),
++    },
++    /// Determine the line breaks in a simple first-fit style.
++    "simple" => Self::Simple,
++    /// Optimize the line breaks for the whole paragraph.
++    ///
++    /// Typst will try to produce more evenly filled lines of text by
++    /// considering the whole paragraph when calculating line breaks.
++    "optimized" => Self::Optimized,
++    /// Emulate Microsoft Word's greedy line breaking with the default
++    /// settings (Word 2013 and later, no character grid). Pass a dictionary
++    /// instead to configure the emulated Word version and the document grid,
++    /// see below.
++    "msword" => Self::Msword(MswordLinebreaks::default()),
++    mut dict: Dict => {
++        // Get a value by key, accepting either non-existence or something
++        // convertible to type T.
++        fn take<T: FromValue>(dict: &mut Dict, key: &str) -> HintedStrResult<Option<T>> {
++            dict.take(key).ok().map(|v| v.cast()).transpose()
++        }
++
++        if let Some(mode) = take::<Str>(&mut dict, "mode")?
++            && mode.as_str() != "msword"
++        {
++            return Err(eco_format!(
++                "only the \"msword\" line breaking mode accepts settings, found \"{mode}\""
++            )
++            .into());
++        }
++
++        let mut config = MswordLinebreaks::default();
++        if let Some(compat) = take::<i64>(&mut dict, "compat")? {
++            config.compat = match compat {
++                11 | 12 | 14 | 15 => compat as u8,
++                _ => {
++                    return Err(eco_format!(
++                        "compat must be one of 11 (Word 2003), 12 (Word 2007), \
++                         14 (Word 2010) or 15 (Word 2013 and later), found {compat}"
++                    )
++                    .into());
++                }
++            };
++        }
++        if let Some(pitch) = take::<Smart<Length>>(&mut dict, "char-pitch")? {
++            config.char_pitch = pitch.custom();
++        }
++        if let Some(adjust) = take::<bool>(&mut dict, "adjust-right-indent")? {
++            config.adjust_right_indent = adjust;
++        }
++        if let Some(kern) = take::<bool>(&mut dict, "kern")? {
++            config.kern = kern;
++        }
++        dict.finish(&["mode", "compat", "char-pitch", "adjust-right-indent", "kern"])?;
++        Self::Msword(config)
++    },
++}
++
++/// Settings for the emulation of Microsoft Word's line breaking.
++///
++/// These are given as a dictionary to `par.linebreaks`:
++///
++/// ```example
++/// #set par(justify: true, linebreaks: (
++///   mode: "msword",
++///   compat: 11,
++///   char-pitch: 12.45pt,
++/// ))
++/// ```
++///
++/// - `compat`: The Word compatibility mode whose line breaking rules are
++///   emulated. This is the `compatibilityMode` value found in a `.docx`
++///   file's `settings.xml`: `{11}` (Word 2003, what school-issued `.doc`
++///   templates become when saved by a modern Word), `{12}` (Word 2007),
++///   `{14}` (Word 2010) or `{15}` (Word 2013 and later, the default for new
++///   documents).
++/// - `char-pitch`: The character pitch of the document grid
++///   ("指定行和字符网格" in Word's page setup), or `{auto}` for no character
++///   grid. Each CJK character then occupies one grid cell and Latin glyphs
++///   are widened by the same ratio. The pitch is resolved at the paragraph's
++///   font size; the excess over the font size is kept constant for text of
++///   other sizes, as Word does.
++/// - `adjust-right-indent`: Word's "automatically adjust right indent when
++///   document grid is defined" paragraph property (on by default). It only
++///   matters for compatibility modes 11, 12 and 14 with a character grid.
++/// - `kern`: Whether Word's "kerning for fonts" character property is on,
++///   as it is in the default style of Chinese Word documents. With it, Word
++///   halves the first of two adjacent full-width punctuation marks (for
++///   example the closing parenthesis in `），`), which makes lines hold more.
++#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
++pub struct MswordLinebreaks {
++    /// The emulated compatibility mode: 11, 12, 14 or 15.
++    pub compat: u8,
++    /// The character pitch of the document grid, if any.
++    pub char_pitch: Option<Length>,
++    /// Whether the right indent is adjusted to the grid (modes 11-14).
++    pub adjust_right_indent: bool,
++    /// Whether Word's font kerning is on, which halves adjacent punctuation.
++    pub kern: bool,
++}
++
++impl Default for MswordLinebreaks {
++    fn default() -> Self {
++        Self {
++            compat: 15,
++            char_pitch: None,
++            adjust_right_indent: true,
++            kern: true,
++        }
++    }
++}
++
++impl From<MswordLinebreaks> for Dict {
++    fn from(config: MswordLinebreaks) -> Self {
++        let mut dict = Dict::new();
++        dict.insert("mode".into(), "msword".into_value());
++        dict.insert("compat".into(), (config.compat as i64).into_value());
++        dict.insert(
++            "char-pitch".into(),
++            match config.char_pitch {
++                Some(pitch) => pitch.into_value(),
++                None => Value::Auto,
++            },
++        );
++        dict.insert(
++            "adjust-right-indent".into(),
++            config.adjust_right_indent.into_value(),
++        );
++        dict.insert("kern".into(), config.kern.into_value());
++        dict
++    }
+ }
+ 
+ /// Configuration for first line indent.
+diff --git a/crates/typst-library/src/text/mod.rs b/crates/typst-library/src/text/mod.rs
+index 7246b2c..7e68bdc 100644
+--- a/crates/typst-library/src/text/mod.rs
++++ b/crates/typst-library/src/text/mod.rs
+@@ -101,6 +101,9 @@ pub struct TextElem {
+     ///     - `{"latin-in-cjk"}` covers all codepoints except for those which
+     ///       exist in Latin fonts, but should preferably be taken from CJK
+     ///       fonts.
++    ///     - `{"msword-latin"}` covers what Microsoft Word draws with the
++    ///       Latin font in East Asian text (useful together with
++    ///       `{par(linebreaks: "msword")}`).
+     ///   - A @regex[regular expression] that defines exactly which codepoints
+     ///     shall be covered. Accepts only the subset of regular expressions
+     ///     which consist of exactly one dot, letter, or character class.
+@@ -993,6 +996,9 @@ cast! {
+ pub enum Covers {
+     /// Covers all codepoints except those used both in Latin and CJK fonts.
+     LatinInCjk,
++    /// Covers the codepoints that Microsoft Word draws with the Latin
++    /// (`ascii`/`hAnsi`) font in a run with the `eastAsia` font hint.
++    MswordLatin,
+     /// Covers the set of codepoints for which the regex matches.
+     Regex(Regex),
+ }
+@@ -1009,6 +1015,27 @@ impl Covers {
+                 )
+                 .unwrap()
+             ),
++            // ECMA-376 17.3.2.26 (rFonts): the ranges that go to the East
++            // Asian font when the run carries `w:hint="eastAsia"`, as Chinese
++            // Word documents do by default, checked against Word 16.89 (which
++            // keeps U+2011, U+2012, U+203E and U+2113 Latin). Everything else
++            // is Latin.
++            Self::MswordLatin => singleton!(
++                Regex,
++                Regex::new(
++                    "[^\u{00A1}\u{00A4}\u{00A7}\u{00A8}\u{00AA}\u{00AD}\u{00AF}\
++                       \u{00B0}-\u{00B4}\u{00B6}-\u{00BA}\u{00BC}-\u{00BF}\
++                       \u{00D7}\u{00F7}\u{00E0}\u{00E1}\u{00E8}-\u{00EA}\
++                       \u{00EC}\u{00ED}\u{00F2}\u{00F3}\u{00F9}\u{00FA}\u{00FC}\
++                       \u{0101}\u{0113}\u{011B}\u{012B}\u{014D}\u{016B}\
++                       \u{01CE}\u{01D0}\u{01D2}\u{01D4}\u{01D6}\u{01D8}\u{01DA}\u{01DC}\
++                       \u{0370}-\u{03CF}\u{0400}-\u{04FF}\
++                       \u{2000}-\u{2010}\u{2013}-\u{203D}\u{203F}-\u{2112}\
++                       \u{2114}-\u{2EFF}\u{3000}-\u{9FFF}\u{F900}-\u{FAFF}\
++                       \u{FE30}-\u{FE4F}\u{FF00}-\u{FFEF}\u{20000}-\u{3134F}]"
++                )
++                .unwrap()
++            ),
+             Self::Regex(regex) => regex,
+         }
+     }
+@@ -1018,12 +1045,20 @@ cast! {
+     Covers,
+     self => match self {
+         Self::LatinInCjk => "latin-in-cjk".into_value(),
++        Self::MswordLatin => "msword-latin".into_value(),
+         Self::Regex(regex) => regex.into_value(),
+     },
+ 
+     /// Covers all codepoints except those used both in Latin and CJK fonts.
+     "latin-in-cjk" => Covers::LatinInCjk,
+ 
++    /// Covers the codepoints that Microsoft Word gives to the Latin font in
++    /// a run hinted as East Asian (the default in Chinese Word documents):
++    /// everything except CJK, Greek, Cyrillic, general punctuation and
++    /// symbols such as `×`, `°` or `±`, which Word draws with the East Asian
++    /// font. Use it on the Latin font when reproducing a Word document.
++    "msword-latin" => Covers::MswordLatin,
++
+     regex: Regex => {
+         let ast = regex_syntax::ast::parse::Parser::new().parse(regex.as_str());
+         match ast {

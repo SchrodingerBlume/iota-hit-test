@@ -323,13 +323,56 @@ export const SWITCHES: SwitchDef<any>[] = [
   },
 ];
 
+// 预览引擎：本站的 wasm 是 Typst 0.15.1 + Word 式断行（par(linebreaks: "msword")）。
+// 这一组只在预览里生效；导出的 .typ 只把字符网格折成模板的 layout: (char-pitch: …)，原版 Typst 照编
+SWITCHES.push(
+  {
+    key: 'wordCompat',
+    label: t("Word 兼容模式"),
+    hint: t("预览按哪一版 Word 的断行规则排。学校发的 .doc 模板用新版 Word 另存后是 2003 那一档"),
+    choices: [
+      { value: '11', label: t("2003") },
+      { value: '12', label: t("2007") },
+      { value: '14', label: t("2010") },
+      { value: '15', label: t("2013+") },
+    ],
+    group: t("排版引擎"),
+    resolve: () => ({ value: '11', reason: t("学校范例是 Word 2003 的 .doc") }),
+  },
+  {
+    key: 'charGrid',
+    label: t("字符网格"),
+    hint: t("Word 页面设置里「指定行和字符网格」：每个汉字占一格，西文按比例撑开。预览由引擎排；导出时折成模板的 char-pitch"),
+    choices: onOff,
+    group: t("排版引擎"),
+    resolve: (s) => (s.stage === 'final' ? { value: true, reason: t("终稿范例开着字符网格（12.45 pt 一格）") } : { value: false, reason: t("报告表单没有字符网格") }),
+  },
+  {
+    key: 'wordKern',
+    label: t("字体紧缩"),
+    hint: t("Word 字体对话框的「为字体调整字间距」：相邻的两个全角标点压成一格半，一行能多放一点。只影响预览"),
+    choices: onOff,
+    group: t("排版引擎"),
+    resolve: () => ({ value: true, reason: t("中文 Word 文档的默认样式开着") }),
+  },
+  {
+    key: 'wordRightIndent',
+    label: t("网格调整右缩进"),
+    hint: t("Word 段落对话框「如果定义了文档网格，则自动调整右缩进」；只在 2003 / 2007 / 2010 模式下有意义。只影响预览"),
+    choices: onOff,
+    group: t("排版引擎"),
+    applies: (s) => s.wordCompat !== '15',
+    resolve: () => ({ value: true, reason: t("Word 默认开着") }),
+  },
+);
+
 export function resolveSwitch<V>(def: SwitchDef<any>, s: Settings): { effective: V; auto: Resolved<V>; isAuto: boolean } {
   const raw = s[def.key] as Tri<V>;
   const auto = def.resolve(s) as Resolved<V>;
   return raw === 'auto' ? { effective: auto.value, auto, isAuto: true } : { effective: raw as V, auto, isAuto: false };
 }
 
-export const SWITCH_GROUPS = [t("题注与编号"), t("标题与页面"), t("缩略语与列表"), t("字体")] as const;
+export const SWITCH_GROUPS = [t("题注与编号"), t("标题与页面"), t("缩略语与列表"), t("字体"), t("排版引擎")] as const;
 
 export const defaultSettings = (): Settings => ({
   styles: {},
@@ -360,6 +403,11 @@ export const defaultSettings = (): Settings => ({
   emDash: 'auto',
   appendixNumbering: 'auto',
   titleEnXiaoer: 'auto',
+  wordCompat: 'auto',
+  charGrid: 'auto',
+  charPitch: 'auto',
+  wordKern: 'auto',
+  wordRightIndent: 'auto',
 });
 
 export type { TriBool };
