@@ -307,6 +307,9 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .rich p.no-indent::before { content: '⇤'; position: absolute; left: -1.3em; top: 0; color: var(--accent); opacity: 0.55; font-size: 0.85em; font-family: var(--sans); pointer-events: none; }
 /* 编辑标记开着：编辑区的段末与标题末也画 ¶（与预览同一个开关） */
 .rich.show-marks > p::after, .rich.show-marks li > p::after, .rich.show-marks blockquote > p::after { content: '¶'; color: var(--accent); opacity: 0.5; margin-left: 1px; font-family: "Times New Roman", serif; pointer-events: none; }
+/* 空段：ProseMirror 用一个 <br> 撑行高，¶ 会掉到第二行把空段撑成两行；开着标记时 ¶ 自己撑行，br 藏起来 */
+.rich.show-marks p:has(> br.ProseMirror-trailingBreak:only-child) > br.ProseMirror-trailingBreak { display: none; }
+.rich.show-marks p:has(> br.ProseMirror-trailingBreak:only-child)::after { display: inline-block; min-height: 1em; }
 .rich.show-marks .hd .hd-zh > [data-node-view-content-react]::after { content: '¶'; color: var(--accent); opacity: 0.5; font-weight: 400; font-size: 0.8em; margin-left: 2px; pointer-events: none; }
 .rich p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--muted); opacity: 0.7; float: left; height: 0; pointer-events: none; text-indent: 0; }
 .rich ul, .rich ol { padding-left: 2.2em; margin: 0.2em 0; }
@@ -315,6 +318,29 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .rich pre { font-family: var(--mono); font-size: 13px; background: var(--panel-2); padding: 12px 14px; border-radius: var(--r-s); line-height: 1.55; white-space: pre-wrap; margin: 0.6em 0; }
 .rich blockquote { border-left: 3px solid var(--line-2); margin: 0; padding-left: 12px; color: var(--muted); }
 .rich strong { font-weight: 700; }
+.rich a.lnk { color: var(--accent-ink); text-decoration: underline; text-decoration-color: var(--accent-soft-2); text-underline-offset: 2px; }
+/* 批注：淡黄底（Word 的样子），当前那条深一点 */
+.rich span.cmt { background: rgba(250, 204, 21, 0.28); border-bottom: 1.5px solid rgba(202, 138, 4, 0.6); }
+.rich span.cmt.is-active { background: rgba(250, 204, 21, 0.55); }
+.pv-comment { position: absolute; background: rgba(250, 204, 21, 0.28); pointer-events: none; z-index: 0; }
+.pv-comment.is-active { background: rgba(250, 204, 21, 0.5); }
+.len-input.is-bad input, .len-input.is-bad { border-color: var(--danger) !important; }
+/* 批注面板：右边一栏（像 Word 的批注窗格） */
+.work.has-comments { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
+.comments-pane { position: sticky; top: 0; max-height: calc(100vh - 160px); overflow: auto; border-left: 1px solid var(--line); padding-left: 12px; font-size: 13px; }
+.comments-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-weight: 600; }
+.comments-head > span:first-child { display: inline-flex; align-items: center; gap: 4px; flex: 1; }
+.comments-toggle { border: 0; background: none; color: var(--accent-ink); font-size: 12px; padding: 2px 0 8px; cursor: pointer; }
+.comments-empty { font-size: 12.5px; line-height: 1.5; }
+.comment-card { border: 1px solid var(--line); border-left: 3px solid rgba(202, 138, 4, 0.6); border-radius: var(--r-s); padding: 8px 10px; margin-bottom: 8px; background: var(--panel); cursor: pointer; }
+.comment-card.is-active { border-color: var(--accent); border-left-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft-2); }
+.comment-card.is-resolved { opacity: 0.6; }
+.comment-meta { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; margin-bottom: 4px; }
+.comment-text { width: 100%; }
+.comment-reply { margin: 6px 0 0; padding: 6px 8px; background: var(--panel-2); border-radius: var(--r-s); font-size: 12.5px; }
+.comment-actions { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
+.comment-actions > :first-child { flex: 1; }
+@media (max-width: 900px) { .work.has-comments { grid-template-columns: 1fr; } .comments-pane { position: static; max-height: none; border-left: 0; border-top: 1px solid var(--line); padding: 8px 0 0; } }
 /* 强调：西文真斜体（Times 的斜体面），汉字换楷体不伪斜——与模板的排法一致（fake-italic 管的是没楷体时怎么办） */
 .rich em { font-style: italic; font-synthesis: none; font-family: "Times New Roman", "Kaiti SC", "STKaiti", KaiTi, "FandolKai", serif; }
 .rich code { background: var(--panel-2); padding: 0 4px; border-radius: var(--r-xs); font-size: 0.88em; }
@@ -810,6 +836,9 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .rb-pop-menu button:hover { background: var(--panel-2); }
 .rb-pop-menu button svg { width: 18px; height: 18px; color: var(--muted); }
 .table-text-dialog { max-width: 640px; }
+.dlg-fs { border: 1px solid var(--line); border-radius: var(--r-s); padding: 8px 12px 10px; margin: 0 0 10px; }
+.dlg-fs legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
+.dlg-fs .style-field { margin-bottom: 6px; }
 .table-text-input { width: 100%; font-family: var(--mono); font-size: 12.5px; }
 .rb-collapse { border: 0; background: none; color: var(--muted); padding: 4px; margin: 0 0 4px 4px; border-radius: var(--r-s); display: inline-flex; }
 .rb-collapse:hover { background: var(--panel-2); color: var(--ink); }

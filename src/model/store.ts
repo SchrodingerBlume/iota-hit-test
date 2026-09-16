@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ThesisDoc, Settings, Info, RichDoc, Pages, Abbreviation, SymbolEntry, Defense, ImageAsset, NomenclatureOptions } from './types';
+import type { ThesisDoc, Settings, Info, RichDoc, Pages, Abbreviation, SymbolEntry, Defense, ImageAsset, NomenclatureOptions, Comment } from './types';
 import { emptyDoc } from './types';
 import { defaultSettings } from './options';
 import { defaultInfo } from './info';
@@ -52,6 +52,7 @@ export const newDoc = (): ThesisDoc => ({
   },
 
   images: [],
+  comments: [],
 });
 
 /** 老工程文件缺的键补上默认值 */
@@ -78,6 +79,7 @@ export function normalizeDoc(raw: Partial<ThesisDoc>): ThesisDoc {
   if (doc.bibliography?.trim()) { doc.references = [...doc.references, ...parseBibtex(doc.bibliography)]; doc.bibliography = ''; }
   if (doc.achievements?.trim()) { doc.achievementEntries = [...doc.achievementEntries, ...parseBibtex(doc.achievements)]; doc.achievements = ''; }
   doc.abbreviations ??= [];
+  if (!Array.isArray(doc.comments)) doc.comments = [];
   doc.symbols ??= [];
   doc.images ??= [];
   return doc;
@@ -105,6 +107,7 @@ interface State {
   setSection: (s: Section) => void;
   setView: (v: 'projects' | 'editor') => void;
   setSettings: (patch: Partial<Settings>) => void;
+  setComments: (comments: Comment[]) => void;
   setInfo: (patch: Partial<Info>) => void;
   setRich: (key: RichKey, value: RichDoc) => void;
   setPages: (patch: Partial<Pages>) => void;
@@ -170,6 +173,7 @@ export const useStore = create<State>((set, get) => {
     setSection: (section) => set({ section }),
     setView: (view) => set({ view }),
     setSettings: (patch) => update((d) => ({ ...d, settings: { ...d.settings, ...patch } })),
+    setComments: (comments) => update((d) => ({ ...d, comments })),
     setInfo: (patch) => update((d) => ({ ...d, info: { ...d.info, ...patch } })),
     setRich: (key, value) => update((d) => ({ ...d, [key]: value })),
     setPages: (patch) => update((d) => ({ ...d, pages: { ...d.pages, ...patch } })),

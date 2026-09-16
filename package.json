@@ -19,6 +19,7 @@
     "@myriaddreamin/typst-ts-renderer": "file:./vendor/typst-ts-renderer",
     "@myriaddreamin/typst-ts-web-compiler": "file:./vendor/typst-ts-web-compiler",
     "@myriaddreamin/typst.ts": "^0.8.0-rc3",
+    "@sereneinserenade/tiptap-comment-extension": "^0.2.0",
     "@tiptap/core": "^3.31.3",
     "@tiptap/extension-placeholder": "^3.31.3",
     "@tiptap/extension-subscript": "^3.31.3",

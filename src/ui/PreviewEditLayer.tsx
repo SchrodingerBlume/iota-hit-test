@@ -14,6 +14,7 @@ import { getEditor, onRegistryChange, whenEditorReady } from '../editor/registry
 import { docVersion, mappingSince, toNewPos, toOldPos } from '../editor/versions';
 import { useOpenRequest } from '../editor/openRequest';
 import { useBlockMenu } from '../editor/BlockMenu';
+import { useComments } from '../editor/comments';
 import { buildIndex, caretRect, hitPos, hitTest, lineStep, selectionRects, paragraphMarks, EMPTY_INDEX, type CaretRect, type Glyph, type Hit, type Line } from './previewEdit';
 
 const KEY_SECTION: Record<RichKey, Section> = {
@@ -128,6 +129,23 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     return selectionRects(index, activeKey, a, b, caret ? { page: caret.page, y: caret.y } : prefer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sel, activeKey, index, caret, stale]);
+  // 批注圈的范围：预览里淡黄底（与编辑区同色），当前那条深一点
+  const activeComment = useComments((s) => s.active);
+  const commentRects = useMemo(() => {
+    if (!editor || !activeKey) return [] as { id: string; rects: ReturnType<typeof selectionRects> }[];
+    const ranges: { id: string; from: number; to: number }[] = [];
+    editor.state.doc.descendants((n, pos) => {
+      if (!n.isText) return true;
+      const m = n.marks.find((mk) => mk.type.name === 'comment');
+      if (!m) return false;
+      const last = ranges[ranges.length - 1];
+      if (last && last.id === m.attrs.commentId && last.to === pos) last.to = pos + n.nodeSize; else ranges.push({ id: m.attrs.commentId, from: pos, to: pos + n.nodeSize });
+      return false;
+    });
+    return ranges.map((r) => { const a = oldPos(r.from, 1), b = oldPos(r.to, -1); return { id: r.id, rects: a === null || b === null ? [] : selectionRects(index, activeKey, a, b, null) }; });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, activeKey, index, stale, sel]);
+
   // 字形表跟上了：暂印的字淡出，与真字形交叉
   useEffect(() => {
     if (!pending || pending.fading || index.version < pending.version) return;
@@ -511,6 +529,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     <div ref={layerRef} data-active={activeKey ?? ''} data-focused={focused ? 1 : 0} className={`pv-layer ${cursor} ${focused ? 'is-focused' : ''}`} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerLeave={() => setCursor('')} onContextMenu={(e) => { void onContextMenu(e); }}>
       {rects.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <div key={i} className="pv-sel" style={{ left: p.left, top: p.top, width: r.w * p.scale, height: r.h * p.scale }} /> : null; })}
       {gone.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <div key={`g${i}`} className="pv-gone" style={{ left: p.left, top: p.top, width: r.w * p.scale + 0.5, height: r.h * p.scale }} /> : null; })}
+      {commentRects.map((c) => c.rects.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <div key={`c${c.id}${i}`} className={`pv-comment ${activeComment === c.id ? 'is-active' : ''}`} style={{ left: p.left, top: p.top, width: r.w * p.scale, height: r.h * p.scale }} /> : null; }))}
       {marks.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <span key={`m${i}`} className={`pv-mark ${r.blank ? 'is-blank' : ''}`} style={{ left: p.left, top: p.top, height: r.h * p.scale, fontSize: r.h * p.scale * 0.8, lineHeight: `${r.h * p.scale}px` }}>¶</span> : null; })}
       {caretPx && overlayText && (
         <span className={`pv-overlay ${composing !== null ? 'is-composing' : ''} ${composing === null && pending?.fading ? 'is-fading' : ''}`} style={{ left: caretPx.left, top: caretPx.top, height: caretH, fontSize: caretH * 0.92, lineHeight: `${caretH}px` }}>{overlayText}</span>

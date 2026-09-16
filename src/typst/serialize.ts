@@ -6,6 +6,7 @@ import { serializeDoc, escapeText, collectImages, collectRefTargets, indexPositi
 import { generateBibtex } from '../bib/bibtex';
 import { resolvePage } from '../model/pages';
 import { mark, stripMarks, type Segment } from './sourcemap';
+import { lengthTypst, ABS_UNITS } from '../model/length';
 import type { RichKey } from '../model/store';
 
 export const IOTA_HIT_VERSION = '0.1.0';
@@ -98,13 +99,15 @@ function settingsArgs(s: Settings): string[] {
 export function styleEntryArgs(e: StyleEntry): string[] {
   const out: string[] = [];
   if (e.fontZh) out.push(`font-zh: ${JSON.stringify(e.fontZh)}`);
-  if (e.size !== undefined && e.size !== '') out.push(`size: ${typeof e.size === 'number' ? `${e.size}pt` : `zihao.${e.size}`}`);
+  const abs = (v: unknown, fb: string) => lengthTypst(v, 'pt', fb, ABS_UNITS);
+  if (e.size !== undefined && e.size !== '') out.push(`size: ${typeof e.size === 'string' && /^[a-z]+$/.test(e.size) ? `zihao.${e.size}` : abs(e.size, '12pt')}`);
   if (e.bold !== undefined) out.push(`bold: ${e.bold}`);
   if (e.align) out.push(`align: ${e.align}`);
-  if (e.lineSpacing !== undefined) out.push(`line-spacing: ${typeof e.lineSpacing === 'number' ? e.lineSpacing : `(exactly: ${e.lineSpacing.exactly}pt)`}`);
-  if (e.above !== undefined) out.push(`above: (lines: ${e.above})`);
-  if (e.below !== undefined) out.push(`below: (lines: ${e.below})`);
-  if (e.tracking !== undefined) out.push(`tracking: ${e.tracking}pt`);
+  if (e.lineSpacing !== undefined) out.push(`line-spacing: ${typeof e.lineSpacing === 'number' ? e.lineSpacing : `(exactly: ${abs(e.lineSpacing.exactly, '20pt')})`}`);
+  const gap = (v: unknown) => lengthTypst(v, 'lines', '(lines: 0.5)', ['cm', 'mm', 'in', 'pt', 'em', 'lines']);
+  if (e.above !== undefined) out.push(`above: ${gap(e.above)}`);
+  if (e.below !== undefined) out.push(`below: ${gap(e.below)}`);
+  if (e.tracking !== undefined) out.push(`tracking: ${abs(e.tracking, '0pt')}`);
   return out;
 }
 function stylesArg(styles: Settings['styles']): string {
@@ -234,6 +237,9 @@ export function serializeProject(doc: ThesisDoc, { preview = false }: { preview?
   parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n// LaTeX 公式走 mitex 转成 Typst（包已随站内打包）\n#import "@preview/mitex:0.2.7": mitex, mi`);
   if (preview) parts.push(PREVIEW_PRELUDE);
   parts.push(`#show: iota-hit.with(\n  ${[...settingsArgs(s), ...infoArgs(doc.info, s)].join(',\n  ')},\n)`);
+  // 西文断字：模板在 show 规则里 set text(hyphenate: false)，之后再 set 一句就压回来（模板自己这么说明的）
+  if (s.hyphenate === true) parts.push('// 西文断字：模板默认关，这里打开\n#set text(hyphenate: true)');
+  else if (s.hyphenate === false) parts.push('#set text(hyphenate: false)');
 
   // ── 前置 ──
   parts.push('#show: frontmatter');

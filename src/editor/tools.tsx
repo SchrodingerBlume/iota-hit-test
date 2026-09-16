@@ -8,6 +8,8 @@ import { Button, ToggleButton, Tooltip, Divider, Popover, PopoverTrigger, Popove
 import { TextAlignCenter20Regular, TableCellEdit20Regular, TextFontSize20Regular } from '@fluentui/react-icons';
 import { currentCellInfo } from './extensions/table';
 import { parseTableText, tableNodeFromParsed } from './tableImport';
+import { LengthInput } from '../ui/LengthInput';
+import { parseLength, toPx } from '../model/length';
 import { useEditorEnv } from './env';
 import { usePreviewSurface } from '../ui/PreviewEditLayer';
 
@@ -88,10 +90,10 @@ export function useInsertActions(editor: Editor | null) {
     insertTableJson(tableNodeFromParsed(parsed, { header }));
     return true;
   };
-  const insertTable = (rows = 3, cols = 3, header = true) => {
+  const insertTable = (rows = 3, cols = 3, header = true, fit: 'content' | 'window' | 'fixed' = 'content', colWidth: number | string = 2.5) => {
     const table = createTable(ed().schema, rows, cols, header);
     const at = ed().state.selection.from;
-    ed().chain().focus().insertContent({ type: 'tableFigure', attrs: {}, content: [table.toJSON()] }).run();
+    ed().chain().focus().insertContent({ type: 'tableFigure', attrs: { fit, colWidth }, content: [table.toJSON()] }).run();
     // 光标放进第一格（Word 也是）——功能区顺势切到「表格工具」
     let first = -1;
     ed().state.doc.nodesBetween(at, ed().state.doc.content.size, (node, pos) => {
@@ -157,11 +159,11 @@ export function TableAlignTools({ editor }: { editor: Editor }) {
       </Popover>
       <B title={rowScope ? '对齐作用于整行（点击改为只作用于当前 / 选中的单元格）' : '对齐只作用于当前 / 选中的单元格（点击改为整行）'} on={rowScope} icon={<TableCellEdit20Regular />} run={() => setRowScope((r) => !r)}>整行</B>
       <Sep />
-      <label className="tb-field" title="当前列的宽度（厘米）；也可以直接拖列线。留空 = 自动">
-        列宽 <input type="number" min={0.5} max={16} step={0.1} value={cw} placeholder="自动" onChange={(e) => { const v = parseFloat(e.target.value); editor.chain().focus().setColumnWidth(Number.isFinite(v) && v > 0 ? Math.round(v * 37.8) : null).run(); }} /> cm
+      <label className="tb-field" title="当前列的宽度：cm / mm / in / pt（列线可拖，拖的是像素）。留空 = 自动">
+        列宽 <LengthInput value={cw === '' ? '' : `${cw}cm`} defaultUnit="cm" allowed={['cm', 'mm', 'in', 'pt']} placeholder="自动" width={84} onChange={(v) => { const l = v ? parseLength(v, 'cm') : null; const px = l ? toPx(l) : null; editor.chain().focus().setColumnWidth(px && px > 0 ? Math.round(px) : null).run(); }} />
       </label>
-      <label className="tb-field" title="当前行的高度（厘米）。留空 = 自动">
-        行高 <input type="number" min={0.3} max={10} step={0.1} value={info.rowHeight ?? ''} placeholder="自动" onChange={(e) => { const v = parseFloat(e.target.value); editor.chain().focus().setRowAttribute('height', Number.isFinite(v) && v > 0 ? String(v) : null).run(); }} /> cm
+      <label className="tb-field" title="当前行的高度：cm / mm / pt / em。留空 = 自动">
+        行高 <LengthInput value={info.rowHeight ?? ''} defaultUnit="cm" placeholder="自动" width={84} onChange={(v) => editor.chain().focus().setRowAttribute('height', v ?? null).run()} />
       </label>
     </>
   );

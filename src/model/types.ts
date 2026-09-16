@@ -27,17 +27,17 @@ export type Fontset = 'webapp' | 'windows' | 'macos';
 export interface StyleEntry {
   /** 中文字体角色：songti / heiti / kaishu / fangsong / lishu / xinwei */
   fontZh?: string;
-  /** 字号：zihao 键名（xiaosi）或磅数 */
+  /** 字号：zihao 键名（xiaosi）、磅数，或带单位的绝对长度（"12pt" / "0.4cm"） */
   size?: string | number;
   bold?: boolean;
   align?: 'left' | 'center' | 'right';
-  /** 行距：倍数，或固定值（磅） */
-  lineSpacing?: number | { exactly: number };
-  /** 段前 / 段后，行 */
-  above?: number;
-  below?: number;
-  /** 字符间距，磅 */
-  tracking?: number;
+  /** 行距：倍数，或固定值（磅数或带单位的长度） */
+  lineSpacing?: number | { exactly: number | string };
+  /** 段前 / 段后：数 = 行；字符串 = 带单位的长度（"6pt" / "1em"）或 "0.5行" */
+  above?: number | string;
+  below?: number | string;
+  /** 字符间距：磅数或带单位的绝对长度 */
+  tracking?: number | string;
 }
 export type StyleKey = 'body' | 'chapter' | 'section' | 'subsection' | 'subsubsection';
 
@@ -68,6 +68,8 @@ export interface Settings {
   titleSpread: TriBool;
   fakeBold: TriBool;
   fakeItalic: TriBool;
+  /** 西文断字（Typst text.hyphenate）；auto ＝ 模板关着（Word 默认不断字） */
+  hyphenate: TriBool;
   emDash: Tri<'cjk' | 'latin'>;
   appendixNumbering: Tri<'letters' | 'numbers'>;
   /** 英文题目强制小二号（封面与内封的 title-en-xiaoer） */
@@ -188,6 +190,18 @@ export interface ImageAsset {
   height?: number;
 }
 
+/** 批注：正文里的 comment 标记圈范围，本体在这里；随工程文件走 */
+export interface Comment {
+  id: string;
+  /** 哪份富文本 */
+  key: 'abstractZh' | 'abstractEn' | 'body' | 'conclusion' | 'appendix' | 'acknowledgement' | 'resume';
+  author: string;
+  text: string;
+  createdAt: string;
+  resolved?: boolean;
+  replies?: { author: string; text: string; createdAt: string }[];
+}
+
 export interface ThesisDoc {
   version: 1;
   id: string;
@@ -215,6 +229,7 @@ export interface ThesisDoc {
   resume: RichDoc;
   pages: Pages;
   images: ImageAsset[];
+  comments?: Comment[];
 }
 
 export const emptyDoc = (): RichDoc => ({ type: 'doc', content: [{ type: 'paragraph' }] });

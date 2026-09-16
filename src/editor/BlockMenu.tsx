@@ -9,13 +9,16 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { create } from 'zustand';
 import {
   Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuItemRadio, MenuItemCheckbox, MenuDivider, MenuGroup, MenuGroupHeader,
-  Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions, DialogTrigger, Button, Dropdown, Option, Input, Label,
+  Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions, DialogTrigger, Button, Dropdown, Option, Label,
 } from '@fluentui/react-components';
 import { TextHeader120Regular, TextAlignLeft20Regular, TextParagraph20Regular, TextEditStyle20Regular, Translate20Regular, DocumentPageBreak20Regular, Dismiss20Regular } from '@fluentui/react-icons';
 import { getEditor } from './registry';
 import { useStore, type RichKey } from '../model/store';
 import type { Settings, StyleEntry, StyleKey } from '../model/types';
 import { levelLabels, styleKeyOfLevel } from '../typst/numbering';
+import { LengthInput } from '../ui/LengthInput';
+import { ABS_UNITS, type Unit } from '../model/length';
+const GAP_UNITS: Unit[] = ['lines', 'pt', 'em', 'mm', 'cm'];
 
 interface MenuReq { key: RichKey; pos: number; x: number; y: number; nonce: number }
 interface State {
@@ -187,7 +190,6 @@ function StyleDialog({ level }: { level: number }) {
   const ls = draft.lineSpacing;
   const lsKey = ls === undefined ? 'auto' : typeof ls === 'number' ? String(ls) : 'exactly';
   const lsOptions = [['auto', 'Auto（模板）'], ['1', '单倍'], ['1.15', '1.15 倍'], ['1.25', '1.25 倍'], ['1.5', '1.5 倍'], ['2', '两倍'], ['exactly', '固定值…']] as const;
-  const num = (v: string): number | undefined => { const n = parseFloat(v); return Number.isFinite(n) ? n : undefined; };
   const field = (label: string, control: ReactNode, hint?: string) => (
     <div className="style-field">
       <Label className="style-label">{label}</Label>
@@ -214,7 +216,7 @@ function StyleDialog({ level }: { level: number }) {
                   {ZIHAO.map((z) => <Option key={z.key} value={z.key} text={z.label}>{z.label} <span className="muted">{z.pt}pt</span></Option>)}
                   <Option value="pt" text="磅数…">磅数…</Option>
                 </Dropdown>
-                {typeof draft.size === 'number' && <Input size="small" type="number" step={0.5} min={5} max={72} value={String(draft.size)} onChange={(_, d) => { const n = num(d.value); if (n !== undefined) set({ size: n }); }} contentAfter="pt" style={{ width: 100 }} />}
+                {(typeof draft.size === 'number' || (typeof draft.size === 'string' && !/^[a-z]+$/.test(draft.size))) && <LengthInput value={draft.size} defaultUnit="pt" allowed={ABS_UNITS} allowEmpty={false} onChange={(v) => set({ size: v ?? 12 })} width={100} />}
               </span>
             ))}
             {field('加粗', (
@@ -235,18 +237,18 @@ function StyleDialog({ level }: { level: number }) {
                 <Dropdown size="small" value={lsOptions.find((o) => o[0] === lsKey)?.[1] ?? 'Auto'} selectedOptions={[lsKey]} onOptionSelect={(_, d) => { const v = d.optionValue!; set({ lineSpacing: v === 'auto' ? undefined : v === 'exactly' ? { exactly: typeof ls === 'object' && ls ? ls.exactly : 20 } : parseFloat(v) }); }}>
                   {lsOptions.map(([v, l]) => <Option key={v} value={v} text={l}>{l}</Option>)}
                 </Dropdown>
-                {typeof ls === 'object' && ls && <Input size="small" type="number" step={0.5} min={6} max={60} value={String(ls.exactly)} onChange={(_, d) => { const n = num(d.value); if (n !== undefined) set({ lineSpacing: { exactly: n } }); }} contentAfter="pt" style={{ width: 100 }} />}
+                {typeof ls === 'object' && ls && <LengthInput value={ls.exactly} defaultUnit="pt" allowed={ABS_UNITS} allowEmpty={false} onChange={(v) => set({ lineSpacing: { exactly: v ?? 20 } })} width={100} />}
               </span>
             ))}
             {field('段前 / 段后', (
               <span className="style-row">
-                <Input size="small" type="number" step={0.5} min={0} max={10} placeholder="Auto" value={draft.above === undefined ? '' : String(draft.above)} onChange={(_, d) => set({ above: d.value === '' ? undefined : num(d.value) })} contentAfter="行" style={{ width: 110 }} />
-                <Input size="small" type="number" step={0.5} min={0} max={10} placeholder="Auto" value={draft.below === undefined ? '' : String(draft.below)} onChange={(_, d) => set({ below: d.value === '' ? undefined : num(d.value) })} contentAfter="行" style={{ width: 110 }} />
+                <LengthInput value={draft.above ?? ''} defaultUnit="lines" allowed={GAP_UNITS} placeholder="段前：Auto" onChange={(v) => set({ above: v })} width={120} />
+                <LengthInput value={draft.below ?? ''} defaultUnit="lines" allowed={GAP_UNITS} placeholder="段后：Auto" onChange={(v) => set({ below: v })} width={120} />
               </span>
-            ), 'Word 段落对话框的「段前 / 段后」，按行计；相邻两段取较大者')}
+            ), 'Word 段落对话框的「段前 / 段后」：光写数按行，也可写 6pt / 1em / 0.3cm；相邻两段取较大者')}
             {field('字符间距', (
-              <Input size="small" type="number" step={0.1} min={-5} max={20} placeholder="Auto" value={draft.tracking === undefined ? '' : String(draft.tracking)} onChange={(_, d) => set({ tracking: d.value === '' ? undefined : num(d.value) })} contentAfter="pt" style={{ width: 110 }} />
-            ), 'Word 字体对话框的「字符间距」，磅')}
+              <LengthInput value={draft.tracking ?? ''} defaultUnit="pt" allowed={ABS_UNITS} placeholder="Auto" onChange={(v) => set({ tracking: v })} width={110} />
+            ), 'Word 字体对话框的「字符间距」：光写数按磅，也可写 0.1mm')}
             {key === 'body' && <p className="muted style-hint">首行缩进与两端对齐由模板按规范定，这里不开口子。</p>}
           </DialogContent>
           <DialogActions>

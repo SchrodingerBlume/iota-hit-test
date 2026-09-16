@@ -10,6 +10,17 @@ import { MathEditor, forPreview } from '../math/MathEditor';
 import { MathPreview } from '../math/MathPreview';
 import { AutoInput } from '../../ui/AutoInput';
 import { Trash2, ImageUp, Tag, MoveHorizontal, PencilLine, Check } from 'lucide-react';
+import { LengthInput } from '../../ui/LengthInput';
+import { parseLength, toPx } from '../../model/length';
+
+/** 编辑区里图的显示宽度：绝对长度按 28px/cm 的缩小比例画，百分比按容器，其余按 8cm */
+function figurePx(w: unknown): string {
+  const l = parseLength(w, 'cm');
+  if (!l) return `${8 * 28}px`;
+  if (l.unit === '%') return `${Math.min(100, l.value)}%`;
+  const px = toPx(l, 12);
+  return px ? `${px * (28 / 37.8)}px` : `${8 * 28}px`;
+}
 
 const attr = (k: string, def: any) => ({ default: def, parseHTML: (el: HTMLElement) => el.getAttribute(`data-${k}`) ?? def, renderHTML: (a: any) => ({ [`data-${k}`]: a[k] }) });
 
@@ -62,7 +73,7 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
   return (
     <NodeViewWrapper className={`blk fig ${selected ? 'is-selected' : ''}`} data-drag-handle ref={wrap}>
       <div className="fig-body" contentEditable={false}>
-        {url ? <img src={url} alt="" style={{ width: `${(node.attrs.width ?? 8) * 28}px`, maxWidth: '100%' }} draggable={false} /> : (
+        {url ? <img src={url} alt="" style={{ width: figurePx(node.attrs.width), maxWidth: '100%' }} draggable={false} /> : (
           <label className="fig-drop">
             <ImageUp />
             <span>{name ? `找不到图片 ${name}，点击重新选择` : '选择图片（PNG / JPG / SVG）'}</span>
@@ -72,10 +83,9 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
       </div>
       <Caption node={node} updateAttributes={updateAttributes} kindName="图" editable={editable} prefix={num} />
       <Tools>
-        <label className="blk-tool" title="图的宽度（厘米）">
+        <label className="blk-tool" title="图的宽度：cm / mm / pt / em / %（相对版心宽）">
           <MoveHorizontal />
-          <input type="number" min={2} max={16} step={0.5} value={node.attrs.width ?? 8} disabled={!editable} onChange={(e) => updateAttributes({ width: Number(e.target.value) || 8 })} />
-          <span>cm</span>
+          <LengthInput value={node.attrs.width ?? 8} defaultUnit="cm" disabled={!editable} onChange={(v) => updateAttributes({ width: v ?? 8 })} width={84} />
         </label>
         <LabelField node={node} updateAttributes={updateAttributes} prefix="fig" editable={editable} />
         <label className="blk-tool is-btn" title="换一张图"><ImageUp /><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>
@@ -128,7 +138,8 @@ export const TableFigure = Node.create({
   defining: true,
   draggable: false,
   addAttributes() {
-    return { caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null), placement: attr('placement', 'none'), breakable: attr('breakable', 'auto') };
+    // fit：Word 的「自动调整」——content 根据内容、window 根据窗口（撑满版心）、fixed 固定列宽（colWidth 厘米）；拖过列线的列另算
+    return { caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null), placement: attr('placement', 'none'), breakable: attr('breakable', 'auto'), fit: attr('fit', 'content'), colWidth: attr('colWidth', 2.5) };
   },
   parseHTML() { return [{ tag: 'div[data-node="tableFigure"]' }]; },
   renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { 'data-node': 'tableFigure' }), 0]; },

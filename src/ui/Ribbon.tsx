@@ -19,6 +19,7 @@ import {
   TableCellsMerge20Regular, TableFreezeRow20Regular, TableDismiss20Regular, PanelLeftContract20Regular, PanelLeftExpand20Regular, PanelLeft20Regular, LayoutColumnTwo20Regular, PanelRight20Regular,
   ZoomIn20Regular, ZoomOut20Regular, AutoFitWidth20Regular, AutoFitHeight20Regular, Settings20Regular, Info20Regular, ChevronUp20Regular, ChevronDown20Regular, ChevronLeft20Regular, ChevronRight20Regular, Dismiss20Regular, Pin20Regular, Grid20Regular, Navigation20Regular, TextParagraph20Regular,
   Document20Regular, DocumentMultiple20Regular, Translate20Regular, ImageEdit20Regular, Delete20Regular, TableSimple20Regular, ClipboardTextLtr20Regular,
+  CommentAdd20Regular, CommentDismiss20Regular, Comment20Regular,
 } from '@fluentui/react-icons';
 import { useStore, type RichKey } from '../model/store';
 import { getEditor, getEditorMeta, onRegistryChange } from '../editor/registry';
@@ -32,7 +33,13 @@ import { ThesisTab, LayoutTab, PagesTab, ChoiceMenu } from './RibbonSettings';
 import { useEditorEnv } from '../editor/env';
 import { useOpenRequest } from '../editor/openRequest';
 import { useMedia, SHORT } from './useMedia';
-import { TableSizeDialog, TableTextDialog, type TableDialogKind } from './TableInsert';
+import { TableSizeDialog, TableTextDialog, readTableDefaults, type TableDialogKind } from './TableInsert';
+import { LengthInput } from './LengthInput';
+import { useLinkDialog } from './LinkDialog';
+import { useComments, newCommentId } from '../editor/comments';
+import { commentRange } from './CommentsPane';
+import { wordAt } from '../editor/wordAt';
+const FITS = [{ value: 'content', label: '根据内容', hint: '列宽按内容定' }, { value: 'window', label: '根据窗口', hint: '撑满版心，各列均分' }, { value: 'fixed', label: '固定列宽', hint: '每列同宽（厘米在插入表格对话框里定）' }];
 
 /** 图 / 表的浮动与跨页选项（模板：placement 交给 Typst；跨页走 show figure.where(kind:): set block(breakable:)） */
 const PLACEMENTS = [{ value: 'none', label: '不浮动', hint: '跟着文字排' }, { value: 'auto', label: '自动', hint: '本页顶或底，就近' }, { value: 'top', label: '页顶' }, { value: 'bottom', label: '页底' }];
@@ -40,7 +47,7 @@ const BREAK_IMAGE = [{ value: 'auto', label: 'Auto→不拆', hint: '模板默�
 const BREAK_TABLE = [{ value: 'auto', label: 'Auto→允许', hint: '模板默认，续页注「续表」' }, { value: 'true', label: '允许' }, { value: 'false', label: '不允许', hint: '整张不拆，放不下就整张挪到下页' }];
 
 type LayoutMode = 'editor' | 'split' | 'preview';
-type TabKey = 'home' | 'insert' | 'thesis' | 'layout' | 'pages' | 'cite' | 'table' | 'figure' | 'view';
+type TabKey = 'home' | 'insert' | 'thesis' | 'layout' | 'pages' | 'cite' | 'review' | 'table' | 'figure' | 'view';
 const CTX_TABS: TabKey[] = ['table', 'figure'];
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'home', label: '开始' },
@@ -49,6 +56,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'layout', label: '版式' },
   { key: 'pages', label: '页面' },
   { key: 'cite', label: '引用' },
+  { key: 'review', label: '审阅' },
   { key: 'table', label: '表格工具' },
   { key: 'figure', label: '图片工具' },
   { key: 'view', label: '视图' },
@@ -121,6 +129,32 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx]);
   const env = useEditorEnv();
+  // 批注
+  const comments = useStore((s) => s.doc.comments ?? []);
+  const commentsOpen = useComments((s) => s.open);
+  const reviewer = useComments((s) => s.author);
+  const activeCommentId = useComments((s) => s.active);
+  const activeComment = comments.find((c) => c.id === activeCommentId) ?? null;
+  const newComment = () => {
+    if (!ed || !activeKey) return;
+    const sel = ed.state.selection;
+    const id = newCommentId();
+    const c = ed.chain().focus();
+    if (sel.empty) { const r = wordAt(ed, sel.from); if (!r) return; c.setTextSelection(r); }
+    c.setComment(id).run();
+    useStore.getState().setComments([...comments, { id, key: activeKey, author: reviewer, text: '', createdAt: new Date().toISOString() }]);
+    useComments.getState().setOpen(true);
+    useComments.getState().setActive(id);
+    window.setTimeout(() => document.querySelector<HTMLTextAreaElement>(`.comment-card.is-active textarea`)?.focus(), 80);
+  };
+  const stepComment = (dir: 1 | -1) => {
+    const list = comments.filter((c) => c.key === activeKey);
+    if (!list.length) return;
+    const i = list.findIndex((c) => c.id === activeCommentId);
+    const next = list[(i + dir + list.length) % list.length];
+    const r = commentRange(next.key, next.id);
+    if (r && ed) { ed.chain().focus().setTextSelection(r).run(); useComments.getState().setActive(next.id); }
+  };
   /** 换一张图（图片工具页） */
   const replaceImage = () => {
     const input = document.createElement('input');
@@ -364,18 +398,21 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                     <span className="rb-keep"><B title="插入表格：拖着选行列数" big menu icon={<Table20Regular />} disabled={none || !blocks} run={() => setPop(pop === 'table' ? null : 'table')}>表格</B></span>
                   </PopoverTrigger>
                   <PopoverSurface className="rb-table-grid">
-                    <TableGrid onPick={(rows, cols) => { ins.insertTable(rows, cols); setPop(null); afterCommand(); }} />
+                    <TableGrid onPick={(rows, cols) => { const d = readTableDefaults(); ins.insertTable(rows, cols, d.header, d.fit === 'fixed' && d.colWidth === 'auto' ? 'content' : d.fit, d.colWidth === 'auto' ? 2.5 : d.colWidth); setPop(null); afterCommand(); }} />
                     <div className="rb-pop-menu">
                       <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setPop(null); setTableDlg('size'); }}><TableSimple20Regular />插入表格…</button>
                       <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setPop(null); setTableDlg('text'); }}><ClipboardTextLtr20Regular />从文本 / Markdown 插入…</button>
                     </div>
                   </PopoverSurface>
                 </Popover>
-                {tableDlg === 'size' && <TableSizeDialog onClose={() => setTableDlg(null)} onInsert={(r, c, h) => { setTableDlg(null); ins.insertTable(r, c, h); afterCommand(); }} />}
+                {tableDlg === 'size' && <TableSizeDialog onClose={() => setTableDlg(null)} onInsert={(r, c, h, fit, cw) => { setTableDlg(null); ins.insertTable(r, c, h, fit, cw); afterCommand(); }} />}
                 {tableDlg === 'text' && <TableTextDialog onClose={() => setTableDlg(null)} onInsert={(t, h) => { setTableDlg(null); ins.insertTableFromText(t, h); afterCommand(); }} />}
               </Group>
               <Group label="插图">
                 <B title="插图…（也可以直接把图片粘贴进正文）" big icon={<Image20Regular />} disabled={none || !blocks} run={ins.insertFigure}>图片</B>
+              </Group>
+              <Group label="链接">
+                <B title="插入 / 编辑链接（⌘K）：网址与显示的文本，排成 #link" big icon={<Link20Regular />} disabled={none} run={() => useLinkDialog.getState().open()}>链接</B>
               </Group>
               <Group label="公式">
                 <B title="行间公式（编号）" big icon={<MathFormula20Regular />} disabled={none || !blocks} run={ins.insertEquation}>公式</B>
@@ -431,6 +468,29 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               </Group>
             </>
           )}
+          {tab === 'review' && (
+            <>
+              <Group label="批注">
+                <B title="给选中的文字加一条批注（Word 的「新建批注」）；没选中就批注光标所在的词" big icon={<CommentAdd20Regular />} disabled={none} run={newComment}>新建批注</B>
+                <Stack>
+                  <B title="删除光标所在的批注" icon={<CommentDismiss20Regular />} disabled={!activeComment} run={() => { const c = activeComment; if (c) { chain().unsetComment(c.id).run(); useStore.getState().setComments(comments.filter((x) => x.id !== c.id)); } }}>删除</B>
+                  <B title="上一条批注" icon={<ChevronUp20Regular />} disabled={!comments.length} run={() => stepComment(-1)}>上一条</B>
+                  <B title="下一条批注" icon={<ChevronDown20Regular />} disabled={!comments.length} run={() => stepComment(1)}>下一条</B>
+                </Stack>
+              </Group>
+              <Group label="面板">
+                <B title="显示 / 隐藏批注面板（右侧一栏，像 Word 的批注窗格）" big icon={<Comment20Regular />} on={commentsOpen} run={() => useComments.getState().setOpen(!commentsOpen)}>批注面板</B>
+              </Group>
+              <Group label="审阅者">
+                <span className="rb-keep rb-inline">
+                  <Input size="small" value={reviewer} placeholder="姓名（写进批注）" onChange={(_, d) => useComments.getState().setAuthor(d.value)} style={{ width: 140 }} />
+                </span>
+              </Group>
+              <Group label="提示">
+                <span className="rb-hint"><Navigation20Regular />批注随工程文件（文件 → 保存工程）一起走：老师导入、写批注、再导出，学生导入就看得见；PDF 里不印</span>
+              </Group>
+            </>
+          )}
           {tab === 'table' && ed && (
             <>
               <Group label="行与列">
@@ -462,6 +522,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                   <Rows>
                     <Row><ChoiceMenu label="浮动" hint="浮动：表不跟着文字走，Typst 把它放到本页或下页的顶 / 底（figure(placement:)）；浮动的表不跨页" choices={PLACEMENTS} value={(ed.getAttributes('tableFigure').placement as string) || 'none'} onChange={(v) => chain().updateAttributes('tableFigure', { placement: v }).run()} /></Row>
                     <Row><ChoiceMenu label="跨页" hint="表能不能拆到下一页（指南 2.12：一页放不下才可转页，续页表右上角注「续表」）；模板默认允许" choices={BREAK_TABLE} value={(ed.getAttributes('tableFigure').breakable as string) || 'auto'} disabled={((ed.getAttributes('tableFigure').placement as string) || 'none') !== 'none'} onChange={(v) => chain().updateAttributes('tableFigure', { breakable: v }).run()} /></Row>
+                    <Row><ChoiceMenu label="自动调整" hint="Word 的「自动调整」：根据内容 / 根据窗口 / 固定列宽；拖过列线的列按拖的来" choices={FITS} value={(ed.getAttributes('tableFigure').fit as string) || 'content'} onChange={(v) => chain().updateAttributes('tableFigure', { fit: v }).run()} /></Row>
                   </Rows>
                 </span>
               </Group>
@@ -471,11 +532,11 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
             <>
               <Group label="大小">
                 <span className="rb-keep rb-inline">
-                  <label className="tb-field" title="图的宽度（厘米）；版心宽约 14.6 cm">
-                    宽度 <input type="number" min={2} max={16} step={0.5} value={a.width ?? 8} onChange={(e) => chain().updateAttributes('figure', { width: Number(e.target.value) || 8 }).run()} /> cm
+                  <label className="tb-field" title="图的宽度：cm / mm / pt / em / %（相对版心宽）；版心宽约 14.6 cm">
+                    宽度 <LengthInput value={a.width ?? 8} defaultUnit="cm" onChange={(v) => chain().updateAttributes('figure', { width: v ?? 8 }).run()} width={96} />
                   </label>
                   <Stack>
-                    {[6, 10, 14].map((w) => <B key={w} title={`宽 ${w} cm`} on={Number(a.width) === w} run={() => chain().updateAttributes('figure', { width: w }).run()}>{w} cm</B>)}
+                    {['6cm', '10cm', '100%'].map((w) => <B key={w} title={`宽 ${w}`} on={String(a.width) === w} run={() => chain().updateAttributes('figure', { width: w }).run()}>{w}</B>)}
                   </Stack>
                 </span>
               </Group>

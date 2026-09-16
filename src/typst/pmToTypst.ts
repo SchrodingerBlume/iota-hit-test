@@ -15,6 +15,7 @@
 // 纯文本里 Typst 的特殊字符一律转义，行首会被当成标记的字符再多转义一次。
 // 带 map 选项时，文本与节点外面套上源码映射的记号（见 sourcemap.ts），预览区直接编辑靠它。
 import { mark, unmarked } from './sourcemap';
+import { lengthTypst } from '../model/length';
 import type { RichKey } from '../model/store';
 
 export interface PMNode {
@@ -200,7 +201,7 @@ function caption(n: PMNode, opts: SerializeOptions): string {
   return enRaw ? `${zh}#en[${en}]` : zh;
 }
 
-function serializeTable(table: PMNode, opts: SerializeOptions): string {
+function serializeTable(table: PMNode, opts: SerializeOptions, fit: string = 'content', colWidth: unknown = 2.5): string {
   const rows = (table.content ?? []).filter((r) => r.type === 'tableRow');
   if (!rows.length) return '';
   // 列数按第一行的 colspan 之和算
@@ -216,7 +217,8 @@ function serializeTable(table: PMNode, opts: SerializeOptions): string {
       col += span;
     }
   }
-  let columns = String(ncols);
+  // 没拖过列线时按「自动调整」：根据内容 = auto 列；根据窗口 = 每列 1fr 撑满版心；固定列宽 = 每列 X cm
+  let columns = fit === 'window' ? `(${Array(ncols).fill('1fr').join(', ')})` : fit === 'fixed' ? `(${Array(ncols).fill(lengthTypst(colWidth, 'cm', '2.5cm', ['cm', 'mm', 'in', 'pt', 'em', '%', 'fr'])).join(', ')})` : String(ncols);
   if (widths.some((w) => w)) {
     if (widths.every((w) => w)) {
       // 全部拖过 / 设过：按比例分，总宽由模板的版心定
@@ -227,7 +229,7 @@ function serializeTable(table: PMNode, opts: SerializeOptions): string {
       columns = `(${widths.map((w) => (w ? `${(w / 37.8).toFixed(2)}cm` : 'auto')).join(', ')})`;
     }
   }
-  const rowHeights = rows.map((r) => (r.attrs?.height ? `${Number(r.attrs.height)}cm` : 'auto'));
+  const rowHeights = rows.map((r) => (r.attrs?.height ? lengthTypst(r.attrs.height, 'cm', 'auto') : 'auto'));
   const rowsArg = rowHeights.some((h) => h !== 'auto') ? `\n    rows: (${rowHeights.join(', ')}),` : '';
   const cell = (c: PMNode): string => {
     const body = (c.content ?? []).map((p) => serializeInline(p.content, opts)).join(' \\ ');
@@ -297,15 +299,15 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
     case 'figure': {
       const img = String(n.attrs?.image ?? '');
       if (!img) return '';
-      const width = Number(n.attrs?.width) || 8;
+      const width = lengthTypst(n.attrs?.width ?? 8, 'cm', '8cm');
       const label = labelOf(n.attrs, 'fig');
-      return floatWrap(n, 'image', tag(opts, n, 'node', `#figure(\n  image(${JSON.stringify(`${opts.imageDir ?? 'images'}/${img}`)}, width: ${width}cm),\n  caption: [${caption(n, opts)}],${placementArg(n)}\n)`) + (label ? ` <${label}>` : ''));
+      return floatWrap(n, 'image', tag(opts, n, 'node', `#figure(\n  image(${JSON.stringify(`${opts.imageDir ?? 'images'}/${img}`)}, width: ${width}),\n  caption: [${caption(n, opts)}],${placementArg(n)}\n)`) + (label ? ` <${label}>` : ''));
     }
     case 'tableFigure': {
       const table = (n.content ?? []).find((c) => c.type === 'table');
       if (!table) return '';
       const label = labelOf(n.attrs, 'tab');
-      return floatWrap(n, 'table', tag(opts, n, 'node', `#figure(\n  caption: [${caption(n, opts)}],${placementArg(n)}\n  ${serializeTable(table, opts)},\n)`) + (label ? ` <${label}>` : ''));
+      return floatWrap(n, 'table', tag(opts, n, 'node', `#figure(\n  caption: [${caption(n, opts)}],${placementArg(n)}\n  ${serializeTable(table, opts, String(n.attrs?.fit ?? 'content'), n.attrs?.colWidth ?? 2.5)},\n)`) + (label ? ` <${label}>` : ''));
     }
     case 'equation': {
       const src = String(n.attrs?.src ?? '').trim();

@@ -260,6 +260,14 @@ export const SWITCHES: SwitchDef<any>[] = [
     resolve: (s) => ({ value: false, reason: s.fontset === 'webapp' ? '本站带了 FandolKai，强调用楷体，不斜切' : '本机有楷体就用楷体，不斜切' }),
   },
   {
+    key: 'hyphenate',
+    label: '西文断字',
+    hint: '行尾的英文单词按音节断开加连字符（Typst 的 text.hyphenate）。模板默认关——两份范例的 Word 都没开自动断字；两端对齐下西文多时开了更匀',
+    choices: onOff,
+    group: '字体',
+    resolve: () => ({ value: false, reason: '模板默认不断字（照 Word 的默认）' }),
+  },
+  {
     key: 'appendixNumbering',
     label: '附录编号',
     hint: '附录 A / 附录 1 / 附录一',
@@ -325,6 +333,7 @@ export const defaultSettings = (): Settings => ({
   titleSpread: 'auto',
   fakeBold: 'auto',
   fakeItalic: 'auto',
+  hyphenate: 'auto',
   emDash: 'auto',
   appendixNumbering: 'auto',
   titleEnXiaoer: 'auto',

@@ -4,6 +4,9 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { useBlockMenu } from './BlockMenu';
+import { CommentExtension } from '@sereneinserenade/tiptap-comment-extension';
+import { useComments } from './comments';
+import { useLinkDialog } from '../ui/LinkDialog';
 import StarterKit from '@tiptap/starter-kit';
 import Paragraph from '@tiptap/extension-paragraph';
 import Superscript from '@tiptap/extension-superscript';
@@ -74,7 +77,9 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ heading: false, link: false, paragraph: false, codeBlock: { defaultLanguage: 'python' } }),
+      StarterKit.configure({ heading: false, link: { openOnClick: false, autolink: true, linkOnPaste: true, HTMLAttributes: { rel: 'noopener', class: 'lnk' } }, paragraph: false, codeBlock: { defaultLanguage: 'python' } }),
+      // 批注：@sereneinserenade/tiptap-comment-extension（MIT），正文里只是一个带 id 的标记
+      CommentExtension.configure({ HTMLAttributes: { class: 'cmt' }, onCommentActivated: (id) => useComments.getState().setActive(id) }),
       NoIndentParagraph,
       ...(headings ? [HeadingEn] : []),
       Superscript, Subscript,
@@ -98,6 +103,8 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
       // ⌘F / ⌘H 开查找替换栏（Word 的习惯）
       handleKeyDown: (_view, event) => {
         if ((event.metaKey || event.ctrlKey) && (event.key === 'f' || event.key === 'h')) { event.preventDefault(); useFindBar.getState().set(true); return true; }
+        // ⌘K：插入 / 编辑链接（Word 与浏览器的习惯）
+        if ((event.metaKey || event.ctrlKey) && event.key === 'k') { event.preventDefault(); useLinkDialog.getState().open(); return true; }
         return false;
       },
       // 右键一段 / 一条标题：块级样式菜单（Word 右键的「段落」「样式」那一组）
@@ -152,6 +159,20 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     editor.on('focus', onFocus);
     return () => { editor.off('focus', onFocus); unregisterEditor(richKey, editor); };
   }, [editor, richKey, blocks, headings]);
+
+  // 当前批注：正文里那一段加亮
+  useEffect(() => {
+    if (!editor) return;
+    const apply = () => {
+      if (editor.isDestroyed) return;
+      const id = useComments.getState().active;
+      editor.view.dom.querySelectorAll<HTMLElement>('span.cmt').forEach((el) => el.classList.toggle('is-active', !!id && el.dataset.commentId === id));
+    };
+    apply();
+    const off = editor.on('transaction', apply);
+    const unsub = useComments.subscribe(apply);
+    return () => { unsub(); void off; editor.off('transaction', apply); };
+  }, [editor]);
 
   // 编辑标记（¶）与预览同一个开关：开着就给编辑区挂 show-marks，样式表画段末的 ¶
   useEffect(() => {

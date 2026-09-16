@@ -4,6 +4,9 @@ import type { ThesisDoc } from '../model/types';
 import { startCompiler, requestCompile, exportPdf, useCompileState } from '../compiler/client';
 import { serializeProject } from '../typst/serialize';
 import { BlockMenu } from '../editor/BlockMenu';
+import { CommentsPane } from './CommentsPane';
+import { LinkDialogHost } from './LinkDialog';
+import { useComments } from '../editor/comments';
 import { collectRefTargets } from '../typst/pmToTypst';
 import { computeNumbering } from '../typst/numbering';
 import { docVersion } from '../editor/versions';
@@ -88,6 +91,7 @@ export function App() {
   const [busy, setBusy] = useState<string | null>(null);
   const [theme, setTheme] = useTheme();
   const { navOpen, setNavOpen, mode, setMode, ratio, startDrag, mainRef, gridColumns, gridRows, compact, stacked } = useLayoutPrefs();
+  const commentsOpen = useComments((s) => s.open);
 
   useEffect(() => {
     startCompiler();
@@ -238,9 +242,11 @@ export function App() {
               </div>
             ))}
           </nav>
-          <section className="work" hidden={mode === 'preview'}>
+          <section className={`work ${commentsOpen ? 'has-comments' : ''}`} hidden={mode === 'preview'}>
             {loaded ? <div className="work-inner" key={section}>{panel}</div> : <div className="muted">读取工程…</div>}
+            {commentsOpen && loaded && <CommentsPane />}
           </section>
+          <LinkDialogHost />
           {mode === 'split' && <div className="splitter" title={`拖动调整比例（${Math.round(ratio * 100)}% : ${Math.round((1 - ratio) * 100)}%）`} onPointerDown={startDrag} />}
           <div className="preview-slot" hidden={mode === 'editor'}><Preview /></div>
           <BlockMenu />
