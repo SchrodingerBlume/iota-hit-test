@@ -1,6 +1,7 @@
 // 行内原子节点（公式、引用、交叉引用、缩略语、脚注）共用的「小药丸 + 弹出编辑框」。
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NodeViewWrapper } from '@tiptap/react';
+import { t } from '../../i18n';
 
 interface Props {
   kind: string;
@@ -51,7 +52,7 @@ export function InlineChip({ kind, text, title, selected, editable = true, child
         <span className={`chip-pop ${wide ? 'chip-pop-wide' : ''}`} contentEditable={false} onMouseDown={(e) => e.stopPropagation()}>
           {children(() => setOpen(false))}
           {onDelete && (
-            <button type="button" className="btn btn-danger btn-xs chip-pop-del" onClick={onDelete}>删除</button>
+            <button type="button" className="btn btn-danger btn-xs chip-pop-del" onClick={onDelete}>{t("删除")}</button>
           )}
         </span>
       )}

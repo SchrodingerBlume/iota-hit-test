@@ -3,6 +3,7 @@ import { Button, Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, 
 import { useStore } from '../model/store';
 import { useCompileState } from '../compiler/client';
 import { roleAvailability, useFontState } from '../fonts/userFonts';
+import { t } from '../i18n';
 
 /** Restore granted fonts before warning, and warn again if a recovered family disappears. */
 export function FontRecovery() {
@@ -38,18 +39,18 @@ export function FontRecovery() {
   return <Dialog open={open} onOpenChange={(_, data) => { if (!data.open && !busy) setDismissed(signature); }}>
     <DialogSurface>
       <DialogBody>
-        <DialogTitle>需要重新读取字体</DialogTitle>
+        <DialogTitle>{t("需要重新读取字体")}</DialogTitle>
         <DialogContent>
-          <p>当前文档缺少以下字体，预览暂时使用替代字体：</p>
+          <p>{t("当前文档缺少以下字体，预览暂时使用替代字体：")}</p>
           <p>{missing.map((font) => font.family).join('、')}</p>
           {busy && <p role="status">{busy}</p>}
           {error && <p role="alert">{error}</p>}
           <input ref={input} type="file" hidden multiple accept=".otf,.ttf,.ttc,.otc" onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) void addFiles(files); }} />
         </DialogContent>
         <DialogActions>
-          <Button disabled={!!busy} onClick={() => setDismissed(signature)}>暂时使用替代字体</Button>
-          <Button disabled={!!busy} onClick={() => input.current?.click()}>选择字体文件</Button>
-          {canQuery && <Button appearance="primary" disabled={!!busy} onClick={() => void readLocal()}>重新读取字体</Button>}
+          <Button disabled={!!busy} onClick={() => setDismissed(signature)}>{t("暂时使用替代字体")}</Button>
+          <Button disabled={!!busy} onClick={() => input.current?.click()}>{t("选择字体文件")}</Button>
+          {canQuery && <Button appearance="primary" disabled={!!busy} onClick={() => void readLocal()}>{t("重新读取字体")}</Button>}
         </DialogActions>
       </DialogBody>
     </DialogSurface>

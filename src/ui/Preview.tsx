@@ -5,6 +5,7 @@ import { flipBefore, flipAfter } from './flip';
 import { usePreviewZoom } from './previewZoom';
 import { Eye, ZoomIn, ZoomOut, Maximize2, Minimize2, Loader2, RefreshCw } from 'lucide-react';
 import { PreviewEditLayer } from './PreviewEditLayer';
+import { t as tx } from '../i18n';
 
 const fmtMB = (n: number) => (n / 1024 / 1024).toFixed(1);
 
@@ -218,50 +219,50 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
   return (
     <div className={`preview ${compiling ? 'is-compiling' : ''}`}>
       <div className="pane-bar">
-        <span className="pane-title"><Eye />预览</span>
-        <button type="button" className="btn btn-xs" title="重新排版当前文档" disabled={refreshDisabled || status !== 'ready' || compiling} onMouseDown={(e) => e.preventDefault()} onClick={onRefresh}><RefreshCw />{compiling ? '正在刷新…' : '刷新预览'}</button>
-        {status === 'ready' && lastMs !== null && <span className="muted">{pages} 页{compiling ? ' · 排版中…' : ''}</span>}
-        {status === 'ready' && errors.length > 0 && <span className="err-badge" title="下面列了出错的位置">{errors.length} 个错误</span>}
+        <span className="pane-title"><Eye />{tx("预览")}</span>
+        <button type="button" className="btn btn-xs" title={tx("重新排版当前文档")} disabled={refreshDisabled || status !== 'ready' || compiling} onMouseDown={(e) => e.preventDefault()} onClick={onRefresh}><RefreshCw />{compiling ? tx("正在刷新…") : tx("刷新预览")}</button>
+        {status === 'ready' && lastMs !== null && <span className="muted">{pages} {' '}{tx("页")}{compiling ? tx(" · 排版中…") : ''}</span>}
+        {status === 'ready' && errors.length > 0 && <span className="err-badge" title={tx("下面列了出错的位置")}>{errors.length} {' '}{tx("个错误")}</span>}
         <span className="spacer" />
         <span className="join">
-          <button type="button" className="btn btn-xs btn-icon" title="缩小（触控板捏合、⌘/Ctrl + 滚轮也行）" onClick={() => zoomBy(1 / 1.1)}><ZoomOut /></button>
-          <button type="button" className="btn btn-xs" style={{ width: 52, justifyContent: 'center' }} title="回到 100%" onClick={() => zoomTo(1)}>{Math.round(zoom * 100)}%</button>
-          <button type="button" className="btn btn-xs btn-icon" title="放大（触控板捏合、⌘/Ctrl + 滚轮也行）" onClick={() => zoomBy(1.1)}><ZoomIn /></button>
-          <button type="button" className="btn btn-xs btn-icon" title="适宽" onClick={() => zoomTo(1)}><Maximize2 /></button>
-          <button type="button" className="btn btn-xs btn-icon" title="整页：一页正好放进视口" onClick={fitPage}><Minimize2 /></button>
+          <button type="button" className="btn btn-xs btn-icon" title={tx("缩小（触控板捏合、⌘/Ctrl + 滚轮也行）")} onClick={() => zoomBy(1 / 1.1)}><ZoomOut /></button>
+          <button type="button" className="btn btn-xs" style={{ width: 52, justifyContent: 'center' }} title={tx("回到 100%")} onClick={() => zoomTo(1)}>{Math.round(zoom * 100)}%</button>
+          <button type="button" className="btn btn-xs btn-icon" title={tx("放大（触控板捏合、⌘/Ctrl + 滚轮也行）")} onClick={() => zoomBy(1.1)}><ZoomIn /></button>
+          <button type="button" className="btn btn-xs btn-icon" title={tx("适宽")} onClick={() => zoomTo(1)}><Maximize2 /></button>
+          <button type="button" className="btn btn-xs btn-icon" title={tx("整页：一页正好放进视口")} onClick={fitPage}><Minimize2 /></button>
         </span>
-        <span className="join" title="每行几页（Word 的「多页」视图）">
-          {([1, 2, 3] as const).map((n) => <button key={n} type="button" className={`btn btn-xs per-row ${perRow === n ? 'on' : ''}`} title={`每行 ${n} 页`} onClick={() => setPerRow(n)}>{n}</button>)}
+        <span className="join" title={tx("每行几页（Word 的「多页」视图）")}>
+          {([1, 2, 3] as const).map((n) => <button key={n} type="button" className={`btn btn-xs per-row ${perRow === n ? 'on' : ''}`} title={tx("每行 {{n}} 页", { n: n })} onClick={() => setPerRow(n)}>{n}</button>)}
         </span>
         <div className="preview-progress" aria-hidden />
       </div>
       <div className="preview-scroll" ref={scrollRef}>
         {status === 'booting' && (
           <div className="boot">
-            <h3><Loader2 />正在准备排版引擎</h3>
-            <div className="muted">首次使用需要下载排版资源，可能需要一些时间。</div>
+            <h3><Loader2 />{tx("正在准备排版引擎")}</h3>
+            <div className="muted">{tx("首次使用需要下载排版资源，可能需要一些时间。")}</div>
             <div className="bar"><i style={{ width: progress && progress.total ? `${Math.min(100, (progress.loaded / progress.total) * 100)}%` : '2%' }} /></div>
             <div className="detail">{progress ? `${progress.phase} · ${fmtMB(progress.loaded)} / ${fmtMB(progress.total)} MB${progress.detail ? ' · ' + progress.detail : ''}` : '…'}</div>
           </div>
         )}
         {status === 'error' && (
           <div className="boot">
-            <h3>排版引擎启动失败</h3>
+            <h3>{tx("排版引擎启动失败")}</h3>
             <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{fatal}</pre>
-            <div className="muted">请刷新页面重试。</div>
+            <div className="muted">{tx("请刷新页面重试。")}</div>
           </div>
         )}
         {status === 'ready' && shown.length > 0 && (
           <div className={`diag ${errors.length ? 'err' : ''}`} style={{ marginBottom: 12, borderRadius: 'var(--r-m)', border: '1px solid' }}>
             <ul>
               {shown.slice(0, 30).map((d, i) => (
-                <li key={i}><span className={`sev ${d.severity}`}>{d.severity === 'error' ? '错误' : '警告'}</span><span className="where">{d.where}</span><span>{d.message}</span></li>
+                <li key={i}><span className={`sev ${d.severity}`}>{d.severity === 'error' ? tx("错误") : tx("警告")}</span><span className="where">{d.where}</span><span>{d.message}</span></li>
               ))}
             </ul>
           </div>
         )}
-        {renderError && <div className="diag err" style={{ marginBottom: 12, padding: 8 }}>渲染失败：{renderError}</div>}
-        {status === 'ready' && !artifact && !compiling && !errors.length && <div className="preview-empty">还没有内容</div>}
+        {renderError && <div className="diag err" style={{ marginBottom: 12, padding: 8 }}>{tx("渲染失败：")}{renderError}</div>}
+        {status === 'ready' && !artifact && !compiling && !errors.length && <div className="preview-empty">{tx("还没有内容")}</div>}
         {/* 渲染器会整个改写 preview-doc 的内容，编辑层只能做它的兄弟盖在上面 */}
         <div ref={canvasRef} className="preview-canvas">
           <div ref={stageRef} className="preview-stage" style={{ width: '100%' }}>

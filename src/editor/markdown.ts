@@ -1,5 +1,6 @@
 import { marked, type Token, type Tokens } from 'marked';
 import type { RichDoc } from '../model/types';
+import { t as tx } from '../i18n';
 
 // GFM handles ordinary text. Valid GFM comments/fences preserve thesis-only data.
 type Node = NonNullable<RichDoc['content']>[number];
@@ -143,7 +144,7 @@ function blocks(tokens: Token[], headings: boolean): Node[] {
     let node: Node;
     switch (t.type) {
       case 'heading':
-        if (headings && t.depth > 4) throw new Error('论文标题支持 1 至 4 级，请减少标题前的 #。');
+        if (headings && t.depth > 4) throw new Error(tx("论文标题支持 1 至 4 级，请减少标题前的 #。"));
         node = { type: headings ? 'heading' : 'paragraph', ...(headings ? { attrs: { level: t.depth } } : {}), content: inlines(t.tokens) }; break;
       case 'paragraph': case 'text': {
         const raw = String(t.raw ?? t.text ?? '').trim();
@@ -158,25 +159,26 @@ function blocks(tokens: Token[], headings: boolean): Node[] {
       case 'hr': node = { type: 'horizontalRule' }; break;
       case 'code':
         if (t.lang === 'iota-node') {
-          try { node = JSON.parse(t.text); } catch { throw new Error('iota-node 代码块中的 JSON 不完整。'); }
-          if (!node || typeof node.type !== 'string') throw new Error('iota-node 代码块需要有效的文档节点。');
+          try { node = JSON.parse(t.text); } catch { throw new Error(tx("iota-node 代码块中的 JSON 不完整。")); }
+          if (!node || typeof node.type !== 'string') throw new Error(tx("iota-node 代码块需要有效的文档节点。"));
         } else node = { type: 'codeBlock', attrs: { language: t.lang || null }, content: textNode(t.text) };
         break;
       case 'blockquote': node = { type: 'blockquote', content: blocks(t.tokens, headings) }; break;
-      case 'list': node = { type: t.ordered ? 'orderedList' : 'bulletList', ...(t.ordered ? { attrs: { start: t.start } } : {}), content: t.items.map((item: Tokens.ListItem) => {
+      // Typst 的写法：+ 是编号列表
+      case 'list': { const ordered = t.ordered || /^\s*\+/.test(String(t.raw ?? '')); node = { type: ordered ? 'orderedList' : 'bulletList', ...(ordered ? { attrs: { start: t.ordered ? t.start : 1 } } : {}), content: t.items.map((item: Tokens.ListItem) => {
         const content = blocks(item.tokens, headings);
         if (content[0]?.type !== 'paragraph') content.unshift({ type: 'paragraph', content: [] });
         if (item.task) content[0].content = [...textNode(item.checked ? '[x] ' : '[ ] '), ...(content[0].content ?? [])];
         return { type: 'listItem', content };
-      }) }; break;
+      }) }; break; }
       case 'table': node = { type: 'tableFigure', content: [{ type: 'table', content: [t.header, ...t.rows].map((row: Tokens.TableCell[], i: number) => ({ type: 'tableRow', content: row.map((cell, j) => ({ type: i === 0 ? 'tableHeader' : 'tableCell', attrs: { align: t.align[j] }, content: [{ type: 'paragraph', content: inlines(cell.tokens) }] })) })) }] }; break;
       case 'html': node = { type: 'paragraph', content: textNode(t.raw) }; break;
-      default: throw new Error(`暂不支持此 Markdown 内容：${t.type}`);
+      default: throw new Error(tx("暂不支持此 Markdown 内容：{{type}}", { type: t.type }));
     }
     if (attrs) { node.attrs = { ...node.attrs, ...attrs }; attrs = undefined; }
     out.push(node);
   }
-  if (attrs) throw new Error('属性注释后需要一个正文块。');
+  if (attrs) throw new Error(tx("属性注释后需要一个正文块。"));
   return out;
 }
 export function fromMarkdown(source: string, headings = true): RichDoc {

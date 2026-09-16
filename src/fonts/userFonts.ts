@@ -7,34 +7,35 @@ import { create } from 'zustand';
 import { updateUserFonts, useCompileState } from '../compiler/client';
 import { saveFontFile, loadFontFile, deleteFontFile, listFontFiles } from '../model/persist';
 import type { Fontset } from '../model/types';
+import { t } from '../i18n';
 
 /** 模板各档的角色 → 家族名（抄自 iota-hit/src/config/fonts.typ 的 presets） */
 export const PRESET_ROLES: Record<Exclude<Fontset, 'webapp'>, { role: string; label: string; family: string; optional?: boolean }[]> = {
   windows: [
-    { role: 'songti', label: '宋体', family: 'SimSun' },
-    { role: 'heiti', label: '黑体', family: 'SimHei' },
-    { role: 'kaishu', label: '楷体', family: 'KaiTi' },
-    { role: 'fangsong', label: '仿宋', family: 'FangSong' },
-    { role: 'kaishu-gb2312', label: '楷体_GB2312（封面校名）', family: 'KaiTi_GB2312', optional: true },
-    { role: 'lishu', label: '隶书（报告落款）', family: 'LiSu', optional: true },
-    { role: 'xinwei', label: '华文新魏（深圳本科表单）', family: 'STXinwei', optional: true },
-    { role: 'serif', label: '西文衬线', family: 'Times New Roman' },
-    { role: 'sans', label: '西文无衬线', family: 'Arial' },
-    { role: 'mono', label: '等宽', family: 'Consolas' },
-    { role: 'math', label: '数学', family: 'Cambria Math' },
+    { role: 'songti', label: t("宋体"), family: 'SimSun' },
+    { role: 'heiti', label: t("黑体"), family: 'SimHei' },
+    { role: 'kaishu', label: t("楷体"), family: 'KaiTi' },
+    { role: 'fangsong', label: t("仿宋"), family: 'FangSong' },
+    { role: 'kaishu-gb2312', label: t("楷体_GB2312（封面校名）"), family: 'KaiTi_GB2312', optional: true },
+    { role: 'lishu', label: t("隶书（报告落款）"), family: 'LiSu', optional: true },
+    { role: 'xinwei', label: t("华文新魏（深圳本科表单）"), family: 'STXinwei', optional: true },
+    { role: 'serif', label: t("西文衬线"), family: 'Times New Roman' },
+    { role: 'sans', label: t("西文无衬线"), family: 'Arial' },
+    { role: 'mono', label: t("等宽"), family: 'Consolas' },
+    { role: 'math', label: t("数学"), family: 'Cambria Math' },
   ],
   macos: [
-    { role: 'songti', label: '宋体', family: 'Songti SC' },
-    { role: 'heiti', label: '黑体', family: 'Heiti SC' },
-    { role: 'kaishu', label: '楷体', family: 'Kaiti SC' },
-    { role: 'fangsong', label: '仿宋', family: 'STFangsong' },
-    { role: 'kaishu-gb2312', label: '楷体_GB2312（封面校名）', family: 'KaiTi_GB2312', optional: true },
-    { role: 'lishu', label: '隶书（报告落款）', family: 'LiSu', optional: true },
-    { role: 'xinwei', label: '华文新魏（深圳本科表单）', family: 'STXinwei', optional: true },
-    { role: 'serif', label: '西文衬线', family: 'Times New Roman' },
-    { role: 'sans', label: '西文无衬线', family: 'Arial' },
-    { role: 'mono', label: '等宽', family: 'Menlo' },
-    { role: 'math', label: '数学', family: 'STIX Two Math' },
+    { role: 'songti', label: t("宋体"), family: 'Songti SC' },
+    { role: 'heiti', label: t("黑体"), family: 'Heiti SC' },
+    { role: 'kaishu', label: t("楷体"), family: 'Kaiti SC' },
+    { role: 'fangsong', label: t("仿宋"), family: 'STFangsong' },
+    { role: 'kaishu-gb2312', label: t("楷体_GB2312（封面校名）"), family: 'KaiTi_GB2312', optional: true },
+    { role: 'lishu', label: t("隶书（报告落款）"), family: 'LiSu', optional: true },
+    { role: 'xinwei', label: t("华文新魏（深圳本科表单）"), family: 'STXinwei', optional: true },
+    { role: 'serif', label: t("西文衬线"), family: 'Times New Roman' },
+    { role: 'sans', label: t("西文无衬线"), family: 'Arial' },
+    { role: 'mono', label: t("等宽"), family: 'Menlo' },
+    { role: 'math', label: t("数学"), family: 'STIX Two Math' },
   ],
 };
 
@@ -74,7 +75,7 @@ async function fingerprint(buf: ArrayBuffer): Promise<string> {
 
 async function apply(add: { id: string; data: ArrayBuffer }[], remove: string[]) {
   const r = await updateUserFonts(add, remove);
-  if (r.error) throw new Error(`字体加载失败：${r.error}`);
+  if (r.error) throw new Error(t("字体加载失败：{{error}}", { error: r.error }));
 }
 
 interface FontData { family: string; fullName: string; postscriptName: string; style: string; blob(): Promise<Blob> }
@@ -89,18 +90,18 @@ export const useFontState = create<FontState>((set, get) => ({
   readLocal: async () => {
     if (get().busy) return;
     const query = (window as unknown as { queryLocalFonts?: () => Promise<FontData[]> }).queryLocalFonts;
-    if (!query) { set({ error: '当前浏览器不支持读取本机字体，请选择字体文件。' }); return; }
-    set({ busy: '正在读取本机字体…', error: null });
+    if (!query) { set({ error: t("当前浏览器不支持读取本机字体，请选择字体文件。") }); return; }
+    set({ busy: t("正在读取本机字体…"), error: null });
     try {
       const all = await query.call(window);
       const hits = all.filter((f) => WANTED.has(f.family.toLowerCase()));
-      if (!hits.length) { set({ busy: null, error: '未找到所需字体，请选择字体文件或使用内置字体。' }); return; }
+      if (!hits.length) { set({ busy: null, error: t("未找到所需字体，请选择字体文件或使用内置字体。") }); return; }
       const fonts = [...get().fonts];
       const seen = new Set<string>();
       const add: { id: string; data: ArrayBuffer }[] = [];
       let n = 0;
       for (const f of hits) {
-        set({ busy: `读取 ${f.family}（${++n}/${hits.length}）` });
+        set({ busy: t("读取 {{family}}（{{v1}}/{{length}}）", { family: f.family, v1: ++n, length: hits.length }) });
         const data = await (await f.blob()).arrayBuffer();
         const id = await fingerprint(data);
         if (seen.has(id)) continue; // 同一个 .ttc 里的几个字面共用一份字节
@@ -108,22 +109,22 @@ export const useFontState = create<FontState>((set, get) => ({
         if (!fonts.some((font) => font.id === id)) fonts.push({ id, name: f.postscriptName || f.fullName, size: data.byteLength, source: 'local' });
         add.push({ id, data });
       }
-      set({ busy: '正在加载字体…' });
+      set({ busy: t("正在加载字体…") });
       await apply(add, []);
       set({ fonts, busy: null });
     } catch (e) {
       const msg = String((e as Error)?.message ?? e);
-      set({ busy: null, error: /denied|NotAllowed|permission/i.test(msg) ? '未获得字体访问权限。请再次读取字体，并在浏览器提示中选择“允许”。' : msg });
+      set({ busy: null, error: /denied|NotAllowed|permission/i.test(msg) ? t("未获得字体访问权限。请再次读取字体，并在浏览器提示中选择“允许”。") : msg });
     }
   },
 
   addFiles: async (files) => {
     if (get().busy) return;
-    set({ busy: '正在加载字体…', error: null });
+    set({ busy: t("正在加载字体…"), error: null });
     try {
     const list = [...files].filter((f) => /\.(otf|ttf|ttc|otc)$/i.test(f.name));
-    if (!list.length) { set({ error: '只认 .otf / .ttf / .ttc 文件' }); return; }
-    set({ busy: '读取字体文件…', error: null });
+    if (!list.length) { set({ error: t("只认 .otf / .ttf / .ttc 文件") }); return; }
+    set({ busy: t("读取字体文件…"), error: null });
     const fonts = [...get().fonts];
     const seen = new Set(fonts.map((f) => f.id));
     const add: { id: string; data: ArrayBuffer }[] = [];
@@ -136,7 +137,7 @@ export const useFontState = create<FontState>((set, get) => ({
       fonts.push({ id, name: f.name, size: data.byteLength, source: 'file' });
       add.push({ id, data });
     }
-    set({ busy: '正在加载字体…' });
+    set({ busy: t("正在加载字体…") });
     await apply(add, []);
     set({ fonts });
     set({ busy: null });
@@ -146,11 +147,11 @@ export const useFontState = create<FontState>((set, get) => ({
 
   removeFile: async (name) => {
     if (get().busy) return;
-    set({ busy: '正在加载字体…', error: null });
+    set({ busy: t("正在加载字体…"), error: null });
     try {
     await deleteFontFile(name);
     const gone = get().fonts.filter((f) => f.source === 'file' && f.name === name).map((f) => f.id);
-    set({ fonts: get().fonts.filter((f) => !gone.includes(f.id)), busy: '正在重建字体表…' });
+    set({ fonts: get().fonts.filter((f) => !gone.includes(f.id)), busy: t("正在重建字体表…") });
     await apply([], gone);
     set({ busy: null });
     } catch (error) { set({ error: String((error as Error)?.message ?? error) }); }
@@ -167,7 +168,7 @@ export const useFontState = create<FontState>((set, get) => ({
 
   loadStored: async () => {
     if (get().busy) return;
-    set({ busy: '正在加载字体…', error: null });
+    set({ busy: t("正在加载字体…"), error: null });
     try {
     const names = await listFontFiles();
     if (!names.length) return;

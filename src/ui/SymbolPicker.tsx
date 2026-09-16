@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import { Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogTrigger, Button, Input } from '@fluentui/react-components';
 import { Dismiss20Regular, Search20Regular } from '@fluentui/react-icons';
 import SYMBOLS from '../data/symbols.json';
+import { t } from '../i18n';
 
 export interface SymbolEntry { n: string; c: string; l?: string; cls?: string; k: string }
 export const SYMBOL_TABLE: SymbolEntry[] = SYMBOLS as SymbolEntry[];
@@ -14,15 +15,15 @@ export const SYMBOL_BY_CHAR: Map<string, SymbolEntry> = (() => { const m = new M
 
 /** 面板里按这些类别排；剩下的归「其他」 */
 const CATEGORIES: { key: string; label: string; match: (k: string) => boolean }[] = [
-  { key: 'greek', label: '希腊字母', match: (k) => /Greek/.test(k) },
-  { key: 'arith', label: '运算', match: (k) => /Arithmetic|Algebra|Calculus|Number theory/.test(k) },
-  { key: 'rel', label: '关系', match: (k) => /Relations|Set theory|Logic/.test(k) },
-  { key: 'arrow', label: '箭头', match: (k) => /Arrows/.test(k) },
-  { key: 'delim', label: '括号', match: (k) => /Delimiters/.test(k) },
-  { key: 'punct', label: '标点', match: (k) => /Punctuation|Accents|Spaces|Printable/.test(k) },
-  { key: 'letter', label: '字母类', match: (k) => /Double-struck|letter-likes|Cyrillic/.test(k) },
-  { key: 'geo', label: '几何形状', match: (k) => /Geometry|Shapes/.test(k) },
-  { key: 'misc', label: '其他', match: (k) => /Miscell|Currency|Music|Astronomical|Game|Function|Keyboard|Technical|pull/.test(k) },
+  { key: 'greek', label: t("希腊字母"), match: (k) => /Greek/.test(k) },
+  { key: 'arith', label: t("运算"), match: (k) => /Arithmetic|Algebra|Calculus|Number theory/.test(k) },
+  { key: 'rel', label: t("关系"), match: (k) => /Relations|Set theory|Logic/.test(k) },
+  { key: 'arrow', label: t("箭头"), match: (k) => /Arrows/.test(k) },
+  { key: 'delim', label: t("括号"), match: (k) => /Delimiters/.test(k) },
+  { key: 'punct', label: t("标点"), match: (k) => /Punctuation|Accents|Spaces|Printable/.test(k) },
+  { key: 'letter', label: t("字母类"), match: (k) => /Double-struck|letter-likes|Cyrillic/.test(k) },
+  { key: 'geo', label: t("几何形状"), match: (k) => /Geometry|Shapes/.test(k) },
+  { key: 'misc', label: t("其他"), match: (k) => /Miscell|Currency|Music|Astronomical|Game|Function|Keyboard|Technical|pull/.test(k) },
 ];
 const catOf = (k: string) => CATEGORIES.find((c) => c.match(k))?.key ?? 'misc';
 const SKIP = /^(Control|Spaces)$/;
@@ -50,10 +51,10 @@ export function SymbolPanel({ onPick, autoFocus }: { onPick: (ch: string) => voi
   }, [q, cat]);
   return (
     <div className="sym-panel" onMouseDown={(e) => { if ((e.target as HTMLElement).tagName !== 'INPUT') e.preventDefault(); }}>
-      <Input size="small" contentBefore={<Search20Regular />} value={q} placeholder="搜名字 / LaTeX 命令 / 字：alpha、arrow.r、\\leq、≤" onChange={(_, d) => setQ(d.value)} autoFocus={autoFocus} className="sym-search" />
+      <Input size="small" contentBefore={<Search20Regular />} value={q} placeholder={t("搜名字 / LaTeX 命令 / 字：alpha、arrow.r、\\\\leq、≤")} onChange={(_, d) => setQ(d.value)} autoFocus={autoFocus} className="sym-search" />
       {!q.trim() && (
         <div className="sym-cats" role="tablist">
-          <button type="button" role="tab" className={`sym-cat ${cat === 'quick' ? 'on' : ''}`} onClick={() => setCat('quick')}>常用</button>
+          <button type="button" role="tab" className={`sym-cat ${cat === 'quick' ? 'on' : ''}`} onClick={() => setCat('quick')}>{t("常用")}</button>
           {CATEGORIES.map((c) => <button key={c.key} type="button" role="tab" className={`sym-cat ${cat === c.key ? 'on' : ''}`} onClick={() => setCat(c.key)}>{c.label}</button>)}
         </div>
       )}
@@ -61,9 +62,9 @@ export function SymbolPanel({ onPick, autoFocus }: { onPick: (ch: string) => voi
         {list.map((s) => (
           <button key={s.n + s.c} type="button" className="sym-cell" title={`${s.c}${s.n ? `  sym.${s.n}` : ''}${s.l ? `  ·  ${s.l}` : ''}`} onClick={() => onPick(s.c)}>{s.c}</button>
         ))}
-        {!list.length && <p className="muted" style={{ gridColumn: '1 / -1', margin: 8 }}>没有这个符号</p>}
+        {!list.length && <p className="muted" style={{ gridColumn: '1 / -1', margin: 8 }}>{t("没有这个符号")}</p>}
       </div>
-      <div className="sym-foot muted">{q.trim() ? `${list.length} 个` : cat === 'quick' ? '常打的几十个；别的类别与搜索覆盖 Typst 整张符号表' : `${list.length} 个 · 悬停看 Typst 名与 LaTeX 命令`}</div>
+      <div className="sym-foot muted">{q.trim() ? t("{{length}} 个", { length: list.length }) : cat === 'quick' ? t("常打的几十个；别的类别与搜索覆盖 Typst 整张符号表") : t("{{length}} 个 · 悬停看 Typst 名与 LaTeX 命令", { length: list.length })}</div>
     </div>
   );
 }
@@ -77,7 +78,7 @@ export function SymbolPicker({ onPick }: { onPick: (ch: string) => void }) {
     <Dialog open onOpenChange={(_, d) => { if (!d.open) setOpen(false); }}>
       <DialogSurface className="style-dialog sym-dialog">
         <DialogBody>
-          <DialogTitle action={<DialogTrigger action="close"><Button appearance="subtle" icon={<Dismiss20Regular />} /></DialogTrigger>}>符号</DialogTitle>
+          <DialogTitle action={<DialogTrigger action="close"><Button appearance="subtle" icon={<Dismiss20Regular />} /></DialogTrigger>}>{t("符号")}</DialogTitle>
           <DialogContent><SymbolPanel onPick={onPick} autoFocus /></DialogContent>
         </DialogBody>
       </DialogSurface>

@@ -5,6 +5,7 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { compileSnippet } from '../../compiler/client';
 import { renderSnippetSvg } from '../../compiler/renderer';
+import { t as tx } from '../../i18n';
 
 const typstCache = new Map<string, { svg?: string; error?: string }>();
 const pending = new Map<string, Promise<{ svg?: string; error?: string }>>();
@@ -18,7 +19,7 @@ export function renderTypstMath(src: string, display: boolean): Promise<{ svg?: 
   const p = (async () => {
     const r = await compileSnippet(src, display);
     let out: { svg?: string; error?: string };
-    if (!r.artifact) out = { error: r.error ?? '编译失败' };
+    if (!r.artifact) out = { error: r.error ?? tx("编译失败") };
     else {
       try {
         const svg = await renderSnippetSvg(new Uint8Array(r.artifact));
@@ -71,7 +72,7 @@ export function MathPreview({ src, mode, display = false, onError, className, em
 
   // KaTeX 每次几毫秒，父组件重画时别跟着重算
   const katexOut = useMemo(() => (mode === 'latex' && trimmed ? katexHtml(trimmed, display) : null), [mode, trimmed, display]);
-  if (!trimmed) return <span className={`math-preview is-empty ${className ?? ''}`}>{empty ?? '（空公式）'}</span>;
+  if (!trimmed) return <span className={`math-preview is-empty ${className ?? ''}`}>{empty ?? tx("（空公式）")}</span>;
   if (mode === 'latex' && katexOut) {
     const r = katexOut;
     return <span className={`math-preview katex-host ${r.error ? 'has-error' : ''} ${className ?? ''}`} dangerouslySetInnerHTML={{ __html: r.html }} />;

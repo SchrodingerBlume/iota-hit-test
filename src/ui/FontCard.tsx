@@ -4,11 +4,12 @@ import { useStore } from '../model/store';
 import { useCompileState } from '../compiler/client';
 import { useFontState, roleAvailability } from '../fonts/userFonts';
 import type { Fontset } from '../model/types';
+import { t } from '../i18n';
 
 const CHOICES: { value: Fontset; label: string; hint: string }[] = [
-  { value: 'webapp', label: '内置字体', hint: 'Noto CJK、FandolKai、TeX Gyre，无需另行安装' },
-  { value: 'windows', label: 'Windows 字体', hint: '宋体、黑体、楷体、Times New Roman 等，需加载本机字体' },
-  { value: 'macos', label: 'macOS 字体', hint: 'Songti / Heiti / Kaiti SC + STFangsong + Times New Roman / Arial / Menlo / STIX Two Math' },
+  { value: 'webapp', label: t("内置字体"), hint: t("Noto CJK、FandolKai、TeX Gyre，无需另行安装") },
+  { value: 'windows', label: t("Windows 字体"), hint: t("宋体、黑体、楷体、Times New Roman 等，需加载本机字体") },
+  { value: 'macos', label: t("macOS 字体"), hint: 'Songti / Heiti / Kaiti SC + STFangsong + Times New Roman / Arial / Menlo / STIX Two Math' },
 ];
 
 const fmtMB = (n: number) => (n / 1024 / 1024).toFixed(1);
@@ -25,7 +26,7 @@ export function FontCard() {
 
   return (
     <div className="card">
-      <h3>字体方案</h3>
+      <h3>{t("字体方案")}</h3>
       <div className="fontset">
         {CHOICES.map((c) => (
           <label key={c.value} className={`fontset-opt ${fontset === c.value ? 'on' : ''}`}>
@@ -39,18 +40,16 @@ export function FontCard() {
         <>
           <div className="row" style={{ marginTop: 10 }}>
             {canQuery
-              ? <button type="button" className="btn btn-primary" disabled={!!busy || status !== 'ready'} onClick={() => void readLocal()}>读取本机字体</button>
-              : <span className="muted" style={{ fontSize: 12 }}>当前浏览器不支持读取系统字体，请选择字体文件。</span>}
+              ? <button type="button" className="btn btn-primary" disabled={!!busy || status !== 'ready'} onClick={() => void readLocal()}>{t("读取本机字体")}</button>
+              : <span className="muted" style={{ fontSize: 12 }}>{t("当前浏览器不支持读取系统字体，请选择字体文件。")}</span>}
             <label className="btn">
-              选择字体文件…
-              <input type="file" hidden multiple accept=".otf,.ttf,.ttc,.otc" disabled={!!busy} onChange={(e) => { if (e.target.files?.length) void addFiles(e.target.files); e.target.value = ''; }} />
+              {t("选择字体文件…")}<input type="file" hidden multiple accept=".otf,.ttf,.ttc,.otc" disabled={!!busy} onChange={(e) => { if (e.target.files?.length) void addFiles(e.target.files); e.target.value = ''; }} />
             </label>
             {busy && <span className="muted" style={{ fontSize: 12 }}>{busy}</span>}
           </div>
           {error && <div className="diag err" style={{ marginTop: 8, padding: '6px 10px', borderRadius: 'var(--r-s)', border: '1px solid' }}>{error}</div>}
           <p className="muted" style={{ fontSize: 12, margin: '8px 0 6px' }}>
-            字体仅在本机使用。选择的字体文件会保存在此浏览器中。
-          </p>
+            {t("字体仅在本机使用。选择的字体文件会保存在此浏览器中。")}</p>
 
           <table className="tbl roles">
             <tbody>
@@ -59,26 +58,26 @@ export function FontCard() {
                   <td className="mark">{r.ok ? '✓' : r.optional ? '–' : '✗'}</td>
                   <td>{r.label}</td>
                   <td><code>{r.family}</code></td>
-                  <td className="muted">{r.ok ? '已加载' : r.optional ? '可选' : '缺失，使用替代字体'}</td>
+                  <td className="muted">{r.ok ? t("已加载") : r.optional ? t("可选") : t("缺失，使用替代字体")}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           {missing.length > 0 && fonts.length === 0 && !busy && (
-            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>尚未加载本机字体，当前使用替代字体。</div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{t("尚未加载本机字体，当前使用替代字体。")}</div>
           )}
           {missing.length > 0 && fonts.length > 0 && (
-            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>缺少 {missing.map((m) => m.family).join('、')}，当前使用替代字体。</div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{t("缺少")}{' '}{missing.map((m) => m.family).join('、')}{t("，当前使用替代字体。")}</div>
           )}
 
           {fonts.length > 0 && (
             <details style={{ marginTop: 8 }}>
-              <summary className="muted" style={{ fontSize: 12, cursor: 'pointer' }}>已装入 {fonts.length} 个字体文件，共 {fmtMB(fonts.reduce((s, f) => s + f.size, 0))} MB</summary>
+              <summary className="muted" style={{ fontSize: 12, cursor: 'pointer' }}>{t("已装入")}{' '}{fonts.length} {' '}{t("个字体文件，共")}{' '}{fmtMB(fonts.reduce((s, f) => s + f.size, 0))} MB</summary>
               <ul className="font-list">
                 {fonts.map((f) => (
                   <li key={f.id}>
-                    <code>{f.name}</code> <span className="muted">{fmtMB(f.size)} MB · {f.source === 'local' ? '本机' : '文件'}</span>
-                    {f.source === 'file' && <button type="button" className="del" title="移除" onClick={() => void removeFile(f.name)}>✕</button>}
+                    <code>{f.name}</code> <span className="muted">{fmtMB(f.size)} MB · {f.source === 'local' ? t("本机") : t("文件")}</span>
+                    {f.source === 'file' && <button type="button" className="del" title={t("移除")} onClick={() => void removeFile(f.name)}>✕</button>}
                   </li>
                 ))}
               </ul>

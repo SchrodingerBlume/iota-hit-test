@@ -12,6 +12,7 @@ import { LengthInput } from '../ui/LengthInput';
 import { parseLength, toPx } from '../model/length';
 import { useEditorEnv } from './env';
 import { usePreviewSurface } from '../ui/PreviewEditLayer';
+import { t as tx } from '../i18n';
 
 /** 编辑器每一笔事务都重画（按钮的亮暗跟着选区走），一帧合成一次 */
 export function useEditorTick(editor: Editor | null) {
@@ -157,8 +158,8 @@ export function TableAlignTools({ editor }: { editor: Editor }) {
   };
   const H = ['left', 'center', 'right'] as const;
   const V = ['top', 'horizon', 'bottom'] as const;
-  const HN = { left: '左', center: '中', right: '右' };
-  const VN = { top: '上', horizon: '中', bottom: '下' };
+  const HN = { left: tx("左"), center: tx("中"), right: tx("右") };
+  const VN = { top: tx("上"), horizon: tx("中"), bottom: tx("下") };
   const cw = info.colwidth ? +(info.colwidth / 37.8).toFixed(1) : '';
   // 相对单位（fr / % / em）的列宽存在 tableFigure.cols 上，绝对单位折成像素进单元格 colwidth（列线跟着动）
   const raw = editor.getAttributes('tableFigure').cols;
@@ -172,12 +173,12 @@ export function TableAlignTools({ editor }: { editor: Editor }) {
     const px = l && abs ? toPx(l) : null;
     editor.chain().setColumnWidth(px ? Math.max(1, Math.round(px)) : null).updateAttributes('tableFigure', { cols: Object.keys(next).length ? next : null }).run();
   };
-  const cur = info.align || info.valign ? `${VN[(info.valign ?? 'horizon') as keyof typeof VN]}${HN[(info.align ?? 'center') as keyof typeof HN]}` : '默认';
+  const cur = info.align || info.valign ? `${VN[(info.valign ?? 'horizon') as keyof typeof VN]}${HN[(info.align ?? 'center') as keyof typeof HN]}` : tx("默认");
   return (
     <>
       <Popover open={open} onOpenChange={(_, d) => setOpen(d.open)} positioning="below-start" trapFocus={false}>
         <PopoverTrigger disableButtonEnhancement>
-          <ToggleButton appearance="subtle" className="rb-btn rb-menu" icon={<TextAlignCenter20Regular />} checked={open} onMouseDown={(e) => e.preventDefault()} onClick={() => setOpen((o) => !o)} title={`单元格对齐：${cur}（点开九宫格）`}>{cur}</ToggleButton>
+          <ToggleButton appearance="subtle" className="rb-btn rb-menu" icon={<TextAlignCenter20Regular />} checked={open} onMouseDown={(e) => e.preventDefault()} onClick={() => setOpen((o) => !o)} title={tx("单元格对齐：{{cur}}（点开九宫格）", { cur: cur })}>{cur}</ToggleButton>
         </PopoverTrigger>
         <PopoverSurface className="align-pop">
           <div className="align-grid">
@@ -187,16 +188,16 @@ export function TableAlignTools({ editor }: { editor: Editor }) {
               </button>
             )))}
           </div>
-          <Button size="small" style={{ width: '100%', marginTop: 6 }} onMouseDown={(e) => e.preventDefault()} onClick={() => apply(null, null)}>恢复默认（居中）</Button>
+          <Button size="small" style={{ width: '100%', marginTop: 6 }} onMouseDown={(e) => e.preventDefault()} onClick={() => apply(null, null)}>{tx("恢复默认（居中）")}</Button>
         </PopoverSurface>
       </Popover>
-      <B title={rowScope ? '对齐作用于整行（点击改为只作用于当前 / 选中的单元格）' : '对齐只作用于当前 / 选中的单元格（点击改为整行）'} on={rowScope} icon={<TableCellEdit20Regular />} run={() => setRowScope((r) => !r)}>整行</B>
+      <B title={rowScope ? tx("对齐作用于整行（点击改为只作用于当前 / 选中的单元格）") : tx("对齐只作用于当前 / 选中的单元格（点击改为整行）")} on={rowScope} icon={<TableCellEdit20Regular />} run={() => setRowScope((r) => !r)}>{tx("整行")}</B>
       <Sep />
-      <label className="tb-field" title="当前列的宽度：cm / mm / in / pt / em / %（相对版心）/ fr（按份分剩余宽度；列线可拖，拖的是像素）。留空 = 自动">
-        列宽 <LengthInput value={cols[col] ?? (cw === '' ? '' : `${cw}cm`)} defaultUnit="cm" allowed={['cm', 'mm', 'in', 'pt', 'em', '%', 'fr']} placeholder="自动" width={84} onChange={setCol} />
+      <label className="tb-field" title={tx("当前列的宽度：cm / mm / in / pt / em / %（相对版心）/ fr（按份分剩余宽度；列线可拖，拖的是像素）。留空 = 自动")}>
+        {tx("列宽")}{' '}<LengthInput value={cols[col] ?? (cw === '' ? '' : `${cw}cm`)} defaultUnit="cm" allowed={['cm', 'mm', 'in', 'pt', 'em', '%', 'fr']} placeholder={tx("自动")} width={84} onChange={setCol} />
       </label>
-      <label className="tb-field" title="当前行的高度：cm / mm / pt / em。留空 = 自动">
-        行高 <LengthInput value={info.rowHeight ?? ''} defaultUnit="cm" placeholder="自动" width={84} onChange={(v) => editor.chain().setRowAttribute('height', v ?? null).run()} />
+      <label className="tb-field" title={tx("当前行的高度：cm / mm / pt / em。留空 = 自动")}>
+        {tx("行高")}{' '}<LengthInput value={info.rowHeight ?? ''} defaultUnit="cm" placeholder={tx("自动")} width={84} onChange={(v) => editor.chain().setRowAttribute('height', v ?? null).run()} />
       </label>
     </>
   );
@@ -215,11 +216,11 @@ export function useRichSize(): [number, (n: number) => void] {
 export function FontSizeTool() {
   const [size, setSize] = useRichSize();
   return (
-    <span className="tb-size" title="编辑区显示字号（只影响这里，不影响排版结果）">
+    <span className="tb-size" title={tx("编辑区显示字号（只影响这里，不影响排版结果）")}>
       <TextFontSize20Regular className="tb-size-ico" />
-      <B title="字号小一点" run={() => setSize(size - 1)} disabled={size <= 13}>A−</B>
+      <B title={tx("字号小一点")} run={() => setSize(size - 1)} disabled={size <= 13}>A−</B>
       <span className="tb-size-val">{Math.round(size)}</span>
-      <B title="字号大一点" run={() => setSize(size + 1)} disabled={size >= 24}>A+</B>
+      <B title={tx("字号大一点")} run={() => setSize(size + 1)} disabled={size >= 24}>A+</B>
     </span>
   );
 }

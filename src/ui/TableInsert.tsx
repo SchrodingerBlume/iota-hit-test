@@ -5,6 +5,7 @@ import { Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogAc
 import { Dismiss20Regular } from '@fluentui/react-icons';
 import { parseTableText } from '../editor/tableImport';
 import { LengthInput } from './LengthInput';
+import { t } from '../i18n';
 
 export type TableDialogKind = 'size' | 'text';
 export type TableFit = 'content' | 'window' | 'fixed';
@@ -32,30 +33,30 @@ export function TableSizeDialog({ onInsert, onClose }: { onInsert: (rows: number
     <Dialog open onOpenChange={(_, ev) => { if (!ev.open) onClose(); }}>
       <DialogSurface className="style-dialog">
         <DialogBody>
-          <DialogTitle action={<DialogTrigger action="close"><Button appearance="subtle" icon={<Dismiss20Regular />} /></DialogTrigger>}>插入表格</DialogTitle>
+          <DialogTitle action={<DialogTrigger action="close"><Button appearance="subtle" icon={<Dismiss20Regular />} /></DialogTrigger>}>{t("插入表格")}</DialogTitle>
           <DialogContent>
             <fieldset className="dlg-fs">
-              <legend>表格尺寸</legend>
-              <div className="style-field"><Label className="style-label">列数</Label><Input type="number" min={1} max={20} value={String(d.cols)} onChange={(_, e) => set({ cols: Number(e.value) || 0 })} style={{ width: 120 }} autoFocus /></div>
-              <div className="style-field"><Label className="style-label">行数</Label><Input type="number" min={1} max={60} value={String(d.rows)} onChange={(_, e) => set({ rows: Number(e.value) || 0 })} style={{ width: 120 }} /></div>
-              <Checkbox label="第一行是表头（三线表的栏头，跨页时续页重排）" checked={d.header} onChange={(_, e) => set({ header: !!e.checked })} />
+              <legend>{t("表格尺寸")}</legend>
+              <div className="style-field"><Label className="style-label">{t("列数")}</Label><Input type="number" min={1} max={20} value={String(d.cols)} onChange={(_, e) => set({ cols: Number(e.value) || 0 })} style={{ width: 120 }} autoFocus /></div>
+              <div className="style-field"><Label className="style-label">{t("行数")}</Label><Input type="number" min={1} max={60} value={String(d.rows)} onChange={(_, e) => set({ rows: Number(e.value) || 0 })} style={{ width: 120 }} /></div>
+              <Checkbox label={t("第一行是表头（三线表的栏头，跨页时续页重排）")} checked={d.header} onChange={(_, e) => set({ header: !!e.checked })} />
             </fieldset>
             <fieldset className="dlg-fs">
-              <legend>“自动调整”操作</legend>
+              <legend>{t("“自动调整”操作")}</legend>
               <RadioGroup value={d.fit} onChange={(_, e) => set({ fit: e.value as TableFit })}>
                 <span className="style-row">
-                  <Radio value="fixed" label="固定列宽：" />
-                  <LengthInput value={d.colWidth === 'auto' ? '' : d.colWidth} defaultUnit="cm" allowed={['cm', 'mm', 'in', 'pt', 'em', '%', 'fr']} disabled={d.fit !== 'fixed'} placeholder="自动" width={110} onChange={(v) => set({ colWidth: v ?? 'auto' })} />
+                  <Radio value="fixed" label={t("固定列宽：")} />
+                  <LengthInput value={d.colWidth === 'auto' ? '' : d.colWidth} defaultUnit="cm" allowed={['cm', 'mm', 'in', 'pt', 'em', '%', 'fr']} disabled={d.fit !== 'fixed'} placeholder={t("自动")} width={110} onChange={(v) => set({ colWidth: v ?? 'auto' })} />
                 </span>
-                <Radio value="content" label="根据内容调整表格" />
-                <Radio value="window" label="根据窗口调整表格（撑满版心）" />
+                <Radio value="content" label={t("根据内容调整表格")} />
+                <Radio value="window" label={t("根据窗口调整表格（撑满版心）")} />
               </RadioGroup>
             </fieldset>
-            <Checkbox label="为新表格记住此尺寸" checked={remember} onChange={(_, e) => setRemember(!!e.checked)} />
+            <Checkbox label={t("为新表格记住此尺寸")} checked={remember} onChange={(_, e) => setRemember(!!e.checked)} />
           </DialogContent>
           <DialogActions>
-            <Button appearance="secondary" onClick={onClose}>取消</Button>
-            <Button appearance="primary" disabled={!ok} onClick={submit}>确定</Button>
+            <Button appearance="secondary" onClick={onClose}>{t("取消")}</Button>
+            <Button appearance="primary" disabled={!ok} onClick={submit}>{t("确定")}</Button>
           </DialogActions>
         </DialogBody>
       </DialogSurface>
@@ -63,10 +64,7 @@ export function TableSizeDialog({ onInsert, onClose }: { onInsert: (rows: number
   );
 }
 
-const EXAMPLE = `| 试样 | 渗透率 / m² | 孔隙度 |
-|:----|----------:|:-----:|
-| 1 号 | $3.2\\times10^{-14}$ | 0.35 |
-| 2 号 | $2.9\\times10^{-14}$ | 0.33 |`;
+const EXAMPLE = t("| 试样 | 渗透率 / m² | 孔隙度 |\n|:----|----------:|:-----:|\n| 1 号 | $3.2\\times10^{-14}$ | 0.35 |\n| 2 号 | $2.9\\times10^{-14}$ | 0.33 |");
 
 export function TableTextDialog({ onInsert, onClose }: { onInsert: (text: string, header: boolean) => void; onClose: () => void }) {
   const [text, setText] = useState('');
@@ -76,19 +74,19 @@ export function TableTextDialog({ onInsert, onClose }: { onInsert: (text: string
     <Dialog open onOpenChange={(_, d) => { if (!d.open) onClose(); }}>
       <DialogSurface className="style-dialog table-text-dialog">
         <DialogBody>
-          <DialogTitle action={<DialogTrigger action="close"><Button appearance="subtle" icon={<Dismiss20Regular />} /></DialogTrigger>}>从文本 / Markdown 插入表格</DialogTitle>
+          <DialogTitle action={<DialogTrigger action="close"><Button appearance="subtle" icon={<Dismiss20Regular />} /></DialogTrigger>}>{t("从文本 / Markdown 插入表格")}</DialogTitle>
           <DialogContent>
-            <p className="muted style-hint">粘贴 Excel 单元格、CSV 或 Markdown 表格。</p>
+            <p className="muted style-hint">{t("粘贴 Excel 单元格、CSV 或 Markdown 表格。")}</p>
             <Textarea value={text} onChange={(_, d) => setText(d.value)} placeholder={EXAMPLE} rows={9} resize="vertical" className="table-text-input" autoFocus spellCheck={false} />
             <div className="style-row" style={{ marginTop: 8, justifyContent: 'space-between' }}>
-              <Checkbox label="第一行是表头" checked={parsed ? (parsed.header || header) : header} disabled={!!parsed?.header} onChange={(_, d) => setHeader(!!d.checked)} />
-              <span className="muted">{parsed ? `识别到 ${parsed.rows.length} 行 × ${parsed.rows[0].length} 列${parsed.header ? '（含表头）' : ''}` : text.trim() ? '还认不出表来' : ''}</span>
+              <Checkbox label={t("第一行是表头")} checked={parsed ? (parsed.header || header) : header} disabled={!!parsed?.header} onChange={(_, d) => setHeader(!!d.checked)} />
+              <span className="muted">{parsed ? t("识别到 {{length}} 行 × {{v1}} 列{{v2}}", { length: parsed.rows.length, v1: parsed.rows[0].length, v2: parsed.header ? t("（含表头）") : '' }) : text.trim() ? t("还认不出表来") : ''}</span>
             </div>
           </DialogContent>
           <DialogActions>
-            <Button appearance="subtle" onClick={() => setText(EXAMPLE)}>填个示例</Button>
-            <Button appearance="secondary" onClick={onClose}>取消</Button>
-            <Button appearance="primary" disabled={!parsed} onClick={() => onInsert(text, parsed?.header || header)}>插入</Button>
+            <Button appearance="subtle" onClick={() => setText(EXAMPLE)}>{t("填个示例")}</Button>
+            <Button appearance="secondary" onClick={onClose}>{t("取消")}</Button>
+            <Button appearance="primary" disabled={!parsed} onClick={() => onInsert(text, parsed?.header || header)}>{t("插入")}</Button>
           </DialogActions>
         </DialogBody>
       </DialogSurface>

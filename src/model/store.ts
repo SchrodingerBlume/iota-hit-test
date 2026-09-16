@@ -7,6 +7,7 @@ import { saveProject, loadProject, deleteProjectRecord, allProjects, getActivePr
 import { clearImageCache } from '../editor/imageCache';
 import { sampleDoc, SAMPLE_IMAGE } from './sample';
 import { parseBibtex, type BibEntry } from '../bib/bibtex';
+import { t } from '../i18n';
 
 export type RichKey = 'abstractZh' | 'abstractEn' | 'body' | 'conclusion' | 'appendix' | 'acknowledgement' | 'resume';
 
@@ -19,7 +20,7 @@ const person = () => ({ name: '', title: '', affiliation: '', discipline: '' });
 export const newDoc = (): ThesisDoc => ({
   version: 1,
   id: crypto.randomUUID(),
-  name: '未命名论文',
+  name: t("未命名论文"),
   updatedAt: new Date().toISOString(),
   settings: defaultSettings(),
   info: defaultInfo(),
@@ -73,7 +74,7 @@ export function normalizeDoc(raw: Partial<ThesisDoc>): ThesisDoc {
   for (const k of ['abstractZh', 'abstractEn', 'body', 'conclusion', 'appendix', 'acknowledgement', 'resume'] as RichKey[]) {
     if (!doc[k] || doc[k].type !== 'doc') doc[k] = emptyDoc();
   }
-  doc.name ||= raw.info?.title?.split('\n')[0] || '未命名论文';
+  doc.name ||= raw.info?.title?.split('\n')[0] || t("未命名论文");
   // 旧工程：BibTeX 原文 → 结构化条目
   if (!Array.isArray(doc.references)) doc.references = [];
   if (!Array.isArray(doc.achievementEntries)) doc.achievementEntries = [];
@@ -227,7 +228,7 @@ export const useStore = create<State>((set, get) => {
         // v2 → v3：把单份工程迁成一个项目，图片挪进它的名字空间
         const legacy = await loadLegacyDoc<ThesisDoc>();
         if (legacy) {
-          const doc = normalizeDoc({ ...legacy, name: legacy.name || legacy.info?.title?.split('\n')[0] || '未命名论文' });
+          const doc = normalizeDoc({ ...legacy, name: legacy.name || legacy.info?.title?.split('\n')[0] || t("未命名论文") });
           await saveProject(doc.id, doc);
           for (const key of await listImageKeys()) {
             if (!key.includes('/')) { await copyImageRaw(key, `${doc.id}/${key}`); await deleteImageKey(key); }
@@ -266,7 +267,7 @@ export const useStore = create<State>((set, get) => {
       await flushSave();
       const doc = template === 'sample' ? sampleDoc() : newDoc();
       doc.id = crypto.randomUUID();
-      doc.name = name.trim() || (template === 'sample' ? '示例论文' : '未命名论文');
+      doc.name = name.trim() || (template === 'sample' ? t("示例论文") : t("未命名论文"));
       doc.settings = { ...doc.settings, ...settings };
       doc.updatedAt = new Date().toISOString();
       await saveProject(doc.id, doc);
@@ -303,7 +304,7 @@ export const useStore = create<State>((set, get) => {
       await flushSave();
       const src = id === get().doc.id ? get().doc : await loadProject<ThesisDoc>(id);
       if (!src) return id;
-      const copy = normalizeDoc({ ...JSON.parse(JSON.stringify(src)), id: crypto.randomUUID(), name: `${src.name} 副本`, updatedAt: new Date().toISOString() });
+      const copy = normalizeDoc({ ...JSON.parse(JSON.stringify(src)), id: crypto.randomUUID(), name: t("{{name}} 副本", { name: src.name }), updatedAt: new Date().toISOString() });
       await saveProject(copy.id, copy);
       for (const key of await listImageKeys()) if (key.startsWith(`${id}/`)) await copyImageRaw(key, `${copy.id}/${key.slice(id.length + 1)}`);
       await get().refreshProjects();

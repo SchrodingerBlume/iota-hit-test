@@ -1,5 +1,6 @@
 // 元信息字段的登记表：标签、提示、在哪些档位下才印（不印的字段界面上折起来）。
 import type { Info, Settings } from './types';
+import { t } from '../i18n';
 
 export interface InfoFieldDef {
   key: keyof Info;
@@ -10,7 +11,7 @@ export interface InfoFieldDef {
   kind: 'text' | 'textarea' | 'keywords' | 'month';
   /** 多行：题目允许手写换行 \ */
   applies?: (s: Settings) => boolean;
-  group: '题目' | '作者与导师' | '学位与单位' | '其他信息';
+  group: string;
   placeholder?: string;
 }
 
@@ -19,40 +20,40 @@ const final = (s: Settings) => s.stage === 'final';
 const practice = (s: Settings) => s.form === 'practice' && s.degreeLevel !== 'bachelor';
 
 export const INFO_FIELDS: InfoFieldDef[] = [
-  { key: 'title', label: '中文题目', param: 'title', kind: 'textarea', group: '题目', hint: '按 Enter 换行', placeholder: '局部多孔质气体静压轴承关键技术的研究' },
-  { key: 'titleEn', label: '英文题目', param: 'title-en', kind: 'textarea', group: '题目', placeholder: 'RESEARCH ON KEY TECHNOLOGIES OF …' },
-  { key: 'subtitle', label: '中文副题目', param: 'subtitle', kind: 'text', group: '题目', hint: '选填', applies: final },
-  { key: 'subtitleEn', label: '英文副题目', param: 'subtitle-en', kind: 'text', group: '题目', applies: final },
-  { key: 'keywords', label: '中文关键词', param: 'keywords', kind: 'keywords', group: '题目', hint: '按 Enter 添加关键词', applies: final },
-  { key: 'keywordsEn', label: '英文关键词', param: 'keywords-en', kind: 'keywords', group: '题目', applies: final },
+  { key: 'title', label: t("中文题目"), param: 'title', kind: 'textarea', group: t("题目"), hint: t("按 Enter 换行"), placeholder: t("局部多孔质气体静压轴承关键技术的研究") },
+  { key: 'titleEn', label: t("英文题目"), param: 'title-en', kind: 'textarea', group: t("题目"), placeholder: 'RESEARCH ON KEY TECHNOLOGIES OF …' },
+  { key: 'subtitle', label: t("中文副题目"), param: 'subtitle', kind: 'text', group: t("题目"), hint: t("选填"), applies: final },
+  { key: 'subtitleEn', label: t("英文副题目"), param: 'subtitle-en', kind: 'text', group: t("题目"), applies: final },
+  { key: 'keywords', label: t("中文关键词"), param: 'keywords', kind: 'keywords', group: t("题目"), hint: t("按 Enter 添加关键词"), applies: final },
+  { key: 'keywordsEn', label: t("英文关键词"), param: 'keywords-en', kind: 'keywords', group: t("题目"), applies: final },
 
-  { key: 'author', label: '作者', param: 'author', kind: 'text', group: '作者与导师' },
-  { key: 'authorEn', label: '作者（英文）', param: 'author-en', kind: 'text', group: '作者与导师', hint: '留空则内封英文页用中文名', applies: final },
-  { key: 'studentId', label: '学号', param: 'student-id', kind: 'text', group: '作者与导师', applies: (s) => s.degreeLevel === 'bachelor' || s.stage !== 'final' },
-  { key: 'supervisor', label: '导师', param: 'supervisor', kind: 'text', group: '作者与导师', placeholder: '×××　教授' },
-  { key: 'supervisorEn', label: '导师（英文）', param: 'supervisor-en', kind: 'text', group: '作者与导师', applies: final, placeholder: 'Prof. ×××' },
-  { key: 'coSupervisor', label: '副导师', param: 'co-supervisor', kind: 'text', group: '作者与导师', hint: '选填', applies: (s) => graduate(s) && final(s) },
-  { key: 'coSupervisorEn', label: '副导师（英文）', param: 'co-supervisor-en', kind: 'text', group: '作者与导师', applies: (s) => graduate(s) && final(s) },
-  { key: 'industrySupervisor', label: '行业导师', param: 'industry-supervisor', kind: 'text', group: '作者与导师', hint: '实践成果才有', applies: (s) => practice(s) && final(s) },
-  { key: 'industrySupervisorEn', label: '行业导师（英文）', param: 'industry-supervisor-en', kind: 'text', group: '作者与导师', applies: (s) => practice(s) && final(s) },
+  { key: 'author', label: t("作者"), param: 'author', kind: 'text', group: t("作者与导师") },
+  { key: 'authorEn', label: t("作者（英文）"), param: 'author-en', kind: 'text', group: t("作者与导师"), hint: t("留空则内封英文页用中文名"), applies: final },
+  { key: 'studentId', label: t("学号"), param: 'student-id', kind: 'text', group: t("作者与导师"), applies: (s) => s.degreeLevel === 'bachelor' || s.stage !== 'final' },
+  { key: 'supervisor', label: t("导师"), param: 'supervisor', kind: 'text', group: t("作者与导师"), placeholder: t("×××　教授") },
+  { key: 'supervisorEn', label: t("导师（英文）"), param: 'supervisor-en', kind: 'text', group: t("作者与导师"), applies: final, placeholder: 'Prof. ×××' },
+  { key: 'coSupervisor', label: t("副导师"), param: 'co-supervisor', kind: 'text', group: t("作者与导师"), hint: t("选填"), applies: (s) => graduate(s) && final(s) },
+  { key: 'coSupervisorEn', label: t("副导师（英文）"), param: 'co-supervisor-en', kind: 'text', group: t("作者与导师"), applies: (s) => graduate(s) && final(s) },
+  { key: 'industrySupervisor', label: t("行业导师"), param: 'industry-supervisor', kind: 'text', group: t("作者与导师"), hint: t("实践成果才有"), applies: (s) => practice(s) && final(s) },
+  { key: 'industrySupervisorEn', label: t("行业导师（英文）"), param: 'industry-supervisor-en', kind: 'text', group: t("作者与导师"), applies: (s) => practice(s) && final(s) },
 
-  { key: 'degreeApplied', label: '申请学位', param: 'degree-applied', kind: 'text', group: '学位与单位', placeholder: '工学博士', applies: (s) => graduate(s) && final(s) },
-  { key: 'degreeAppliedEn', label: '申请学位（英文）', param: 'degree-applied-en', kind: 'text', group: '学位与单位', placeholder: 'Doctor of Engineering', applies: (s) => graduate(s) && final(s) },
-  { key: 'speciality', label: '学科 / 专业', param: 'speciality', kind: 'text', group: '学位与单位', placeholder: '机械工程', hint: '实践成果这一格印「类别」' },
-  { key: 'specialityEn', label: '学科（英文）', param: 'speciality-en', kind: 'text', group: '学位与单位', placeholder: 'Mechanical Engineering', applies: final },
-  { key: 'practiceType', label: '实践成果类型', param: 'practice-type', kind: 'text', group: '学位与单位', hint: '例如调研报告、产品设计报告', placeholder: '重大装备报告', applies: practice },
-  { key: 'affiliation', label: '所在单位', param: 'affiliation', kind: 'text', group: '学位与单位', placeholder: '机电工程学院' },
-  { key: 'affiliationEn', label: '所在单位（英文）', param: 'affiliation-en', kind: 'text', group: '学位与单位', placeholder: 'School of Mechatronics Engineering', applies: final },
-  { key: 'defenseDate', label: '答辩日期', param: 'defense-date', kind: 'month', group: '学位与单位', hint: '选择答辩年月', applies: final },
-  { key: 'date', label: '封面日期', param: 'date', kind: 'month', group: '学位与单位', hint: '留空使用当前日期' },
+  { key: 'degreeApplied', label: t("申请学位"), param: 'degree-applied', kind: 'text', group: t("学位与单位"), placeholder: t("工学博士"), applies: (s) => graduate(s) && final(s) },
+  { key: 'degreeAppliedEn', label: t("申请学位（英文）"), param: 'degree-applied-en', kind: 'text', group: t("学位与单位"), placeholder: 'Doctor of Engineering', applies: (s) => graduate(s) && final(s) },
+  { key: 'speciality', label: t("学科 / 专业"), param: 'speciality', kind: 'text', group: t("学位与单位"), placeholder: t("机械工程"), hint: t("实践成果这一格印「类别」") },
+  { key: 'specialityEn', label: t("学科（英文）"), param: 'speciality-en', kind: 'text', group: t("学位与单位"), placeholder: 'Mechanical Engineering', applies: final },
+  { key: 'practiceType', label: t("实践成果类型"), param: 'practice-type', kind: 'text', group: t("学位与单位"), hint: t("例如调研报告、产品设计报告"), placeholder: t("重大装备报告"), applies: practice },
+  { key: 'affiliation', label: t("所在单位"), param: 'affiliation', kind: 'text', group: t("学位与单位"), placeholder: t("机电工程学院") },
+  { key: 'affiliationEn', label: t("所在单位（英文）"), param: 'affiliation-en', kind: 'text', group: t("学位与单位"), placeholder: 'School of Mechatronics Engineering', applies: final },
+  { key: 'defenseDate', label: t("答辩日期"), param: 'defense-date', kind: 'month', group: t("学位与单位"), hint: t("选择答辩年月"), applies: final },
+  { key: 'date', label: t("封面日期"), param: 'date', kind: 'month', group: t("学位与单位"), hint: t("留空使用当前日期") },
 
-  { key: 'secrecy', label: '密级', param: 'secrecy', kind: 'text', group: '其他信息', placeholder: '公开', applies: final },
-  { key: 'classifiedIndex', label: '分类号', param: 'classified-index', kind: 'text', group: '其他信息', placeholder: 'TH133.3', applies: (s) => graduate(s) && final(s) },
-  { key: 'udc', label: 'U.D.C.', param: 'udc', kind: 'text', group: '其他信息', placeholder: '621.8', applies: (s) => graduate(s) && final(s) },
-  { key: 'schoolCode', label: '学校代码', param: 'school-code', kind: 'text', group: '其他信息', placeholder: '10213', applies: (s) => graduate(s) && final(s) },
+  { key: 'secrecy', label: t("密级"), param: 'secrecy', kind: 'text', group: t("其他信息"), placeholder: t("公开"), applies: final },
+  { key: 'classifiedIndex', label: t("分类号"), param: 'classified-index', kind: 'text', group: t("其他信息"), placeholder: 'TH133.3', applies: (s) => graduate(s) && final(s) },
+  { key: 'udc', label: 'U.D.C.', param: 'udc', kind: 'text', group: t("其他信息"), placeholder: '621.8', applies: (s) => graduate(s) && final(s) },
+  { key: 'schoolCode', label: t("学校代码"), param: 'school-code', kind: 'text', group: t("其他信息"), placeholder: '10213', applies: (s) => graduate(s) && final(s) },
 ];
 
-export const INFO_GROUPS = ['题目', '作者与导师', '学位与单位', '其他信息'] as const;
+export const INFO_GROUPS = [t("题目"), t("作者与导师"), t("学位与单位"), t("其他信息")] as const;
 
 export const defaultInfo = (): Info => ({
   title: '',

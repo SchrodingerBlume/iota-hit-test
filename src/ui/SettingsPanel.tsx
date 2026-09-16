@@ -2,15 +2,16 @@ import { useStore } from '../model/store';
 import { AXES, SWITCHES, SWITCH_GROUPS } from '../model/options';
 import { TriSwitch } from './TriSwitch';
 import { FontCard } from './FontCard';
+import { t } from '../i18n';
 
 export function SettingsPanel() {
   const settings = useStore((s) => s.doc.settings);
   const setSettings = useStore((s) => s.setSettings);
   return (
     <>
-      <h2>论文设置</h2>
+      <h2>{t("论文设置")}</h2>
       <div className="card">
-        <h3>论文类型</h3>
+        <h3>{t("论文类型")}</h3>
         {AXES.filter((a) => !a.applies || a.applies(settings)).map((a) => (
           <div className="axis" key={a.key}>
             <div className="lab" title={a.hint}>{a.label}</div>

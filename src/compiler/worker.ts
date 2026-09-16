@@ -46,7 +46,7 @@ async function fetchCached(url: string, version: string | number | null, onBytes
     return buf;
   }
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`下载失败 ${url}: ${res.status}`);
+  if (!res.ok) throw new Error(t("下载失败 {{url}}: {{status}}", { url: url, status: res.status }));
   const chunks: Uint8Array[] = [];
   let total = 0;
   if (res.body) {
@@ -94,7 +94,7 @@ let wasmBytes: Uint8Array | undefined;
 
 async function init(base: string) {
   const t0 = performance.now();
-  const progress: Progress = { phase: '准备', loaded: 0, total: 0 };
+  const progress: Progress = { phase: t("准备"), loaded: 0, total: 0 };
   const report = (detail?: string) => post({ type: 'progress', progress: { ...progress, detail } });
 
   const [fontManifest, pkgManifest] = await Promise.all([
@@ -109,13 +109,13 @@ async function init(base: string) {
   const wasmSize = 30_200_000; // 进度条用的估计值
   progress.total = wasmSize + fonts.filter((f) => !f.lazy).reduce((s, f) => s + f.size, 0) + packages.reduce((s, p) => s + p.size, 0);
 
-  progress.phase = '下载排版引擎';
+  progress.phase = t("下载排版引擎");
   report('typst 0.15.1 · wasm');
   let wasmLoaded = 0;
   const wasm = wasmBytes = await fetchCached(wasmUrl, null, (n) => { wasmLoaded += n; progress.loaded += n; report('typst 0.15.1 · wasm'); });
   progress.loaded += Math.max(0, wasmSize - wasmLoaded);
 
-  progress.phase = '下载字体';
+  progress.phase = t("下载字体");
   const fontBuffers: (Uint8Array | { info: unknown; url: string })[] = [];
   // 大字体并发拉，小的顺序无所谓
   await Promise.all(fonts.map(async (f) => {
@@ -126,7 +126,7 @@ async function init(base: string) {
   }));
   bundledFonts = fontBuffers.filter((f): f is Uint8Array => f instanceof Uint8Array);
 
-  progress.phase = '下载模板与依赖包';
+  progress.phase = t("下载模板与依赖包");
   const am = new MemoryAccessModel();
   const registry = new StaticPackageRegistry(am);
   await Promise.all(packages.map(async (p) => {
@@ -134,7 +134,7 @@ async function init(base: string) {
     registry.add(p, await ensureGzip(buf));
   }));
 
-  progress.phase = '启动编译器';
+  progress.phase = t("启动编译器");
   progress.loaded = progress.total;
   report();
   compiler = createTypstCompiler();
@@ -187,6 +187,7 @@ function byteToUnitTable(s: string): Uint32Array {
 }
 
 import { GLYPH_STRIDE } from './protocol';
+import { t } from '../i18n';
 
 /** 字形表：wasm 给的字节偏移换成 UTF-16 下标，拷出 wasm 内存 */
 function glyphMap(main: string): ArrayBuffer | null {
@@ -270,7 +271,7 @@ ${body}
     const res = await compiler.compile({ mainFilePath: '/snippet.typ', format: 0 as any, diagnostics: 'full' });
     const errors = normalizeDiagnostics(res.diagnostics).filter((d) => d.severity === 'error');
     if (!res.result || errors.length) {
-      post({ type: 'snippet', id: msg.id, artifact: null, error: errors.map((e) => e.message).join('；') || '编译失败' });
+      post({ type: 'snippet', id: msg.id, artifact: null, error: errors.map((e) => e.message).join('；') || t("编译失败") });
       return;
     }
     const artifact = new Uint8Array(res.result as Uint8Array).buffer;

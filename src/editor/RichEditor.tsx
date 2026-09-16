@@ -9,6 +9,7 @@ import { useComments } from './comments';
 import { SpaceMarks, spaceMarksKey } from './extensions/SpaceMarks';
 import { useLinkDialog } from '../ui/LinkDialog';
 import StarterKit from '@tiptap/starter-kit';
+import { TypstBulletList, TypstOrderedList } from './extensions/lists';
 import Paragraph from '@tiptap/extension-paragraph';
 import Superscript from '@tiptap/extension-superscript';
 import Subscript from '@tiptap/extension-subscript';
@@ -35,6 +36,7 @@ import { useFindBar } from '../ui/Ribbon';
 import { recordTransaction, invalidatePositions } from './versions';
 import { usePreviewSurface, usePreviewMarks } from '../ui/PreviewEditLayer';
 import { TextBold20Regular, TextItalic20Regular, TextUnderline20Regular, TextSuperscript20Regular, TextSubscript20Regular, Code20Regular, MathFormula20Regular, Book20Regular, BookmarkAdd20Regular } from '@fluentui/react-icons';
+import { t } from '../i18n';
 
 /** 段落多一个「不缩进」属性：接在公式、列表后面的续段，模板里就是 first-line-indent: 0pt */
 const NoIndentParagraph = Paragraph.extend({
@@ -84,13 +86,14 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ heading: false, link: { openOnClick: false, autolink: true, linkOnPaste: true, HTMLAttributes: { rel: 'noopener', class: 'lnk' } }, paragraph: false, codeBlock: { defaultLanguage: 'python' } }),
+      StarterKit.configure({ heading: false, bulletList: false, orderedList: false, link: { openOnClick: false, autolink: true, linkOnPaste: true, HTMLAttributes: { rel: 'noopener', class: 'lnk' } }, paragraph: false, codeBlock: { defaultLanguage: 'python' } }),
+      TypstBulletList, TypstOrderedList,
       // 批注：@sereneinserenade/tiptap-comment-extension（MIT），正文里只是一个带 id 的标记
       CommentExtension.configure({ HTMLAttributes: { class: 'cmt' }, onCommentActivated: (id) => useComments.getState().setActive(id) }),
       NoIndentParagraph,
       ...(headings ? [HeadingEn] : []),
       Superscript, Subscript,
-      Placeholder.configure({ placeholder: placeholder ?? '输入文本…' }),
+      Placeholder.configure({ placeholder: placeholder ?? t("输入文本…") }),
       TableKit.configure({ table: { resizable: true, cellMinWidth: 40 }, tableCell: false, tableHeader: false, tableRow: false }),
       AlignedTableCell, AlignedTableHeader, SizedTableRow, TableExtras,
       Figure, TableFigure, CodeFigure, Algorithm, Equation, PageBreak, EqDenote,
@@ -245,18 +248,18 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     <NumberingContext.Provider value={numbering}>
       <RichKeyContext.Provider value={richKey}>
         <div className={`editor ${className ?? ''}`} style={{ '--rich-size': `${richSize}px` } as React.CSSProperties}>
-          <div className="editor-mode" role="group" aria-label="编辑模式">
-            <button type="button" className={`btn btn-xs ${!sourceMode ? 'btn-primary' : ''}`} aria-pressed={!sourceMode} onClick={() => switchMode(false)}>富文本</button>
+          <div className="editor-mode" role="group" aria-label={t("编辑模式")}>
+            <button type="button" className={`btn btn-xs ${!sourceMode ? 'btn-primary' : ''}`} aria-pressed={!sourceMode} onClick={() => switchMode(false)}>{t("富文本")}</button>
             <button type="button" className={`btn btn-xs ${sourceMode ? 'btn-primary' : ''}`} aria-pressed={sourceMode} onClick={() => switchMode(true)}>Markdown</button>
             {sourceMode && <span className="muted">GFM</span>}
           </div>
           {sourceMode && <>
-            <textarea className="markdown-source" aria-label="Markdown 源代码" value={source} spellCheck={false}
+            <textarea className="markdown-source" aria-label={t("Markdown 源代码")} value={source} spellCheck={false}
               onChange={(event) => changeSource(event.target.value, (event.nativeEvent as InputEvent).isComposing)}
               onCompositionEnd={(event) => changeSource(event.currentTarget.value, false)}
               onKeyDown={(event) => { if (event.nativeEvent.isComposing || event.keyCode === 229) return; if (event.key === 'Tab') { event.preventDefault(); const el = event.currentTarget; const start = el.selectionStart, end = el.selectionEnd; changeSource(source.slice(0, start) + '  ' + source.slice(end), false); requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = start + 2; }); } }} />
-            {sourceError && <p className="diag err" role="alert">{sourceError} 草稿已保存，预览保留上次有效内容。</p>}
-            <details className="markdown-help"><summary>Markdown 语法</summary><p># 标题 · **加粗** · *斜体* · ~~删除线~~ · 列表 · 表格 · 代码块</p><p>公式、图片、题注和引用等专用内容保留在 iota-node 代码块或 iota 注释中。任务列表在富文本中显示为 [ ] / [x]。</p></details>
+            {sourceError && <p className="diag err" role="alert">{sourceError} {' '}{t("草稿已保存，预览保留上次有效内容。")}</p>}
+            <details className="markdown-help"><summary>{t("Markdown 语法")}</summary><p>{t("# 标题 · **加粗** · *斜体* · ~~删除线~~ · 列表 · 表格 · 代码块")}</p><p>{t("公式、图片、题注和引用等专用内容保留在 iota-node 代码块或 iota 注释中。任务列表在富文本中显示为 [ ] / [x]。")}</p></details>
           </>}
           <div hidden={sourceMode}>
             {editor && !sourceMode && <Bubble editor={editor} />}
@@ -284,16 +287,16 @@ function Bubble({ editor }: { editor: Editor }) {
   const { insertInline } = useInsertActions(editor);
   return (
     <BubbleMenu editor={editor} className="bubble" options={bubbleOptions} shouldShow={bubbleShouldShow}>
-      <B title="加粗" icon={<TextBold20Regular />} on={editor.isActive('bold')} run={() => editor.chain().focus().toggleBold().run()} />
-      <B title="强调" icon={<TextItalic20Regular />} on={editor.isActive('italic')} run={() => editor.chain().focus().toggleItalic().run()} />
-      <B title="下划线" icon={<TextUnderline20Regular />} on={editor.isActive('underline')} run={() => editor.chain().focus().toggleUnderline().run()} />
-      <B title="下标" icon={<TextSubscript20Regular />} on={editor.isActive('subscript')} run={() => editor.chain().focus().toggleSubscript().run()} />
-      <B title="上标" icon={<TextSuperscript20Regular />} on={editor.isActive('superscript')} run={() => editor.chain().focus().toggleSuperscript().run()} />
-      <B title="等宽代码" icon={<Code20Regular />} on={editor.isActive('code')} run={() => editor.chain().focus().toggleCode().run()} />
+      <B title={t("加粗")} icon={<TextBold20Regular />} on={editor.isActive('bold')} run={() => editor.chain().focus().toggleBold().run()} />
+      <B title={t("强调")} icon={<TextItalic20Regular />} on={editor.isActive('italic')} run={() => editor.chain().focus().toggleItalic().run()} />
+      <B title={t("下划线")} icon={<TextUnderline20Regular />} on={editor.isActive('underline')} run={() => editor.chain().focus().toggleUnderline().run()} />
+      <B title={t("下标")} icon={<TextSubscript20Regular />} on={editor.isActive('subscript')} run={() => editor.chain().focus().toggleSubscript().run()} />
+      <B title={t("上标")} icon={<TextSuperscript20Regular />} on={editor.isActive('superscript')} run={() => editor.chain().focus().toggleSuperscript().run()} />
+      <B title={t("等宽代码")} icon={<Code20Regular />} on={editor.isActive('code')} run={() => editor.chain().focus().toggleCode().run()} />
       <Sep />
-      <B title="变成行内公式（LaTeX）" icon={<MathFormula20Regular />} run={() => { const { from, to } = editor.state.selection; const text = editor.state.doc.textBetween(from, to, ' '); editor.chain().focus().insertContent({ type: 'mathInline', attrs: { src: text, mode: 'latex' } }).run(); }} />
-      <B title="在此引用文献" icon={<Book20Regular />} run={() => { editor.chain().focus().setTextSelection(editor.state.selection.to).run(); insertInline('cite'); }} />
-      <B title="登记为索引词" icon={<BookmarkAdd20Regular />} run={() => { const { from, to } = editor.state.selection; const text = editor.state.doc.textBetween(from, to, ' '); editor.chain().focus().insertContent({ type: 'idx', attrs: { text } }).run(); }} />
+      <B title={t("变成行内公式（LaTeX）")} icon={<MathFormula20Regular />} run={() => { const { from, to } = editor.state.selection; const text = editor.state.doc.textBetween(from, to, ' '); editor.chain().focus().insertContent({ type: 'mathInline', attrs: { src: text, mode: 'latex' } }).run(); }} />
+      <B title={t("在此引用文献")} icon={<Book20Regular />} run={() => { editor.chain().focus().setTextSelection(editor.state.selection.to).run(); insertInline('cite'); }} />
+      <B title={t("登记为索引词")} icon={<BookmarkAdd20Regular />} run={() => { const { from, to } = editor.state.selection; const text = editor.state.doc.textBetween(from, to, ' '); editor.chain().focus().insertContent({ type: 'idx', attrs: { text } }).run(); }} />
     </BubbleMenu>
   );
 }

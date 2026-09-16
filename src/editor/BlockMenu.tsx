@@ -18,6 +18,7 @@ import type { Settings, StyleEntry, StyleKey } from '../model/types';
 import { levelLabels, styleKeyOfLevel } from '../typst/numbering';
 import { LengthInput } from '../ui/LengthInput';
 import { ABS_UNITS, type Unit } from '../model/length';
+import { t } from '../i18n';
 const GAP_UNITS: Unit[] = ['lines', 'pt', 'em', 'mm', 'cm'];
 
 interface MenuReq { key: RichKey; pos: number; x: number; y: number; nonce: number }
@@ -40,35 +41,35 @@ export const useBlockMenu = create<State>((set) => ({
 }));
 
 const ZIHAO: { key: string; label: string; pt: number }[] = [
-  { key: 'chuhao', label: '初号', pt: 42 }, { key: 'xiaochu', label: '小初', pt: 36 },
-  { key: 'yihao', label: '一号', pt: 26 }, { key: 'xiaoyi', label: '小一', pt: 24 },
-  { key: 'erhao', label: '二号', pt: 22 }, { key: 'xiaoer', label: '小二', pt: 18 },
-  { key: 'sanhao', label: '三号', pt: 16 }, { key: 'xiaosan', label: '小三', pt: 15 },
-  { key: 'sihao', label: '四号', pt: 14 }, { key: 'xiaosi', label: '小四', pt: 12 },
-  { key: 'wuhao', label: '五号', pt: 10.5 }, { key: 'xiaowu', label: '小五', pt: 9 },
-  { key: 'liuhao', label: '六号', pt: 7.5 }, { key: 'xiaoliu', label: '小六', pt: 6.5 },
+  { key: 'chuhao', label: t("初号"), pt: 42 }, { key: 'xiaochu', label: t("小初"), pt: 36 },
+  { key: 'yihao', label: t("一号"), pt: 26 }, { key: 'xiaoyi', label: t("小一"), pt: 24 },
+  { key: 'erhao', label: t("二号"), pt: 22 }, { key: 'xiaoer', label: t("小二"), pt: 18 },
+  { key: 'sanhao', label: t("三号"), pt: 16 }, { key: 'xiaosan', label: t("小三"), pt: 15 },
+  { key: 'sihao', label: t("四号"), pt: 14 }, { key: 'xiaosi', label: t("小四"), pt: 12 },
+  { key: 'wuhao', label: t("五号"), pt: 10.5 }, { key: 'xiaowu', label: t("小五"), pt: 9 },
+  { key: 'liuhao', label: t("六号"), pt: 7.5 }, { key: 'xiaoliu', label: t("小六"), pt: 6.5 },
 ];
 const FONTS: { key: string; label: string }[] = [
-  { key: 'songti', label: '宋体' }, { key: 'heiti', label: '黑体' }, { key: 'kaishu', label: '楷体' },
-  { key: 'fangsong', label: '仿宋' }, { key: 'lishu', label: '隶书' }, { key: 'xinwei', label: '新魏' }, { key: 'kaishu-gb2312', label: '楷体_GB2312' },
+  { key: 'songti', label: t("宋体") }, { key: 'heiti', label: t("黑体") }, { key: 'kaishu', label: t("楷体") },
+  { key: 'fangsong', label: t("仿宋") }, { key: 'lishu', label: t("隶书") }, { key: 'xinwei', label: t("新魏") }, { key: 'kaishu-gb2312', label: t("楷体_GB2312") },
 ];
-const ALIGNS = [{ key: 'left', label: '左对齐' }, { key: 'center', label: '居中' }, { key: 'right', label: '右对齐' }] as const;
+const ALIGNS = [{ key: 'left', label: t("左对齐") }, { key: 'center', label: t("居中") }, { key: 'right', label: t("右对齐") }] as const;
 /** 模板默认（终稿档），做占位提示；报告档的行距略有不同，以预览为准 */
 const TEMPLATE_DEFAULTS: Record<StyleKey, string> = {
-  body: '宋体 · 小四 · 1.25 倍行距 · 两端对齐 · 首行缩进两字',
-  chapter: '黑体 · 小二 · 居中 · 1.25 倍 · 段前 1 行 · 段后 0.8 行 · 字距 −0.4pt',
-  section: '黑体 · 小三 · 左 · 1.25 倍 · 段前 0.5 行 · 段后 0.5 行',
-  subsection: '黑体 · 四号 · 左 · 1.25 倍 · 段前 0.5 行 · 段后 0.5 行',
-  subsubsection: '黑体 · 小四 · 左 · 1.25 倍',
-  toc: '宋体 · 小四 · 行距按学位（本科 1.25、研究生 1.2）',
+  body: t("宋体 · 小四 · 1.25 倍行距 · 两端对齐 · 首行缩进两字"),
+  chapter: t("黑体 · 小二 · 居中 · 1.25 倍 · 段前 1 行 · 段后 0.8 行 · 字距 −0.4pt"),
+  section: t("黑体 · 小三 · 左 · 1.25 倍 · 段前 0.5 行 · 段后 0.5 行"),
+  subsection: t("黑体 · 四号 · 左 · 1.25 倍 · 段前 0.5 行 · 段后 0.5 行"),
+  subsubsection: t("黑体 · 小四 · 左 · 1.25 倍"),
+  toc: t("宋体 · 小四 · 行距按学位（本科 1.25、研究生 1.2）"),
 };
 
 /** 这一级叫什么：0 = 正文，其余按档位（章 / 节 / 条 / 款，报告从节起） */
 function levelName(s: Settings, level: number): string {
-  if (level === 0) return '正文';
-  if (level === -1) return '目录';
+  if (level === 0) return t("正文");
+  if (level === -1) return t("目录");
   const l = levelLabels(s).find((x) => x.level === level);
-  return l?.name ? `${l.name}标题` : `${level} 级标题`;
+  return l?.name ? t("{{name}}标题", { name: l.name }) : t("{{level}} 级标题", { level: level });
 }
 
 /** 块级菜单 + 样式对话框，挂在 App 里（FluentProvider 之内）一份 */
@@ -125,42 +126,42 @@ export function BlockMenu() {
           {info && (
             <MenuList>
               <MenuGroup>
-                <MenuGroupHeader>{isHeading ? levelName(settings, level) : '段落'}</MenuGroupHeader>
-                <MenuItemRadio name="level" value="0" icon={<TextParagraph20Regular />} onClick={() => setLevel(0)}>正文</MenuItemRadio>
+                <MenuGroupHeader>{isHeading ? levelName(settings, level) : t("段落")}</MenuGroupHeader>
+                <MenuItemRadio name="level" value="0" icon={<TextParagraph20Regular />} onClick={() => setLevel(0)}>{t("正文")}</MenuItemRadio>
                 {info.headingsAllowed && labels.map((l) => (
                   <MenuItemRadio key={l.level} name="level" value={String(l.level)} icon={<TextHeader120Regular />} onClick={() => setLevel(l.level)}>
-                    {l.name ? `${l.name}标题` : `${l.level} 级标题`} <span className="muted">· {l.sample}</span>
+                    {l.name ? t("{{name}}标题", { name: l.name }) : t("{{level}} 级标题", { level: l.level })} <span className="muted">· {l.sample}</span>
                   </MenuItemRadio>
                 ))}
               </MenuGroup>
               <MenuDivider />
               {isHeading ? (
                 <>
-                  <MenuItemCheckbox name="opts" value="numbered" onClick={() => patchAttrs({ numbered: info.node.attrs.numbered === false })}>编号</MenuItemCheckbox>
-                  <MenuItem icon={<Translate20Regular />} onClick={focusEn}>英文标题…</MenuItem>
+                  <MenuItemCheckbox name="opts" value="numbered" onClick={() => patchAttrs({ numbered: info.node.attrs.numbered === false })}>{t("编号")}</MenuItemCheckbox>
+                  <MenuItem icon={<Translate20Regular />} onClick={focusEn}>{t("英文标题…")}</MenuItem>
                   {level === 1 && (
                     <>
                       <MenuDivider />
                       <MenuGroup>
-                        <MenuGroupHeader>另起页（右手页起）</MenuGroupHeader>
+                        <MenuGroupHeader>{t("另起页（右手页起）")}</MenuGroupHeader>
                         {(['auto', 'true', 'false'] as const).map((v) => (
-                          <MenuItemRadio key={v} name="openright" value={v} icon={v === 'auto' ? undefined : <DocumentPageBreak20Regular />} onClick={() => patchAttrs({ openright: v })}>{v === 'auto' ? '自动（使用文档设置）' : v === 'true' ? '是' : '否'}</MenuItemRadio>
+                          <MenuItemRadio key={v} name="openright" value={v} icon={v === 'auto' ? undefined : <DocumentPageBreak20Regular />} onClick={() => patchAttrs({ openright: v })}>{v === 'auto' ? t("自动（使用文档设置）") : v === 'true' ? t("是") : t("否")}</MenuItemRadio>
                         ))}
                       </MenuGroup>
                       <MenuGroup>
-                        <MenuGroupHeader>两字标题撑开（绪　论）</MenuGroupHeader>
+                        <MenuGroupHeader>{t("两字标题撑开（绪　论）")}</MenuGroupHeader>
                         {(['auto', 'true', 'false'] as const).map((v) => (
-                          <MenuItemRadio key={v} name="spread" value={v} onClick={() => patchAttrs({ spread: v })}>{v === 'auto' ? '自动（使用文档设置）' : v === 'true' ? '分散对齐' : '不分散'}</MenuItemRadio>
+                          <MenuItemRadio key={v} name="spread" value={v} onClick={() => patchAttrs({ spread: v })}>{v === 'auto' ? t("自动（使用文档设置）") : v === 'true' ? t("分散对齐") : t("不分散")}</MenuItemRadio>
                         ))}
                       </MenuGroup>
                     </>
                   )}
                 </>
               ) : (
-                <MenuItemCheckbox name="opts" value="noIndent" icon={<TextAlignLeft20Regular />} onClick={() => patchAttrs({ noIndent: !info.node.attrs.noIndent })}>这一段不首行缩进</MenuItemCheckbox>
+                <MenuItemCheckbox name="opts" value="noIndent" icon={<TextAlignLeft20Regular />} onClick={() => patchAttrs({ noIndent: !info.node.attrs.noIndent })}>{t("这一段不首行缩进")}</MenuItemCheckbox>
               )}
               <MenuDivider />
-              <MenuItem icon={<TextEditStyle20Regular />} onClick={() => openStyle(level)}>修改「{levelName(settings, level)}」样式…<span className="muted"> 全篇同级</span></MenuItem>
+              <MenuItem icon={<TextEditStyle20Regular />} onClick={() => openStyle(level)}>{t("修改「")}{levelName(settings, level)}{t("」样式…")}<span className="muted"> {' '}{t("全篇同级")}</span></MenuItem>
             </MenuList>
           )}
         </MenuPopover>
@@ -190,7 +191,7 @@ function StyleDialog({ level }: { level: number }) {
   };
   const reset = () => setDraft({});
   const ls = draft.lineSpacing;
-  const lsOptions = [['auto', '自动'], ['1', '单倍'], ['1.15', '1.15 倍'], ['1.25', '1.25 倍'], ['1.5', '1.5 倍'], ['2', '两倍'], ['multiple', '多倍…'], ['exactly', '固定值…']] as const;
+  const lsOptions = [['auto', t("自动")], ['1', t("单倍")], ['1.15', t("1.15 倍")], ['1.25', t("1.25 倍")], ['1.5', t("1.5 倍")], ['2', t("两倍")], ['multiple', t("多倍…")], ['exactly', t("固定值…")]] as const;
   const lsKey = ls === undefined ? 'auto' : typeof ls === 'number' ? (lsOptions.some((o) => o[0] === String(ls)) ? String(ls) : 'multiple') : 'exactly';
   const field = (label: string, control: ReactNode, hint?: string) => (
     <div className="style-field">
@@ -202,62 +203,62 @@ function StyleDialog({ level }: { level: number }) {
     <Dialog open onOpenChange={(_, d) => { if (!d.open) closeStyle(); }}>
       <DialogSurface className="style-dialog">
         <DialogBody>
-          <DialogTitle action={<DialogTrigger action="close"><Button appearance="subtle" icon={<Dismiss20Regular />} /></DialogTrigger>}>修改样式：{levelName(settings, level)}</DialogTitle>
+          <DialogTitle action={<DialogTrigger action="close"><Button appearance="subtle" icon={<Dismiss20Regular />} /></DialogTrigger>}>{t("修改样式：")}{levelName(settings, level)}</DialogTitle>
           <DialogContent>
-            <p className="muted style-hint">全篇同级一起变（与 Word 的「修改样式」一样）；留 Auto 的项按模板排。模板默认：{TEMPLATE_DEFAULTS[key]}</p>
-            {field('中文字体', (
-              <Dropdown size="small" value={FONTS.find((f) => f.key === draft.fontZh)?.label ?? '自动'} selectedOptions={[draft.fontZh ?? 'auto']} onOptionSelect={(_, d) => set({ fontZh: d.optionValue === 'auto' ? undefined : d.optionValue })}>
-                <Option value="auto" text="自动">自动</Option>
+            <p className="muted style-hint">{t("全篇同级一起变（与 Word 的「修改样式」一样）；留 Auto 的项按模板排。模板默认：")}{TEMPLATE_DEFAULTS[key]}</p>
+            {field(t("中文字体"), (
+              <Dropdown size="small" value={FONTS.find((f) => f.key === draft.fontZh)?.label ?? t("自动")} selectedOptions={[draft.fontZh ?? 'auto']} onOptionSelect={(_, d) => set({ fontZh: d.optionValue === 'auto' ? undefined : d.optionValue })}>
+                <Option value="auto" text={t("自动")}>{t("自动")}</Option>
                 {FONTS.map((f) => <Option key={f.key} value={f.key} text={f.label}>{f.label}</Option>)}
               </Dropdown>
-            ), '西文照模板的字体方案配（Times New Roman 一类）')}
-            {field('字号', (
+            ), t("西文照模板的字体方案配（Times New Roman 一类）"))}
+            {field(t("字号"), (
               <span className="style-row">
-                <Dropdown size="small" value={typeof draft.size === 'number' ? `${draft.size} pt` : ZIHAO.find((z) => z.key === draft.size)?.label ?? '自动'} selectedOptions={[typeof draft.size === 'number' ? 'pt' : draft.size ?? 'auto']} onOptionSelect={(_, d) => set({ size: d.optionValue === 'auto' ? undefined : d.optionValue === 'pt' ? (typeof draft.size === 'number' ? draft.size : 12) : d.optionValue })}>
-                  <Option value="auto" text="自动">自动</Option>
+                <Dropdown size="small" value={typeof draft.size === 'number' ? `${draft.size} pt` : ZIHAO.find((z) => z.key === draft.size)?.label ?? t("自动")} selectedOptions={[typeof draft.size === 'number' ? 'pt' : draft.size ?? 'auto']} onOptionSelect={(_, d) => set({ size: d.optionValue === 'auto' ? undefined : d.optionValue === 'pt' ? (typeof draft.size === 'number' ? draft.size : 12) : d.optionValue })}>
+                  <Option value="auto" text={t("自动")}>{t("自动")}</Option>
                   {ZIHAO.map((z) => <Option key={z.key} value={z.key} text={z.label}>{z.label} <span className="muted">{z.pt}pt</span></Option>)}
-                  <Option value="pt" text="磅数…">磅数…</Option>
+                  <Option value="pt" text={t("磅数…")}>{t("磅数…")}</Option>
                 </Dropdown>
                 {(typeof draft.size === 'number' || (typeof draft.size === 'string' && !/^[a-z]+$/.test(draft.size))) && <LengthInput value={draft.size} defaultUnit="pt" allowed={ABS_UNITS} allowEmpty={false} onChange={(v) => set({ size: v ?? 12 })} width={100} />}
               </span>
             ))}
-            {field('加粗', (
-              <Dropdown size="small" value={draft.bold === undefined ? '自动' : draft.bold ? '加粗' : '不加粗'} selectedOptions={[draft.bold === undefined ? 'auto' : String(draft.bold)]} onOptionSelect={(_, d) => set({ bold: d.optionValue === 'auto' ? undefined : d.optionValue === 'true' })}>
-                <Option value="auto" text="自动">自动</Option>
-                <Option value="true" text="加粗">加粗</Option>
-                <Option value="false" text="不加粗">不加粗</Option>
+            {field(t("加粗"), (
+              <Dropdown size="small" value={draft.bold === undefined ? t("自动") : draft.bold ? t("加粗") : t("不加粗")} selectedOptions={[draft.bold === undefined ? 'auto' : String(draft.bold)]} onOptionSelect={(_, d) => set({ bold: d.optionValue === 'auto' ? undefined : d.optionValue === 'true' })}>
+                <Option value="auto" text={t("自动")}>{t("自动")}</Option>
+                <Option value="true" text={t("加粗")}>{t("加粗")}</Option>
+                <Option value="false" text={t("不加粗")}>{t("不加粗")}</Option>
               </Dropdown>
-            ), '中文黑体本身够重，规范不要求加粗；宋体没有粗体面时按「伪粗」设置合成')}
-            {field('对齐', (
-              <Dropdown size="small" value={ALIGNS.find((a) => a.key === draft.align)?.label ?? '自动'} selectedOptions={[draft.align ?? 'auto']} onOptionSelect={(_, d) => set({ align: d.optionValue === 'auto' ? undefined : (d.optionValue as StyleEntry['align']) })}>
-                <Option value="auto" text="自动">自动</Option>
+            ), t("中文黑体本身够重，规范不要求加粗；宋体没有粗体面时按「伪粗」设置合成"))}
+            {field(t("对齐"), (
+              <Dropdown size="small" value={ALIGNS.find((a) => a.key === draft.align)?.label ?? t("自动")} selectedOptions={[draft.align ?? 'auto']} onOptionSelect={(_, d) => set({ align: d.optionValue === 'auto' ? undefined : (d.optionValue as StyleEntry['align']) })}>
+                <Option value="auto" text={t("自动")}>{t("自动")}</Option>
                 {ALIGNS.map((a) => <Option key={a.key} value={a.key} text={a.label}>{a.label}</Option>)}
               </Dropdown>
             ))}
-            {field('行距', (
+            {field(t("行距"), (
               <span className="style-row">
-                <Dropdown size="small" value={lsOptions.find((o) => o[0] === lsKey)?.[1] ?? '自动'} selectedOptions={[lsKey]} onOptionSelect={(_, d) => { const v = d.optionValue!; set({ lineSpacing: v === 'auto' ? undefined : v === 'exactly' ? { exactly: typeof ls === 'object' && ls ? ls.exactly : 20 } : v === 'multiple' ? (typeof ls === 'number' ? ls : 1.3) : parseFloat(v) }); }}>
+                <Dropdown size="small" value={lsOptions.find((o) => o[0] === lsKey)?.[1] ?? t("自动")} selectedOptions={[lsKey]} onOptionSelect={(_, d) => { const v = d.optionValue!; set({ lineSpacing: v === 'auto' ? undefined : v === 'exactly' ? { exactly: typeof ls === 'object' && ls ? ls.exactly : 20 } : v === 'multiple' ? (typeof ls === 'number' ? ls : 1.3) : parseFloat(v) }); }}>
                   {lsOptions.map(([v, l]) => <Option key={v} value={v} text={l}>{l}</Option>)}
                 </Dropdown>
                 {typeof ls === 'object' && ls && <LengthInput value={ls.exactly} defaultUnit="pt" allowed={ABS_UNITS} allowEmpty={false} onChange={(v) => set({ lineSpacing: { exactly: v ?? 20 } })} width={100} />}
-                {lsKey === 'multiple' && <Input size="small" type="number" step={0.05} min={0.5} max={5} value={String(ls)} onChange={(_, d) => { const n = parseFloat(d.value); if (Number.isFinite(n) && n > 0) set({ lineSpacing: n }); }} contentAfter="倍" style={{ width: 100 }} />}
+                {lsKey === 'multiple' && <Input size="small" type="number" step={0.05} min={0.5} max={5} value={String(ls)} onChange={(_, d) => { const n = parseFloat(d.value); if (Number.isFinite(n) && n > 0) set({ lineSpacing: n }); }} contentAfter={t("倍")} style={{ width: 100 }} />}
               </span>
             ))}
-            {field('段前 / 段后', (
+            {field(t("段前 / 段后"), (
               <span className="style-row">
-                <LengthInput value={draft.above ?? ''} defaultUnit="lines" allowed={GAP_UNITS} placeholder="段前：Auto" onChange={(v) => set({ above: v })} width={120} />
-                <LengthInput value={draft.below ?? ''} defaultUnit="lines" allowed={GAP_UNITS} placeholder="段后：Auto" onChange={(v) => set({ below: v })} width={120} />
+                <LengthInput value={draft.above ?? ''} defaultUnit="lines" allowed={GAP_UNITS} placeholder={t("段前：Auto")} onChange={(v) => set({ above: v })} width={120} />
+                <LengthInput value={draft.below ?? ''} defaultUnit="lines" allowed={GAP_UNITS} placeholder={t("段后：Auto")} onChange={(v) => set({ below: v })} width={120} />
               </span>
-            ), 'Word 段落对话框的「段前 / 段后」：光写数按行，也可写 6pt / 1em / 0.3cm；相邻两段取较大者')}
-            {field('字符间距', (
+            ), t("Word 段落对话框的「段前 / 段后」：光写数按行，也可写 6pt / 1em / 0.3cm；相邻两段取较大者"))}
+            {field(t("字符间距"), (
               <LengthInput value={draft.tracking ?? ''} defaultUnit="pt" allowed={ABS_UNITS} placeholder="Auto" onChange={(v) => set({ tracking: v })} width={110} />
-            ), 'Word 字体对话框的「字符间距」：光写数按磅，也可写 0.1mm')}
-            {key === 'body' && <p className="muted style-hint">首行缩进与两端对齐由模板按规范定，这里不开口子。</p>}
+            ), t("Word 字体对话框的「字符间距」：光写数按磅，也可写 0.1mm"))}
+            {key === 'body' && <p className="muted style-hint">{t("首行缩进与两端对齐由模板按规范定，这里不开口子。")}</p>}
           </DialogContent>
           <DialogActions>
-            <Button appearance="subtle" onClick={reset}>恢复模板默认</Button>
-            <Button appearance="secondary" onClick={closeStyle}>取消</Button>
-            <Button appearance="primary" onClick={save}>确定</Button>
+            <Button appearance="subtle" onClick={reset}>{t("恢复模板默认")}</Button>
+            <Button appearance="secondary" onClick={closeStyle}>{t("取消")}</Button>
+            <Button appearance="primary" onClick={save}>{t("确定")}</Button>
           </DialogActions>
         </DialogBody>
       </DialogSurface>

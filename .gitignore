@@ -6,3 +6,4 @@ test-out.pdf
 # 字体不进仓库：npm run fonts 从官方源拉（scripts/fetch-fonts.sh）
 public/fonts/*.otf
 public/fonts/*.ttf
+scripts/i18n-skipped.txt

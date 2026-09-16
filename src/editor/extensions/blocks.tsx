@@ -12,6 +12,7 @@ import { AutoInput } from '../../ui/AutoInput';
 import { Trash2, ImageUp, Tag, MoveHorizontal, PencilLine, Check } from 'lucide-react';
 import { LengthInput } from '../../ui/LengthInput';
 import { parseLength, toPx } from '../../model/length';
+import { t } from '../../i18n';
 
 /** 编辑区里图的显示宽度：绝对长度按 28px/cm 的缩小比例画，百分比按容器，其余按 8cm */
 function figurePx(w: unknown): string {
@@ -29,11 +30,11 @@ function Caption({ node, updateAttributes, kindName, editable, prefix }: { node:
   return (
     <div className="cap" contentEditable={false}>
       <div className="cap-zh">
-        {prefix && <span className="cap-num" title="编号按模板规则算，预览为准">{prefix}</span>}
-        <AutoInput className="cap-input" data-attr="caption" disabled={!editable} value={node.attrs.caption ?? ''} placeholder={`${kindName}题`} minWidth={60} onChange={(e) => updateAttributes({ caption: e.target.value })} />
+        {prefix && <span className="cap-num" title={t("编号按模板规则算，预览为准")}>{prefix}</span>}
+        <AutoInput className="cap-input" data-attr="caption" disabled={!editable} value={node.attrs.caption ?? ''} placeholder={t("{{kindName}}题", { kindName: kindName })} minWidth={60} onChange={(e) => updateAttributes({ caption: e.target.value })} />
       </div>
       <div className="cap-en">
-        <AutoInput className="cap-input-en" data-attr="captionEn" disabled={!editable} value={node.attrs.captionEn ?? ''} placeholder="English caption（博士双语题注用，可空）" minWidth={60} onChange={(e) => updateAttributes({ captionEn: e.target.value })} />
+        <AutoInput className="cap-input-en" data-attr="captionEn" disabled={!editable} value={node.attrs.captionEn ?? ''} placeholder={t("English caption（博士双语题注用，可空）")} minWidth={60} onChange={(e) => updateAttributes({ captionEn: e.target.value })} />
       </div>
     </div>
   );
@@ -46,7 +47,7 @@ function Tools({ children }: { children: React.ReactNode }) {
 
 function LabelField({ node, updateAttributes, prefix, editable }: { node: NodeViewProps['node']; updateAttributes: NodeViewProps['updateAttributes']; prefix: string; editable: boolean }) {
   return (
-    <label className="blk-tool" title="交叉引用用的标签；留空则自动生成">
+    <label className="blk-tool" title={t("交叉引用用的标签；留空则自动生成")}>
       <Tag />
       <input value={node.attrs.label ?? ''} placeholder={`${prefix}:${node.attrs.uid ?? ''}`} disabled={!editable} onChange={(e) => updateAttributes({ label: e.target.value.trim() })} />
     </label>
@@ -68,15 +69,15 @@ function SubFigureCell({ sub, index, editable, onChange, onRemove, letter, label
   useEffect(() => { let alive = true; void imageUrl(sub.image).then((u) => { if (alive) setUrl(u); }); return () => { alive = false; }; }, [sub.image, env.images]);
   const pick = async (file: File) => { const r = await env.addImage(file); onChange({ image: r.name, width: r.width && r.height ? `${Math.min(7, Math.max(3, Math.round((r.width / 96) * 2.54 * 10) / 10))}cm` : sub.width }); };
   return (
-    <div className="subfig" title={`分图 (${letter})，标签 ${labelBase}-${letter}`}>
+    <div className="subfig" title={t("分图 ({{letter}})，标签 {{labelBase}}-{{v2}}", { letter: letter, labelBase: labelBase, v2: letter })}>
       {url ? <img src={url} alt="" style={{ width: figurePx(sub.width), maxWidth: '100%' }} draggable={false} /> : (
-        <label className="fig-drop fig-drop-sm"><ImageUp /><span>{sub.image ? `找不到 ${sub.image}` : '选图'}</span><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>
+        <label className="fig-drop fig-drop-sm"><ImageUp /><span>{sub.image ? t("找不到 {{image}}", { image: sub.image }) : t("选图")}</span><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>
       )}
-      <div className="subfig-cap"><span className="cap-num">({letter})</span><AutoInput className="cap-input" disabled={!editable} value={sub.caption} placeholder="分图题" minWidth={40} onChange={(e) => onChange({ caption: e.target.value })} /></div>
+      <div className="subfig-cap"><span className="cap-num">({letter})</span><AutoInput className="cap-input" disabled={!editable} value={sub.caption} placeholder={t("分图题")} minWidth={40} onChange={(e) => onChange({ caption: e.target.value })} /></div>
       <div className="subfig-tools">
         <LengthInput value={sub.width} defaultUnit="cm" disabled={!editable} onChange={(v) => onChange({ width: v ?? '6cm' })} width={70} />
-        <label className="blk-tool is-btn" title="换图"><ImageUp /><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>
-        <button type="button" className="blk-tool is-btn is-danger" title={`删掉分图 (${letter})`} disabled={!editable} onClick={onRemove}><Trash2 /></button>
+        <label className="blk-tool is-btn" title={t("换图")}><ImageUp /><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>
+        <button type="button" className="blk-tool is-btn is-danger" title={t("删掉分图 ({{letter}})", { letter: letter })} disabled={!editable} onClick={onRemove}><Trash2 /></button>
         <span className="muted" style={{ fontSize: 11 }}>#{index + 1}</span>
       </div>
     </div>
@@ -113,21 +114,21 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
         ) : url ? <img src={url} alt="" style={{ width: figurePx(node.attrs.width), maxWidth: '100%' }} draggable={false} /> : (
           <label className="fig-drop">
             <ImageUp />
-            <span>{name ? `找不到图片 ${name}，点击重新选择` : '选择图片（PNG / JPG / SVG）'}</span>
+            <span>{name ? t("找不到图片 {{name}}，点击重新选择", { name: name }) : t("选择图片（PNG / JPG / SVG）")}</span>
             <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/gif" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} />
           </label>
         )}
       </div>
-      <Caption node={node} updateAttributes={updateAttributes} kindName="图" editable={editable} prefix={num} />
+      <Caption node={node} updateAttributes={updateAttributes} kindName={t("图")} editable={editable} prefix={num} />
       <Tools>
-        <label className="blk-tool" title="图的宽度：cm / mm / pt / em / %（相对版心宽）">
+        <label className="blk-tool" title={t("图的宽度：cm / mm / pt / em / %（相对版心宽）")}>
           <MoveHorizontal />
           <LengthInput value={node.attrs.width ?? 8} defaultUnit="cm" disabled={!editable} onChange={(v) => updateAttributes({ width: v ?? 8 })} width={84} />
         </label>
         <LabelField node={node} updateAttributes={updateAttributes} prefix="fig" editable={editable} />
-        <button type="button" className="blk-tool is-btn" title="加一张分图（多张分图排成一张母图，分图题 (a)(b)…）" disabled={!editable} onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.onchange = async () => { const files = [...(input.files ?? [])]; const add: SubFig[] = []; for (const f of files) { const r = await env.addImage(f); add.push({ image: r.name, width: r.width && r.height ? `${Math.min(7, Math.max(3, Math.round((r.width / 96) * 2.54 * 10) / 10))}cm` : '6cm', caption: '' }); } const base = subs.length ? subs : (name ? [{ image: name, width: node.attrs.width ?? '6cm', caption: '' }] : []); setSubs([...base, ...add]); }; input.click(); }}><PencilLine />分图</button>
-        {!subs.length && <label className="blk-tool is-btn" title="换一张图"><ImageUp /><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>}
-        <button type="button" className="blk-tool is-btn is-danger" title="删除插图" disabled={!editable} onClick={deleteNode}><Trash2 /></button>
+        <button type="button" className="blk-tool is-btn" title={t("加一张分图（多张分图排成一张母图，分图题 (a)(b)…）")} disabled={!editable} onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.onchange = async () => { const files = [...(input.files ?? [])]; const add: SubFig[] = []; for (const f of files) { const r = await env.addImage(f); add.push({ image: r.name, width: r.width && r.height ? `${Math.min(7, Math.max(3, Math.round((r.width / 96) * 2.54 * 10) / 10))}cm` : '6cm', caption: '' }); } const base = subs.length ? subs : (name ? [{ image: name, width: node.attrs.width ?? '6cm', caption: '' }] : []); setSubs([...base, ...add]); }; input.click(); }}><PencilLine />{t("分图")}</button>
+        {!subs.length && <label className="blk-tool is-btn" title={t("换一张图")}><ImageUp /><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>}
+        <button type="button" className="blk-tool is-btn is-danger" title={t("删除插图")} disabled={!editable} onClick={deleteNode}><Trash2 /></button>
       </Tools>
     </NodeViewWrapper>
   );
@@ -159,12 +160,12 @@ function TableFigureView({ node, updateAttributes, selected, deleteNode, editor,
   const num = useNumbering().get(labelOf(node.attrs as any, 'tab'))?.number;
   return (
     <NodeViewWrapper className={`blk tab ${selected ? 'is-selected' : ''}`} ref={wrap}>
-      <Caption node={node} updateAttributes={updateAttributes} kindName="表" editable={editable} prefix={num} />
+      <Caption node={node} updateAttributes={updateAttributes} kindName={t("表")} editable={editable} prefix={num} />
       <NodeViewContent className="tab-body" />
       <Tools>
         <LabelField node={node} updateAttributes={updateAttributes} prefix="tab" editable={editable} />
-        <span className="blk-hint">光标进单元格后工具栏有加减行列</span>
-        <button type="button" className="blk-tool is-btn is-danger" title="删除整张表" disabled={!editable} onClick={deleteNode}><Trash2 /></button>
+        <span className="blk-hint">{t("光标进单元格后工具栏有加减行列")}</span>
+        <button type="button" className="blk-tool is-btn is-danger" title={t("删除整张表")} disabled={!editable} onClick={deleteNode}><Trash2 /></button>
       </Tools>
     </NodeViewWrapper>
   );
@@ -176,12 +177,12 @@ function CodeFigureView({ node, updateAttributes, selected, deleteNode, editor }
   const num = useNumbering().get(labelOf(node.attrs as any, 'lst'))?.number;
   return (
     <NodeViewWrapper className={`blk lst ${selected ? 'is-selected' : ''}`}>
-      <Caption node={node} updateAttributes={updateAttributes} kindName="代码" editable={editable} prefix={num} />
+      <Caption node={node} updateAttributes={updateAttributes} kindName={t("代码")} editable={editable} prefix={num} />
       <NodeViewContent className="lst-body" />
       <Tools>
         <LabelField node={node} updateAttributes={updateAttributes} prefix="lst" editable={editable} />
-        <span className="blk-hint">框与行号按模板的 raw-style 排，不另设</span>
-        <button type="button" className="blk-tool is-btn is-danger" title="删除代码清单" disabled={!editable} onClick={deleteNode}><Trash2 /></button>
+        <span className="blk-hint">{t("框与行号按模板的 raw-style 排，不另设")}</span>
+        <button type="button" className="blk-tool is-btn is-danger" title={t("删除代码清单")} disabled={!editable} onClick={deleteNode}><Trash2 /></button>
       </Tools>
     </NodeViewWrapper>
   );
@@ -233,9 +234,9 @@ function EquationView({ node, updateAttributes, selected, deleteNode, editor, ge
   return (
     <NodeViewWrapper className={`blk eq ${selected ? 'is-selected' : ''} ${editing ? 'is-editing' : ''}`} data-drag-handle>
       {!editing && (
-        <div className="eq-line" contentEditable={false} onClick={() => editable && setEditing(true)} title="点击编辑公式">
+        <div className="eq-line" contentEditable={false} onClick={() => editable && setEditing(true)} title={t("点击编辑公式")}>
           <span className="eq-spacer" />
-          <span className="eq-render"><MathPreview src={forPreview(src, mode)} mode={mode} display empty={<em className="muted">空公式，点击编辑</em>} /></span>
+          <span className="eq-render"><MathPreview src={forPreview(src, mode)} mode={mode} display empty={<em className="muted">{t("空公式，点击编辑")}</em>} /></span>
           <span className="eq-number">{numbered ? num : ''}</span>
         </div>
       )}
@@ -243,18 +244,18 @@ function EquationView({ node, updateAttributes, selected, deleteNode, editor, ge
         <div className="eq-editor" contentEditable={false}>
           <MathEditor value={src} mode={mode} display onChange={(v) => updateAttributes({ src: v })} onMode={(m) => updateAttributes({ mode: m })} autoFocus onEnter={() => setEditing(false)} />
           <div className="eq-editor-foot">
-            <label className="blk-tool"><input type="checkbox" checked={numbered} disabled={!editable} onChange={(e) => updateAttributes({ numbered: e.target.checked })} /> 编号 {numbered && num && <b>{num}</b>}</label>
+            <label className="blk-tool"><input type="checkbox" checked={numbered} disabled={!editable} onChange={(e) => updateAttributes({ numbered: e.target.checked })} /> {' '}{t("编号")}{' '}{numbered && num && <b>{num}</b>}</label>
             <LabelField node={node} updateAttributes={updateAttributes} prefix="eq" editable={editable} />
             <span className="spacer" />
-            <button type="button" className="blk-tool is-btn is-danger" title="删除公式" onClick={deleteNode}><Trash2 /></button>
-            <button type="button" className="btn btn-xs btn-primary" onClick={() => setEditing(false)}><Check />完成</button>
+            <button type="button" className="blk-tool is-btn is-danger" title={t("删除公式")} onClick={deleteNode}><Trash2 /></button>
+            <button type="button" className="btn btn-xs btn-primary" onClick={() => setEditing(false)}><Check />{t("完成")}</button>
           </div>
         </div>
       )}
       {!editing && (
         <Tools>
-          <button type="button" className="blk-tool is-btn" title="编辑" onClick={() => setEditing(true)}><PencilLine /></button>
-          <button type="button" className="blk-tool is-btn is-danger" title="删除公式" onClick={deleteNode}><Trash2 /></button>
+          <button type="button" className="blk-tool is-btn" title={t("编辑")} onClick={() => setEditing(true)}><PencilLine /></button>
+          <button type="button" className="blk-tool is-btn is-danger" title={t("删除公式")} onClick={deleteNode}><Trash2 /></button>
         </Tools>
       )}
     </NodeViewWrapper>
@@ -279,8 +280,8 @@ export const Equation = Node.create({
 function PageBreakView({ selected, deleteNode }: NodeViewProps) {
   return (
     <NodeViewWrapper className={`blk pb ${selected ? 'is-selected' : ''}`} contentEditable={false}>
-      <span>分页</span>
-      <Tools><button type="button" className="blk-tool is-btn is-danger" title="删除分页" onClick={deleteNode}><Trash2 /></button></Tools>
+      <span>{t("分页")}</span>
+      <Tools><button type="button" className="blk-tool is-btn is-danger" title={t("删除分页")} onClick={deleteNode}><Trash2 /></button></Tools>
     </NodeViewWrapper>
   );
 }

@@ -40,24 +40,25 @@ import { commentRange } from './CommentsPane';
 import { wordAt } from '../editor/wordAt';
 import { SymbolPicker, SymbolPanel } from './SymbolPicker';
 import { useOutline } from './OutlinePane';
-const FITS = [{ value: 'content', label: '根据内容', hint: '列宽按内容定' }, { value: 'window', label: '根据窗口', hint: '撑满版心，各列均分' }, { value: 'fixed', label: '固定列宽', hint: '每列同宽（厘米在插入表格对话框里定）' }];
+import { t as tx } from '../i18n';
+const FITS = [{ value: 'content', label: tx("根据内容"), hint: tx("列宽按内容定") }, { value: 'window', label: tx("根据窗口"), hint: tx("撑满版心，各列均分") }, { value: 'fixed', label: tx("固定列宽"), hint: tx("每列同宽（厘米在插入表格对话框里定）") }];
 
 /** 图 / 表的浮动与跨页选项（模板：placement 交给 Typst；跨页走 show figure.where(kind:): set block(breakable:)） */
-const PLACEMENTS = [{ value: 'none', label: '不浮动', hint: '跟着文字排' }, { value: 'auto', label: '自动', hint: '本页顶或底，就近' }, { value: 'top', label: '页顶' }, { value: 'bottom', label: '页底' }];
-const BREAK_IMAGE = [{ value: 'auto', label: '自动：不拆', hint: '模板默认，图与题注一整块' }, { value: 'true', label: '允许', hint: '按指南排「续图」' }, { value: 'false', label: '不允许' }];
-const BREAK_TABLE = [{ value: 'auto', label: '自动：允许', hint: '模板默认，续页注「续表」' }, { value: 'true', label: '允许' }, { value: 'false', label: '不允许', hint: '整张不拆，放不下就整张挪到下页' }];
+const PLACEMENTS = [{ value: 'none', label: tx("不浮动"), hint: tx("跟着文字排") }, { value: 'auto', label: tx("自动"), hint: tx("本页顶或底，就近") }, { value: 'top', label: tx("页顶") }, { value: 'bottom', label: tx("页底") }];
+const BREAK_IMAGE = [{ value: 'auto', label: tx("自动：不拆"), hint: tx("模板默认，图与题注一整块") }, { value: 'true', label: tx("允许"), hint: tx("按指南排「续图」") }, { value: 'false', label: tx("不允许") }];
+const BREAK_TABLE = [{ value: 'auto', label: tx("自动：允许"), hint: tx("模板默认，续页注「续表」") }, { value: 'true', label: tx("允许") }, { value: 'false', label: tx("不允许"), hint: tx("整张不拆，放不下就整张挪到下页") }];
 
 type LayoutMode = 'editor' | 'split' | 'preview';
 type TabKey = 'home' | 'insert' | 'cite' | 'review' | 'table' | 'figure' | 'view';
 const CTX_TABS: TabKey[] = ['table', 'figure'];
 const TABS: { key: TabKey; label: string }[] = [
-  { key: 'home', label: '开始' },
-  { key: 'insert', label: '插入' },
-  { key: 'cite', label: '引用' },
-  { key: 'review', label: '审阅' },
-  { key: 'table', label: '表格工具' },
-  { key: 'figure', label: '图片工具' },
-  { key: 'view', label: '视图' },
+  { key: 'home', label: tx("开始") },
+  { key: 'insert', label: tx("插入") },
+  { key: 'cite', label: tx("引用") },
+  { key: 'review', label: tx("审阅") },
+  { key: 'table', label: tx("表格工具") },
+  { key: 'figure', label: tx("图片工具") },
+  { key: 'view', label: tx("视图") },
 ];
 const COLLAPSE_KEY = 'iota4web-ribbon-collapsed-v2';
 
@@ -285,7 +286,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const symbolPop = (id: 'symbol' | 'symbol2', big: boolean) => (
     <Popover open={pop === id} onOpenChange={(_, d) => setPop(d.open ? id : null)} positioning="below-start" trapFocus={false}>
       <PopoverTrigger disableButtonEnhancement>
-        <span className="rb-keep"><B title="插入符号" big={big} menu icon={<Omega20Regular />} disabled={none} run={() => setPop(pop === id ? null : id)}>{big ? '符号' : undefined}</B></span>
+        <span className="rb-keep"><B title={tx("插入符号")} big={big} menu icon={<Omega20Regular />} disabled={none} run={() => setPop(pop === id ? null : id)}>{big ? tx("符号") : undefined}</B></span>
       </PopoverTrigger>
       <PopoverSurface className="rb-symbols">
         <SymbolPanel autoFocus onPick={(ch) => { chain().insertContent(ch).run(); }} />
@@ -305,9 +306,9 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
             ))}
           </TabList>
         )}
-        {collapsed && peek && !shortScreen && <Button size="small" appearance="primary" icon={<Pin20Regular />} className="rb-pin" onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(false)}>固定</Button>}
+        {collapsed && peek && !shortScreen && <Button size="small" appearance="primary" icon={<Pin20Regular />} className="rb-pin" onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(false)}>{tx("固定")}</Button>}
         {!minimal && !shortScreen && (
-          <Tooltip content={collapsed ? '固定功能区（双击选项卡也行）' : '收起功能区（双击选项卡也行）'} relationship="label" positioning="below">
+          <Tooltip content={collapsed ? tx("固定功能区（双击选项卡也行）") : tx("收起功能区（双击选项卡也行）")} relationship="label" positioning="below">
             <Button appearance="subtle" size="small" icon={collapsed ? <ChevronDown20Regular /> : <ChevronUp20Regular />} className="rb-collapse" onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(!collapsed)} />
           </Tooltip>
         )}
@@ -319,220 +320,220 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
         <div className="rb-body">
           {tab === 'home' && (
             <>
-              <Group label="剪贴板">
-                <B title="粘贴（⌘V）" big icon={<ClipboardPaste20Regular />} disabled={none} run={clipboard.paste}>粘贴</B>
+              <Group label={tx("剪贴板")}>
+                <B title={tx("粘贴（⌘V）")} big icon={<ClipboardPaste20Regular />} disabled={none} run={clipboard.paste}>{tx("粘贴")}</B>
                 <Stack>
-                  <B title="剪切（⌘X）" icon={<Cut20Regular />} disabled={none || ed.state.selection.empty} run={clipboard.cut}>剪切</B>
-                  <B title="复制（⌘C）" icon={<Copy20Regular />} disabled={none || ed.state.selection.empty} run={clipboard.copy}>复制</B>
-                  <B title="格式刷：先选中有格式的字，点它，再选中要刷的字" icon={<PaintBrush20Regular />} on={!!painter} disabled={none} run={() => { if (painter) setPainter(null); else if (ed) { const { from, to } = ed.state.selection; const marks = from === to ? ed.state.storedMarks ?? ed.state.selection.$from.marks() : ed.state.doc.resolve(from + 1).marks(); setPainter([...marks]); } }}>格式刷</B>
+                  <B title={tx("剪切（⌘X）")} icon={<Cut20Regular />} disabled={none || ed.state.selection.empty} run={clipboard.cut}>{tx("剪切")}</B>
+                  <B title={tx("复制（⌘C）")} icon={<Copy20Regular />} disabled={none || ed.state.selection.empty} run={clipboard.copy}>{tx("复制")}</B>
+                  <B title={tx("格式刷：先选中有格式的字，点它，再选中要刷的字")} icon={<PaintBrush20Regular />} on={!!painter} disabled={none} run={() => { if (painter) setPainter(null); else if (ed) { const { from, to } = ed.state.selection; const marks = from === to ? ed.state.storedMarks ?? ed.state.selection.$from.marks() : ed.state.doc.resolve(from + 1).marks(); setPainter([...marks]); } }}>{tx("格式刷")}</B>
                 </Stack>
                 <Stack>
-                  <B title="撤销 (⌘Z)" icon={<ArrowUndo20Regular />} run={() => chain().undo().run()} disabled={none || !ed.can().undo()}>撤销</B>
-                  <B title="重做 (⌘⇧Z)" icon={<ArrowRedo20Regular />} run={() => chain().redo().run()} disabled={none || !ed.can().redo()}>重做</B>
+                  <B title={tx("撤销 (⌘Z)")} icon={<ArrowUndo20Regular />} run={() => chain().undo().run()} disabled={none || !ed.can().undo()}>{tx("撤销")}</B>
+                  <B title={tx("重做 (⌘⇧Z)")} icon={<ArrowRedo20Regular />} run={() => chain().redo().run()} disabled={none || !ed.can().redo()}>{tx("重做")}</B>
                 </Stack>
               </Group>
-              <Group label="字体">
+              <Group label={tx("字体")}>
                 <Rows>
                   <Row>
-                    <B title="加粗 (⌘B)" icon={<TextBold20Regular />} on={!!ed?.isActive('bold')} disabled={none} run={() => chain().toggleBold().run()} />
-                    <B title="强调（排楷体）(⌘I)" icon={<TextItalic20Regular />} on={!!ed?.isActive('italic')} disabled={none} run={() => chain().toggleItalic().run()} />
-                    <B title="下划线 (⌘U)" icon={<TextUnderline20Regular />} on={!!ed?.isActive('underline')} disabled={none} run={() => chain().toggleUnderline().run()} />
-                    <B title="删除线" icon={<TextStrikethrough20Regular />} on={!!ed?.isActive('strike')} disabled={none} run={() => chain().toggleStrike().run()} />
-                    <B title="下标 (⌘,)" icon={<TextSubscript20Regular />} on={!!ed?.isActive('subscript')} disabled={none} run={() => chain().toggleSubscript().run()} />
-                    <B title="上标 (⌘.)" icon={<TextSuperscript20Regular />} on={!!ed?.isActive('superscript')} disabled={none} run={() => chain().toggleSuperscript().run()} />
+                    <B title={tx("加粗 (⌘B)")} icon={<TextBold20Regular />} on={!!ed?.isActive('bold')} disabled={none} run={() => chain().toggleBold().run()} />
+                    <B title={tx("强调（排楷体）(⌘I)")} icon={<TextItalic20Regular />} on={!!ed?.isActive('italic')} disabled={none} run={() => chain().toggleItalic().run()} />
+                    <B title={tx("下划线 (⌘U)")} icon={<TextUnderline20Regular />} on={!!ed?.isActive('underline')} disabled={none} run={() => chain().toggleUnderline().run()} />
+                    <B title={tx("删除线")} icon={<TextStrikethrough20Regular />} on={!!ed?.isActive('strike')} disabled={none} run={() => chain().toggleStrike().run()} />
+                    <B title={tx("下标 (⌘,)")} icon={<TextSubscript20Regular />} on={!!ed?.isActive('subscript')} disabled={none} run={() => chain().toggleSubscript().run()} />
+                    <B title={tx("上标 (⌘.)")} icon={<TextSuperscript20Regular />} on={!!ed?.isActive('superscript')} disabled={none} run={() => chain().toggleSuperscript().run()} />
                   </Row>
                   <Row>
-                    <B title="等宽代码" icon={<Code20Regular />} on={!!ed?.isActive('code')} disabled={none} run={() => chain().toggleCode().run()} />
-                    <B title="清除格式" icon={<ClearFormatting20Regular />} disabled={none} run={() => chain().unsetAllMarks().run()} />
+                    <B title={tx("等宽代码")} icon={<Code20Regular />} on={!!ed?.isActive('code')} disabled={none} run={() => chain().toggleCode().run()} />
+                    <B title={tx("清除格式")} icon={<ClearFormatting20Regular />} disabled={none} run={() => chain().unsetAllMarks().run()} />
                     <Sep />
                   </Row>
                 </Rows>
               </Group>
-              <Group label="段落">
+              <Group label={tx("段落")}>
                 <Rows>
                   <Row>
-                    <B title="无序列表" icon={<TextBulletListLtr20Regular />} on={!!ed?.isActive('bulletList')} disabled={none} run={() => chain().toggleBulletList().run()} />
-                    <B title="编号列表（指南里的「项」：（1）接排）" icon={<TextNumberListLtr20Regular />} on={!!ed?.isActive('orderedList')} disabled={none} run={() => chain().toggleOrderedList().run()} />
-                    <B title="这一段不首行缩进（接在公式、列表后面的续段）" icon={<TextIndentDecreaseLtr20Regular />} on={!!ed?.isActive('paragraph', { noIndent: true })} disabled={none} run={() => chain().updateAttributes('paragraph', { noIndent: !ed!.getAttributes('paragraph').noIndent }).run()} />
+                    <B title={tx("无序列表")} icon={<TextBulletListLtr20Regular />} on={!!ed?.isActive('bulletList')} disabled={none} run={() => chain().toggleBulletList().run()} />
+                    <B title={tx("编号列表（指南里的「项」：（1）接排）")} icon={<TextNumberListLtr20Regular />} on={!!ed?.isActive('orderedList')} disabled={none} run={() => chain().toggleOrderedList().run()} />
+                    <B title={tx("这一段不首行缩进（接在公式、列表后面的续段）")} icon={<TextIndentDecreaseLtr20Regular />} on={!!ed?.isActive('paragraph', { noIndent: true })} disabled={none} run={() => chain().updateAttributes('paragraph', { noIndent: !ed!.getAttributes('paragraph').noIndent }).run()} />
                   </Row>
                   <Row>
-                    <B title="空一个汉字宽（#ccwd）" icon={<Spacebar20Regular />} disabled={none} run={() => ins.insertInline('ccwd', { n: 1 })} />
-                    <B title="空回车段：连续空段落会排成 #enter(n)，真占一行" icon={<ArrowEnter20Regular />} disabled={none} run={() => chain().splitBlock().run()} />
-                    <B title="分页" icon={<DocumentPageBreak20Regular />} disabled={none || !blocks} run={ins.insertPageBreak} />
-                    <B title="显示 / 隐藏编辑标记（¶、空格、顶格符；只在编辑区与预览里画，PDF 不受影响）" icon={<TextParagraph20Regular />} on={marksOn} run={toggleMarks} />
+                    <B title={tx("空一个汉字宽（#ccwd）")} icon={<Spacebar20Regular />} disabled={none} run={() => ins.insertInline('ccwd', { n: 1 })} />
+                    <B title={tx("空回车段：连续空段落会排成 #enter(n)，真占一行")} icon={<ArrowEnter20Regular />} disabled={none} run={() => chain().splitBlock().run()} />
+                    <B title={tx("分页")} icon={<DocumentPageBreak20Regular />} disabled={none || !blocks} run={ins.insertPageBreak} />
+                    <B title={tx("显示 / 隐藏编辑标记（¶、空格、顶格符；只在编辑区与预览里画，PDF 不受影响）")} icon={<TextParagraph20Regular />} on={marksOn} run={toggleMarks} />
                     <Menu checkedValues={{ k: (['paragraph', 'space', 'gutter'] as const).filter((k) => markKinds[k]) }} onCheckedValueChange={(_, d) => { for (const k of ['paragraph', 'space', 'gutter'] as const) usePreviewMarks.getState().setKind(k, d.checkedItems.includes(k)); }} positioning="below-start">
                       <MenuTrigger disableButtonEnhancement>
-                        <span className="rb-keep"><B title="选择显示哪些标记" menu run={() => {}} /></span>
+                        <span className="rb-keep"><B title={tx("选择显示哪些标记")} menu run={() => {}} /></span>
                       </MenuTrigger>
                       <MenuPopover><MenuList>
-                        <MenuItemCheckbox name="k" value="paragraph">段落标记 ¶</MenuItemCheckbox>
-                        <MenuItemCheckbox name="k" value="space">空格 ·</MenuItemCheckbox>
-                        <MenuItemCheckbox name="k" value="gutter">顶格符 ⇤</MenuItemCheckbox>
+                        <MenuItemCheckbox name="k" value="paragraph">{tx("段落标记 ¶")}</MenuItemCheckbox>
+                        <MenuItemCheckbox name="k" value="space">{tx("空格 ·")}</MenuItemCheckbox>
+                        <MenuItemCheckbox name="k" value="gutter">{tx("顶格符 ⇤")}</MenuItemCheckbox>
                       </MenuList></MenuPopover>
                     </Menu>
                   </Row>
                 </Rows>
               </Group>
-              <Group label="样式">
+              <Group label={tx("样式")}>
                 <div className="rb-styles">
-                  <button type="button" className={`rb-style rb-style-p ${ed?.isActive('paragraph') ? 'on' : ''}`} disabled={none} title="正文段落" onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(() => chain().setParagraph().run())} onContextMenu={(e) => { e.preventDefault(); useBlockMenu.getState().openStyle(0); }}><span>正文</span></button>
+                  <button type="button" className={`rb-style rb-style-p ${ed?.isActive('paragraph') ? 'on' : ''}`} disabled={none} title={tx("正文段落")} onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(() => chain().setParagraph().run())} onContextMenu={(e) => { e.preventDefault(); useBlockMenu.getState().openStyle(0); }}><span>{tx("正文")}</span></button>
                   {levels.map(({ level: l, name, sample }) => (
-                    <button key={l} type="button" className={`rb-style rb-style-h${l} ${ed?.isActive('heading', { level: l }) ? 'on' : ''}`} disabled={none || !headings} title={`${name || `${l} 级`}标题（${l} 级）`} onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(() => chain().toggleHeading({ level: l as 1 | 2 | 3 | 4 }).run())} onContextMenu={(e) => { e.preventDefault(); useBlockMenu.getState().openStyle(l); }}><span>{sample}</span><small>{name || `${l} 级`}</small></button>
+                    <button key={l} type="button" className={`rb-style rb-style-h${l} ${ed?.isActive('heading', { level: l }) ? 'on' : ''}`} disabled={none || !headings} title={tx("{{v0}}标题（{{l}} 级）", { v0: name || tx("{{l}} 级", { l: l }), l: l })} onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(() => chain().toggleHeading({ level: l as 1 | 2 | 3 | 4 }).run())} onContextMenu={(e) => { e.preventDefault(); useBlockMenu.getState().openStyle(l); }}><span>{sample}</span><small>{name || tx("{{l}} 级", { l: l })}</small></button>
                   ))}
-                  <button type="button" className={`rb-style rb-style-item ${ed?.isActive('orderedList') ? 'on' : ''}`} disabled={none} title="项：款底下那一级——指南说是「（1）」题序、内容接排的段落写法，不是标题；用编号列表" onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(() => chain().toggleOrderedList().run())}><span>（1）</span><small>项</small></button>
+                  <button type="button" className={`rb-style rb-style-item ${ed?.isActive('orderedList') ? 'on' : ''}`} disabled={none} title={tx("项：款底下那一级——指南说是「（1）」题序、内容接排的段落写法，不是标题；用编号列表")} onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(() => chain().toggleOrderedList().run())}><span>（1）</span><small>{tx("项")}</small></button>
                 </div>
               </Group>
-              <Group label="编辑">
+              <Group label={tx("编辑")}>
                 <Stack>
-                  <B title="查找 (⌘F)" icon={<Search20Regular />} on={findOpen} run={() => useFindBar.getState().set(!findOpen)}>查找</B>
-                  <B title="替换 (⌘H)" icon={<ArrowSwap20Regular />} run={() => useFindBar.getState().set(true)}>替换</B>
-                  <B title="全选 (⌘A)" icon={<SelectAllOn20Regular />} disabled={none} run={() => chain().selectAll().run()}>全选</B>
+                  <B title={tx("查找 (⌘F)")} icon={<Search20Regular />} on={findOpen} run={() => useFindBar.getState().set(!findOpen)}>{tx("查找")}</B>
+                  <B title={tx("替换 (⌘H)")} icon={<ArrowSwap20Regular />} run={() => useFindBar.getState().set(true)}>{tx("替换")}</B>
+                  <B title={tx("全选 (⌘A)")} icon={<SelectAllOn20Regular />} disabled={none} run={() => chain().selectAll().run()}>{tx("全选")}</B>
                 </Stack>
               </Group>
             </>
           )}
           {tab === 'insert' && (
             <>
-              <Group label="页面">
-                <B title="分页" big icon={<DocumentPageBreak20Regular />} disabled={none || !blocks} run={ins.insertPageBreak}>分页</B>
+              <Group label={tx("页面")}>
+                <B title={tx("分页")} big icon={<DocumentPageBreak20Regular />} disabled={none || !blocks} run={ins.insertPageBreak}>{tx("分页")}</B>
               </Group>
-              <Group label="表格">
+              <Group label={tx("表格")}>
                 <Popover open={pop === 'table'} onOpenChange={(_, d) => setPop(d.open ? 'table' : null)} positioning="below-start" trapFocus={false}>
                   <PopoverTrigger disableButtonEnhancement>
-                    <span className="rb-keep"><B title="插入表格：拖着选行列数" big menu icon={<Table20Regular />} disabled={none || !blocks} run={() => setPop(pop === 'table' ? null : 'table')}>表格</B></span>
+                    <span className="rb-keep"><B title={tx("插入表格：拖着选行列数")} big menu icon={<Table20Regular />} disabled={none || !blocks} run={() => setPop(pop === 'table' ? null : 'table')}>{tx("表格")}</B></span>
                   </PopoverTrigger>
                   <PopoverSurface className="rb-table-grid">
                     <TableGrid onPick={(rows, cols) => { const d = readTableDefaults(); ins.insertTable(rows, cols, d.header, d.fit === 'fixed' && d.colWidth === 'auto' ? 'content' : d.fit, d.colWidth === 'auto' ? 2.5 : d.colWidth); setPop(null); afterCommand(); }} />
                     <div className="rb-pop-menu">
-                      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setPop(null); setTableDlg('size'); }}><TableSimple20Regular />插入表格…</button>
-                      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setPop(null); setTableDlg('text'); }}><ClipboardTextLtr20Regular />从文本 / Markdown 插入…</button>
+                      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setPop(null); setTableDlg('size'); }}><TableSimple20Regular />{tx("插入表格…")}</button>
+                      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setPop(null); setTableDlg('text'); }}><ClipboardTextLtr20Regular />{tx("从文本 / Markdown 插入…")}</button>
                     </div>
                   </PopoverSurface>
                 </Popover>
                 {tableDlg === 'size' && <TableSizeDialog onClose={() => setTableDlg(null)} onInsert={(r, c, h, fit, cw) => { setTableDlg(null); ins.insertTable(r, c, h, fit, cw); afterCommand(); }} />}
                 {tableDlg === 'text' && <TableTextDialog onClose={() => setTableDlg(null)} onInsert={(t, h) => { setTableDlg(null); ins.insertTableFromText(t, h); afterCommand(); }} />}
               </Group>
-              <Group label="插图">
-                <B title="插图…（也可以直接把图片粘贴进正文）" big icon={<Image20Regular />} disabled={none || !blocks} run={ins.insertFigure}>图片</B>
+              <Group label={tx("插图")}>
+                <B title={tx("插图…（也可以直接把图片粘贴进正文）")} big icon={<Image20Regular />} disabled={none || !blocks} run={ins.insertFigure}>{tx("图片")}</B>
               </Group>
-              <Group label="链接">
-                <B title="插入链接（⌘K）" big icon={<Link20Regular />} disabled={none} run={() => useLinkDialog.getState().open()}>链接</B>
+              <Group label={tx("链接")}>
+                <B title={tx("插入链接（⌘K）")} big icon={<Link20Regular />} disabled={none} run={() => useLinkDialog.getState().open()}>{tx("链接")}</B>
               </Group>
-              <Group label="公式">
-                <B title="行间公式（编号）" big icon={<MathFormula20Regular />} disabled={none || !blocks} run={ins.insertEquation}>公式</B>
+              <Group label={tx("公式")}>
+                <B title={tx("行间公式（编号）")} big icon={<MathFormula20Regular />} disabled={none || !blocks} run={ins.insertEquation}>{tx("公式")}</B>
                 <Stack>
-                  <B title="行内公式" icon={<MathSymbols20Regular />} disabled={none} run={() => ins.insertInline('mathInline')}>行内公式</B>
-                  <B title="公式底下的「式中 x——…」" icon={<TextDescription20Regular />} disabled={none || !blocks} run={ins.insertDenote}>式中</B>
+                  <B title={tx("行内公式")} icon={<MathSymbols20Regular />} disabled={none} run={() => ins.insertInline('mathInline')}>{tx("行内公式")}</B>
+                  <B title={tx("公式底下的「式中 x——…」")} icon={<TextDescription20Regular />} disabled={none || !blocks} run={ins.insertDenote}>{tx("式中")}</B>
                 </Stack>
               </Group>
-              <Group label="算法与代码">
-                <B title="伪代码（模板的 lovelace 排法：一行一条，Tab 缩进；题注「算法 1-1」，可引用）" big icon={<TextBulletListSquare20Regular />} disabled={none || !blocks} run={ins.insertAlgorithm}>算法</B>
+              <Group label={tx("算法与代码")}>
+                <B title={tx("伪代码（模板的 lovelace 排法：一行一条，Tab 缩进；题注「算法 1-1」，可引用）")} big icon={<TextBulletListSquare20Regular />} disabled={none || !blocks} run={ins.insertAlgorithm}>{tx("算法")}</B>
                 <Stack>
-                  <B title="代码块（不带题注，按模板的代码样式排）" icon={<Braces20Regular />} disabled={none || !blocks} run={() => chain().toggleCodeBlock().run()}>代码块</B>
-                  <B title="代码清单：带题注「代码 1-1」、可引用的代码块（光标在代码块里就给它加题注）" icon={<Code20Regular />} disabled={none || !blocks} run={ins.insertCodeFigure}>代码清单</B>
+                  <B title={tx("代码块（不带题注，按模板的代码样式排）")} icon={<Braces20Regular />} disabled={none || !blocks} run={() => chain().toggleCodeBlock().run()}>{tx("代码块")}</B>
+                  <B title={tx("代码清单：带题注「代码 1-1」、可引用的代码块（光标在代码块里就给它加题注）")} icon={<Code20Regular />} disabled={none || !blocks} run={ins.insertCodeFigure}>{tx("代码清单")}</B>
                 </Stack>
               </Group>
-              <Group label="符号">
+              <Group label={tx("符号")}>
                 {symbolPop('symbol2', true)}
               </Group>
-              <Group label="文本">
+              <Group label={tx("文本")}>
                 <Stack>
-                  <B title="空一个汉字宽" icon={<Spacebar20Regular />} disabled={none} run={() => ins.insertInline('ccwd', { n: 1 })}>空格</B>
+                  <B title={tx("空一个汉字宽")} icon={<Spacebar20Regular />} disabled={none} run={() => ins.insertInline('ccwd', { n: 1 })}>{tx("空格")}</B>
                 </Stack>
               </Group>
             </>
           )}
           {tab === 'cite' && (
             <>
-              <Group label="目录">
-                <B title="目录设置" big icon={<DocumentTableSearch20Regular />} run={() => useStore.getState().setSection('pages')}>目录</B>
+              <Group label={tx("目录")}>
+                <B title={tx("目录设置")} big icon={<DocumentTableSearch20Regular />} run={() => useStore.getState().setSection('pages')}>{tx("目录")}</B>
                 <Stack>
-                  <B title="目录条目的行距、字体、字号（模板的 toc-1～toc-4）" icon={<TextEditStyle20Regular />} run={() => useBlockMenu.getState().openStyle(-1)}>目录样式…</B>
+                  <B title={tx("目录条目的行距、字体、字号（模板的 toc-1～toc-4）")} icon={<TextEditStyle20Regular />} run={() => useBlockMenu.getState().openStyle(-1)}>{tx("目录样式…")}</B>
                 </Stack>
               </Group>
-              <Group label="引文与书目">
-                <B title="引用参考文献" big icon={<Book20Regular />} disabled={none} run={() => ins.insertInline('cite')}>插入引文</B>
+              <Group label={tx("引文与书目")}>
+                <B title={tx("引用参考文献")} big icon={<Book20Regular />} disabled={none} run={() => ins.insertInline('cite')}>{tx("插入引文")}</B>
                 <Stack>
-                  <B title="管理参考文献" icon={<Library20Regular />} run={() => useStore.getState().setSection('bibliography')}>管理源</B>
-                  <B title="到「成果」页登记攻读期间的成果" icon={<TextGrammarSettings20Regular />} run={() => useStore.getState().setSection('achievements')}>成果</B>
+                  <B title={tx("管理参考文献")} icon={<Library20Regular />} run={() => useStore.getState().setSection('bibliography')}>{tx("管理源")}</B>
+                  <B title={tx("到「成果」页登记攻读期间的成果")} icon={<TextGrammarSettings20Regular />} run={() => useStore.getState().setSection('achievements')}>{tx("成果")}</B>
                 </Stack>
               </Group>
-              <Group label="题注">
-                <B title="交叉引用图 / 表 / 式 / 节" big icon={<Link20Regular />} disabled={none} run={() => ins.insertInline('ref')}>交叉引用</B>
+              <Group label={tx("题注")}>
+                <B title={tx("交叉引用图 / 表 / 式 / 节")} big icon={<Link20Regular />} disabled={none} run={() => ins.insertInline('ref')}>{tx("交叉引用")}</B>
               </Group>
-              <Group label="脚注">
-                <B title="插入脚注" big icon={<TextFootnote20Regular />} disabled={none} run={() => ins.insertInline('footnote')}>插入脚注</B>
+              <Group label={tx("脚注")}>
+                <B title={tx("插入脚注")} big icon={<TextFootnote20Regular />} disabled={none} run={() => ins.insertInline('footnote')}>{tx("插入脚注")}</B>
                 <Stack>
-                  <B title="上一条脚注" icon={<ChevronUp20Regular />} disabled={none} run={() => stepNode('footnote', -1)}>上一条</B>
-                  <B title="下一条脚注" icon={<ChevronDown20Regular />} disabled={none} run={() => stepNode('footnote', 1)}>下一条</B>
+                  <B title={tx("上一条脚注")} icon={<ChevronUp20Regular />} disabled={none} run={() => stepNode('footnote', -1)}>{tx("上一条")}</B>
+                  <B title={tx("下一条脚注")} icon={<ChevronDown20Regular />} disabled={none} run={() => stepNode('footnote', 1)}>{tx("下一条")}</B>
                 </Stack>
               </Group>
-              <Group label="缩略语">
-                <B title="缩略语（首次出现自动展开）" big icon={<span className="rb-glyph">Ab</span>} disabled={none} run={() => ins.insertInline('abbr')}>缩略语</B>
+              <Group label={tx("缩略语")}>
+                <B title={tx("缩略语（首次出现自动展开）")} big icon={<span className="rb-glyph">Ab</span>} disabled={none} run={() => ins.insertInline('abbr')}>{tx("缩略语")}</B>
                 <Stack>
-                  <B title="到「符号与缩略语」页登记" icon={<MathSymbols20Regular />} run={() => useStore.getState().setSection('nomenclature')}>管理缩略语</B>
+                  <B title={tx("到「符号与缩略语」页登记")} icon={<MathSymbols20Regular />} run={() => useStore.getState().setSection('nomenclature')}>{tx("管理缩略语")}</B>
                 </Stack>
               </Group>
-              <Group label="索引">
-                <B title="标记索引词（登记进索引页）" big icon={<BookmarkAdd20Regular />} disabled={none} run={() => ins.insertInline('idx')}>标记条目</B>
+              <Group label={tx("索引")}>
+                <B title={tx("标记索引词（登记进索引页）")} big icon={<BookmarkAdd20Regular />} disabled={none} run={() => ins.insertInline('idx')}>{tx("标记条目")}</B>
                 <Stack>
-                  <B title="索引设置" icon={<Grid20Regular />} run={() => useStore.getState().setSection('index')}>索引设置</B>
+                  <B title={tx("索引设置")} icon={<Grid20Regular />} run={() => useStore.getState().setSection('index')}>{tx("索引设置")}</B>
                 </Stack>
               </Group>
             </>
           )}
           {tab === 'review' && (
             <>
-              <Group label="批注">
-                <B title="新建批注" big icon={<CommentAdd20Regular />} disabled={none} run={newComment}>新建批注</B>
+              <Group label={tx("批注")}>
+                <B title={tx("新建批注")} big icon={<CommentAdd20Regular />} disabled={none} run={newComment}>{tx("新建批注")}</B>
                 <Stack>
-                  <B title="删除光标所在的批注" icon={<CommentDismiss20Regular />} disabled={!activeComment} run={() => { const c = activeComment; if (c) { chain().unsetComment(c.id).run(); useStore.getState().setComments(comments.filter((x) => x.id !== c.id)); } }}>删除</B>
-                  <B title="上一条批注" icon={<ChevronUp20Regular />} disabled={!comments.some((c) => c.key === activeKey)} run={() => stepComment(-1)}>上一条</B>
-                  <B title="下一条批注" icon={<ChevronDown20Regular />} disabled={!comments.some((c) => c.key === activeKey)} run={() => stepComment(1)}>下一条</B>
+                  <B title={tx("删除光标所在的批注")} icon={<CommentDismiss20Regular />} disabled={!activeComment} run={() => { const c = activeComment; if (c) { chain().unsetComment(c.id).run(); useStore.getState().setComments(comments.filter((x) => x.id !== c.id)); } }}>{tx("删除")}</B>
+                  <B title={tx("上一条批注")} icon={<ChevronUp20Regular />} disabled={!comments.some((c) => c.key === activeKey)} run={() => stepComment(-1)}>{tx("上一条")}</B>
+                  <B title={tx("下一条批注")} icon={<ChevronDown20Regular />} disabled={!comments.some((c) => c.key === activeKey)} run={() => stepComment(1)}>{tx("下一条")}</B>
                 </Stack>
               </Group>
-              <Group label="面板">
-                <B title="显示或隐藏批注窗格" big icon={<Comment20Regular />} on={commentsOpen} run={() => useComments.getState().setOpen(!commentsOpen)}>批注窗格</B>
+              <Group label={tx("面板")}>
+                <B title={tx("显示或隐藏批注窗格")} big icon={<Comment20Regular />} on={commentsOpen} run={() => useComments.getState().setOpen(!commentsOpen)}>{tx("批注窗格")}</B>
               </Group>
-              <Group label="审阅者">
+              <Group label={tx("审阅者")}>
                 <span className="rb-keep rb-inline">
-                  <Input size="small" value={reviewer} placeholder="审阅者姓名" onChange={(_, d) => useComments.getState().setAuthor(d.value)} style={{ width: 140 }} />
+                  <Input size="small" value={reviewer} placeholder={tx("审阅者姓名")} onChange={(_, d) => useComments.getState().setAuthor(d.value)} style={{ width: 140 }} />
                 </span>
               </Group>
             </>
           )}
           {tab === 'table' && ed && (
             <>
-              <Group label="行与列">
+              <Group label={tx("行与列")}>
                 <Rows>
                   <Row>
-                    <B title="在上方插入行" icon={<TableStackAbove20Regular />} disabled={!inTable} run={() => chain().addRowBefore().run()} />
-                    <B title="在下方插入行" icon={<TableStackBelow20Regular />} disabled={!inTable} run={() => chain().addRowAfter().run()} />
-                    <B title="删除行" icon={<TableDeleteRow20Regular />} disabled={!inTable} run={() => chain().deleteRow().run()} />
+                    <B title={tx("在上方插入行")} icon={<TableStackAbove20Regular />} disabled={!inTable} run={() => chain().addRowBefore().run()} />
+                    <B title={tx("在下方插入行")} icon={<TableStackBelow20Regular />} disabled={!inTable} run={() => chain().addRowAfter().run()} />
+                    <B title={tx("删除行")} icon={<TableDeleteRow20Regular />} disabled={!inTable} run={() => chain().deleteRow().run()} />
                   </Row>
                   <Row>
-                    <B title="在左侧插入列" icon={<TableStackLeft20Regular />} disabled={!inTable} run={() => chain().addColumnBefore().run()} />
-                    <B title="在右侧插入列" icon={<TableStackRight20Regular />} disabled={!inTable} run={() => chain().addColumnAfter().run()} />
-                    <B title="删除列" icon={<TableDeleteColumn20Regular />} disabled={!inTable} run={() => chain().deleteColumn().run()} />
+                    <B title={tx("在左侧插入列")} icon={<TableStackLeft20Regular />} disabled={!inTable} run={() => chain().addColumnBefore().run()} />
+                    <B title={tx("在右侧插入列")} icon={<TableStackRight20Regular />} disabled={!inTable} run={() => chain().addColumnAfter().run()} />
+                    <B title={tx("删除列")} icon={<TableDeleteColumn20Regular />} disabled={!inTable} run={() => chain().deleteColumn().run()} />
                   </Row>
                 </Rows>
               </Group>
-              <Group label="合并">
+              <Group label={tx("合并")}>
                 <Stack>
-                  <B title="合并 / 拆分单元格" icon={<TableCellsMerge20Regular />} disabled={!inTable} run={() => chain().mergeOrSplit().run()}>合并 / 拆分</B>
-                  <B title="标题行" icon={<TableFreezeRow20Regular />} disabled={!inTable} run={() => chain().toggleHeaderRow().run()}>标题行</B>
-                  <B title="删除整张表" icon={<TableDismiss20Regular />} disabled={!inTable} run={() => chain().deleteTable().run()}>删除表格</B>
+                  <B title={tx("合并 / 拆分单元格")} icon={<TableCellsMerge20Regular />} disabled={!inTable} run={() => chain().mergeOrSplit().run()}>{tx("合并 / 拆分")}</B>
+                  <B title={tx("标题行")} icon={<TableFreezeRow20Regular />} disabled={!inTable} run={() => chain().toggleHeaderRow().run()}>{tx("标题行")}</B>
+                  <B title={tx("删除整张表")} icon={<TableDismiss20Regular />} disabled={!inTable} run={() => chain().deleteTable().run()}>{tx("删除表格")}</B>
                 </Stack>
               </Group>
-              <Group label="对齐与尺寸">
+              <Group label={tx("对齐与尺寸")}>
                 <span className="rb-keep rb-inline">{inTable && <TableAlignTools editor={ed} />}</span>
               </Group>
-              <Group label="版式">
+              <Group label={tx("版式")}>
                 <span className="rb-keep rb-inline">
                   <Rows>
-                    <Row><ChoiceMenu label="浮动" hint="浮动：表不跟着文字走，Typst 把它放到本页或下页的顶 / 底（figure(placement:)）；浮动的表不跨页" choices={PLACEMENTS} value={(ed.getAttributes('tableFigure').placement as string) || 'none'} onChange={(v) => chain().updateAttributes('tableFigure', { placement: v }).run()} /></Row>
-                    <Row><ChoiceMenu label="跨页" hint="表能不能拆到下一页（指南 2.12：一页放不下才可转页，续页表右上角注「续表」）；模板默认允许" choices={BREAK_TABLE} value={(ed.getAttributes('tableFigure').breakable as string) || 'auto'} disabled={((ed.getAttributes('tableFigure').placement as string) || 'none') !== 'none'} onChange={(v) => chain().updateAttributes('tableFigure', { breakable: v }).run()} /></Row>
-                    <Row><ChoiceMenu label="自动调整" hint="Word 的「自动调整」：根据内容 / 根据窗口 / 固定列宽；拖过列线的列按拖的来" choices={FITS} value={(ed.getAttributes('tableFigure').fit as string) || 'content'} onChange={(v) => chain().updateAttributes('tableFigure', { fit: v }).run()} /></Row>
+                    <Row><ChoiceMenu label={tx("浮动")} hint={tx("浮动：表不跟着文字走，Typst 把它放到本页或下页的顶 / 底（figure(placement:)）；浮动的表不跨页")} choices={PLACEMENTS} value={(ed.getAttributes('tableFigure').placement as string) || 'none'} onChange={(v) => chain().updateAttributes('tableFigure', { placement: v }).run()} /></Row>
+                    <Row><ChoiceMenu label={tx("跨页")} hint={tx("表能不能拆到下一页（指南 2.12：一页放不下才可转页，续页表右上角注「续表」）；模板默认允许")} choices={BREAK_TABLE} value={(ed.getAttributes('tableFigure').breakable as string) || 'auto'} disabled={((ed.getAttributes('tableFigure').placement as string) || 'none') !== 'none'} onChange={(v) => chain().updateAttributes('tableFigure', { breakable: v }).run()} /></Row>
+                    <Row><ChoiceMenu label={tx("自动调整")} hint={tx("Word 的「自动调整」：根据内容 / 根据窗口 / 固定列宽；拖过列线的列按拖的来")} choices={FITS} value={(ed.getAttributes('tableFigure').fit as string) || 'content'} onChange={(v) => chain().updateAttributes('tableFigure', { fit: v }).run()} /></Row>
                   </Rows>
                 </span>
               </Group>
@@ -540,61 +541,61 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
           )}
           {tab === 'figure' && ed && inFigure && (() => { const a = ed.getAttributes('figure'); const placement = (a.placement as string) || 'none'; return (
             <>
-              <Group label="大小">
+              <Group label={tx("大小")}>
                 <span className="rb-keep rb-inline">
-                  <label className="tb-field" title="图的宽度：cm / mm / pt / em / %（相对版心宽）；版心宽约 14.6 cm">
-                    宽度 <LengthInput value={a.width ?? 8} defaultUnit="cm" onChange={(v) => chain().updateAttributes('figure', { width: v ?? 8 }).run()} width={96} />
+                  <label className="tb-field" title={tx("图的宽度：cm / mm / pt / em / %（相对版心宽）；版心宽约 14.6 cm")}>
+                    {tx("宽度")}{' '}<LengthInput value={a.width ?? 8} defaultUnit="cm" onChange={(v) => chain().updateAttributes('figure', { width: v ?? 8 }).run()} width={96} />
                   </label>
                   <Stack>
-                    {['6cm', '10cm', '100%'].map((w) => <B key={w} title={`宽 ${w}`} on={String(a.width) === w} run={() => chain().updateAttributes('figure', { width: w }).run()}>{w}</B>)}
+                    {['6cm', '10cm', '100%'].map((w) => <B key={w} title={tx("宽 {{w}}", { w: w })} on={String(a.width) === w} run={() => chain().updateAttributes('figure', { width: w }).run()}>{w}</B>)}
                   </Stack>
                 </span>
               </Group>
-              <Group label="位置">
+              <Group label={tx("位置")}>
                 <span className="rb-keep rb-inline">
                   <Rows>
-                    <Row><ChoiceMenu label="浮动" hint="浮动：图不跟着文字走，Typst 把它放到本页或下页的顶 / 底（figure(placement:)）；浮动的图不跨页" choices={PLACEMENTS} value={placement} onChange={(v) => chain().updateAttributes('figure', { placement: v }).run()} /></Row>
-                    <Row><ChoiceMenu label="跨页" hint="图默认整块不拆（指南 2.13.2）；允许后分图多的图按指南排成「续图」" choices={BREAK_IMAGE} value={(a.breakable as string) || 'auto'} disabled={placement !== 'none'} onChange={(v) => chain().updateAttributes('figure', { breakable: v }).run()} /></Row>
+                    <Row><ChoiceMenu label={tx("浮动")} hint={tx("浮动：图不跟着文字走，Typst 把它放到本页或下页的顶 / 底（figure(placement:)）；浮动的图不跨页")} choices={PLACEMENTS} value={placement} onChange={(v) => chain().updateAttributes('figure', { placement: v }).run()} /></Row>
+                    <Row><ChoiceMenu label={tx("跨页")} hint={tx("图默认整块不拆（指南 2.13.2）；允许后分图多的图按指南排成「续图」")} choices={BREAK_IMAGE} value={(a.breakable as string) || 'auto'} disabled={placement !== 'none'} onChange={(v) => chain().updateAttributes('figure', { breakable: v }).run()} /></Row>
                   </Rows>
                 </span>
               </Group>
-              <Group label="分图">
+              <Group label={tx("分图")}>
                 <span className="rb-keep rb-inline">
                   <Rows>
-                    <Row><ChoiceMenu label="每行" choices={[1, 2, 3, 4].map((n) => ({ value: String(n), label: `${n} 张` }))} value={String(Math.max(1, Math.min(4, Number(a.columns) || 2)))} onChange={(v) => chain().updateAttributes('figure', { columns: Number(v) }).run()} /></Row>
-                    <Row><ChoiceMenu label="分图题" hint="分图题排在分图之下（#subfigure），或跟在图题之下连排（#subs）——指南 2.13.1 的两种" choices={[{ value: 'under', label: '分图之下' }, { value: 'caption', label: '图题之下连排' }]} value={(a.subMode as string) || 'under'} onChange={(v) => chain().updateAttributes('figure', { subMode: v }).run()} /></Row>
+                    <Row><ChoiceMenu label={tx("每行")} choices={[1, 2, 3, 4].map((n) => ({ value: String(n), label: tx("{{n}} 张", { n: n }) }))} value={String(Math.max(1, Math.min(4, Number(a.columns) || 2)))} onChange={(v) => chain().updateAttributes('figure', { columns: Number(v) }).run()} /></Row>
+                    <Row><ChoiceMenu label={tx("分图题")} hint={tx("分图题排在分图之下（#subfigure），或跟在图题之下连排（#subs）——指南 2.13.1 的两种")} choices={[{ value: 'under', label: tx("分图之下") }, { value: 'caption', label: tx("图题之下连排") }]} value={(a.subMode as string) || 'under'} onChange={(v) => chain().updateAttributes('figure', { subMode: v }).run()} /></Row>
                   </Rows>
                 </span>
               </Group>
-              <Group label="题注">
+              <Group label={tx("题注")}>
                 <Stack>
-                  <B title="编辑题注" icon={<TextDescription20Regular />} run={() => { const pos = ed.state.selection.from; useOpenRequest.getState().request({ key: activeKey!, pos, attr: 'caption' }); }}>题注</B>
-                  <B title="编辑英文题注" icon={<Translate20Regular />} run={() => { const pos = ed.state.selection.from; useOpenRequest.getState().request({ key: activeKey!, pos, attr: 'captionEn' }); }}>英文题注</B>
+                  <B title={tx("编辑题注")} icon={<TextDescription20Regular />} run={() => { const pos = ed.state.selection.from; useOpenRequest.getState().request({ key: activeKey!, pos, attr: 'caption' }); }}>{tx("题注")}</B>
+                  <B title={tx("编辑英文题注")} icon={<Translate20Regular />} run={() => { const pos = ed.state.selection.from; useOpenRequest.getState().request({ key: activeKey!, pos, attr: 'captionEn' }); }}>{tx("英文题注")}</B>
                 </Stack>
               </Group>
-              <Group label="图片">
+              <Group label={tx("图片")}>
                 <Stack>
-                  <B title="更改图片" icon={<ImageEdit20Regular />} run={replaceImage}>更改图片</B>
-                  <B title="删除插图" icon={<Delete20Regular />} run={() => chain().deleteSelection().run()}>删除</B>
+                  <B title={tx("更改图片")} icon={<ImageEdit20Regular />} run={replaceImage}>{tx("更改图片")}</B>
+                  <B title={tx("删除插图")} icon={<Delete20Regular />} run={() => chain().deleteSelection().run()}>{tx("删除")}</B>
                 </Stack>
               </Group>
             </>
           ); })()}
           {tab === 'view' && (
             <>
-              <Group label="视图">
-                <B title="只看编辑" big icon={<PanelLeft20Regular />} on={layout.mode === 'editor'} run={() => layout.setMode('editor')}>编辑</B>
-                <B title="编辑 + 预览" big icon={<LayoutColumnTwo20Regular />} on={layout.mode === 'split'} run={() => layout.setMode('split')}>并排查看</B>
-                <B title="只看预览" big icon={<PanelRight20Regular />} on={layout.mode === 'preview'} run={() => layout.setMode('preview')}>预览</B>
+              <Group label={tx("视图")}>
+                <B title={tx("只看编辑")} big icon={<PanelLeft20Regular />} on={layout.mode === 'editor'} run={() => layout.setMode('editor')}>{tx("编辑")}</B>
+                <B title={tx("编辑 + 预览")} big icon={<LayoutColumnTwo20Regular />} on={layout.mode === 'split'} run={() => layout.setMode('split')}>{tx("并排查看")}</B>
+                <B title={tx("只看预览")} big icon={<PanelRight20Regular />} on={layout.mode === 'preview'} run={() => layout.setMode('preview')}>{tx("预览")}</B>
               </Group>
-              <Group label="显示">
+              <Group label={tx("显示")}>
                 <Stack>
-                  <B title={layout.navOpen ? '收起左栏' : '展开左栏'} icon={layout.navOpen ? <PanelLeftContract20Regular /> : <PanelLeftExpand20Regular />} on={layout.navOpen} run={() => layout.setNavOpen(!layout.navOpen)}>导航窗格</B>
-                  <B title="大纲：左栏里列出本节的标题，点一下跳过去" icon={<TextBulletListSquare20Regular />} on={outlineOn} run={() => { useOutline.getState().toggle(); if (!layout.navOpen) layout.setNavOpen(true); }}>大纲</B>
+                  <B title={layout.navOpen ? tx("收起左栏") : tx("展开左栏")} icon={layout.navOpen ? <PanelLeftContract20Regular /> : <PanelLeftExpand20Regular />} on={layout.navOpen} run={() => layout.setNavOpen(!layout.navOpen)}>{tx("导航窗格")}</B>
+                  <B title={tx("大纲：左栏里列出本节的标题，点一下跳过去")} icon={<TextBulletListSquare20Regular />} on={outlineOn} run={() => { useOutline.getState().toggle(); if (!layout.navOpen) layout.setNavOpen(true); }}>{tx("大纲")}</B>
                 </Stack>
-                <B title="显示或隐藏段落标记" big icon={<TextParagraph20Regular />} on={marksOn} run={toggleMarks}>显示/隐藏 ¶</B>
+                <B title={tx("显示或隐藏段落标记")} big icon={<TextParagraph20Regular />} on={marksOn} run={toggleMarks}>{tx("显示/隐藏 ¶")}</B>
               </Group>
-              <Group label="编辑区字号">
+              <Group label={tx("编辑区字号")}>
                 <span className="rb-keep rb-inline"><FontSizeTool /></span>
               </Group>
             </>
@@ -614,13 +615,13 @@ function TableGrid({ onPick }: { onPick: (rows: number, cols: number) => void })
   const COLS = 10, ROWS = 8;
   return (
     <div onMouseDown={(e) => e.preventDefault()}>
-      <div className="rb-grid-label">{hover[0] && hover[1] ? `${hover[0]} 行 × ${hover[1]} 列的表格` : '插入表格'}</div>
+      <div className="rb-grid-label">{hover[0] && hover[1] ? tx("{{v0}} 行 × {{v1}} 列的表格", { v0: hover[0], v1: hover[1] }) : tx("插入表格")}</div>
       <div className="rb-grid" onMouseLeave={() => setHover([0, 0])}>
         {Array.from({ length: ROWS }, (_, r) => Array.from({ length: COLS }, (_, c) => (
           <button key={`${r}-${c}`} type="button" className={`rb-cell ${r < hover[0] && c < hover[1] ? 'on' : ''}`} onMouseEnter={() => setHover([r + 1, c + 1])} onClick={() => onPick(r + 1, c + 1)} title={`${r + 1} × ${c + 1}`} />
         )))}
       </div>
-      <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>第一行是表头；题注在表上方直接写</div>
+      <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>{tx("第一行是表头；题注在表上方直接写")}</div>
     </div>
   );
 }
@@ -657,18 +658,18 @@ function FindBar({ editor }: { editor: Editor | null }) {
   };
   return (
     <div className="findbar" onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Escape') close(); }}>
-      <Input ref={input} size="small" contentBefore={<Search20Regular />} value={q} placeholder="查找" onChange={(_, d) => setQ(d.value)} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); step(e.shiftKey ? -1 : 1); } }} className="findbar-input" />
-      <span className="findbar-count">{q ? (n ? `${(st!.current % n) + 1} / ${n}` : '无结果') : ''}</span>
-      <Button size="small" appearance="subtle" icon={<ChevronLeft20Regular />} title="上一个 (⇧Enter)" disabled={!n} onClick={() => step(-1)} />
-      <Button size="small" appearance="subtle" icon={<ChevronRight20Regular />} title="下一个 (Enter)" disabled={!n} onClick={() => step(1)} />
-      <Checkbox size="medium" label="区分大小写" checked={cs} onChange={(_, d) => setCs(!!d.checked)} />
+      <Input ref={input} size="small" contentBefore={<Search20Regular />} value={q} placeholder={tx("查找")} onChange={(_, d) => setQ(d.value)} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); step(e.shiftKey ? -1 : 1); } }} className="findbar-input" />
+      <span className="findbar-count">{q ? (n ? `${(st!.current % n) + 1} / ${n}` : tx("无结果")) : ''}</span>
+      <Button size="small" appearance="subtle" icon={<ChevronLeft20Regular />} title={tx("上一个 (⇧Enter)")} disabled={!n} onClick={() => step(-1)} />
+      <Button size="small" appearance="subtle" icon={<ChevronRight20Regular />} title={tx("下一个 (Enter)")} disabled={!n} onClick={() => step(1)} />
+      <Checkbox size="medium" label={tx("区分大小写")} checked={cs} onChange={(_, d) => setCs(!!d.checked)} />
       <Sep />
-      <Input size="small" contentBefore={<ArrowSwap20Regular />} value={rep} placeholder="替换为" onChange={(_, d) => setRep(d.value)} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); replaceOne(); } }} className="findbar-input" />
-      <Button size="small" disabled={!n} onClick={replaceOne}>替换</Button>
-      <Button size="small" disabled={!n} onClick={replaceAll}>全部替换</Button>
+      <Input size="small" contentBefore={<ArrowSwap20Regular />} value={rep} placeholder={tx("替换为")} onChange={(_, d) => setRep(d.value)} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); replaceOne(); } }} className="findbar-input" />
+      <Button size="small" disabled={!n} onClick={replaceOne}>{tx("替换")}</Button>
+      <Button size="small" disabled={!n} onClick={replaceAll}>{tx("全部替换")}</Button>
       <span className="spacer" />
-      {!editor && <span className="muted" style={{ fontSize: 12 }}>请先选择要查找的文本区域</span>}
-      <Button size="small" appearance="subtle" icon={<Dismiss20Regular />} title="关闭 (Esc)" onClick={close} />
+      {!editor && <span className="muted" style={{ fontSize: 12 }}>{tx("请先选择要查找的文本区域")}</span>}
+      <Button size="small" appearance="subtle" icon={<Dismiss20Regular />} title={tx("关闭 (Esc)")} onClick={close} />
     </div>
   );
 }

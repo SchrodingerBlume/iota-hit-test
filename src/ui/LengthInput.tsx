@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Input, Select, type InputProps } from '@fluentui/react-components';
 import { parseLength, formatLength, UNIT_LABEL, type Unit } from '../model/length';
+import { t } from '../i18n';
 
 interface Props {
   value: unknown;
@@ -33,7 +34,7 @@ export function LengthInput({ value, defaultUnit, allowed, onChange, placeholder
   };
   return (
     <span className="len-input" title={title} style={{ width }}>
-      <Input size={size} type="number" step="any" value={num} disabled={disabled} placeholder={placeholder ?? (allowEmpty ? '自动' : '')} className="len-num"
+      <Input size={size} type="number" step="any" value={num} disabled={disabled} placeholder={placeholder ?? (allowEmpty ? t("自动") : '')} className="len-num"
         onChange={(_, d) => setNum(d.value)} onBlur={() => commit(num, unit)}
         onKeyDown={(e) => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); commit(num, unit); (e.target as HTMLInputElement).blur(); } }} />
       <Select size={size} value={unit} disabled={disabled} className="len-unit" onChange={(_, d) => { const u = d.value as Unit; setUnit(u); if (num.trim()) commit(num, u); }}>

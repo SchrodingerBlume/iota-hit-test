@@ -123,6 +123,10 @@ npm run build        # dist/ 就是整站，扔到任何静态托管
 npm run test:compile # 不开浏览器，在 Node 里用同一颗 wasm 编一份样张到 test-out.pdf
 ```
 
+界面上的所有文字在 `src/i18n/zh.ts`：左边是代码里的原文（键），改右边的值界面就变，`{{name}}` 是代入的变量。代码里新写文字用 `t("…")`
+（`src/i18n`，i18next），`node scripts/i18n-extract.mjs --write` 会把没包的中文字符串包上并补进 `zh.ts`（已改过的值保留）。
+样例文档（`src/model/sample.ts`）与生成的 Typst 源码里的文字不在此列。
+
 `scripts/bundle-packages.mjs` 默认从 `../iota-hit` 取模板，也可以 `IOTA_HIT=/path/to/iota-hit npm run packages`。
 `@preview/*` 依赖从 `~/Library/Caches/typst/packages/preview` 取，本机没有的从 packages.typst.org 下载。
 

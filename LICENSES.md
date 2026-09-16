@@ -6,6 +6,7 @@
 | omni-gb7714（`local-omni-gb7714-*.tar.gz`） | Apache-2.0 | 本机 typst local 包 |
 | 其余 `@preview/*` 包（glossy、lovelace、algorithmic、quan、auto-pinyin、zhconv、auto-bihua、glotter、jurlstify、mitex、valkyrie） | 各自的许可，见各包 `typst.toml` / LICENSE | packages.typst.org |
 | Fluent UI React v9（`@fluentui/react-components`、`@fluentui/react-icons`） | MIT | github.com/microsoft/fluentui — 功能区的组件与图标 |
+| i18next | MIT | github.com/i18next/i18next — 界面文字层（`src/i18n`） |
 | `src/compiler/svgPatch.mjs`（typst.ts 的增量 SVG 补丁算法，包没导出，抄了一份） | Apache-2.0 | github.com/Myriad-Dreamin/typst.ts |
 | typst.ts 编译器 / 渲染器 wasm（`vendor/`） | Apache-2.0 | github.com/Myriad-Dreamin/typst.ts 主分支自建，提交号见 `vendor/*/COMMIT` |
 | Typst | Apache-2.0 | 编进 wasm 里，0.15.1 |

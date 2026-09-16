@@ -2,6 +2,7 @@
 // 标签可以拖着换位置：按住拖，别的标签让开（滑过去），松手落位；也可以选中标签后按 ⌥←/→ 挪。
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent as RPointerEvent } from 'react';
 import { X } from 'lucide-react';
+import { t as tx } from '../i18n';
 
 interface Drag { from: number; to: number; x: number; y: number; w: number; h: number; ox: number; oy: number; active: boolean }
 
@@ -96,7 +97,7 @@ export function TagInput({ value, onChange, placeholder, dataInfo }: { value: st
             ref={(el) => { if (el) items.current.set(t, el); else items.current.delete(t); }}
             className={`tag-item ${ghost ? 'is-ghost' : ''}`}
             tabIndex={0}
-            title="拖动换位置；⌥ + ← / → 也行"
+            title={tx("拖动换位置；⌥ + ← / → 也行")}
             onPointerDown={(e) => onPointerDown(e, i)}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
@@ -104,11 +105,11 @@ export function TagInput({ value, onChange, placeholder, dataInfo }: { value: st
             onKeyDown={(e) => onTagKey(e, i)}
           >
             {t}
-            <button type="button" title="删除" tabIndex={-1} onClick={(e) => { e.stopPropagation(); onChange(value.filter((_, j) => j !== i)); }}><X /></button>
+            <button type="button" title={tx("删除")} tabIndex={-1} onClick={(e) => { e.stopPropagation(); onChange(value.filter((_, j) => j !== i)); }}><X /></button>
           </span>
         );
       })}
-      <input data-info={dataInfo} value={draft} placeholder={value.length ? '' : placeholder ?? '输入后回车'} onChange={(e) => setDraft(e.target.value)} onKeyDown={onKey} onBlur={commit} />
+      <input data-info={dataInfo} value={draft} placeholder={value.length ? '' : placeholder ?? tx("输入后回车")} onChange={(e) => setDraft(e.target.value)} onKeyDown={onKey} onBlur={commit} />
       {drag?.active && (
         <span className="tag-item is-lifted" style={{ position: 'fixed', left: drag.x - drag.ox, top: drag.y - drag.oy, width: drag.w, height: drag.h, pointerEvents: 'none', zIndex: 50 }}>
           {value[drag.from]}

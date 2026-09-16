@@ -16,6 +16,7 @@ import { useOpenRequest } from '../editor/openRequest';
 import { useBlockMenu } from '../editor/BlockMenu';
 import { useComments } from '../editor/comments';
 import { buildIndex, caretRect, hitPos, hitTest, lineStep, selectionRects, paragraphMarks, EMPTY_INDEX, type CaretRect, type Glyph, type Hit, type Line } from './previewEdit';
+import { t as tx } from '../i18n';
 
 const KEY_SECTION: Record<RichKey, Section> = {
   body: 'body', appendix: 'appendix', conclusion: 'conclusion', acknowledgement: 'acknowledgement', resume: 'resume',
@@ -575,7 +576,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
         ref={inputRef}
         className="pv-input"
         style={caretPx ? { left: caretLeft, top: caretPx.top, height: Math.max(1, caretH) } : { left: 0, top: 0 }}
-        aria-label="在预览里直接编辑"
+        aria-label={tx("在预览里直接编辑")}
         autoCapitalize="off" autoCorrect="off" spellCheck={false} autoComplete="off"
         onFocus={() => setSurface({ focused: true })}
         onBlur={() => { setSurface({ focused: false }); setComposing(null); }}

@@ -6,6 +6,7 @@
 // Auto 段直接写出它现在映射到什么，下面一行小字说为什么。
 import type { Settings } from '../model/types';
 import { resolveSwitch, type SwitchDef, type Choice } from '../model/options';
+import { t } from '../i18n';
 
 export interface SegChoice<V = any> { value: V; label: string; tone?: 'on' | 'off' | 'accent'; hint?: string }
 
@@ -30,25 +31,25 @@ export function TriSeg<V>({ label, hint, choices, value, auto, onChange, showAut
     <div className="triseg">
       <div className="triseg-lab" title={hint}>{label}</div>
       <div className="seg triseg-seg" role="radiogroup" aria-label={label}>
-        <button type="button" role="radio" aria-checked={isAuto} className={`auto ${isAuto ? 'on' : ''}`} onClick={() => onChange('auto')} title={`自动：${auto.reason}`}>
+        <button type="button" role="radio" aria-checked={isAuto} className={`auto ${isAuto ? 'on' : ''}`} onClick={() => onChange('auto')} title={t("自动：{{reason}}", { reason: auto.reason })}>
           Auto<span className="triseg-arrow">→</span><b className={`t-${toneOf(auto.value)}`}>{labelOf(auto.value)}</b>
         </button>
         {choices.map((c) => (
-          <button key={String(c.value)} type="button" role="radio" aria-checked={!isAuto && value === c.value} className={`${!isAuto && value === c.value ? `on t-${c.tone ?? 'accent'}` : ''}`} onClick={() => onChange(c.value)} title={c.hint ?? `固定为「${c.label}」`}>{c.label}</button>
+          <button key={String(c.value)} type="button" role="radio" aria-checked={!isAuto && value === c.value} className={`${!isAuto && value === c.value ? `on t-${c.tone ?? 'accent'}` : ''}`} onClick={() => onChange(c.value)} title={c.hint ?? t("固定为「{{label}}」", { label: c.label })}>{c.label}</button>
         ))}
       </div>
       <div className="triseg-note">
         {isAuto
-          ? <>自动 → <b className={`t-${toneOf(eff)}`}>{labelOf(eff)}</b> · {auto.reason}</>
-          : <>已固定为 <b className={`t-${toneOf(eff)}`}>{labelOf(eff)}</b>{showAutoWhenFixed && auto.value !== value && <span className="muted">（自动档会是「{labelOf(auto.value)}」：{auto.reason}）</span>}</>}
+          ? <>{t("自动 →")}{' '}<b className={`t-${toneOf(eff)}`}>{labelOf(eff)}</b> · {auto.reason}</>
+          : <>{t("已固定为")}{' '}<b className={`t-${toneOf(eff)}`}>{labelOf(eff)}</b>{showAutoWhenFixed && auto.value !== value && <span className="muted">{t("（自动档会是「")}{labelOf(auto.value)}」：{auto.reason}）</span>}</>}
       </div>
     </div>
   );
 }
 
 export const ON_OFF: SegChoice<boolean>[] = [
-  { value: false, label: '关', tone: 'off' },
-  { value: true, label: '开', tone: 'on' },
+  { value: false, label: t("关"), tone: 'off' },
+  { value: true, label: t("开"), tone: 'on' },
 ];
 
 /** 论文设置里的开关：从登记表取档位与 auto 映射 */

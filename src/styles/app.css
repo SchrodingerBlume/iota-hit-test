@@ -935,8 +935,8 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .rb-note { font-size: 11px; color: var(--muted); max-width: 120px; line-height: 1.4; align-self: center; padding: 0 4px; }
 /* 样式库：像 Word 那排带预览的样式格子 */
 .rb-styles { display: flex; gap: 4px; }
-.rb-style { width: 60px; height: 48px; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--panel); color: var(--ink); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 4px; cursor: pointer; transition: border-color var(--fast) var(--ease), background-color var(--fast) var(--ease); font-family: var(--serif); }
-.rb-style span { line-height: 1.1; white-space: nowrap; }
+.rb-style { min-width: 60px; height: 48px; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--panel); color: var(--ink); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 4px; cursor: pointer; transition: border-color var(--fast) var(--ease), background-color var(--fast) var(--ease); font-family: var(--serif); }
+.rb-style span { line-height: 1.1; white-space: nowrap; padding: 0 4px; }
 .rb-style small { font-family: var(--sans); font-size: 10px; color: var(--muted); }
 .rb-style:hover { border-color: var(--accent-soft-2); background: var(--panel-2); }
 .rb-style.on { border-color: var(--accent); background: var(--accent-soft); }

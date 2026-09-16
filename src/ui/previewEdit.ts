@@ -251,8 +251,9 @@ export function caretRect(index: GlyphIndex, key: string, pos: number, prefer: {
       const line = lineOf(g), x = after ? g.x + g.w : g.x, old = edge.get(line);
       if (!old || (after ? x > old.x : x < old.x)) edge.set(line, { page: g.page, x, y: g.y, h: g.h, line });
     };
-    for (let i = lowerBound(arr, pos); i < arr.length && arr[i].from === pos; i++) keep(arr[i], false);
-    for (let i = Math.min(arr.length - 1, lowerBound(arr, pos)); i >= 0 && pos - arr[i].from < 40; i--) if (arr[i].to === pos) keep(arr[i], true);
+    // 只认 node 字形：attr 的（脚注正文、题注）画在别处，不是这一段的边
+    for (let i = lowerBound(arr, pos); i < arr.length && arr[i].from === pos; i++) if (arr[i].kind === 'node') keep(arr[i], false);
+    for (let i = Math.min(arr.length - 1, lowerBound(arr, pos)); i >= 0 && pos - arr[i].from < 40; i--) if (arr[i].to === pos && arr[i].kind === 'node') keep(arr[i], true);
     cands.push(...edge.values());
   }
   // 同一处「字后」与下一字「字前」重合时留一个就行；prefer 决定挑哪一处印本
