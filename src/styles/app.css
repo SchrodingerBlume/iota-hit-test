@@ -1052,9 +1052,6 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .preview { grid-template-rows: auto minmax(0, 1fr); }
 .preview .pane-bar { position: relative; flex-wrap: wrap; padding-block: 6px; min-height: 38px; }
 .preview .pane-bar .btn { flex-shrink: 0; }
-.triseg-seg button.auto.on,
-.triseg-seg button.on.t-on,
-.triseg-seg button.on.t-off { background: var(--accent); color: #fff; }
 .preview .pane-bar .preview-progress { top: auto; bottom: 0; }
 
 .editor-mode { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }

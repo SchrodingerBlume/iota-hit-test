@@ -94,14 +94,16 @@ function tag(opts: SerializeOptions, n: PMNode, kind: 'node' | 'attr', inner: st
 const INLINE_SPECIAL = /[\\*_`#$@<>\[\]~/]/g;
 
 export function escapeText(s: string): string {
-  return s.replace(INLINE_SPECIAL, (c) => '\\' + c);
+  // 连打的空格照排：Typst 会把多个空格合成一个，多出来的写成 ~（不断行空格，宽度同空格）
+  return s.replace(INLINE_SPECIAL, (c) => '\\' + c).replace(/ {2,}/g, (run) => '~'.repeat(run.length - 1) + ' ').replace(/-{2,}/g, (run) => run.split('').map((c) => '\\' + c).join(''));
 }
 
 /** 一段开头如果长得像列表、标题、词条，补一个反斜杠（跳过映射记号看内容） */
 export function escapeLineStart(s: string): string {
   // 转义之后 * _ / 已经带反斜杠了，这里只管没转义的：= - + 与「1.」
-  if (/^\s*(=|-|\+|\d+\.)(\s|$)/.test(unmarked(s))) return s.replace(/^((?:\s|\uE000[^\uE001]*\uE001)*)/, '$1\\');
-  return s;
+  if (/^\s*(=+|-|\+|\d+\.)(\s|$)/.test(unmarked(s))) s = s.replace(/^((?:\s|\uE000[^\uE001]*\uE001)*)/, '$1\\');
+  // 段首的空格 Typst 会吃掉，换成 ~
+  return s.replace(/^((?:\uE000[^\uE001]*\uE001)*) /, '$1~');
 }
 
 // ── 行内 ────────────────────────────────────────────────────────

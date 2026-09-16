@@ -324,8 +324,6 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                   <B title="复制（⌘C）" icon={<Copy20Regular />} disabled={none || ed.state.selection.empty} run={clipboard.copy}>复制</B>
                   <B title="格式刷：先选中有格式的字，点它，再选中要刷的字" icon={<PaintBrush20Regular />} on={!!painter} disabled={none} run={() => { if (painter) setPainter(null); else if (ed) { const { from, to } = ed.state.selection; const marks = from === to ? ed.state.storedMarks ?? ed.state.selection.$from.marks() : ed.state.doc.resolve(from + 1).marks(); setPainter([...marks]); } }}>格式刷</B>
                 </Stack>
-              </Group>
-              <Group label="撤销">
                 <Stack>
                   <B title="撤销 (⌘Z)" icon={<ArrowUndo20Regular />} run={() => chain().undo().run()} disabled={none || !ed.can().undo()}>撤销</B>
                   <B title="重做 (⌘⇧Z)" icon={<ArrowRedo20Regular />} run={() => chain().redo().run()} disabled={none || !ed.can().redo()}>重做</B>

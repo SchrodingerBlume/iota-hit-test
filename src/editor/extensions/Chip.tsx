@@ -18,9 +18,10 @@ interface Props {
   wide?: boolean;
   /** 变了就展开（预览里双击过来的请求） */
   openNonce?: number;
+  onSelect?: () => void;
 }
 
-export function InlineChip({ kind, text, title, selected, editable = true, children, autoOpen, onDelete, wide, openNonce }: Props) {
+export function InlineChip({ kind, text, title, selected, editable = true, children, autoOpen, onDelete, wide, openNonce, onSelect }: Props) {
   const [open, setOpen] = useState(!!autoOpen);
   const ref = useRef<HTMLSpanElement>(null);
   useEffect(() => { if (openNonce) setOpen(true); }, [openNonce]);
@@ -41,7 +42,7 @@ export function InlineChip({ kind, text, title, selected, editable = true, child
         className={`chip chip-${kind} ${selected ? 'is-selected' : ''}`}
         title={title}
         contentEditable={false}
-        onMouseDown={(e) => { e.preventDefault(); }}
+        onMouseDown={(e) => { e.preventDefault(); onSelect?.(); }}
         onClick={() => editable && setOpen((o) => !o)}
       >
         {text}

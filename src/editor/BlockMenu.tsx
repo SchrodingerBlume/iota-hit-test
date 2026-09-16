@@ -9,7 +9,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { create } from 'zustand';
 import {
   Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuItemRadio, MenuItemCheckbox, MenuDivider, MenuGroup, MenuGroupHeader,
-  Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions, DialogTrigger, Button, Dropdown, Option, Label,
+  Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions, DialogTrigger, Button, Dropdown, Option, Input, Label,
 } from '@fluentui/react-components';
 import { TextHeader120Regular, TextAlignLeft20Regular, TextParagraph20Regular, TextEditStyle20Regular, Translate20Regular, DocumentPageBreak20Regular, Dismiss20Regular } from '@fluentui/react-icons';
 import { getEditor } from './registry';
@@ -190,8 +190,8 @@ function StyleDialog({ level }: { level: number }) {
   };
   const reset = () => setDraft({});
   const ls = draft.lineSpacing;
-  const lsKey = ls === undefined ? 'auto' : typeof ls === 'number' ? String(ls) : 'exactly';
-  const lsOptions = [['auto', '自动'], ['1', '单倍'], ['1.15', '1.15 倍'], ['1.25', '1.25 倍'], ['1.5', '1.5 倍'], ['2', '两倍'], ['exactly', '固定值…']] as const;
+  const lsOptions = [['auto', '自动'], ['1', '单倍'], ['1.15', '1.15 倍'], ['1.25', '1.25 倍'], ['1.5', '1.5 倍'], ['2', '两倍'], ['multiple', '多倍…'], ['exactly', '固定值…']] as const;
+  const lsKey = ls === undefined ? 'auto' : typeof ls === 'number' ? (lsOptions.some((o) => o[0] === String(ls)) ? String(ls) : 'multiple') : 'exactly';
   const field = (label: string, control: ReactNode, hint?: string) => (
     <div className="style-field">
       <Label className="style-label">{label}</Label>
@@ -236,10 +236,11 @@ function StyleDialog({ level }: { level: number }) {
             ))}
             {field('行距', (
               <span className="style-row">
-                <Dropdown size="small" value={lsOptions.find((o) => o[0] === lsKey)?.[1] ?? '自动'} selectedOptions={[lsKey]} onOptionSelect={(_, d) => { const v = d.optionValue!; set({ lineSpacing: v === 'auto' ? undefined : v === 'exactly' ? { exactly: typeof ls === 'object' && ls ? ls.exactly : 20 } : parseFloat(v) }); }}>
+                <Dropdown size="small" value={lsOptions.find((o) => o[0] === lsKey)?.[1] ?? '自动'} selectedOptions={[lsKey]} onOptionSelect={(_, d) => { const v = d.optionValue!; set({ lineSpacing: v === 'auto' ? undefined : v === 'exactly' ? { exactly: typeof ls === 'object' && ls ? ls.exactly : 20 } : v === 'multiple' ? (typeof ls === 'number' ? ls : 1.3) : parseFloat(v) }); }}>
                   {lsOptions.map(([v, l]) => <Option key={v} value={v} text={l}>{l}</Option>)}
                 </Dropdown>
                 {typeof ls === 'object' && ls && <LengthInput value={ls.exactly} defaultUnit="pt" allowed={ABS_UNITS} allowEmpty={false} onChange={(v) => set({ lineSpacing: { exactly: v ?? 20 } })} width={100} />}
+                {lsKey === 'multiple' && <Input size="small" type="number" step={0.05} min={0.5} max={5} value={String(ls)} onChange={(_, d) => { const n = parseFloat(d.value); if (Number.isFinite(n) && n > 0) set({ lineSpacing: n }); }} contentAfter="倍" style={{ width: 100 }} />}
               </span>
             ))}
             {field('段前 / 段后', (
