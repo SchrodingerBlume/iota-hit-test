@@ -5,6 +5,7 @@ import { startCompiler, requestCompile, exportPdf, useCompileState } from '../co
 import { serializeProject } from '../typst/serialize';
 import { BlockMenu } from '../editor/BlockMenu';
 import { CommentsPane } from './CommentsPane';
+import { Logo } from './Logo';
 import { LinkDialogHost } from './LinkDialog';
 import { useComments } from '../editor/comments';
 import { collectRefTargets } from '../typst/pmToTypst';
@@ -22,7 +23,7 @@ import { Preview } from './Preview';
 import { useTheme } from './theme';
 import { useLayoutPrefs } from './layout';
 import { Ribbon } from './Ribbon';
-import { FluentProvider, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuDivider, Button, Tooltip } from '@fluentui/react-components';
+import { FluentProvider, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuDivider, Button, Tooltip, Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions } from '@fluentui/react-components';
 import { Apps20Regular, DocumentAdd20Regular, Save20Regular, FolderOpen20Regular, DocumentPdf20Regular, Document20Regular, Info20Regular, WeatherSunny20Regular, WeatherMoon20Regular, Navigation20Regular } from '@fluentui/react-icons';
 import { fluentLight, fluentDark } from './fluent';
 import { SlidersHorizontal, BookText, PenLine, Library } from 'lucide-react';
@@ -109,6 +110,7 @@ export function App() {
   }, [section, mode, setMode]);
   const hasDocument = loaded && useStore.getState().projects.some((p) => p.id === doc.id);
   const commentsOpen = useComments((s) => s.open);
+  const [about, setAbout] = useState(false);
 
   useEffect(() => {
     void load();
@@ -219,7 +221,6 @@ export function App() {
         {/* 顶栏并进功能区那一行：左边品牌与「文件」菜单，右边状态、导出、主题 */}
         {(() => { const leading = (
           <span className="rb-leading">
-            <span className="brand" title="iota-hit · 哈尔滨工业大学学位论文在线编辑"><span className="brand-mark" aria-hidden>ι</span><b>iota-hit</b></span>
             <Menu positioning="below-start">
               <MenuTrigger disableButtonEnhancement>
                 <Button appearance="primary" className="rb-file" onMouseDown={(e) => e.preventDefault()}>文件</Button>
@@ -234,8 +235,6 @@ export function App() {
                   <MenuDivider />
                   <MenuItem icon={<DocumentPdf20Regular />} disabled={!hasDocument || compile.status !== 'ready' || !!busy} onClick={() => void onExportPdf()}>导出 PDF</MenuItem>
                   <MenuItem icon={<Document20Regular />} disabled={!hasDocument} onClick={onExportTypst}>导出 Typst 源文件</MenuItem>
-                  <MenuDivider />
-                  <MenuItem icon={<Info20Regular />} onClick={() => alert('iota-hit\n哈尔滨工业大学学位论文编辑器\n\n文档和图片保存在此浏览器中。可通过“文件 → 下载副本”备份。')}>关于</MenuItem>
                 </MenuList>
               </MenuPopover>
             </Menu>
@@ -248,6 +247,17 @@ export function App() {
             <Tooltip content={theme === 'dark' ? '浅色模式' : '深色模式'} relationship="label" positioning="below">
               <Button appearance="subtle" size="small" className="theme-btn" icon={theme === 'dark' ? <WeatherSunny20Regular /> : <WeatherMoon20Regular />} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
             </Tooltip>
+            <Menu positioning="below-end">
+              <MenuTrigger disableButtonEnhancement>
+                <button type="button" className="brand-btn" title="iota-hit · 关于"><Logo size={30} /></button>
+              </MenuTrigger>
+              <MenuPopover>
+                <MenuList>
+                  <MenuItem icon={<Info20Regular />} onClick={() => setAbout(true)}>关于 iota-hit</MenuItem>
+                  <MenuItem onClick={() => window.open('https://github.com/SchrodingerBlume/iota-hit-test', '_blank', 'noopener')}>GitHub</MenuItem>
+                </MenuList>
+              </MenuPopover>
+            </Menu>
           </span>
         ); return view === 'projects' ? <Ribbon minimal leading={leading} trailing={trailing} layout={{ navOpen, setNavOpen, mode, setMode }} /> : <Ribbon leading={leading} trailing={trailing} layout={{ navOpen, setNavOpen, mode, setMode }} />; })()}
         {view === 'projects' ? <ProjectsView /> : (<>
@@ -269,6 +279,19 @@ export function App() {
             {commentsOpen && loaded && <CommentsPane />}
           </section>
           <LinkDialogHost />
+          <Dialog open={about} onOpenChange={(_, d) => setAbout(d.open)}>
+            <DialogSurface className="style-dialog">
+              <DialogBody>
+                <DialogTitle><span className="about-title"><Logo size={40} />iota-hit</span></DialogTitle>
+                <DialogContent>
+                  <p>哈尔滨工业大学学位论文在线编辑器。排版用 iota-hit 模板（hithesis 的 Typst 复刻），Typst 0.15.1 经 typst.ts 编成 wasm 在浏览器里运行。</p>
+                  <p>字体：Noto Serif / Sans CJK SC、FandolKai、TeX Gyre Termes / Heros、DejaVu Sans Mono；也可读本机字体切到 Windows / macOS 档。</p>
+                  <p className="muted">整站静态，没有服务器；工程与图片只存在这台浏览器里，记得定期「文件 → 保存工程」。</p>
+                </DialogContent>
+                <DialogActions><Button appearance="primary" onClick={() => setAbout(false)}>好</Button></DialogActions>
+              </DialogBody>
+            </DialogSurface>
+          </Dialog>
           {mode === 'split' && <div className="splitter" title={`拖动调整比例（${Math.round(ratio * 100)}% : ${Math.round((1 - ratio) * 100)}%）`} onPointerDown={startDrag} />}
           <div className="preview-slot" hidden={mode === 'editor'}><Preview onRefresh={() => setRefresh((n) => n + 1)} refreshDisabled={!hasDocument} /></div>
           <BlockMenu />

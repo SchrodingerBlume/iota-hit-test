@@ -218,10 +218,7 @@ const PREVIEW_PRELUDE = `// 站内预览用：空回车段上各放一个隐形�
   if "preview" in sys.inputs {
     context {
       let h = measure(enter(1)).height
-      // 与 Word 一样，空段的 ¶ 站在首行缩进处
-      let ind = par.first-line-indent
-      let dx = if type(ind) == dictionary { ind.amount } else { ind }
-      for (k, m) in marks.pos().enumerate() { place(dx: dx, dy: k * h, text(fill: rgb(0, 0, 0, 0), m)) }
+      for (k, m) in marks.pos().enumerate() { place(dy: k * h, text(fill: rgb(0, 0, 0, 0), m)) }
     }
   }
   enter(marks.pos().len())
