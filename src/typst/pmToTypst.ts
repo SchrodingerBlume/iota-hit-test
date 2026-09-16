@@ -265,7 +265,7 @@ function serializeList(node: PMNode, marker: '-' | '+', opts: SerializeOptions, 
   return items.map((item) => {
     const parts: string[] = [];
     for (const child of item.content ?? []) {
-      if (child.type === 'paragraph') parts.push(serializeInline(child.content, opts) + paraEnd(opts, child));
+      if (child.type === 'paragraph') parts.push(isEmptyParagraph(child) ? blankItem(opts, child) : serializeInline(child.content, opts) + paraEnd(opts, child));
       else if (child.type === 'bulletList') parts.push('\n' + serializeList(child, '-', opts, depth + 1));
       else if (child.type === 'orderedList') parts.push('\n' + serializeList(child, '+', opts, depth + 1));
       else parts.push(serializeBlock(child, opts, depth + 1));
@@ -417,6 +417,13 @@ function paraEnd(opts: SerializeOptions, n: PMNode): string {
   if (!opts.preview || !opts.map || pos === undefined) return '';
   const end = pos + nodeSize(n) - 1;
   return mark('para', opts.map.key, pos + 1, end, '', n.attrs?.noIndent ? { attr: 'noindent' } : {});
+}
+
+/** 列表里的空项：预览放一个隐形 ¶ 当落点（正式排版就是空项） */
+function blankItem(opts: SerializeOptions, n: PMNode): string {
+  const p = opts.map?.posOf.get(n);
+  if (!opts.preview || !opts.map || p === undefined) return '';
+  return `#blank-item[${mark('text', opts.map.key, p + 1, p + 1, '¶', { attr: n.attrs?.noIndent ? 'blank0' : 'blank', raw: '' })}]`;
 }
 
 /** 一串空回车段：正式排 #enter(n)；预览排 #blanks[¶]…，每个 ¶ 映射到那个空段里面的位置 */

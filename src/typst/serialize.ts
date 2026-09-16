@@ -216,17 +216,20 @@ const indent = (s: string, n: number) => s.split('\n').map((l) => (l ? ' '.repea
 /** 预览用的隐形段落标记：空回车段每段一个 ¶，只在站内预览编译（sys.inputs.preview）时真的排字 */
 const PREVIEW_PRELUDE = `// 站内预览用：空回车段上各放一个隐形的 ¶，预览里点空行才有落点。只在 sys.inputs.preview 下排字，
 // 正式排版（PDF）里这一句退化成 #enter(n)，与模板原样一致
+// 预览里每个空段是一个与 enter(1) 同高的块、¶ 放在块里，跨页时随块折到下一页
 #let blanks(indent: true, ..marks) = {
   if "preview" in sys.inputs {
     context {
       let h = measure(enter(1)).height
       let ind = par.first-line-indent
       let dx = if not indent { 0pt } else if type(ind) == dictionary { ind.amount } else { ind }
-      for (k, m) in marks.pos().enumerate() { place(dx: dx, dy: k * h, text(fill: rgb(0, 0, 0, 0), m)) }
+      for m in marks.pos() { block(height: h, above: 0pt, below: 0pt, place(dx: dx, text(fill: rgb(0, 0, 0, 0), m))) }
     }
+  } else {
+    enter(marks.pos().len())
   }
-  enter(marks.pos().len())
-}`;
+}
+#let blank-item(m) = if "preview" in sys.inputs { text(fill: rgb(0, 0, 0, 0), m) }`;
 
 export function serializeProject(doc: ThesisDoc, { preview = false }: { preview?: boolean } = {}): Project {
   const s = doc.settings;
