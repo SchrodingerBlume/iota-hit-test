@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCompileState } from '../compiler/client';
-import { renderArtifact } from '../compiler/renderer';
+import { renderArtifact, relayoutPages } from '../compiler/renderer';
 import { flipBefore, flipAfter } from './flip';
 import { usePreviewZoom } from './previewZoom';
-import { Eye, ZoomIn, ZoomOut, Maximize2, Loader2 } from 'lucide-react';
+import { Eye, ZoomIn, ZoomOut, Maximize2, Minimize2, Loader2 } from 'lucide-react';
 import { PreviewEditLayer } from './PreviewEditLayer';
 
 const fmtMB = (n: number) => (n / 1024 / 1024).toFixed(1);
@@ -117,9 +117,55 @@ export function Preview() {
     if (!g.raf) g.raf = requestAnimationFrame(applyGestureFrame);
   };
   const zoomTo = (z: number) => zoomBy(Math.min(3, Math.max(0.3, z)) / (gesture.current?.target ?? zoomRef.current));
+  /** 整页：第一行的页高正好放进视口（Word 的「单页」视图） */
+  const fitPage = () => {
+    const sc = scrollRef.current, svg = containerRef.current?.querySelector('svg.typst-doc') as SVGSVGElement | null;
+    if (!sc || !svg) return;
+    const vb = svg.viewBox.baseVal;
+    const first = svg.querySelector('g.typst-page');
+    const pageH = parseFloat(first?.getAttribute('data-page-height') ?? '0') || vb.height;
+    if (!vb.width || !pageH) return;
+    // 100% 时版面宽 = 视口内宽；一页的像素高 = 版面宽 × 页高 / 版面宽（用户单位）
+    const contentW = sc.clientWidth - 36;
+    const z = (sc.clientHeight - 44) / (contentW * pageH / vb.width);
+    zoomTo(z);
+  };
+  const perRow = usePreviewZoom((s) => s.perRow);
+  const setPerRow = usePreviewZoom((s) => s.setPerRow);
   // 功能区「视图」页也要能缩放
-  useEffect(() => { usePreviewZoom.getState().set({ zoomBy, zoomTo }); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  useEffect(() => { usePreviewZoom.getState().set({ zoomBy, zoomTo, fitPage }); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
   useEffect(() => { usePreviewZoom.getState().set({ zoom }); }, [zoom]);
+  // 每行几页变了：只重摆页，字形层重新量一次几何
+  const firstLayout = useRef(true);
+  useEffect(() => {
+    if (firstLayout.current) { firstLayout.current = false; return; }
+    if (containerRef.current) { relayoutPages(containerRef.current, perRow); setRenderTick((t) => t + 1); }
+  }, [perRow]);
+
+  // 触屏：两指捏合缩放（浏览器自己的页面缩放被 touch-action 关掉了）
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const pts = new Map<number, { x: number; y: number }>();
+    let lastD = 0;
+    const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+    const down = (e: PointerEvent) => { if (e.pointerType !== 'touch') return; pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (pts.size === 2) lastD = dist(); };
+    const move = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch' || !pts.has(e.pointerId)) return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size !== 2) return;
+      const d = dist();
+      if (lastD > 0 && d > 0) { const [a, b] = [...pts.values()]; zoomBy(d / lastD, (a.x + b.x) / 2, (a.y + b.y) / 2); }
+      lastD = d;
+    };
+    const up = (e: PointerEvent) => { pts.delete(e.pointerId); lastD = 0; };
+    el.addEventListener('pointerdown', down);
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+    return () => { el.removeEventListener('pointerdown', down); el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 触控板捏合：macOS/Windows 的浏览器把它发成 ctrlKey 的 wheel；Safari 另有 gesture 事件
   useEffect(() => {
@@ -158,7 +204,7 @@ export function Preview() {
     renderArtifact(artifact, containerRef.current, artifactFresh, {
       before: (c) => { const [a, b] = view(); flipBefore(c, a, b); },
       after: (c) => { const [a, b] = view(); flipAfter(c, a, b); },
-    })
+    }, usePreviewZoom.getState().perRow)
       .then((info) => { if (alive) { useCompileState.setState({ renderMs: Math.round(performance.now() - t0) }); setPages(info.length); setRenderError(null); setRenderTick((t) => t + 1); } })
       .catch((e) => { if (alive) setRenderError(String(e?.message ?? e)); });
     return () => { alive = false; };
@@ -181,6 +227,10 @@ export function Preview() {
           <button type="button" className="btn btn-xs" style={{ width: 52, justifyContent: 'center' }} title="回到 100%" onClick={() => zoomTo(1)}>{Math.round(zoom * 100)}%</button>
           <button type="button" className="btn btn-xs btn-icon" title="放大（触控板捏合、⌘/Ctrl + 滚轮也行）" onClick={() => zoomBy(1.1)}><ZoomIn /></button>
           <button type="button" className="btn btn-xs btn-icon" title="适宽" onClick={() => zoomTo(1)}><Maximize2 /></button>
+          <button type="button" className="btn btn-xs btn-icon" title="整页：一页正好放进视口" onClick={fitPage}><Minimize2 /></button>
+        </span>
+        <span className="join" title="每行几页（Word 的「多页」视图）">
+          {([1, 2, 3] as const).map((n) => <button key={n} type="button" className={`btn btn-xs per-row ${perRow === n ? 'on' : ''}`} title={`每行 ${n} 页`} onClick={() => setPerRow(n)}>{n}</button>)}
         </span>
       </div>
       <div className="preview-progress" aria-hidden />

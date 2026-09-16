@@ -17,7 +17,8 @@ import {
   BookmarkAdd20Regular, Spacebar20Regular, DocumentPageBreak20Regular, Omega20Regular, ArrowEnter20Regular, Book20Regular, Link20Regular, Library20Regular, DocumentTableSearch20Regular,
   TextGrammarSettings20Regular, TableStackAbove20Regular, TableStackBelow20Regular, TableDeleteRow20Regular, TableStackLeft20Regular, TableStackRight20Regular, TableDeleteColumn20Regular,
   TableCellsMerge20Regular, TableFreezeRow20Regular, TableDismiss20Regular, PanelLeftContract20Regular, PanelLeftExpand20Regular, PanelLeft20Regular, LayoutColumnTwo20Regular, PanelRight20Regular,
-  ZoomIn20Regular, ZoomOut20Regular, AutoFitWidth20Regular, Settings20Regular, Info20Regular, ChevronUp20Regular, ChevronDown20Regular, ChevronLeft20Regular, ChevronRight20Regular, Dismiss20Regular, Pin20Regular, Grid20Regular, Navigation20Regular, TextParagraph20Regular,
+  ZoomIn20Regular, ZoomOut20Regular, AutoFitWidth20Regular, AutoFitHeight20Regular, Settings20Regular, Info20Regular, ChevronUp20Regular, ChevronDown20Regular, ChevronLeft20Regular, ChevronRight20Regular, Dismiss20Regular, Pin20Regular, Grid20Regular, Navigation20Regular, TextParagraph20Regular,
+  Document20Regular, DocumentMultiple20Regular, Translate20Regular, ImageEdit20Regular, Delete20Regular,
 } from '@fluentui/react-icons';
 import { useStore, type RichKey } from '../model/store';
 import { getEditor, getEditorMeta, onRegistryChange } from '../editor/registry';
@@ -27,10 +28,19 @@ import { usePreviewZoom } from './previewZoom';
 import { B, Sep, useEditorTick, useInsertActions, TableAlignTools, FontSizeTool, refocusPreviewAfter } from '../editor/tools';
 import { searchKey, selectCurrentMatch } from '../editor/extensions/Search';
 import { levelLabels } from '../typst/numbering';
-import { ThesisTab, LayoutTab, PagesTab } from './RibbonSettings';
+import { ThesisTab, LayoutTab, PagesTab, ChoiceMenu } from './RibbonSettings';
+import { useEditorEnv } from '../editor/env';
+import { useOpenRequest } from '../editor/openRequest';
+import { useMedia, SHORT } from './useMedia';
+
+/** 图 / 表的浮动与跨页选项（模板：placement 交给 Typst；跨页走 show figure.where(kind:): set block(breakable:)） */
+const PLACEMENTS = [{ value: 'none', label: '不浮动', hint: '跟着文字排' }, { value: 'auto', label: '自动', hint: '本页顶或底，就近' }, { value: 'top', label: '页顶' }, { value: 'bottom', label: '页底' }];
+const BREAK_IMAGE = [{ value: 'auto', label: 'Auto→不拆', hint: '模板默认，图与题注一整块' }, { value: 'true', label: '允许', hint: '按指南排「续图」' }, { value: 'false', label: '不允许' }];
+const BREAK_TABLE = [{ value: 'auto', label: 'Auto→允许', hint: '模板默认，续页注「续表」' }, { value: 'true', label: '允许' }, { value: 'false', label: '不允许', hint: '整张不拆，放不下就整张挪到下页' }];
 
 type LayoutMode = 'editor' | 'split' | 'preview';
-type TabKey = 'home' | 'insert' | 'thesis' | 'layout' | 'pages' | 'cite' | 'table' | 'view';
+type TabKey = 'home' | 'insert' | 'thesis' | 'layout' | 'pages' | 'cite' | 'table' | 'figure' | 'view';
+const CTX_TABS: TabKey[] = ['table', 'figure'];
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'home', label: '开始' },
   { key: 'insert', label: '插入' },
@@ -39,6 +49,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'pages', label: '页面' },
   { key: 'cite', label: '引用' },
   { key: 'table', label: '表格工具' },
+  { key: 'figure', label: '图片工具' },
   { key: 'view', label: '视图' },
 ];
 /** 外面（视图页的按钮、文件菜单）要切到某一页 */
@@ -80,7 +91,10 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const [editor, setEditor] = useState<Editor | null>(null);
   const [tab, setTab] = useState<TabKey>('home');
   const [autoTable, setAutoTable] = useState(false);
-  const [collapsed, setCollapsed] = useState<boolean>(() => { try { return localStorage.getItem(COLLAPSE_KEY) === '1'; } catch { return false; } });
+  const [userCollapsed, setCollapsed] = useState<boolean>(() => { try { return localStorage.getItem(COLLAPSE_KEY) === '1'; } catch { return false; } });
+  // 矮屏（手机横屏）功能区默认收起，点选项卡临时弹出；宽高够了再照用户的偏好
+  const shortScreen = useMedia(SHORT);
+  const collapsed = userCollapsed || shortScreen;
   /** 收起状态下临时展开 */
   const [peek, setPeek] = useState(false);
   const [pop, setPop] = useState<'table' | 'symbol' | 'symbol2' | null>(null);
@@ -96,11 +110,29 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const ins = useInsertActions(editor);
   const ed = editor && !editor.isDestroyed ? editor : null;
   const inTable = !!ed?.isActive('table');
+  const inFigure = !!ed?.isActive('figure');
+  // 上下文页：光标进表格 / 选中插图时自动切过去，离开时切回（用户自己点过别的页就不再管）
+  const ctx: TabKey | null = inTable ? 'table' : inFigure ? 'figure' : null;
   useEffect(() => {
-    if (inTable && tab !== 'table') { setTab('table'); setAutoTable(true); }
-    else if (!inTable && tab === 'table' && autoTable) { setTab('home'); setAutoTable(false); }
+    if (ctx && tab !== ctx) { setTab(ctx); setAutoTable(true); }
+    else if (!ctx && CTX_TABS.includes(tab) && autoTable) { setTab('home'); setAutoTable(false); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inTable]);
+  }, [ctx]);
+  const env = useEditorEnv();
+  /** 换一张图（图片工具页） */
+  const replaceImage = () => {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/png,image/jpeg,image/svg+xml,image/gif';
+    input.onchange = async () => {
+      const f = input.files?.[0];
+      if (!f || !ed) return;
+      const r = await env.addImage(f);
+      const patch: Record<string, unknown> = { image: r.name };
+      if (r.width && r.height) patch.width = Math.min(14, Math.max(4, Math.round((r.width / 96) * 2.54 * 10) / 10));
+      ed.chain().focus().updateAttributes('figure', patch).run();
+    };
+    input.click();
+  };
   const headings = !!ed?.schema.nodes.heading;
   const blocks = meta?.blocks !== false;
   const none = !ed;
@@ -233,15 +265,15 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
         {leading}
         {!minimal && (
           <TabList selectedValue={bodyVisible ? tab : ''} onTabSelect={(_, d) => onTab(d.value as TabKey)} size="medium" appearance="subtle" className="rb-tablist">
-            {TABS.filter((t) => t.key !== 'table' || inTable).map((t) => (
-              <Tab key={t.key} value={t.key} className={t.key === 'table' ? 'rb-tab-ctx' : ''} onMouseDown={(e) => e.preventDefault()} onDoubleClick={() => toggleCollapsed(!collapsed)}>{t.label}</Tab>
+            {TABS.filter((t) => (t.key !== 'table' || inTable) && (t.key !== 'figure' || inFigure)).map((t) => (
+              <Tab key={t.key} value={t.key} className={CTX_TABS.includes(t.key) ? 'rb-tab-ctx' : ''} onMouseDown={(e) => e.preventDefault()} onDoubleClick={() => toggleCollapsed(!collapsed)}>{t.label}</Tab>
             ))}
           </TabList>
         )}
         <span className="rb-where">{minimal ? '' : where}</span>
         {trailing}
-        {collapsed && peek && <Button size="small" appearance="primary" icon={<Pin20Regular />} className="rb-pin" onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(false)}>固定</Button>}
-        {!minimal && (
+        {collapsed && peek && !shortScreen && <Button size="small" appearance="primary" icon={<Pin20Regular />} className="rb-pin" onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(false)}>固定</Button>}
+        {!minimal && !shortScreen && (
           <Tooltip content={collapsed ? '固定功能区（双击选项卡也行）' : '收起功能区（双击选项卡也行）'} relationship="label" positioning="below">
             <Button appearance="subtle" size="small" icon={collapsed ? <ChevronDown20Regular /> : <ChevronUp20Regular />} className="rb-collapse" onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(!collapsed)} />
           </Tooltip>
@@ -417,8 +449,50 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               <Group label="对齐与尺寸">
                 <span className="rb-keep rb-inline">{inTable && <TableAlignTools editor={ed} />}</span>
               </Group>
+              <Group label="版式">
+                <span className="rb-keep rb-inline">
+                  <Rows>
+                    <Row><ChoiceMenu label="浮动" hint="浮动：表不跟着文字走，Typst 把它放到本页或下页的顶 / 底（figure(placement:)）；浮动的表不跨页" choices={PLACEMENTS} value={(ed.getAttributes('tableFigure').placement as string) || 'none'} onChange={(v) => chain().updateAttributes('tableFigure', { placement: v }).run()} /></Row>
+                    <Row><ChoiceMenu label="跨页" hint="表能不能拆到下一页（指南 2.12：一页放不下才可转页，续页表右上角注「续表」）；模板默认允许" choices={BREAK_TABLE} value={(ed.getAttributes('tableFigure').breakable as string) || 'auto'} disabled={((ed.getAttributes('tableFigure').placement as string) || 'none') !== 'none'} onChange={(v) => chain().updateAttributes('tableFigure', { breakable: v }).run()} /></Row>
+                  </Rows>
+                </span>
+              </Group>
             </>
           )}
+          {tab === 'figure' && ed && inFigure && (() => { const a = ed.getAttributes('figure'); const placement = (a.placement as string) || 'none'; return (
+            <>
+              <Group label="大小">
+                <span className="rb-keep rb-inline">
+                  <label className="tb-field" title="图的宽度（厘米）；版心宽约 14.6 cm">
+                    宽度 <input type="number" min={2} max={16} step={0.5} value={a.width ?? 8} onChange={(e) => chain().updateAttributes('figure', { width: Number(e.target.value) || 8 }).run()} /> cm
+                  </label>
+                  <Stack>
+                    {[6, 10, 14].map((w) => <B key={w} title={`宽 ${w} cm`} on={Number(a.width) === w} run={() => chain().updateAttributes('figure', { width: w }).run()}>{w} cm</B>)}
+                  </Stack>
+                </span>
+              </Group>
+              <Group label="位置">
+                <span className="rb-keep rb-inline">
+                  <Rows>
+                    <Row><ChoiceMenu label="浮动" hint="浮动：图不跟着文字走，Typst 把它放到本页或下页的顶 / 底（figure(placement:)）；浮动的图不跨页" choices={PLACEMENTS} value={placement} onChange={(v) => chain().updateAttributes('figure', { placement: v }).run()} /></Row>
+                    <Row><ChoiceMenu label="跨页" hint="图默认整块不拆（指南 2.13.2）；允许后分图多的图按指南排成「续图」" choices={BREAK_IMAGE} value={(a.breakable as string) || 'auto'} disabled={placement !== 'none'} onChange={(v) => chain().updateAttributes('figure', { breakable: v }).run()} /></Row>
+                  </Rows>
+                </span>
+              </Group>
+              <Group label="题注">
+                <Stack>
+                  <B title="编辑题注" icon={<TextDescription20Regular />} run={() => { const pos = ed.state.selection.from; useOpenRequest.getState().request({ key: activeKey!, pos, attr: 'caption' }); }}>题注</B>
+                  <B title="编辑英文题注" icon={<Translate20Regular />} run={() => { const pos = ed.state.selection.from; useOpenRequest.getState().request({ key: activeKey!, pos, attr: 'captionEn' }); }}>English</B>
+                </Stack>
+              </Group>
+              <Group label="图片">
+                <Stack>
+                  <B title="换一张图" icon={<ImageEdit20Regular />} run={replaceImage}>换图</B>
+                  <B title="删除插图" icon={<Delete20Regular />} run={() => chain().deleteSelection().run()}>删除</B>
+                </Stack>
+              </Group>
+            </>
+          ); })()}
           {tab === 'view' && (
             <>
               <Group label="视图">
@@ -443,7 +517,13 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                   <B title="回到 100%" run={() => zoom.zoomTo(1)}><span style={{ minWidth: 40, display: 'inline-block', textAlign: 'center' }}>{Math.round(zoom.zoom * 100)}%</span></B>
                   <B title="放大" icon={<ZoomIn20Regular />} run={() => zoom.zoomBy(1.1)} />
                   <B title="适宽" icon={<AutoFitWidth20Regular />} run={() => zoom.zoomTo(1)} />
+                  <B title="整页：一页正好放进视口" icon={<AutoFitHeight20Regular />} run={() => zoom.fitPage()} />
                 </span>
+              </Group>
+              <Group label="页面布局">
+                <B title="每行一页" big icon={<Document20Regular />} on={zoom.perRow === 1} run={() => zoom.setPerRow(1)}>单页</B>
+                <B title="每行两页（像翻开的书）" big icon={<DocumentMultiple20Regular />} on={zoom.perRow === 2} run={() => zoom.setPerRow(2)}>双页</B>
+                <B title="每行三页" big icon={<Grid20Regular />} on={zoom.perRow === 3} run={() => zoom.setPerRow(3)}>三页</B>
               </Group>
               <Group label="提示">
                 <span className="rb-hint"><Navigation20Regular />预览里点哪儿光标落哪儿，直接打字；功能区的按钮对预览里的选区同样生效</span>

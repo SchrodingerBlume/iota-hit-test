@@ -20,7 +20,7 @@ import { useTheme } from './theme';
 import { useLayoutPrefs } from './layout';
 import { Ribbon } from './Ribbon';
 import { FluentProvider, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuDivider, Button, Tooltip } from '@fluentui/react-components';
-import { Apps20Regular, DocumentAdd20Regular, Save20Regular, FolderOpen20Regular, DocumentPdf20Regular, Document20Regular, Info20Regular, WeatherSunny20Regular, WeatherMoon20Regular } from '@fluentui/react-icons';
+import { Apps20Regular, DocumentAdd20Regular, Save20Regular, FolderOpen20Regular, DocumentPdf20Regular, Document20Regular, Info20Regular, WeatherSunny20Regular, WeatherMoon20Regular, Navigation20Regular } from '@fluentui/react-icons';
 import { fluentLight, fluentDark } from './fluent';
 import { SlidersHorizontal, BookText, PenLine, Library } from 'lucide-react';
 
@@ -87,7 +87,7 @@ export function App() {
   useAutoCompile(doc, loaded);
   const [busy, setBusy] = useState<string | null>(null);
   const [theme, setTheme] = useTheme();
-  const { navOpen, setNavOpen, mode, setMode, ratio, startDrag, mainRef, gridColumns } = useLayoutPrefs();
+  const { navOpen, setNavOpen, mode, setMode, ratio, startDrag, mainRef, gridColumns, gridRows, compact, stacked } = useLayoutPrefs();
 
   useEffect(() => {
     startCompiler();
@@ -225,8 +225,9 @@ export function App() {
           </span>
         ); return view === 'projects' ? <Ribbon minimal leading={leading} trailing={trailing} layout={{ navOpen, setNavOpen, mode, setMode }} /> : <Ribbon leading={leading} trailing={trailing} layout={{ navOpen, setNavOpen, mode, setMode }} />; })()}
         {view === 'projects' ? <ProjectsView /> : (<>
-        <div className={`main mode-${mode} ${navOpen ? '' : 'nav-closed'}`} ref={mainRef} style={{ gridTemplateColumns: gridColumns }}>
-          <nav className="nav" hidden={!navOpen}>
+        <div className={`main mode-${mode} ${navOpen ? '' : 'nav-closed'} ${compact ? 'is-compact' : ''} ${stacked ? 'is-stacked' : ''}`} ref={mainRef} style={{ gridTemplateColumns: gridColumns, gridTemplateRows: gridRows }}>
+          {compact && navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} />}
+          <nav className={`nav ${compact ? 'is-overlay' : ''}`} hidden={!navOpen} onClick={(e) => { if (compact && (e.target as HTMLElement).closest('button')) setNavOpen(false); }}>
             {['设置', '前置', '主体', '后置'].map((g) => (
               <div key={g}>
                 <h4>{GROUP_ICON[g]}{g}</h4>
@@ -244,6 +245,15 @@ export function App() {
           <div className="preview-slot" hidden={mode === 'editor'}><Preview /></div>
           <BlockMenu />
         </div>
+        {/* 手机：底部一条切换 编辑 / 分栏 / 预览 与目录抽屉，够不着功能区「视图」页时用 */}
+        {compact && (
+          <div className="mobile-bar" role="toolbar">
+            <button type="button" className={navOpen ? 'on' : ''} onClick={() => setNavOpen(!navOpen)} title="目录"><Navigation20Regular />目录</button>
+            <button type="button" className={mode === 'editor' ? 'on' : ''} onClick={() => setMode('editor')}>编辑</button>
+            <button type="button" className={mode === 'split' ? 'on' : ''} onClick={() => setMode('split')}>分栏</button>
+            <button type="button" className={mode === 'preview' ? 'on' : ''} onClick={() => setMode('preview')}>预览</button>
+          </div>
+        )}
         </>)}
       </div>
       </FluentProvider>

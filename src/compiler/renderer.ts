@@ -47,7 +47,7 @@ export interface RenderHooks {
 /** 页与页之间留的空当（SVG 单位 = pt） */
 export const PAGE_GAP = 22;
 
-export async function renderArtifact(artifact: Uint8Array, container: HTMLElement, fresh: boolean, hooks: RenderHooks = {}): Promise<PageInfo[]> {
+export async function renderArtifact(artifact: Uint8Array, container: HTMLElement, fresh: boolean, hooks: RenderHooks = {}, perRow = 1): Promise<PageInfo[]> {
   await initRenderer();
   if (!renderer || !session) throw new Error('renderer not ready');
   const prev = container.querySelector(':scope > svg.typst-doc') as SVGSVGElement | null;
@@ -62,7 +62,7 @@ export async function renderArtifact(artifact: Uint8Array, container: HTMLElemen
   if (prev && !fresh) patchRoot(prev, next);
   else { container.querySelector(':scope > svg.typst-doc')?.remove(); container.appendChild(next); }
   const pages = session.retrievePagesInfo() as PageInfo[];
-  layoutPages(container, pages);
+  layoutPages(container, pages, perRow);
   hooks.after?.(container, pages);
   return pages;
 }
@@ -71,7 +71,12 @@ export async function renderArtifact(artifact: Uint8Array, container: HTMLElemen
  * typst.ts 把所有页画进一张 SVG、一页紧贴一页。这里把每页往下错开一个空当，
  * 底下另一张 SVG 给每页垫一张带阴影的白纸、空当里印页码——看着就是一叠纸，不是一条长卷。
  */
-function layoutPages(container: HTMLElement, pages: PageInfo[]) {
+/** 只重新摆页（每行几页变了），不重画字形 */
+export function relayoutPages(container: HTMLElement, perRow = 1) {
+  layoutPages(container, [], perRow);
+}
+
+function layoutPages(container: HTMLElement, pages: PageInfo[], perRow = 1) {
   const svg = container.querySelector(':scope > svg.typst-doc') as SVGSVGElement | null;
   if (!svg) return;
   const groups = [...svg.querySelectorAll<SVGGElement>(':scope > g.typst-page')];
@@ -83,30 +88,45 @@ function layoutPages(container: HTMLElement, pages: PageInfo[]) {
     container.insertBefore(chrome, svg);
   }
   chrome.replaceChildren();
+  // 每行 perRow 页（Word 的「多页」视图）：一行里按最高的那页定行高
+  const cols = Math.max(1, Math.min(3, perRow));
+  const size = (i: number) => {
+    const g = groups[i];
+    return {
+      w: pages[i]?.width ?? parseFloat(g.getAttribute('data-page-width') ?? '0'),
+      h: pages[i]?.height ?? parseFloat(g.getAttribute('data-page-height') ?? '0'),
+    };
+  };
   let y = 0;
   let width = 0;
-  groups.forEach((g, i) => {
-    const w = pages[i]?.width ?? parseFloat(g.getAttribute('data-page-width') ?? '0');
-    const h = pages[i]?.height ?? parseFloat(g.getAttribute('data-page-height') ?? '0');
-    width = Math.max(width, w);
-    g.setAttribute('transform', `translate(0, ${y})`);
-    const sheet = document.createElementNS(NS, 'rect');
-    sheet.setAttribute('class', 'page-sheet');
-    sheet.setAttribute('x', '0'); sheet.setAttribute('y', String(y));
-    sheet.setAttribute('width', String(w)); sheet.setAttribute('height', String(h));
-    sheet.setAttribute('rx', '1.5');
-    chrome!.appendChild(sheet);
-    if (i < groups.length - 1) {
-      const label = document.createElementNS(NS, 'text');
-      label.setAttribute('class', 'page-label');
-      label.setAttribute('x', String(w - 2));
-      label.setAttribute('y', String(y + h + PAGE_GAP * 0.62));
-      label.setAttribute('text-anchor', 'end');
-      label.textContent = `${i + 1} / ${groups.length}`;
-      chrome!.appendChild(label);
+  for (let r = 0; r * cols < groups.length; r++) {
+    const rowH = Math.max(...Array.from({ length: Math.min(cols, groups.length - r * cols) }, (_, k) => size(r * cols + k).h));
+    let x = 0;
+    for (let c = 0; c < cols && r * cols + c < groups.length; c++) {
+      const i = r * cols + c;
+      const g = groups[i];
+      const { w, h } = size(i);
+      g.setAttribute('transform', `translate(${x}, ${y})`);
+      const sheet = document.createElementNS(NS, 'rect');
+      sheet.setAttribute('class', 'page-sheet');
+      sheet.setAttribute('x', String(x)); sheet.setAttribute('y', String(y));
+      sheet.setAttribute('width', String(w)); sheet.setAttribute('height', String(h));
+      sheet.setAttribute('rx', '1.5');
+      chrome!.appendChild(sheet);
+      if (i < groups.length - 1 || cols > 1) {
+        const label = document.createElementNS(NS, 'text');
+        label.setAttribute('class', 'page-label');
+        label.setAttribute('x', String(x + w - 2));
+        label.setAttribute('y', String(y + rowH + PAGE_GAP * 0.62));
+        label.setAttribute('text-anchor', 'end');
+        label.textContent = `${i + 1} / ${groups.length}`;
+        chrome!.appendChild(label);
+      }
+      x += w + PAGE_GAP;
+      width = Math.max(width, x - PAGE_GAP);
     }
-    y += h + PAGE_GAP;
-  });
+    y += rowH + PAGE_GAP;
+  }
   const height = Math.max(0, y - PAGE_GAP);
   for (const el of [svg, chrome]) {
     el.setAttribute('viewBox', `0 0 ${width} ${height}`);

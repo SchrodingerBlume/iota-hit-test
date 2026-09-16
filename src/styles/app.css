@@ -110,7 +110,11 @@ code { font-family: var(--mono); font-size: 0.92em; }
 @keyframes tick { 0% { transform: scale(0.6); opacity: 0; } 60% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); } }
 
 /* ── 布局 ─────────────────────────────────────────── */
-.app { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+.app { display: grid; grid-template-rows: auto 1fr; grid-template-columns: minmax(0, 1fr); height: 100%; height: 100dvh; }
+/* 网格的孩子默认 min-width: auto，功能区那一行的固有宽度会把整页撑得比视口宽（手机上尤其）；一律不许撑 */
+.app > * { min-width: 0; }
+.main { min-width: 0; }
+.ribbon { min-width: 0; max-width: 100%; }
 .topbar { display: flex; align-items: center; gap: 6px; padding: 0 12px 0 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .brand { display: flex; align-items: center; gap: 10px; margin-right: 8px; }
 .brand-mark { position: relative; width: 28px; height: 28px; border-radius: var(--r-m); background: var(--hit); color: #fff; display: grid; place-items: center; font-family: "Times New Roman", serif; font-style: italic; font-size: 19px; line-height: 1; box-shadow: inset 0 -2px 0 rgba(0,0,0,0.18); }
@@ -150,7 +154,9 @@ code { font-family: var(--mono); font-size: 0.92em; }
 .pane-title { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
 .pane-title svg { width: 14px; height: 14px; color: var(--accent); }
 .pane-bar .spacer { flex: 1; }
-.preview-scroll { overflow: auto; padding: 18px; }
+.preview-scroll { overflow: auto; padding: 18px; touch-action: pan-x pan-y; overscroll-behavior: contain; }
+.pane-bar .per-row { min-width: 24px; justify-content: center; }
+.pane-bar .per-row.on { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
 .preview-canvas { margin: 0 auto; }
 .preview-stage { position: relative; margin: 0 auto; }
 /* 捏合进行中：版面只是 transform 缩放，字形层不重绘；关掉一切过渡免得叠加抖动 */
@@ -466,9 +472,29 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
 
-@media (max-width: 1100px) {
-  .main { grid-template-columns: 170px 1fr; grid-template-rows: 1fr 45%; }
-  .preview { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line); }
+/* ── 窄屏（手机、竖着的平板）：单栏 / 上下叠，左栏是抽屉，底部一条模式切换；横屏仍左右分 ── */
+.mobile-bar { display: none; position: fixed; left: 50%; bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 50; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-pill); box-shadow: var(--shadow-2); padding: 4px; gap: 2px; }
+.mobile-bar button { border: 0; background: none; padding: 7px 12px; border-radius: var(--r-pill); font-size: 13px; color: var(--ink-2); display: inline-flex; align-items: center; gap: 4px; }
+.mobile-bar button svg { width: 16px; height: 16px; }
+.mobile-bar button.on { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+.nav-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.28); z-index: 59; animation: fade var(--fast) var(--ease) both; }
+@media (max-width: 900px) {
+  .mobile-bar { display: flex; }
+  .main.is-compact .nav.is-overlay { position: fixed; left: 0; top: 0; bottom: 0; width: min(78vw, 280px); z-index: 60; box-shadow: var(--shadow-2); border-right: 1px solid var(--line); animation: rise var(--fast) var(--ease) both; }
+  .main.is-stacked .splitter { cursor: row-resize; }
+  .main.is-stacked .splitter::after { top: 1px; left: 50%; width: 36px; height: 4px; transform: translateX(-50%); }
+  .main.is-stacked .preview { border-left: 0; border-top: 1px solid var(--line); }
+  .main.is-compact .preview { border-left: 0; }
+  .work { padding: 12px 12px 72px; }
+  .preview-scroll { padding: 8px; padding-bottom: 72px; }
+  .rb-leading .rb-proj, .rb-trailing .status, .rb-where, .pane-bar .muted { display: none; }
+  .brand b, .pane-title, .mobile-bar button, .rb-tablist [role=tab] { white-space: nowrap; }
+  .brand { margin-right: 2px; }
+  .rb-tabs { padding-left: 6px; padding-right: 6px; overflow-x: auto; scrollbar-width: none; }
+  .style-field { grid-template-columns: 1fr; }
+}
+@media (max-height: 520px) {
+  .work { padding-top: 8px; }
 }
 
 /* ── 项目管理 ────────────────────────────────────── */

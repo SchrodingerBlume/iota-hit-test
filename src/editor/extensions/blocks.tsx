@@ -92,7 +92,8 @@ export const Figure = Node.create({
   draggable: true,
   selectable: true,
   addAttributes() {
-    return { image: attr('image', ''), width: attr('width', 8), caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null) };
+    // placement：浮动（none / auto / top / bottom，Typst 的 figure(placement:)）；breakable：跨页三态（auto 按模板：图不拆、表可拆）
+    return { image: attr('image', ''), width: attr('width', 8), caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null), placement: attr('placement', 'none'), breakable: attr('breakable', 'auto') };
   },
   parseHTML() { return [{ tag: 'div[data-node="figure"]' }]; },
   renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { 'data-node': 'figure' })]; },
@@ -127,7 +128,7 @@ export const TableFigure = Node.create({
   defining: true,
   draggable: false,
   addAttributes() {
-    return { caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null) };
+    return { caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null), placement: attr('placement', 'none'), breakable: attr('breakable', 'auto') };
   },
   parseHTML() { return [{ tag: 'div[data-node="tableFigure"]' }]; },
   renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { 'data-node': 'tableFigure' }), 0]; },

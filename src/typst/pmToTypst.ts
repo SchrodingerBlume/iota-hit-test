@@ -299,13 +299,13 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
       if (!img) return '';
       const width = Number(n.attrs?.width) || 8;
       const label = labelOf(n.attrs, 'fig');
-      return tag(opts, n, 'node', `#figure(\n  image(${JSON.stringify(`${opts.imageDir ?? 'images'}/${img}`)}, width: ${width}cm),\n  caption: [${caption(n, opts)}],\n)`) + (label ? ` <${label}>` : '');
+      return floatWrap(n, 'image', tag(opts, n, 'node', `#figure(\n  image(${JSON.stringify(`${opts.imageDir ?? 'images'}/${img}`)}, width: ${width}cm),\n  caption: [${caption(n, opts)}],${placementArg(n)}\n)`) + (label ? ` <${label}>` : ''));
     }
     case 'tableFigure': {
       const table = (n.content ?? []).find((c) => c.type === 'table');
       if (!table) return '';
       const label = labelOf(n.attrs, 'tab');
-      return tag(opts, n, 'node', `#figure(\n  caption: [${caption(n, opts)}],\n  ${serializeTable(table, opts)},\n)`) + (label ? ` <${label}>` : '');
+      return floatWrap(n, 'table', tag(opts, n, 'node', `#figure(\n  caption: [${caption(n, opts)}],${placementArg(n)}\n  ${serializeTable(table, opts)},\n)`) + (label ? ` <${label}>` : ''));
     }
     case 'equation': {
       const src = String(n.attrs?.src ?? '').trim();
@@ -347,6 +347,19 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
     default:
       return n.content ? serializeBlocks(n.content, opts, depth) : '';
   }
+}
+
+/** 图 / 表的浮动：Typst 的 figure(placement: auto / top / bottom)，模板原样放行（浮动块不拆页） */
+const placementOf = (n: PMNode): string | null => { const p = String(n.attrs?.placement ?? ''); return ['auto', 'top', 'bottom'].includes(p) ? p : null; };
+const placementArg = (n: PMNode): string => { const p = placementOf(n); return p ? `\n  placement: ${p},` : ''; };
+/**
+ * 跨页：模板的口子是 show figure.where(kind: …): set block(breakable:)（图默认不拆、表默认可拆；
+ * 图拆了按指南排「续图」），单张要改就在局部套一层。浮动的没有跨页可言，不发
+ */
+function floatWrap(n: PMNode, kind: 'image' | 'table', body: string): string {
+  const br = String(n.attrs?.breakable ?? 'auto');
+  if ((br !== 'true' && br !== 'false') || placementOf(n)) return body;
+  return `#[\n#show figure.where(kind: ${kind}): set block(breakable: ${br})\n${body}\n]`;
 }
 
 export interface DenoteRow { symbol: string; mode: 'typst' | 'latex'; meaning: string }
