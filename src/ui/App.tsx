@@ -55,12 +55,15 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number) {
   const sent = useRef(new Map<string, number>());
   const lastProject = useRef<string | null>(null);
   const lastRefresh = useRef(refresh);
+  // 换断行引擎 / 网格这类全篇生效的设置，增量编译会留下旧版面的碎片，整个重来
+  const engineKey = [doc.settings.linebreaker, doc.settings.wordCompat, doc.settings.charGrid, doc.settings.charPitch, doc.settings.wordKern, doc.settings.wordRightIndent].join('|');
+  const lastEngine = useRef(engineKey);
   const restoring = useFontState((s) => s.restoring);
   useEffect(() => {
     if (!loaded || status !== 'ready') return;
     if (restoring && doc.settings.fontset !== 'webapp') return;
     let cancelled = false;
-    const force = refresh !== lastRefresh.current;
+    const force = refresh !== lastRefresh.current || engineKey !== lastEngine.current;
     const t = window.setTimeout(async () => {
       const project = serializeProject(doc, { preview: true });
       // 换了项目：图片名字空间变了，worker 里映射的旧图全撤掉，重新发
@@ -85,6 +88,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number) {
       sent.current = nextSent;
       lastProject.current = doc.id;
       lastRefresh.current = refresh;
+      lastEngine.current = engineKey;
       requestCompile({ force, main: project.main, files: project.files, images, removeImages, segments: project.segments, version: docVersion() });
     }, force ? 0 : 130);
     return () => { cancelled = true; window.clearTimeout(t); };

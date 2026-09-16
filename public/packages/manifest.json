@@ -1,14 +1,14 @@
 {
   "iotaHit": "0.1.0",
-  "iotaHitCommit": "96eb7af",
+  "iotaHitCommit": "ccef12b",
   "packages": [
     {
       "namespace": "local",
       "name": "iota-hit",
       "version": "0.1.0",
       "file": "local-iota-hit-0.1.0.tar.gz",
-      "size": 664078,
-      "sha": "79a095c82e9a"
+      "size": 665272,
+      "sha": "b8d7b9dbf276"
     },
     {
       "namespace": "local",

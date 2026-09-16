@@ -152,10 +152,10 @@ export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {
       case 'text': {
         const raw = n.text ?? '';
         let escaped = escapeText(raw);
-        // 模板在引用 / 公式两侧发弱间距（tracking.typ 的 h(weak: true)），紧挨着的一个空格会被它吞掉；
-        // 写成 #" " 就是普通的字符空格，宽度与可断行都不变
-        if (INLINE_ATOM.has(nodes[i - 1]?.type ?? '') && /^ (?! )/.test(escaped)) escaped = '#" "' + escaped.slice(1);
-        if (INLINE_ATOM.has(nodes[i + 1]?.type ?? '') && /(?<! ) $/.test(escaped)) escaped = escaped.slice(0, -1) + '#" "';
+        // 引用 / 公式旁边照 Typst 的写法带一个语法空格（@fig 所示 里那个，模板的弱间距会吃掉它），
+        // 用户敲的空格从第二个算起，逐个写成 ~ 保留下来
+        if (INLINE_ATOM.has(nodes[i - 1]?.type ?? '')) { const n = /^ */.exec(raw)![0].length; if (n) escaped = ' ' + '~'.repeat(n) + escaped.replace(/^~* /, ''); }
+        if (INLINE_ATOM.has(nodes[i + 1]?.type ?? '')) { const n = / *$/.exec(raw)![0].length; if (n) escaped = escaped.replace(/~* $/, '') + '~'.repeat(n) + ' '; }
         const pos = opts.map?.posOf.get(n);
         const isCode = n.marks?.some((m) => m.type === 'code');
         if (pos !== undefined && opts.map) {

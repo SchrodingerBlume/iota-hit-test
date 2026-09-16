@@ -1,4 +1,4 @@
-# typst-with-msword-linebreaks 292d9988100968ff7233574fd15c5b0e340b3066 合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1 之上（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
+# typst-with-msword-linebreaks cb38ad7071f08f20a5692681c2cf0c3546f047fa 合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1 之上（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
 diff --git a/crates/typst-layout/src/inline/line.rs b/crates/typst-layout/src/inline/line.rs
 index 3d7f3a2..e2c672a 100644
 --- a/crates/typst-layout/src/inline/line.rs
@@ -150,10 +150,10 @@ index 259be81..50f7397 100644
          cjk_latin_spacing: shared.get(TextElem::cjk_latin_spacing).is_auto(),
 diff --git a/crates/typst-layout/src/inline/msword.rs b/crates/typst-layout/src/inline/msword.rs
 new file mode 100644
-index 0000000..f38529d
+index 0000000..eab75df
 --- /dev/null
 +++ b/crates/typst-layout/src/inline/msword.rs
-@@ -0,0 +1,1271 @@
+@@ -0,0 +1,1411 @@
 +//! Line breaking that emulates Microsoft Word.
 +//!
 +//! Word fills a paragraph greedily, one line at a time: it puts as many
@@ -290,6 +290,9 @@ index 0000000..f38529d
 +    paired: bool,
 +    /// The full natural width, for a paired mark that ends a line.
 +    full: Abs,
++    /// For a Latin run: the shaped width of its trailing ASCII closing
++    /// punctuation (`.`, `,`, `)`, `%`...), which may hang into the margin.
++    tail_hang: Abs,
 +}
 +
 +/// Paragraph-level parameters.
@@ -390,7 +393,7 @@ index 0000000..f38529d
 +    if std::env::var_os("MSWORD_DEBUG").is_some() {
 +        for (k, t) in toks.iter().enumerate() {
 +            eprintln!(
-+                "tok {} {:?} {:?} nw={:.3} gap={:.3} spot={} paired={} w={:.3}",
++                "tok {} {:?} {:?} nw={:.3} gap={:.3} spot={} paired={} w={:.3} hang={:.3} range={:?}",
 +                k,
 +                t.kind,
 +                t.c,
@@ -398,7 +401,9 @@ index 0000000..f38529d
 +                t.gap.to_pt(),
 +                t.spot,
 +                t.paired,
-+                t.w.to_pt()
++                t.w.to_pt(),
++                t.tail_hang.to_pt(),
++                t.range
 +            );
 +        }
 +    }
@@ -443,16 +448,51 @@ index 0000000..f38529d
 +    // and later do. No version breaks a dash away from a following digit
 +    // (`13—93`).
 +    let text = p.text;
++    // Word 2013+ also breaks after a hyphen between digits (`117-121`),
++    // which UAX #14 does not; and every version breaks before a slash that
++    // follows a digit (`201910/24`).
++    for (i, c) in text.char_indices() {
++        if i == 0 {
++            continue;
++        }
++        let before = text[..i].chars().next_back();
++        if c == '-' && params.compat == 15 {
++            let next = text[i + 1..].chars().next();
++            if before.is_some_and(|b| b.is_ascii_digit())
++                && next.is_some_and(|n| n.is_ascii_digit())
++            {
++                breaks.push(i + 1);
++            }
++        }
++        if c == '/' && before.is_some_and(|b| b.is_ascii_digit()) {
++            breaks.push(i);
++        }
++        // Word breaks between two em dashes (`——`), UAX #14 does not.
++        if c == '—' && before == Some('—') {
++            breaks.push(i);
++        }
++        // Word breaks after any space, also before `/`, `]`, `)`... which
++        // UAX #14 keeps glued to the text before the space.
++        if before == Some(' ') && c != ' ' {
++            breaks.push(i);
++        }
++    }
 +    breaks.retain(|&offset| {
 +        let before = text[..offset].chars().next_back();
 +        let after = text[offset..].chars().next();
 +        let hyphen_break =
 +            before == Some('-') && after.is_some_and(|c| c.is_alphanumeric());
++        // Word does not break after a slash inside a word (`GB/T`, URLs),
++        // nor before one that follows a letter, nor after a period followed
++        // by a letter (`www.example`).
++        let slash = (before == Some('/') && after.is_some_and(|c| c.is_alphanumeric()))
++            || (after == Some('/') && before.is_some_and(|c| c.is_alphabetic()))
++            || (before == Some('.') && after.is_some_and(|c| c.is_alphanumeric()));
 +        let dash_digit = (matches!(before, Some('—' | '–'))
 +            && after.is_some_and(|c| c.is_ascii_digit()))
 +            || (matches!(after, Some('—' | '–'))
 +                && before.is_some_and(|c| c.is_ascii_digit()));
-+        !((params.compat != 15 && hyphen_break) || dash_digit)
++        !((params.compat != 15 && hyphen_break) || dash_digit || slash)
 +    });
 +
 +    breaks.sort_unstable();
@@ -530,6 +570,7 @@ index 0000000..f38529d
 +                            frame: false,
 +                            paired: false,
 +                            full: Abs::zero(),
++                            tail_hang: Abs::zero(),
 +                        });
 +                    } else if let Some(kind) = cjk_kind {
 +                        toks.push(Tok {
@@ -551,6 +592,7 @@ index 0000000..f38529d
 +                            frame: false,
 +                            paired: false,
 +                            full: Abs::zero(),
++                            tail_hang: Abs::zero(),
 +                        });
 +                    } else {
 +                        // Latin: extend the current run unless a break
@@ -569,6 +611,11 @@ index 0000000..f38529d
 +                            last.w += shaped_w;
 +                            last.tail = Some(c);
 +                            last.glyph_count += cluster.len();
++                            last.tail_hang = if ASCII_CLOSE.contains(&c) {
++                                last.tail_hang + shaped_w
++                            } else {
++                                Abs::zero()
++                            };
 +                        } else {
 +                            toks.push(Tok {
 +                                kind: Kind::Latin,
@@ -589,6 +636,7 @@ index 0000000..f38529d
 +                                frame: false,
 +                                paired: false,
 +                                full: Abs::zero(),
++                                tail_hang: if ASCII_CLOSE.contains(&c) { shaped_w } else { Abs::zero() },
 +                            });
 +                        }
 +                    }
@@ -615,6 +663,7 @@ index 0000000..f38529d
 +                    frame: false,
 +                    paired: false,
 +                    full: Abs::zero(),
++                    tail_hang: Abs::zero(),
 +                });
 +            }
 +            Item::Frame(frame) => {
@@ -637,11 +686,14 @@ index 0000000..f38529d
 +                    frame: true,
 +                    paired: false,
 +                    full: Abs::zero(),
++                    tail_hang: Abs::zero(),
 +                });
 +            }
 +            Item::Fractional(..) => {
++                // Fractional spacing takes what is left after the line is
++                // fixed; for breaking it is zero-width explicit spacing.
 +                toks.push(Tok {
-+                    kind: Kind::Latin,
++                    kind: Kind::Space,
 +                    range: range.clone(),
 +                    c: ' ',
 +                    head: None,
@@ -649,7 +701,7 @@ index 0000000..f38529d
 +                    size: params.cell,
 +                    w: Abs::zero(),
 +                    rigid: true,
-+                    user: false,
++                    user: true,
 +                    weak: false,
 +                    nw: Abs::zero(),
 +                    gap: Abs::zero(),
@@ -659,6 +711,7 @@ index 0000000..f38529d
 +                    frame: false,
 +                    paired: false,
 +                    full: Abs::zero(),
++                    tail_hang: Abs::zero(),
 +                });
 +            }
 +            Item::Tag(_) | Item::Skip(_) => {}
@@ -728,6 +781,10 @@ index 0000000..f38529d
 +            Kind::Latin => {
 +                it.nw = if it.rigid {
 +                    it.w
++                } else if LATINISH.contains(&it.c) && it.w >= it.size * 0.9 {
++                    // A full-width dash or tilde drawn by the CJK font
++                    // occupies a whole cell (measured: `——` at 12.4 each).
++                    it.w + params.excess
 +                } else {
 +                    it.w + params.latin_add() * it.glyph_count as f64
 +                };
@@ -821,10 +878,22 @@ index 0000000..f38529d
 +    let compat = params.compat;
 +    let half = p / 2.0;
 +
-+    // The compression spots among the tokens `first..last` (exclusive).
++    // The first token of a line that is not spacing (an indent is a space
++    // token).
++    let text_start = |first: usize| -> usize {
++        let mut k = first;
++        while k + 1 < n && toks[k].kind == Kind::Space {
++            k += 1;
++        }
++        k
++    };
++
++    // The compression spots among the tokens `first..last` (exclusive). An
++    // opener at the start of the line has no blank to give up.
 +    let spots = |first: usize, last: usize| -> usize {
++        let start = text_start(first);
 +        (first..last)
-+            .filter(|&k| toks[k].spot && !(toks[k].kind == Kind::Open && k == first))
++            .filter(|&k| toks[k].spot && !(toks[k].kind == Kind::Open && k == start))
 +            .count()
 +    };
 +
@@ -914,10 +983,27 @@ index 0000000..f38529d
 +    // last closer may hang a whole cell, and the automatic spacings shrink a
 +    // little. Measured with indent sweeps; see the probe README.
 +    let budget15 = |first: usize, j: usize, core: usize, m: usize| -> Abs {
-+        let openers = if toks[j].kind == Kind::Open && j > first { core - j } else { 0 };
-+        let closers = m - core;
-+        let k = spots(first, j) + openers;
++        let openers = if toks[j].kind == Kind::Open && j > text_start(first) {
++            core - j
++        } else {
++            0
++        };
 +        let latin = toks[core].kind == Kind::Latin;
++        // A trailing Latin run of ASCII closers (or the ASCII closers ending
++        // the core run) hangs by its width; full-width closers before it
++        // are then ordinary spots.
++        let ascii_tail = if m > core && toks[m].kind == Kind::Latin {
++            toks[m].tail_hang
++        } else if m == core && latin {
++            toks[core].tail_hang
++        } else {
++            Abs::zero()
++        };
++        let closers = if m > core && toks[m].kind == Kind::Latin { 0 } else { m - core };
++        // Closers inside the chain that were not halved (font kerning off)
++        // are ordinary spots; only the last one hangs.
++        let mut k = spots(first, j) + openers;
++        k += (core + 1..m).filter(|&i| toks[i].spot).count();
 +        let adjacent = !latin && toks[core].gap > Abs::zero() && core == j;
 +        let n_all = autos_in(first, core);
 +        let mut gaps = n_all as f64;
@@ -938,7 +1024,13 @@ index 0000000..f38529d
 +        if closers > 0 {
 +            pen *= 2.0;
 +        }
-+        let hang = if closers > 0 { toks[m].full } else { Abs::zero() };
++        let hang = if closers > 0 {
++            toks[m].full
++        } else if ascii_tail > Abs::zero() {
++            ascii_tail + if params.grid { params.excess / 2.0 } else { Abs::zero() }
++        } else {
++            Abs::zero()
++        };
 +        let cap = half * k as f64 + hang + auto_cap(n_all - (adjacent as usize), adjacent);
 +        if k == 0 {
 +            return cap - pen;
@@ -951,7 +1043,8 @@ index 0000000..f38529d
 +        };
 +        // k * (u - over) + hang + forgiven >= over
 +        let t_f = (u * k as f64 + hang + forgiven) / (k as f64 + 1.0);
-+        // A single trailing closer: measured a little below the rule.
++        // A single trailing closer: measured a little below the rule; a
++        // longer chain exact with two spots and a little below with more.
 +        let deficit = if closers == 1 {
 +            Abs::pt(match k {
 +                0 | 1 => 0.0,
@@ -959,10 +1052,12 @@ index 0000000..f38529d
 +                3 => 0.75,
 +                _ => 0.8,
 +            })
++        } else if closers >= 2 {
++            Abs::pt(0.25) * k.saturating_sub(2) as f64
 +        } else {
 +            Abs::zero()
 +        };
-+        t_f.min(cap) - pen - deficit
++        (t_f - deficit).min(cap) - pen
 +    };
 +
 +    // Word 2003-2010: half a cell per spot (at most two around an opener),
@@ -1012,6 +1107,23 @@ index 0000000..f38529d
 +        }
 +        let lo = toks[k].range.end;
 +        let hi = toks[m].range.end.max(lo);
++        // Word breaks after full-width closing punctuation and before
++        // full-width opening punctuation like between CJK characters, also
++        // for quotes, which UAX #14 glues to their neighbours.
++        if m + 1 >= n {
++            return Some(text_len);
++        }
++        let next = &toks[m + 1];
++        let cjk_edge = (toks[k].kind == Kind::Close && next.kind != Kind::Close)
++            || (next.kind == Kind::Open
++                && matches!(toks[k].kind, Kind::Cjk | Kind::Close | Kind::Latin))
++            // ...and after ASCII closing punctuation before a CJK character.
++            || (toks[k].kind == Kind::Latin
++                && toks[k].tail_hang > Abs::zero()
++                && next.kind == Kind::Cjk);
++        if cjk_edge && m == k {
++            return Some(lo);
++        }
 +        // The largest break offset in `lo..=hi`.
 +        let idx = breaks.partition_point(|&b| b <= hi);
 +        if idx == 0 {
@@ -1028,30 +1140,42 @@ index 0000000..f38529d
 +        mandatory.iter().copied().find(|&m| m >= lo && m <= hi)
 +    };
 +
-+    // Word 2013 shrinks the spaces of a justified line by up to a quarter.
++    // Word 2013 shrinks the spaces of a justified line by up to a quarter,
++    // but a single space inside a Latin run bounded by CJK text gives
++    // nothing (measured: `ab cd`, `MS Word`, `GB/T 15835`).
 +    let space_shrink = |first: usize, last: usize| -> Abs {
 +        if compat != 15 || !params.justify {
 +            return Abs::zero();
 +        }
-+        (first + 1..last)
++        let spaces: Vec<usize> = (first + 1..last)
 +            .filter(|&k| toks[k].kind == Kind::Space && !toks[k].rigid && !toks[k].user)
-+            .map(|k| toks[k].nw * 0.25)
-+            .sum()
++            .collect();
++        if spaces.len() < 2 {
++            return Abs::zero();
++        }
++        spaces.iter().map(|&k| toks[k].nw * 0.25).sum()
 +    };
 +
 +    let mut lines = Vec::new();
 +    let mut i = 0;
 +    while i < n {
-+        let mut capacity = measure;
 +        let cellcap = if params.grid {
 +            let cells = ((measure + EPS) / p).floor();
 +            p * cells
 +        } else {
 +            measure
 +        };
-+        if params.grid && compat != 15 && params.adjust_right_indent {
-+            capacity = cellcap;
-+        }
++        // Word 2003-2010 with `adjustRightInd` fill a line with a whole
++        // number of cells, but only CJK text snaps: a line ending in Latin
++        // text, a frame or spacing may use the full measure.
++        let snaps = params.grid && compat != 15 && params.adjust_right_indent;
++        let cap_for = |k: usize| -> Abs {
++            if snaps && matches!(toks[k].kind, Kind::Cjk | Kind::Close | Kind::Open) {
++                cellcap
++            } else {
++                measure
++            }
++        };
 +
 +        let first = i;
 +        let mut last = i;
@@ -1059,6 +1183,10 @@ index 0000000..f38529d
 +        let mut deep = false;
 +        let mut forced_end: Option<usize> = None;
 +        let mut have = false;
++        // The end of the first unit that is not spacing: Word never breaks a
++        // line right after a leading indent or tab, so that unit stays on
++        // the line even if it overflows.
++        let mut first_unit: Option<usize> = None;
 +
 +        while j < n {
 +            let it = &toks[j];
@@ -1077,10 +1205,25 @@ index 0000000..f38529d
 +            while m + 1 < n && toks[m + 1].kind == Kind::Close {
 +                m += 1;
 +            }
++            // ASCII closing punctuation right after the unit (`［R］.`,
++            // `(x)`) may not start a line either: it hangs with the unit.
++            if m + 1 < n
++                && toks[m + 1].kind == Kind::Latin
++                && toks[m + 1].glyphs
++                && toks[m + 1].tail_hang == toks[m + 1].w
++                && toks[m + 1].range.start == toks[m].range.end
++            {
++                m += 1;
++            }
 +            let w = width_of(toks, first, m);
++            let capacity = cap_for(m);
++            let spacing = it.kind == Kind::Space;
++            if !spacing && first_unit.is_none() {
++                first_unit = Some(m);
++            }
 +            if w <= capacity + EPS {
 +                last = m;
-+                have = true;
++                have = have || !spacing;
 +                if let Some(mm) = mandatory_after(m) {
 +                    forced_end = Some(mm);
 +                    break;
@@ -1131,7 +1274,7 @@ index 0000000..f38529d
 +            }
 +        }
 +        if !have {
-+            last = first;
++            last = first_unit.unwrap_or(first);
 +        }
 +
 +        // A line may not end with a space, an opener or Latin opening
@@ -1176,11 +1319,8 @@ index 0000000..f38529d
 +        };
 +        let ragged = breakpoint == Breakpoint::Mandatory;
 +        let w = width_of(toks, first, last);
-+        let target = if params.grid && compat != 15 && params.adjust_right_indent {
-+            cellcap
-+        } else {
-+            measure
-+        };
++        let capacity = cap_for(last);
++        let target = capacity;
 +        lines.push(Decided {
 +            first,
 +            last,
