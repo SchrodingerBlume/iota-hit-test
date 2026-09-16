@@ -19,7 +19,7 @@ import {
   TableCellsMerge20Regular, TableFreezeRow20Regular, TableDismiss20Regular, PanelLeftContract20Regular, PanelLeftExpand20Regular, PanelLeft20Regular, LayoutColumnTwo20Regular, PanelRight20Regular,
   ChevronUp20Regular, ChevronDown20Regular, ChevronLeft20Regular, ChevronRight20Regular, Dismiss20Regular, Pin20Regular, Grid20Regular, TextParagraph20Regular,
   Translate20Regular, ImageEdit20Regular, Delete20Regular, TableSimple20Regular, ClipboardTextLtr20Regular,
-  CommentAdd20Regular, CommentDismiss20Regular, Comment20Regular, TextBulletListSquare20Regular,
+  CommentAdd20Regular, CommentDismiss20Regular, Comment20Regular, TextBulletListSquare20Regular, TextEditStyle20Regular,
 } from '@fluentui/react-icons';
 import { useStore } from '../model/store';
 import { getEditor, getEditorMeta, onRegistryChange } from '../editor/registry';
@@ -39,6 +39,7 @@ import { useComments, newCommentId } from '../editor/comments';
 import { commentRange } from './CommentsPane';
 import { wordAt } from '../editor/wordAt';
 import { SymbolPicker, SymbolPanel } from './SymbolPicker';
+import { useOutline } from './OutlinePane';
 const FITS = [{ value: 'content', label: '根据内容', hint: '列宽按内容定' }, { value: 'window', label: '根据窗口', hint: '撑满版心，各列均分' }, { value: 'fixed', label: '固定列宽', hint: '每列同宽（厘米在插入表格对话框里定）' }];
 
 /** 图 / 表的浮动与跨页选项（模板：placement 交给 Typst；跨页走 show figure.where(kind:): set block(breakable:)） */
@@ -148,6 +149,16 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
     const r = commentRange(next.key, next.id);
     if (r && ed) { ed.chain().focus().setTextSelection(r).run(); useComments.getState().setActive(next.id); }
   };
+  const stepNode = (type: string, dir: 1 | -1) => {
+    if (!ed || !activeKey) return;
+    const list: number[] = [];
+    ed.state.doc.descendants((n, pos) => { if (n.type.name === type) list.push(pos); });
+    if (!list.length) return;
+    const cur = ed.state.selection.from;
+    const next = dir > 0 ? list.find((p) => p > cur) ?? list[0] : [...list].reverse().find((p) => p < cur) ?? list[list.length - 1];
+    ed.chain().focus().setNodeSelection(next).scrollIntoView().run();
+    useOpenRequest.getState().request({ key: activeKey, pos: next });
+  };
   /** 更改图片（图片工具页） */
   const replaceImage = () => {
     const input = document.createElement('input');
@@ -166,6 +177,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const blocks = meta?.blocks !== false;
   const none = !ed;
   const marksOn = usePreviewMarks((s) => s.on);
+  const outlineOn = useOutline((s) => s.on);
   const toggleMarks = usePreviewMarks((s) => s.toggle);
   const chain = () => ed!.chain().focus();
   const findOpen = useFindBar((s) => s.open);
@@ -291,13 +303,13 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
             ))}
           </TabList>
         )}
-        {trailing}
         {collapsed && peek && !shortScreen && <Button size="small" appearance="primary" icon={<Pin20Regular />} className="rb-pin" onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(false)}>固定</Button>}
         {!minimal && !shortScreen && (
           <Tooltip content={collapsed ? '固定功能区（双击选项卡也行）' : '收起功能区（双击选项卡也行）'} relationship="label" positioning="below">
             <Button appearance="subtle" size="small" icon={collapsed ? <ChevronDown20Regular /> : <ChevronUp20Regular />} className="rb-collapse" onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(!collapsed)} />
           </Tooltip>
         )}
+        {trailing}
       </div>
       {!minimal && (
         <div ref={drawerRef} className={`rb-drawer ${bodyVisible ? '' : 'is-closed'}`} aria-hidden={!bodyVisible}>
@@ -424,6 +436,9 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
             <>
               <Group label="目录">
                 <B title="目录设置" big icon={<DocumentTableSearch20Regular />} run={() => useStore.getState().setSection('pages')}>目录</B>
+                <Stack>
+                  <B title="目录条目的行距、字体、字号（模板的 toc-1～toc-4）" icon={<TextEditStyle20Regular />} run={() => useBlockMenu.getState().openStyle(-1)}>目录样式…</B>
+                </Stack>
               </Group>
               <Group label="引文与书目">
                 <B title="引用参考文献" big icon={<Book20Regular />} disabled={none} run={() => ins.insertInline('cite')}>插入引文</B>
@@ -435,11 +450,17 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               <Group label="题注">
                 <B title="交叉引用图 / 表 / 式 / 节" big icon={<Link20Regular />} disabled={none} run={() => ins.insertInline('ref')}>交叉引用</B>
               </Group>
-              <Group label="缩略语与符号">
+              <Group label="脚注">
+                <B title="插入脚注" big icon={<TextFootnote20Regular />} disabled={none} run={() => ins.insertInline('footnote')}>插入脚注</B>
+                <Stack>
+                  <B title="上一条脚注" icon={<ChevronUp20Regular />} disabled={none} run={() => stepNode('footnote', -1)}>上一条</B>
+                  <B title="下一条脚注" icon={<ChevronDown20Regular />} disabled={none} run={() => stepNode('footnote', 1)}>下一条</B>
+                </Stack>
+              </Group>
+              <Group label="缩略语">
                 <B title="缩略语（首次出现自动展开）" big icon={<span className="rb-glyph">Ab</span>} disabled={none} run={() => ins.insertInline('abbr')}>缩略语</B>
                 <Stack>
                   <B title="到「符号与缩略语」页登记" icon={<MathSymbols20Regular />} run={() => useStore.getState().setSection('nomenclature')}>管理缩略语</B>
-                  <B title="脚注" icon={<TextFootnote20Regular />} disabled={none} run={() => ins.insertInline('footnote')}>脚注</B>
                 </Stack>
               </Group>
               <Group label="索引">
@@ -559,6 +580,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               <Group label="显示">
                 <Stack>
                   <B title={layout.navOpen ? '收起左栏' : '展开左栏'} icon={layout.navOpen ? <PanelLeftContract20Regular /> : <PanelLeftExpand20Regular />} on={layout.navOpen} run={() => layout.setNavOpen(!layout.navOpen)}>导航窗格</B>
+                  <B title="大纲：左栏里列出本节的标题，点一下跳过去" icon={<TextBulletListSquare20Regular />} on={outlineOn} run={() => { useOutline.getState().toggle(); if (!layout.navOpen) layout.setNavOpen(true); }}>大纲</B>
                 </Stack>
                 <B title="显示或隐藏段落标记" big icon={<TextParagraph20Regular />} on={marksOn} run={toggleMarks}>显示/隐藏 ¶</B>
               </Group>

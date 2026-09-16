@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ThesisDoc, Settings, Info, RichDoc, Pages, Abbreviation, SymbolEntry, Defense, ImageAsset, NomenclatureOptions, Comment } from './types';
+import type { ThesisDoc, Settings, Info, RichDoc, Pages, Abbreviation, SymbolEntry, Defense, ImageAsset, NomenclatureOptions, Comment, OpenrightKey, TriBool } from './types';
 import { emptyDoc } from './types';
 import { defaultSettings } from './options';
 import { defaultInfo } from './info';
@@ -81,6 +81,7 @@ export function normalizeDoc(raw: Partial<ThesisDoc>): ThesisDoc {
   if (doc.achievements?.trim()) { doc.achievementEntries = [...doc.achievementEntries, ...parseBibtex(doc.achievements)]; doc.achievements = ''; }
   doc.abbreviations ??= [];
   if (!Array.isArray(doc.comments)) doc.comments = [];
+  doc.openright ??= {};
   doc.symbols ??= [];
   doc.images ??= [];
   return doc;
@@ -109,6 +110,7 @@ interface State {
   setView: (v: 'projects' | 'editor') => void;
   setSettings: (patch: Partial<Settings>) => void;
   setComments: (comments: Comment[]) => void;
+  setOpenright: (patch: Partial<Record<OpenrightKey, TriBool>>) => void;
   setInfo: (patch: Partial<Info>) => void;
   setSourceDraft: (key: string, source: string | undefined) => void;
   setRich: (key: RichKey, value: RichDoc) => void;
@@ -178,6 +180,7 @@ export const useStore = create<State>((set, get) => {
     setView: (view) => set({ view }),
     setSettings: (patch) => update((d) => ({ ...d, settings: { ...d.settings, ...patch } })),
     setComments: (comments) => update((d) => ({ ...d, comments })),
+    setOpenright: (patch) => update((d) => ({ ...d, openright: { ...d.openright, ...patch } })),
     setInfo: (patch) => update((d) => ({ ...d, info: { ...d.info, ...patch } })),
     setSourceDraft: (key, source) => update((d) => { const sourceDrafts = { ...d.sourceDrafts }; if (source === undefined) delete sourceDrafts[key]; else sourceDrafts[key] = source; return { ...d, sourceDrafts }; }),
     setRich: (key, value) => update((d) => { const sourceDrafts = { ...d.sourceDrafts }; delete sourceDrafts[key]; return { ...d, [key]: value, sourceDrafts }; }),

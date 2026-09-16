@@ -20,8 +20,8 @@ export function Logo({ size = 28, title = 'iota-hit' }: { size?: number; title?:
     <svg className="logo" width={size} height={size} viewBox="0 0 100 100" role="img" aria-label={title}>
       <path d={GEAR} fill="var(--hit)" />
       <circle cx="50" cy="50" r="33" fill="var(--panel)" />
-      <text x="50" y="59" textAnchor="middle" fontFamily='"Times New Roman", "Noto Serif CJK SC", serif' fontSize="30" fontWeight="700" letterSpacing="-1">
-        <tspan fill="var(--hit)">H</tspan><tspan fill="var(--hit-orange)" fontStyle="italic">ι</tspan><tspan fill="var(--hit-orange)" fontSize="16" fontWeight="400" fontStyle="italic">ota</tspan><tspan fill="var(--hit)">T</tspan>
+      <text x="50" y="62" textAnchor="middle" fontFamily='"Times New Roman", "Noto Serif CJK SC", serif' fontSize="36" fontWeight="700">
+        <tspan fill="var(--hit)">H</tspan><tspan fill="var(--hit-orange)" fontStyle="italic">ι</tspan><tspan fill="var(--hit)">T</tspan>
       </text>
     </svg>
   );

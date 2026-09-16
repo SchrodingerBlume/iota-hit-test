@@ -425,6 +425,10 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
       if (inBlock) target = head + dir * n;
     }
     const nb = dir > 0 ? $h.nodeAfter : $h.nodeBefore;
+    if (nb && !nb.isText && nb.isInline && unit === 'char') {
+      ed.view.dispatch(ed.state.tr.delete(dir > 0 ? head : head - nb.nodeSize, dir > 0 ? head + nb.nodeSize : head).scrollIntoView());
+      return;
+    }
     if (target === null || (nb && !nb.isText && nb.isInline)) {
       // 段首、段尾、贴着公式引用这类原子节点：并段 / 删节点交给键位表
       dispatchKey(ed, { key: dir < 0 ? 'Backspace' : 'Delete', code: dir < 0 ? 'Backspace' : 'Delete' });
@@ -472,6 +476,11 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     }
     if (k === 'Enter' || k === 'Tab') {
       e.preventDefault();
+      if (k === 'Enter' && ed.state.selection instanceof NodeSelection) {
+        const sel = ed.state.selection;
+        if (sel.node.isBlock) { const tr = ed.state.tr.insert(sel.to, ed.state.schema.nodes.paragraph.create()); ed.view.dispatch(tr.setSelection(TextSelection.create(tr.doc, sel.to + 1)).scrollIntoView()); return; }
+        ed.commands.setTextSelection(sel.to);
+      }
       dispatchKey(ed, { key: k, code: k, shiftKey: e.shiftKey, altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey });
       if (k === 'Enter') setPending(null);
       return;
@@ -542,7 +551,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
       {rects.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <div key={i} className="pv-sel" style={{ left: p.left, top: p.top, width: r.w * p.scale, height: r.h * p.scale }} /> : null; })}
       {gone.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <div key={`g${i}`} className="pv-gone" style={{ left: p.left, top: p.top, width: r.w * p.scale + 0.5, height: r.h * p.scale }} /> : null; })}
       {commentRects.map((c) => c.rects.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <div key={`c${c.id}${i}`} className={`pv-comment ${activeComment === c.id ? 'is-active' : ''}`} style={{ left: p.left, top: p.top, width: r.w * p.scale, height: r.h * p.scale }} /> : null; }))}
-      {marks.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <span key={`m${i}`} className={`pv-mark ${r.blank ? 'is-blank' : ''}`} style={{ left: p.left, top: p.top, height: r.h * p.scale, fontSize: r.h * p.scale * 0.8, lineHeight: `${r.h * p.scale}px` }}>¶</span> : null; })}
+      {marks.map((r, i) => { const p = pageTo(r.page, r.x, r.y); if (!p) return null; const gutter = r.noIndent && !r.blank; return <span key={`m${i}`} className={`pv-mark ${r.blank ? 'is-blank' : ''} ${gutter || (r.noIndent && r.blank) ? 'is-gutter' : ''}`} style={{ left: p.left - (r.noIndent ? r.h * p.scale * 1.2 : 0), top: p.top, height: r.h * p.scale, fontSize: r.h * p.scale * 0.8, lineHeight: `${r.h * p.scale}px` }}>{r.noIndent && !r.blank ? '⇤' : r.blank && r.noIndent ? '⇤¶' : '¶'}</span>; })}
       {caretPx && overlayText && (
         <span className={`pv-overlay ${composing !== null ? 'is-composing' : ''} ${composing === null && pending?.fading ? 'is-fading' : ''}`} style={{ left: caretPx.left, top: caretPx.top, height: caretH, fontSize: caretH * 0.92, lineHeight: `${caretH}px` }}>{overlayText}</span>
       )}

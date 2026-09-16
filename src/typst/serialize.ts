@@ -1,6 +1,6 @@
 // 整份工程 → main.typ（以及要一起交给编译器的旁文件）。
 // 结构照 iota-hit/template/example.typ：前置 → 主体 → 附录 → 后置。
-import type { ThesisDoc, Settings, Info, StyleEntry } from '../model/types';
+import type { ThesisDoc, Settings, Info, StyleEntry, OpenrightKey } from '../model/types';
 import { INFO_FIELDS } from '../model/info';
 import { serializeDoc, escapeText, collectImages, collectRefTargets, indexPositions } from './pmToTypst';
 import { generateBibtex } from '../bib/bibtex';
@@ -111,7 +111,7 @@ export function styleEntryArgs(e: StyleEntry): string[] {
   return out;
 }
 function stylesArg(styles: Settings['styles']): string {
-  const entries = Object.entries(styles).map(([k, e]) => [k, styleEntryArgs(e ?? {})] as const).filter(([, a]) => a.length);
+  const entries = Object.entries(styles).flatMap(([k, e]) => { const a = styleEntryArgs(e ?? {}); if (!a.length) return []; return k === 'toc' ? ['toc-1', 'toc-2', 'toc-3', 'toc-4'].map((t) => [t, a] as const) : [[k, a] as const]; });
   if (!entries.length) return '';
   return `styles: (\n    ${entries.map(([k, a]) => `${k}: (${a.join(', ')})`).join(',\n    ')},\n  )`;
 }
@@ -139,7 +139,7 @@ function infoArgs(info: Info, s: Settings): string[] {
   return args;
 }
 
-function nomenclature(doc: ThesisDoc): string {
+function nomenclature(doc: ThesisDoc, openright = ''): string {
   const abbrs = doc.abbreviations.filter((a) => a.key.trim());
   const symbols = doc.symbols.filter((s) => s.symbol.trim());
   const o = doc.nomenclatureOptions ?? { sort: 'auto', usedOnly: 'auto', header: 'auto', hangingIndent: '', form: 'auto' };
@@ -179,16 +179,17 @@ function nomenclature(doc: ThesisDoc): string {
     // 合并页：一页两段。与两张单页互斥，模板两个都写会报错
     const opts = [...abbrOpts];
     if (o.form !== 'auto') opts.push(`form: ${JSON.stringify(o.form)}`);
+    if (openright) opts.push(openright);
     return `#nomenclature(\n  abbreviations: ${abbrDict}${withOpts(opts)},\n)[\n${symbolLines}\n]`;
   }
-  if (wantSymbols) parts.push(`#list-of-symbols(${shared.join(', ')})[\n${symbolLines}\n]`);
-  if (wantAbbrs) parts.push(`#list-of-abbreviations(${abbrDict}${withOpts(abbrOpts)})`);
+  if (wantSymbols) parts.push(`#list-of-symbols(${[...shared, ...(openright ? [openright] : [])].join(', ')})[\n${symbolLines}\n]`);
+  if (wantAbbrs) parts.push(`#list-of-abbreviations(${abbrDict}${withOpts([...abbrOpts, ...(openright ? [openright] : [])])})`);
   // 不印缩略语表（关了、或报告档里模板本来就跳过）：只声明条目，正文里的缩写照常首次展开
   else if (abbrs.length) parts.push(`#list-of-abbreviations(${abbrDict}, form: none, shown: true)`);
   return parts.join('\n\n');
 }
 
-function defense(doc: ThesisDoc, knownLabels: Set<string>): string {
+function defense(doc: ThesisDoc, knownLabels: Set<string>, openright = ''): string {
   if (!resolvePage(doc, 'defense').value) return '';
   const d = doc.defense;
   const person = (p: { name: string; title: string; affiliation: string; discipline: string }) =>
@@ -199,7 +200,7 @@ function defense(doc: ThesisDoc, knownLabels: Set<string>): string {
   };
   const resolution = serializeDoc(d.resolution, { headings: false, knownLabels });
   return `#defense(
-  reviewers: ${list(d.reviewers)},
+${openright ? `  ${openright},\n` : ''}  reviewers: ${list(d.reviewers)},
   chair: ${person(d.chair)},
   members: ${list(d.members)},
   secretary: ${person(d.secretary)},
@@ -214,11 +215,13 @@ const indent = (s: string, n: number) => s.split('\n').map((l) => (l ? ' '.repea
 /** 预览用的隐形段落标记：空回车段每段一个 ¶，只在站内预览编译（sys.inputs.preview）时真的排字 */
 const PREVIEW_PRELUDE = `// 站内预览用：空回车段上各放一个隐形的 ¶，预览里点空行才有落点。只在 sys.inputs.preview 下排字，
 // 正式排版（PDF）里这一句退化成 #enter(n)，与模板原样一致
-#let blanks(..marks) = {
+#let blanks(indent: true, ..marks) = {
   if "preview" in sys.inputs {
     context {
       let h = measure(enter(1)).height
-      for (k, m) in marks.pos().enumerate() { place(dy: k * h, text(fill: rgb(0, 0, 0, 0), m)) }
+      let ind = par.first-line-indent
+      let dx = if not indent { 0pt } else if type(ind) == dictionary { ind.amount } else { ind }
+      for (k, m) in marks.pos().enumerate() { place(dx: dx, dy: k * h, text(fill: rgb(0, 0, 0, 0), m)) }
     }
   }
   enter(marks.pos().len())
@@ -239,7 +242,10 @@ export function serializeProject(doc: ThesisDoc, { preview = false }: { preview?
   else if (s.hyphenate === false) parts.push('#set text(hyphenate: false)');
 
   // ── 前置 ──
-  parts.push('#show: frontmatter');
+  const or = (k: OpenrightKey): string => { const v = doc.openright?.[k]; return v === true || v === false ? `openright: ${v}` : ''; };
+  const orArgs = (k: OpenrightKey): string => (or(k) ? `(${or(k)})` : '()');
+  const orLead = (k: OpenrightKey): string => (or(k) ? `${or(k)}, ` : '');
+  parts.push(or('frontmatter') ? `#show: frontmatter.with(${or('frontmatter')})` : '#show: frontmatter');
   const coverArgs = s.titleEnXiaoer !== 'auto' ? `title-en-xiaoer: ${tri(s.titleEnXiaoer)}` : '';
   if (resolvePage(doc, 'cover').value) parts.push(`#cover(${coverArgs})`);
   if (resolvePage(doc, 'titlepage').value) parts.push(`#titlepage(${coverArgs})`);
@@ -250,24 +256,24 @@ export function serializeProject(doc: ThesisDoc, { preview = false }: { preview?
   if (resolvePage(doc, 'abstract').value && (abstractZh.trim() || abstractEn.trim())) {
     // 关键词上方：模板 keywords-above——none 不空、v(1fr) 挤到页底、auto 空一行（默认，不写）
     const ka = s.abstractKeywordsAbove === 'none' ? ', keywords-above: none' : s.abstractKeywordsAbove === 'bottom' ? ', keywords-above: v(1fr)' : '';
-    parts.push(`#abstract(en: [\n${indent(abstractEn, 2)}\n]${ka})[\n${indent(abstractZh, 2)}\n]`);
+    parts.push(`#abstract(en: [\n${indent(abstractEn, 2)}\n]${ka}${or('abstract') ? `, ${or('abstract')}` : ''})[\n${indent(abstractZh, 2)}\n]`);
   }
 
-  const nomen = nomenclature(doc);
+  const nomen = nomenclature(doc, or('nomenclature'));
   if (nomen) parts.push(nomen);
 
-  if (resolvePage(doc, 'tableOfContents').value) parts.push('#table-of-contents()');
-  if (resolvePage(doc, 'listOfFigures').value) parts.push('#list-of-figures()');
-  if (resolvePage(doc, 'listOfTables').value) parts.push('#list-of-tables()');
-  if (resolvePage(doc, 'listOfEquations').value) parts.push('#list-of-equations()');
+  if (resolvePage(doc, 'tableOfContents').value) parts.push(`#table-of-contents${orArgs('tableOfContents')}`);
+  if (resolvePage(doc, 'listOfFigures').value) parts.push(`#list-of-figures${orArgs('listOfFigures')}`);
+  if (resolvePage(doc, 'listOfTables').value) parts.push(`#list-of-tables${orArgs('listOfTables')}`);
+  if (resolvePage(doc, 'listOfEquations').value) parts.push(`#list-of-equations${orArgs('listOfEquations')}`);
 
   // ── 主体 ──
-  parts.push('#show: mainmatter');
+  parts.push(or('mainmatter') ? `#show: mainmatter.with(${or('mainmatter')})` : '#show: mainmatter');
   const body = rich('body', { headings: true, headingBase: 1 });
   parts.push(body || '= 绪论');
 
   const conclusion = rich('conclusion', { headings: false });
-  if (conclusion.trim()) parts.push(`#conclusion[\n${indent(conclusion, 2)}\n]`);
+  if (conclusion.trim()) parts.push(`#conclusion${or('conclusion') ? `(${or('conclusion')})` : ''}[\n${indent(conclusion, 2)}\n]`);
 
   // ── 后置 ──
   const refs = generateBibtex(doc.references ?? []);
@@ -284,20 +290,20 @@ export function serializeProject(doc: ThesisDoc, { preview = false }: { preview?
   const ach = generateBibtex(doc.achievementEntries ?? []);
   if (resolvePage(doc, 'achievements').value && ach.trim()) {
     files['achievements.bib'] = ach;
-    parts.push('#achievements(read("achievements.bib"))');
+    parts.push(`#achievements(${orLead('achievements')}read("achievements.bib"))`);
   }
 
-  const def = defense(doc, knownLabels);
+  const def = defense(doc, knownLabels, or('defense'));
   if (def) parts.push(def);
 
-  if (resolvePage(doc, 'declarations').value) parts.push('#declarations()');
-  if (resolvePage(doc, 'index').value) parts.push('#index()');
+  if (resolvePage(doc, 'declarations').value) parts.push(`#declarations${orArgs('declarations')}`);
+  if (resolvePage(doc, 'index').value) parts.push(`#index${orArgs('index')}`);
 
   const ack = rich('acknowledgement', { headings: false });
-  if (ack.trim()) parts.push(`#acknowledgement[\n${indent(ack, 2)}\n]`);
+  if (ack.trim()) parts.push(`#acknowledgement${or('acknowledgement') ? `(${or('acknowledgement')})` : ''}[\n${indent(ack, 2)}\n]`);
 
   const resume = rich('resume', { headings: false });
-  if (resolvePage(doc, 'resume').value && resume.trim()) parts.push(`#resume[\n${indent(resume, 2)}\n]`);
+  if (resolvePage(doc, 'resume').value && resume.trim()) parts.push(`#resume${or('resume') ? `(${or('resume')})` : ''}[\n${indent(resume, 2)}\n]`);
 
   const images = new Set<string>();
   for (const d of [doc.body, doc.appendix, doc.conclusion, doc.abstractZh, doc.abstractEn, doc.acknowledgement, doc.resume]) {

@@ -39,7 +39,7 @@ export interface StyleEntry {
   /** 字符间距：磅数或带单位的绝对长度 */
   tracking?: number | string;
 }
-export type StyleKey = 'body' | 'chapter' | 'section' | 'subsection' | 'subsubsection';
+export type StyleKey = 'body' | 'chapter' | 'section' | 'subsection' | 'subsubsection' | 'toc';
 
 export interface Settings {
   /** 样式表的局部覆盖，键与模板 styles: 同名；空 = 全按模板 */
@@ -234,6 +234,9 @@ export interface ThesisDoc {
   pages: Pages;
   images: ImageAsset[];
   comments?: Comment[];
+  /** 各部件从右手页起：auto 跟随所在部分（模板按学位定） */
+  openright?: Partial<Record<OpenrightKey, TriBool>>;
 }
+export type OpenrightKey = 'frontmatter' | 'mainmatter' | 'abstract' | 'nomenclature' | 'tableOfContents' | 'listOfFigures' | 'listOfTables' | 'listOfEquations' | 'conclusion' | 'achievements' | 'defense' | 'declarations' | 'index' | 'acknowledgement' | 'resume';
 
 export const emptyDoc = (): RichDoc => ({ type: 'doc', content: [{ type: 'paragraph' }] });

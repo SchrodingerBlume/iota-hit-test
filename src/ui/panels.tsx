@@ -3,7 +3,8 @@ import { useMemo } from 'react';
 import { useStore, type RichKey } from '../model/store';
 import { PAGE_DEFS, resolvePage } from '../model/pages';
 import { TriSeg, ON_OFF } from './TriSwitch';
-import type { Abbreviation, SymbolEntry, DefensePerson, Pages } from '../model/types';
+import type { Abbreviation, SymbolEntry, DefensePerson, Pages, OpenrightKey } from '../model/types';
+import { SWITCHES, resolveSwitch } from '../model/options';
 import { RichEditor } from '../editor/RichEditor';
 import { BibEditor } from './BibEditor';
 import { MathPreview } from '../editor/math/MathPreview';
@@ -282,14 +283,36 @@ export function DefensePanel() {
   );
 }
 
+const OPENRIGHT_OF: Partial<Record<keyof Pages, OpenrightKey>> = { abstract: 'abstract', symbolsPage: 'nomenclature', tableOfContents: 'tableOfContents', listOfFigures: 'listOfFigures', listOfTables: 'listOfTables', listOfEquations: 'listOfEquations', achievements: 'achievements', defense: 'defense', declarations: 'declarations', index: 'index', resume: 'resume' };
+
+function OpenrightSwitch({ orKey, label }: { orKey: OpenrightKey; label: string }) {
+  const doc = useStore((s) => s.doc);
+  const setOpenright = useStore((s) => s.setOpenright);
+  const g = resolveSwitch<boolean>(SWITCHES.find((d) => d.key === 'openright')!, doc.settings);
+  const v = doc.openright?.[orKey] ?? 'auto';
+  return <TriSeg label={label} hint="从右手页（奇数页）起，前面不够就补一张空白页；Auto 跟随所在部分（模板按学位定）" choices={ON_OFF} value={v} auto={{ value: g.effective, reason: '跟随所在部分' }} onChange={(x) => setOpenright({ [orKey]: x })} />;
+}
+
 export function PagesPanel() {
   return (
     <>
       <h2>页面设置</h2>
+      <div className="card">
+        <h3>右手页起</h3>
+        <OpenrightSwitch orKey="frontmatter" label="前置部分" />
+        <OpenrightSwitch orKey="mainmatter" label="正文（各章）" />
+        <OpenrightSwitch orKey="conclusion" label="结论" />
+        <OpenrightSwitch orKey="acknowledgement" label="致谢" />
+      </div>
       {(['前置', '后置'] as const).map((g) => (
         <div className="card" key={g}>
           <h3>{g}</h3>
-          {PAGE_DEFS.filter((d) => d.group === g).map((d) => <PageSwitch key={d.key} pageKey={d.key} />)}
+          {PAGE_DEFS.filter((d) => d.group === g).map((d) => (
+            <div key={d.key} className="page-row">
+              <PageSwitch pageKey={d.key} />
+              {OPENRIGHT_OF[d.key] && <OpenrightSwitch orKey={OPENRIGHT_OF[d.key]!} label="右手页起" />}
+            </div>
+          ))}
         </div>
       ))}
     </>

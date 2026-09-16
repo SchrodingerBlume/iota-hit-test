@@ -6,6 +6,7 @@ import { serializeProject } from '../typst/serialize';
 import { BlockMenu } from '../editor/BlockMenu';
 import { CommentsPane } from './CommentsPane';
 import { Logo } from './Logo';
+import { OutlinePane, useOutline } from './OutlinePane';
 import { LinkDialogHost } from './LinkDialog';
 import { useComments } from '../editor/comments';
 import { collectRefTargets } from '../typst/pmToTypst';
@@ -16,6 +17,7 @@ import { EditorEnvContext, type EditorEnv } from '../editor/env';
 import { imageBytes, putImage, safeImageName, imageDimensions } from '../editor/imageCache';
 import { ProjectsView } from './ProjectsView';
 import { FontRecovery } from './FontRecovery';
+import { useFontState } from '../fonts/userFonts';
 import { SettingsPanel } from './SettingsPanel';
 import { InfoPanel } from './InfoPanel';
 import { AbstractPanel, NomenclaturePanel, RichSection, BibPanel, DefensePanel, PagesPanel, IndexPanel } from './panels';
@@ -52,8 +54,10 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number) {
   const sent = useRef(new Map<string, number>());
   const lastProject = useRef<string | null>(null);
   const lastRefresh = useRef(refresh);
+  const restoring = useFontState((s) => s.restoring);
   useEffect(() => {
     if (!loaded || status !== 'ready') return;
+    if (restoring && doc.settings.fontset !== 'webapp') return;
     let cancelled = false;
     const force = refresh !== lastRefresh.current;
     const t = window.setTimeout(async () => {
@@ -83,7 +87,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number) {
       requestCompile({ force, main: project.main, files: project.files, images, removeImages, segments: project.segments, version: docVersion() });
     }, force ? 0 : 130);
     return () => { cancelled = true; window.clearTimeout(t); };
-  }, [doc, loaded, status, fontsVersion, refresh]);
+  }, [doc, loaded, status, fontsVersion, refresh, restoring]);
   return sent;
 }
 
@@ -111,6 +115,7 @@ export function App() {
   const hasDocument = loaded && useStore.getState().projects.some((p) => p.id === doc.id);
   const commentsOpen = useComments((s) => s.open);
   const [about, setAbout] = useState(false);
+  const outlineOn = useOutline((s) => s.on);
 
   useEffect(() => {
     void load();
@@ -263,7 +268,8 @@ export function App() {
         {view === 'projects' ? <ProjectsView /> : (<>
         <div className={`main mode-${mode} ${navOpen ? '' : 'nav-closed'} ${compact ? 'is-compact' : ''} ${stacked ? 'is-stacked' : ''}`} ref={mainRef} style={{ gridTemplateColumns: gridColumns, gridTemplateRows: gridRows }}>
           {compact && navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} />}
-          <nav className={`nav ${compact ? 'is-overlay' : ''}`} hidden={!navOpen} onClick={(e) => { if (compact && (e.target as HTMLElement).closest('button')) setNavOpen(false); }}>
+          <nav className={`nav ${compact ? 'is-overlay' : ''}`} hidden={!navOpen} onClick={(e) => { if (compact && (e.target as HTMLElement).closest('button:not(.outline-item)')) setNavOpen(false); }}>
+            {outlineOn && <div className="nav-outline"><h4>大纲</h4><OutlinePane /></div>}
             {['设置', '前置', '主体', '后置'].map((g) => (
               <div key={g}>
                 <h4>{GROUP_ICON[g]}{g}</h4>

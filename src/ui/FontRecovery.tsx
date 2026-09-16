@@ -21,9 +21,12 @@ export function FontRecovery() {
     if (!editing || status !== 'ready') return;
     let alive = true;
     void (async () => {
-      stored.current ??= useFontState.getState().loadStored();
-      await stored.current;
-      if (preset !== 'webapp') await useFontState.getState().autoReadLocal();
+      useFontState.setState({ restoring: true });
+      try {
+        stored.current ??= useFontState.getState().loadStored();
+        await stored.current;
+        if (preset !== 'webapp') await useFontState.getState().autoReadLocal();
+      } finally { useFontState.setState({ restoring: false }); }
       if (alive) setRestored(key);
     })();
     return () => { alive = false; };

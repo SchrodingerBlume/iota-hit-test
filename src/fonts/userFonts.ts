@@ -54,6 +54,7 @@ export interface UserFont {
 
 interface FontState {
   fonts: UserFont[];
+  restoring: boolean;
   busy: string | null;
   error: string | null;
   /** Local Font Access API 可不可用 */
@@ -80,6 +81,7 @@ interface FontData { family: string; fullName: string; postscriptName: string; s
 
 export const useFontState = create<FontState>((set, get) => ({
   fonts: [],
+  restoring: false,
   busy: null,
   error: null,
   canQuery: typeof window !== 'undefined' && 'queryLocalFonts' in window,

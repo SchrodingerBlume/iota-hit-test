@@ -60,11 +60,13 @@ const TEMPLATE_DEFAULTS: Record<StyleKey, string> = {
   section: '黑体 · 小三 · 左 · 1.25 倍 · 段前 0.5 行 · 段后 0.5 行',
   subsection: '黑体 · 四号 · 左 · 1.25 倍 · 段前 0.5 行 · 段后 0.5 行',
   subsubsection: '黑体 · 小四 · 左 · 1.25 倍',
+  toc: '宋体 · 小四 · 行距按学位（本科 1.25、研究生 1.2）',
 };
 
 /** 这一级叫什么：0 = 正文，其余按档位（章 / 节 / 条 / 款，报告从节起） */
 function levelName(s: Settings, level: number): string {
   if (level === 0) return '正文';
+  if (level === -1) return '目录';
   const l = levelLabels(s).find((x) => x.level === level);
   return l?.name ? `${l.name}标题` : `${level} 级标题`;
 }
@@ -173,7 +175,7 @@ function StyleDialog({ level }: { level: number }) {
   const closeStyle = useBlockMenu((s) => s.closeStyle);
   const settings = useStore((s) => s.doc.settings);
   const setSettings = useStore((s) => s.setSettings);
-  const key: StyleKey = level === 0 ? 'body' : styleKeyOfLevel(settings, level);
+  const key: StyleKey = level === 0 ? 'body' : level === -1 ? 'toc' : styleKeyOfLevel(settings, level);
   const [draft, setDraft] = useState<StyleEntry>(() => ({ ...(settings.styles?.[key] ?? {}) }));
   const set = (patch: Partial<StyleEntry>) => setDraft((d) => {
     const next = { ...d, ...patch };

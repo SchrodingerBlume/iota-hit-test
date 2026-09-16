@@ -1,8 +1,8 @@
 diff --git a/packages/compiler/src/lib.rs b/packages/compiler/src/lib.rs
-index b9de839..5f0d2cb 100644
+index b9de839..cf07974 100644
 --- a/packages/compiler/src/lib.rs
 +++ b/packages/compiler/src/lib.rs
-@@ -475,6 +475,277 @@ impl TypstCompileWorld {
+@@ -475,6 +475,302 @@ impl TypstCompileWorld {
          })
      }
  
@@ -58,6 +58,8 @@ index b9de839..5f0d2cb 100644
 +            tags: Vec<(::typst::introspection::Location, bool, Option<std::ops::Range<usize>>)>,
 +            page_h: f64,
 +            pieces: std::collections::HashMap<::typst::syntax::Span, Piece>,
++            /// Inside a page-level group that is not the body (header / footer / background)
++            in_margin_group: bool,
 +        }
 +
 +        /// Absolute source range of a text glyph, piece-aware (see `Piece`).
@@ -204,7 +206,7 @@ index b9de839..5f0d2cb 100644
 +                                    let (x2, y2) = (p2.x.to_pt(), p2.y.to_pt());
 +                                    let top = y1.min(y2);
 +                                    let bottom = y1.max(y2);
-+                                    let in_margin = bottom < wk.page_h * 0.085 || top > wk.page_h * 0.93;
++                                    let in_margin = wk.in_margin_group || bottom < wk.page_h * 0.085 || top > wk.page_h * 0.93;
 +                                    let kind = if in_margin { 3.0 } else { 4.0 };
 +                                    wk.out.extend_from_slice(&[
 +                                        page as f64, x1.min(x2), top, (x2 - x1).abs(), bottom - top,
@@ -228,7 +230,7 @@ index b9de839..5f0d2cb 100644
 +                                    let top = y1.min(y2);
 +                                    let bottom = y1.max(y2);
 +                                    // Running headers / footers sit in the page margins: an echo, not the text itself.
-+                                    let in_margin = bottom < wk.page_h * 0.085 || top > wk.page_h * 0.93;
++                                    let in_margin = wk.in_margin_group || bottom < wk.page_h * 0.085 || top > wk.page_h * 0.93;
 +                                    let echo = in_entry || in_margin;
 +                                    let gtext = text.text.get(glyph.range()).unwrap_or("");
 +                                    let cp = gtext.chars().next().map(|c| c as u32).unwrap_or(0);
@@ -268,11 +270,34 @@ index b9de839..5f0d2cb 100644
 +            }
 +        }
 +
-+        let mut w = Walk { source: &source, out: Vec::new(), tags: Vec::new(), page_h: 842.0, pieces: Default::default() };
++        let mut w = Walk { source: &source, out: Vec::new(), tags: Vec::new(), page_h: 842.0, pieces: Default::default(), in_margin_group: false };
 +        for (i, page) in doc.pages().iter().enumerate() {
 +            w.page_h = page.frame.size().y.to_pt();
 +            w.tags.clear();
-+            walk(&mut w, &page.frame, Transform::identity(), i);
++            // The body is the tallest top-level group of the page; header, footer and
++            // background groups are echoes (running heads repeat chapter titles).
++            let body_h = page
++                .frame
++                .items()
++                .filter_map(|(_, it)| match it { FrameItem::Group(g) => Some(g.frame.size().y), _ => None })
++                .fold(::typst::layout::Abs::zero(), |a, b| if b > a { b } else { a });
++            for (pos, item) in page.frame.items() {
++                match item {
++                    FrameItem::Group(g) => {
++                        w.in_margin_group = g.frame.size().y < body_h;
++                        let t = Transform::translate(pos.x, pos.y).pre_concat(g.transform);
++                        walk(&mut w, &g.frame, t, i);
++                        w.in_margin_group = false;
++                    }
++                    _ => {}
++                }
++            }
++            // Loose items directly on the page frame (rare): walk them too
++            let mut loose = Frame::soft(page.frame.size());
++            for (pos, item) in page.frame.items() {
++                if !matches!(item, FrameItem::Group(_)) { loose.push(*pos, item.clone()); }
++            }
++            walk(&mut w, &loose, Transform::identity(), i);
 +        }
 +        Ok(js_sys::Float64Array::from(w.out.as_slice()).into())
 +    }

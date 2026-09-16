@@ -413,15 +413,26 @@ function paraEnd(opts: SerializeOptions, n: PMNode): string {
   const pos = opts.map?.posOf.get(n);
   if (!opts.preview || !opts.map || pos === undefined) return '';
   const end = pos + nodeSize(n) - 1;
-  return mark('para', opts.map.key, end, end, '');
+  return mark('para', opts.map.key, pos + 1, end, '', n.attrs?.noIndent ? { attr: 'noindent' } : {});
 }
 
 /** 一串空回车段：正式排 #enter(n)；预览排 #blanks[¶]…，每个 ¶ 映射到那个空段里面的位置 */
 function blankRun(opts: SerializeOptions, blanks: PMNode[]): string {
   if (opts.preview && opts.map) {
     const key = opts.map.key;
-    const marks = blanks.map((b) => { const p = opts.map!.posOf.get(b); return p === undefined ? '[¶]' : `[${mark('text', key, p + 1, p + 1, '¶', { attr: 'blank', raw: '' })}]`; });
-    return `#blanks${marks.join('')}`;
+    const out: string[] = [];
+    let i = 0;
+    while (i < blanks.length) {
+      const noIndent = !!blanks[i].attrs?.noIndent;
+      const run: string[] = [];
+      while (i < blanks.length && !!blanks[i].attrs?.noIndent === noIndent) {
+        const p = opts.map.posOf.get(blanks[i]);
+        run.push(p === undefined ? '[¶]' : `[${mark('text', key, p + 1, p + 1, '¶', { attr: noIndent ? 'blank0' : 'blank', raw: '' })}]`);
+        i++;
+      }
+      out.push(`#blanks${noIndent ? '(indent: false)' : ''}${run.join('')}`);
+    }
+    return out.join('\n\n');
   }
   return `#enter(${blanks.length})`;
 }

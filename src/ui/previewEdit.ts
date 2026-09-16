@@ -61,7 +61,7 @@ function align(text: string, cur: Cursor, cp: number, nchars: number): [number, 
   if (k >= text.length && c && text.startsWith(c)) k = 0;
   let j = -1;
   if (c && text.startsWith(c, k)) j = k;
-  else if (c) { const f = text.indexOf(c, k); if (f >= 0 && f <= k + 8) j = f; }
+  else if (c && /\S/.test(c)) { const f = text.indexOf(c, k); if (f >= 0 && f <= k + 8) j = f; }
   // 对不上（弯引号、破折号、章标题前模板加的「第 1 章」）：零宽地站在当前位置，不吃原文的字，
   // 后面对得上的字自己会往前找
   if (j < 0) { const a = Math.min(k, text.length); return [a, a]; }
@@ -212,17 +212,19 @@ export function caretRect(index: GlyphIndex, key: string, pos: number, prefer: {
   if (!arr?.length) return null;
   const cands: CaretRect[] = [];
   const lineOf = (g: Glyph): Line => index.lineOf.get(g) ?? { page: g.page, y: g.y, h: g.h, glyphs: [g] };
-  // 字前
-  for (let i = lowerBound(arr, pos); i < arr.length && arr[i].from === pos; i++) {
-    const g = arr[i];
-    if (g.kind !== 'text') continue;
-    cands.push({ page: g.page, x: g.x, y: g.y, h: g.h, line: lineOf(g) });
-  }
+  const zero: CaretRect[] = [];
   // 字后：to === pos 的（to 没排序，往前扫一小段）
   for (let i = Math.min(arr.length - 1, lowerBound(arr, pos)); i >= 0 && pos - arr[i].from < 40; i--) {
     const g = arr[i];
-    if (g.kind === 'text' && g.to === pos) cands.push({ page: g.page, x: g.x + g.w, y: g.y, h: g.h, line: lineOf(g) });
+    if (g.kind === 'text' && g.to === pos && g.from < g.to) cands.push({ page: g.page, x: g.x + g.w, y: g.y, h: g.h, line: lineOf(g) });
   }
+  // 字前；零宽的（没对上原文的字、空段的 ¶）排最后
+  for (let i = lowerBound(arr, pos); i < arr.length && arr[i].from === pos; i++) {
+    const g = arr[i];
+    if (g.kind !== 'text') continue;
+    (g.from === g.to ? zero : cands).push({ page: g.page, x: g.x, y: g.y, h: g.h, line: lineOf(g) });
+  }
+  if (!cands.length) cands.push(...zero);
   if (!cands.length) {
     // 落在原子节点（公式、引用）上：画在节点前 / 后
     for (let i = lowerBound(arr, pos); i < arr.length && arr[i].from === pos; i++) { const g = arr[i]; cands.push({ page: g.page, x: g.x, y: g.y, h: g.h, line: lineOf(g) }); }
@@ -234,19 +236,19 @@ export function caretRect(index: GlyphIndex, key: string, pos: number, prefer: {
 
 export interface SelRect { page: number; x: number; y: number; w: number; h: number }
 
-export interface ParaMark { page: number; x: number; y: number; h: number; blank: boolean }
+export interface ParaMark { page: number; x: number; y: number; h: number; blank: boolean; noIndent?: boolean }
 /** 编辑标记（Word 的 ¶）该画在哪：空回车段上是那个隐形的 ¶ 自己，有字的段落是最后一个字之后 */
 export function paragraphMarks(index: GlyphIndex, segments: Segment[]): ParaMark[] {
   const out: ParaMark[] = [];
   for (const lines of index.pages) if (lines) for (const l of lines) for (const g of l.glyphs) {
-    if (g.seg.attr === 'blank') out.push({ page: g.page, x: g.x, y: g.y, h: g.h, blank: true });
+    if (g.seg.attr === 'blank' || g.seg.attr === 'blank0') out.push({ page: g.page, x: g.x, y: g.y, h: g.h, blank: true, noIndent: g.seg.attr === 'blank0' });
   }
   for (const s of segments) {
     if (s.kind !== 'para') continue;
-    // 段末是换行 / 原子节点时末位没有字形，往前找最近的一个
     let r = null as ReturnType<typeof caretRect>;
-    for (let p = s.pmFrom; p >= s.pmFrom - 3 && !r; p--) r = caretRect(index, s.key, p, null);
+    for (let p = s.pmTo; p >= s.pmTo - 3 && !r; p--) r = caretRect(index, s.key, p, null);
     if (r) out.push({ page: r.page, x: r.x, y: r.y, h: r.h, blank: false });
+    if (s.attr === 'noindent') { const f = caretRect(index, s.key, s.pmFrom, null); if (f) out.push({ page: f.page, x: f.x, y: f.y, h: f.h, blank: false, noIndent: true }); }
   }
   return out;
 }
