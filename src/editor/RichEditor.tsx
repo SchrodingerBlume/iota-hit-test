@@ -6,6 +6,7 @@ import { BubbleMenu } from '@tiptap/react/menus';
 import { useBlockMenu } from './BlockMenu';
 import { CommentExtension } from '@sereneinserenade/tiptap-comment-extension';
 import { useComments } from './comments';
+import { SpaceMarks, spaceMarksKey } from './extensions/SpaceMarks';
 import { useLinkDialog } from '../ui/LinkDialog';
 import StarterKit from '@tiptap/starter-kit';
 import Paragraph from '@tiptap/extension-paragraph';
@@ -94,7 +95,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
       AlignedTableCell, AlignedTableHeader, SizedTableRow, TableExtras,
       Figure, TableFigure, CodeFigure, Algorithm, Equation, PageBreak, EqDenote,
       MathInline, Cite, Ref, Abbr, Footnote, Ccwd, Idx,
-      UniqueId, MirrorCaret, Search,
+      UniqueId, MirrorCaret, Search, SpaceMarks,
     ],
     content: value,
     onUpdate: ({ editor }) => {
@@ -184,7 +185,14 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
   // 编辑标记（¶）与预览同一个开关：开着就给编辑区挂 show-marks，样式表画段末的 ¶
   useEffect(() => {
     if (!editor) return;
-    const apply = () => { if (!editor.isDestroyed) editor.view.dom.classList.toggle('show-marks', usePreviewMarks.getState().on); };
+    const apply = () => {
+      if (editor.isDestroyed) return;
+      const m = usePreviewMarks.getState();
+      editor.view.dom.classList.toggle('show-marks', m.on && m.paragraph);
+      editor.view.dom.classList.toggle('show-gutter', m.on && m.gutter);
+      const on = m.on && m.space;
+      if (spaceMarksKey.getState(editor.state)?.on !== on) editor.view.dispatch(editor.state.tr.setMeta(spaceMarksKey, on));
+    };
     apply();
     return usePreviewMarks.subscribe(apply);
   }, [editor]);

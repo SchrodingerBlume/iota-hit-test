@@ -9,7 +9,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 import type { Editor } from '@tiptap/core';
 import type { Mark } from '@tiptap/pm/model';
 import { create } from 'zustand';
-import { TabList, Tab, Button, Popover, PopoverTrigger, PopoverSurface, Tooltip, Input, Checkbox } from '@fluentui/react-components';
+import { TabList, Tab, Button, Popover, PopoverTrigger, PopoverSurface, Tooltip, Input, Checkbox, Menu, MenuTrigger, MenuPopover, MenuList, MenuItemCheckbox } from '@fluentui/react-components';
 import {
   ArrowUndo20Regular, ArrowRedo20Regular, TextBold20Regular, TextItalic20Regular, TextUnderline20Regular, TextStrikethrough20Regular, TextSubscript20Regular, TextSuperscript20Regular,
   Code20Regular, ClearFormatting20Regular, PaintBrush20Regular, Cut20Regular, Copy20Regular, ClipboardPaste20Regular, TextBulletListLtr20Regular, TextNumberListLtr20Regular, TextIndentDecreaseLtr20Regular,
@@ -177,6 +177,8 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const blocks = meta?.blocks !== false;
   const none = !ed;
   const marksOn = usePreviewMarks((s) => s.on);
+  const mkP = usePreviewMarks((s) => s.paragraph), mkS = usePreviewMarks((s) => s.space), mkG = usePreviewMarks((s) => s.gutter);
+  const markKinds = { paragraph: mkP, space: mkS, gutter: mkG };
   const outlineOn = useOutline((s) => s.on);
   const toggleMarks = usePreviewMarks((s) => s.toggle);
   const chain = () => ed!.chain().focus();
@@ -357,7 +359,17 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                     <B title="空一个汉字宽（#ccwd）" icon={<Spacebar20Regular />} disabled={none} run={() => ins.insertInline('ccwd', { n: 1 })} />
                     <B title="空回车段：连续空段落会排成 #enter(n)，真占一行" icon={<ArrowEnter20Regular />} disabled={none} run={() => chain().splitBlock().run()} />
                     <B title="分页" icon={<DocumentPageBreak20Regular />} disabled={none || !blocks} run={ins.insertPageBreak} />
-                    <B title="显示 / 隐藏编辑标记：预览里每段末尾与空回车段上画 ¶（只在预览里画，PDF 不受影响）" icon={<TextParagraph20Regular />} on={marksOn} run={toggleMarks} />
+                    <B title="显示 / 隐藏编辑标记（¶、空格、顶格符；只在编辑区与预览里画，PDF 不受影响）" icon={<TextParagraph20Regular />} on={marksOn} run={toggleMarks} />
+                    <Menu checkedValues={{ k: (['paragraph', 'space', 'gutter'] as const).filter((k) => markKinds[k]) }} onCheckedValueChange={(_, d) => { for (const k of ['paragraph', 'space', 'gutter'] as const) usePreviewMarks.getState().setKind(k, d.checkedItems.includes(k)); }} positioning="below-start">
+                      <MenuTrigger disableButtonEnhancement>
+                        <span className="rb-keep"><B title="选择显示哪些标记" menu run={() => {}} /></span>
+                      </MenuTrigger>
+                      <MenuPopover><MenuList>
+                        <MenuItemCheckbox name="k" value="paragraph">段落标记 ¶</MenuItemCheckbox>
+                        <MenuItemCheckbox name="k" value="space">空格 ·</MenuItemCheckbox>
+                        <MenuItemCheckbox name="k" value="gutter">顶格符 ⇤</MenuItemCheckbox>
+                      </MenuList></MenuPopover>
+                    </Menu>
                   </Row>
                 </Rows>
               </Group>

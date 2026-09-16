@@ -22,6 +22,8 @@ export interface Glyph {
   /** text：ProseMirror 位置；attr / info：在属性值里的偏移；node：节点起止 */
   from: number;
   to: number;
+  /** 首个码点（空格标记用） */
+  cp: number;
 }
 
 export interface Line {
@@ -117,7 +119,7 @@ export function buildIndex(raw: Float64Array | null, segments: Segment[], versio
         cur.lastStart = start; cur.lastEnd = end; cur.lastCp = cp; cur.lastFrom = from; cur.lastTo = to;
       }
     }
-    glyphs.push({ page: raw[i], x: raw[i + 1], y: raw[i + 2], w: raw[i + 3], h: raw[i + 4], key: seg.key, kind: seg.kind, seg, from, to });
+    glyphs.push({ page: raw[i], x: raw[i + 1], y: raw[i + 2], w: raw[i + 3], h: raw[i + 4], key: seg.key, kind: seg.kind, seg, from, to, cp });
   }
   // 行：同页、基线相近的归一行
   glyphs.sort((a, b) => a.page - b.page || (a.y + a.h) - (b.y + b.h) || a.x - b.x);
@@ -236,19 +238,22 @@ export function caretRect(index: GlyphIndex, key: string, pos: number, prefer: {
 
 export interface SelRect { page: number; x: number; y: number; w: number; h: number }
 
-export interface ParaMark { page: number; x: number; y: number; h: number; blank: boolean; noIndent?: boolean }
+export interface ParaMark { page: number; x: number; y: number; h: number; blank: boolean; noIndent?: boolean; space?: boolean; w?: number }
+export interface MarkKindsOpt { paragraph?: boolean; space?: boolean; gutter?: boolean }
 /** 编辑标记（Word 的 ¶）该画在哪：空回车段上是那个隐形的 ¶ 自己，有字的段落是最后一个字之后 */
-export function paragraphMarks(index: GlyphIndex, segments: Segment[]): ParaMark[] {
+export function paragraphMarks(index: GlyphIndex, segments: Segment[], kinds: MarkKindsOpt = {}): ParaMark[] {
   const out: ParaMark[] = [];
+  const want = { paragraph: kinds.paragraph ?? true, space: kinds.space ?? true, gutter: kinds.gutter ?? true };
   for (const lines of index.pages) if (lines) for (const l of lines) for (const g of l.glyphs) {
-    if (g.seg.attr === 'blank' || g.seg.attr === 'blank0') out.push({ page: g.page, x: g.x, y: g.y, h: g.h, blank: true, noIndent: g.seg.attr === 'blank0' });
+    if (want.paragraph && (g.seg.attr === 'blank' || g.seg.attr === 'blank0')) out.push({ page: g.page, x: g.x, y: g.y, h: g.h, blank: true, noIndent: g.seg.attr === 'blank0' });
+    if (want.space && (g.cp === 32 || g.cp === 160 || g.cp === 0x3000) && g.seg.kind === 'text' && g.w > 0) out.push({ page: g.page, x: g.x, y: g.y, h: g.h, w: g.w, blank: false, space: true });
   }
   for (const s of segments) {
     if (s.kind !== 'para') continue;
     let r = null as ReturnType<typeof caretRect>;
     for (let p = s.pmTo; p >= s.pmTo - 3 && !r; p--) r = caretRect(index, s.key, p, null);
-    if (r) out.push({ page: r.page, x: r.x, y: r.y, h: r.h, blank: false });
-    if (s.attr === 'noindent') { const f = caretRect(index, s.key, s.pmFrom, null); if (f) out.push({ page: f.page, x: f.x, y: f.y, h: f.h, blank: false, noIndent: true }); }
+    if (r && want.paragraph) out.push({ page: r.page, x: r.x, y: r.y, h: r.h, blank: false });
+    if (s.attr === 'noindent' && want.gutter) { const f = caretRect(index, s.key, s.pmFrom, null); if (f) { const g0 = f.line.glyphs[0]; out.push({ page: f.page, x: g0 ? g0.x : f.x, y: f.y, h: f.h, blank: false, noIndent: true }); } }
   }
   return out;
 }

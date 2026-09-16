@@ -175,13 +175,27 @@ function AbbrView({ node, updateAttributes, selected, deleteNode, editor, getPos
 export const Abbr = inlineAtom('abbr', { key: { default: '' } }, AbbrView);
 
 // ── 脚注 ────────────────────────────────────────────────────────
+const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳';
+function useFootnoteIndex(editor: NodeViewProps['editor'], getPos: NodeViewProps['getPos']): number {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    const calc = () => { const p = getPos(); if (p === undefined) return; let k = 0; editor.state.doc.nodesBetween(0, p, (x) => { if (x.type.name === 'footnote') k++; return true; }); setN(k + 1); };
+    calc();
+    editor.on('transaction', calc);
+    return () => { editor.off('transaction', calc); };
+  }, [editor, getPos]);
+  return n;
+}
+
 function FootnoteView({ node, updateAttributes, selected, deleteNode, editor, getPos }: NodeViewProps) {
   const open = useOpenNonce(getPos);
   const text = String(node.attrs.text ?? '');
+  const idx = useFootnoteIndex(editor, getPos);
+  const mark = CIRCLED[idx - 1] ?? `(${idx})`;
   const wrap = useRef<HTMLSpanElement>(null);
   useEffect(() => { if (open.nonce && open.attr) requestAnimationFrame(() => focusAttrInput(wrap.current?.closest('.chip-wrap') as HTMLElement | null, open.attr, open.offset)); }, [open]);
   return (
-    <InlineChip onSelect={() => { const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }} kind="footnote" openNonce={open.nonce} text={<span ref={wrap}>①</span>} title={text || '脚注'} selected={selected} editable={editor.isEditable} autoOpen={!text} onDelete={deleteNode}>
+    <InlineChip onSelect={() => { const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }} kind="footnote" openNonce={open.nonce} text={<span ref={wrap}>{mark}</span>} title={text || '脚注'} selected={selected} editable={editor.isEditable} autoOpen={!text} onDelete={deleteNode}>
       {() => (
         <Field label="脚注内容">
           <textarea autoFocus rows={3} data-attr="text" value={text} onChange={(e) => updateAttributes({ text: e.target.value })} />

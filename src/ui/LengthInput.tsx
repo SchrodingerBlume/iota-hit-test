@@ -1,11 +1,10 @@
-// 收 Typst 长度的输入框：打 "8cm"、"12pt"、"2em"、"100%"，光打数按默认单位。认不出就标红、不提交。
+// 收 Typst 长度：数字框 + 单位下拉。空着（allowEmpty）= 交给模板 / 自动。
 import { useEffect, useState } from 'react';
-import { Input, type InputProps } from '@fluentui/react-components';
+import { Input, Select, type InputProps } from '@fluentui/react-components';
 import { parseLength, formatLength, UNIT_LABEL, type Unit } from '../model/length';
 
 interface Props {
   value: unknown;
-  /** 光写数字时的单位 */
   defaultUnit: Unit;
   allowed?: Unit[];
   onChange: (v: string | undefined) => void;
@@ -14,36 +13,32 @@ interface Props {
   size?: InputProps['size'];
   disabled?: boolean;
   title?: string;
-  /** 空着 = 交给模板 / 自动 */
   allowEmpty?: boolean;
 }
 
+const ALL: Unit[] = ['cm', 'mm', 'in', 'pt', 'em', '%'];
+
 export function LengthInput({ value, defaultUnit, allowed, onChange, placeholder, width = 110, size = 'small', disabled, title, allowEmpty = true }: Props) {
-  const shown = (() => { const l = parseLength(value, defaultUnit, allowed); return l ? formatLength(l) : typeof value === 'string' ? value : ''; })();
-  const [text, setText] = useState(shown);
-  const [bad, setBad] = useState(false);
-  useEffect(() => { setText(shown); setBad(false); }, [shown]);
-  const commit = (t: string) => {
-    const s = t.trim();
-    if (!s) { if (allowEmpty) { setBad(false); onChange(undefined); } else setBad(true); return; }
-    const l = parseLength(s, defaultUnit, allowed);
-    if (!l) { setBad(true); return; }
-    setBad(false);
-    onChange(formatLength(l));
+  const units = allowed ?? ALL;
+  const parsed = parseLength(value, defaultUnit, units);
+  const [num, setNum] = useState(parsed ? String(parsed.value) : '');
+  const [unit, setUnit] = useState<Unit>(parsed?.unit ?? defaultUnit);
+  useEffect(() => { setNum(parsed ? String(parsed.value) : ''); setUnit(parsed?.unit ?? defaultUnit); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [parsed ? formatLength(parsed) : '']);
+  const commit = (n: string, u: Unit) => {
+    const s = n.trim();
+    if (!s) { if (allowEmpty) onChange(undefined); return; }
+    const v = parseFloat(s);
+    if (!Number.isFinite(v)) return;
+    onChange(formatLength({ value: v, unit: u }));
   };
-  const units = (allowed ?? ['cm', 'mm', 'in', 'pt', 'em', '%']).map((u) => UNIT_LABEL[u]).join(' / ');
   return (
-    <Input
-      size={size}
-      className={`len-input ${bad ? 'is-bad' : ''}`}
-      value={text}
-      disabled={disabled}
-      placeholder={placeholder ?? `如 8${UNIT_LABEL[defaultUnit]}`}
-      title={title ?? `单位：${units}；光写数按 ${UNIT_LABEL[defaultUnit]}`}
-      onChange={(_, d) => { setText(d.value); if (bad) setBad(!parseLength(d.value.trim() || '0', defaultUnit, allowed)); }}
-      onBlur={() => commit(text)}
-      onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); commit(text); (e.target as HTMLInputElement).blur(); } }}
-      style={{ width }}
-    />
+    <span className="len-input" title={title} style={{ width }}>
+      <Input size={size} type="number" step="any" value={num} disabled={disabled} placeholder={placeholder ?? (allowEmpty ? '自动' : '')} className="len-num"
+        onChange={(_, d) => setNum(d.value)} onBlur={() => commit(num, unit)}
+        onKeyDown={(e) => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); commit(num, unit); (e.target as HTMLInputElement).blur(); } }} />
+      <Select size={size} value={unit} disabled={disabled} className="len-unit" onChange={(_, d) => { const u = d.value as Unit; setUnit(u); if (num.trim()) commit(num, u); }}>
+        {units.map((u) => <option key={u} value={u}>{UNIT_LABEL[u]}</option>)}
+      </Select>
+    </span>
   );
 }

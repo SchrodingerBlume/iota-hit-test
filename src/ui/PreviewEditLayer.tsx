@@ -34,9 +34,14 @@ export const usePreviewSurface = create<Surface>((set) => ({ activeKey: null, fo
 
 /** 显示编辑标记（Word 的 ¶）：只画在预览的覆盖层上，排版结果与 PDF 不受影响；记在本机 */
 const MARKS_KEY = 'iota4web-show-marks';
-export const usePreviewMarks = create<{ on: boolean; toggle: () => void }>((set) => ({
-  on: (() => { try { return localStorage.getItem(MARKS_KEY) === '1'; } catch { return false; } })(),
-  toggle: () => set((s) => { const on = !s.on; try { localStorage.setItem(MARKS_KEY, on ? '1' : '0'); } catch { /* 无痕模式 */ } return { on }; }),
+export interface MarkKinds { paragraph: boolean; space: boolean; gutter: boolean }
+interface MarksState extends MarkKinds { on: boolean; toggle: () => void; setKind: (k: keyof MarkKinds, v: boolean) => void }
+const readMarks = (): Partial<MarksState> => { try { const v = localStorage.getItem(MARKS_KEY); if (v === '1' || v === '0') return { on: v === '1' }; return v ? JSON.parse(v) : {}; } catch { return {}; } };
+const saveMarks = (s: MarksState) => { try { localStorage.setItem(MARKS_KEY, JSON.stringify({ on: s.on, paragraph: s.paragraph, space: s.space, gutter: s.gutter })); } catch { /* */ } };
+export const usePreviewMarks = create<MarksState>((set, get) => ({
+  on: false, paragraph: true, space: true, gutter: true, ...readMarks(),
+  toggle: () => { set({ on: !get().on }); saveMarks(get()); },
+  setKind: (k, v) => { set({ [k]: v } as Partial<MarksState>); saveMarks(get()); },
 }));
 
 interface PageGeom { left: number; top: number; scale: number; w: number; h: number }
@@ -49,7 +54,8 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   const mapVersion = useCompileState((s) => s.mapVersion);
   const index = useMemo(() => (glyphs ? buildIndex(glyphs, segments, mapVersion) : EMPTY_INDEX), [glyphs, segments, mapVersion]);
   const marksOn = usePreviewMarks((s) => s.on);
-  const marks = useMemo(() => (marksOn ? paragraphMarks(index, segments) : []), [marksOn, index, segments]);
+  const mkP = usePreviewMarks((s) => s.paragraph), mkS = usePreviewMarks((s) => s.space), mkG = usePreviewMarks((s) => s.gutter);
+  const marks = useMemo(() => (marksOn ? paragraphMarks(index, segments, { paragraph: mkP, space: mkS, gutter: mkG }) : []), [marksOn, index, segments, mkP, mkS, mkG]);
 
   const activeKey = usePreviewSurface((s) => s.activeKey);
   const focused = usePreviewSurface((s) => s.focused);
@@ -373,7 +379,13 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     const head = selection.head;
     const $h = doc.resolve(head);
     const nb = dir > 0 ? $h.nodeAfter : $h.nodeBefore;
-    if (!extend && nb?.isInline && nb.isAtom) { setSelection(ed, dir > 0 ? head : head - nb.nodeSize, undefined, true); return; }
+    if (!extend && nb?.isInline && nb.isAtom) {
+      const at = dir > 0 ? head : head - nb.nodeSize;
+      const old = activeKey ? (stale ? toOldPos(activeKey, index.version, at, 1) : at) : null;
+      const drawn = old !== null && !!index.byKey.get(activeKey!)?.some((g) => g.kind === 'node' && g.from === old);
+      if (drawn) { setSelection(ed, at, undefined, true); return; }
+      setSelection(ed, dir > 0 ? head + nb.nodeSize : head - nb.nodeSize); return;
+    }
     let target: number;
     if (word) { const r = wordRange(ed, head + (dir > 0 ? 1 : -1), dir); target = dir > 0 ? r.to : r.from; }
     else target = head + dir;
@@ -551,7 +563,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
       {rects.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <div key={i} className="pv-sel" style={{ left: p.left, top: p.top, width: r.w * p.scale, height: r.h * p.scale }} /> : null; })}
       {gone.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <div key={`g${i}`} className="pv-gone" style={{ left: p.left, top: p.top, width: r.w * p.scale + 0.5, height: r.h * p.scale }} /> : null; })}
       {commentRects.map((c) => c.rects.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <div key={`c${c.id}${i}`} className={`pv-comment ${activeComment === c.id ? 'is-active' : ''}`} style={{ left: p.left, top: p.top, width: r.w * p.scale, height: r.h * p.scale }} /> : null; }))}
-      {marks.map((r, i) => { const p = pageTo(r.page, r.x, r.y); if (!p) return null; const gutter = r.noIndent && !r.blank; return <span key={`m${i}`} className={`pv-mark ${r.blank ? 'is-blank' : ''} ${gutter || (r.noIndent && r.blank) ? 'is-gutter' : ''}`} style={{ left: p.left - (r.noIndent ? r.h * p.scale * 1.2 : 0), top: p.top, height: r.h * p.scale, fontSize: r.h * p.scale * 0.8, lineHeight: `${r.h * p.scale}px` }}>{r.noIndent && !r.blank ? '⇤' : r.blank && r.noIndent ? '⇤¶' : '¶'}</span>; })}
+      {marks.map((r, i) => { const p = pageTo(r.page, r.x, r.y); if (!p) return null; if (r.space) return <span key={`m${i}`} className="pv-mark is-space" style={{ left: p.left, top: p.top, width: (r.w ?? r.h * 0.3) * p.scale, height: r.h * p.scale, fontSize: r.h * p.scale * 0.8, lineHeight: `${r.h * p.scale}px` }}>·</span>; const gutter = r.noIndent && !r.blank; return <span key={`m${i}`} className={`pv-mark ${r.blank ? 'is-blank' : ''} ${gutter || (r.noIndent && r.blank) ? 'is-gutter' : ''}`} style={{ left: p.left - (r.noIndent ? r.h * p.scale * 1.2 : 0), top: p.top, height: r.h * p.scale, fontSize: r.h * p.scale * 0.8, lineHeight: `${r.h * p.scale}px` }}>{r.noIndent && !r.blank ? '⇤' : r.blank && r.noIndent ? '⇤¶' : '¶'}</span>; })}
       {caretPx && overlayText && (
         <span className={`pv-overlay ${composing !== null ? 'is-composing' : ''} ${composing === null && pending?.fading ? 'is-fading' : ''}`} style={{ left: caretPx.left, top: caretPx.top, height: caretH, fontSize: caretH * 0.92, lineHeight: `${caretH}px` }}>{overlayText}</span>
       )}

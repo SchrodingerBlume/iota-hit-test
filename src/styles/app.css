@@ -304,6 +304,10 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .rich p { margin: 0; text-indent: 2em; }
 /* 「不首行缩进」的段：左边挂一个 ⇤，一眼看出它是特殊段（Word 没有这个记号，这里的续段是模板的概念） */
 .rich p.no-indent { text-indent: 0; position: relative; }
+.rich:not(.show-gutter) p.no-indent::before { display: none; }
+.rich span.ws { background: radial-gradient(circle, var(--accent) 1.1px, transparent 1.4px) center / 100% 100% no-repeat; opacity: 0.6; }
+.rich span.ws-full { background-size: 50% 100%; }
+.pv-mark.is-space { text-align: center; }
 .rich p.no-indent::before { content: '⇤'; position: absolute; left: -1.3em; top: 0; color: var(--accent); opacity: 0.55; font-size: 0.85em; font-family: var(--sans); pointer-events: none; }
 /* 编辑标记开着：编辑区的段末与标题末也画 ¶（与预览同一个开关） */
 .rich.show-marks > p::after, .rich.show-marks li > p::after, .rich.show-marks blockquote > p::after { content: '¶'; color: var(--accent); opacity: 0.5; margin-left: 1px; font-family: "Times New Roman", serif; pointer-events: none; }
@@ -328,7 +332,10 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .rich span.cmt.is-active { background: rgba(250, 204, 21, 0.55); }
 .pv-comment { position: absolute; background: rgba(250, 204, 21, 0.28); pointer-events: none; z-index: 0; }
 .pv-comment.is-active { background: rgba(250, 204, 21, 0.5); }
-.len-input.is-bad input, .len-input.is-bad { border-color: var(--danger) !important; }
+.len-input { display: inline-flex; gap: 2px; align-items: center; }
+.len-input .len-num { flex: 1; min-width: 0; }
+.len-input .len-unit { flex: none; }
+.len-input .len-unit select { min-width: 0; padding-right: 20px; }
 /* 批注面板：右边一栏（像 Word 的批注窗格） */
 .work.has-comments { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
 .comments-pane { position: sticky; top: 0; max-height: calc(100vh - 160px); overflow: auto; border-left: 1px solid var(--line); padding-left: 12px; font-size: 13px; }
