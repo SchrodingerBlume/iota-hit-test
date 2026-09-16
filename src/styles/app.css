@@ -308,8 +308,12 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 /* 编辑标记开着：编辑区的段末与标题末也画 ¶（与预览同一个开关） */
 .rich.show-marks > p::after, .rich.show-marks li > p::after, .rich.show-marks blockquote > p::after { content: '¶'; color: var(--accent); opacity: 0.5; margin-left: 1px; font-family: "Times New Roman", serif; pointer-events: none; }
 /* 空段：ProseMirror 用一个 <br> 撑行高，¶ 会掉到第二行把空段撑成两行；开着标记时 ¶ 自己撑行，br 藏起来 */
-.rich.show-marks p:has(> br.ProseMirror-trailingBreak:only-child) > br.ProseMirror-trailingBreak { display: none; }
-.rich.show-marks p:has(> br.ProseMirror-trailingBreak:only-child)::after { display: inline-block; min-height: 1em; }
+/* 空段、以换行结尾的段：ProseMirror 末尾补的 br 只为撑行，开着标记时 ¶ 自己撑行，br 藏起来 */
+.rich.show-marks p > br.ProseMirror-trailingBreak:last-child { display: none; }
+.rich.show-marks p::after { display: inline-block; min-height: 1em; }
+/* 空标题同理：藏起撑行的 br，¶ 自己撑行 */
+.rich.show-marks .hd .hd-zh > [data-node-view-content-react] > br.ProseMirror-trailingBreak:last-child { display: none; }
+.rich.show-marks .hd .hd-zh > [data-node-view-content-react]::after { display: inline-block; min-height: 1em; }
 .rich.show-marks .hd .hd-zh > [data-node-view-content-react]::after { content: '¶'; color: var(--accent); opacity: 0.5; font-weight: 400; font-size: 0.8em; margin-left: 2px; pointer-events: none; }
 .rich p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--muted); opacity: 0.7; float: left; height: 0; pointer-events: none; text-indent: 0; }
 .rich ul, .rich ol { padding-left: 2.2em; margin: 0.2em 0; }
