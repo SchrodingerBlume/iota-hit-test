@@ -210,7 +210,7 @@ export const TableFigure = Node.create({
   draggable: false,
   addAttributes() {
     // fit：Word 的「自动调整」——content 根据内容、window 根据窗口（撑满版心）、fixed 固定列宽（colWidth 厘米）；拖过列线的列另算
-    return { caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null), placement: attr('placement', 'none'), breakable: attr('breakable', 'auto'), fit: attr('fit', 'content'), colWidth: attr('colWidth', 2.5) };
+    return { caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null), placement: attr('placement', 'none'), breakable: attr('breakable', 'auto'), fit: attr('fit', 'content'), colWidth: attr('colWidth', 2.5), cols: attr('cols', null) };
   },
   parseHTML() { return [{ tag: 'div[data-node="tableFigure"]' }]; },
   renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { 'data-node': 'tableFigure' }), 0]; },

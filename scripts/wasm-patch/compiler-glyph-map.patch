@@ -1,8 +1,8 @@
 diff --git a/packages/compiler/src/lib.rs b/packages/compiler/src/lib.rs
-index b9de839..cf07974 100644
+index b9de839..8b892dc 100644
 --- a/packages/compiler/src/lib.rs
 +++ b/packages/compiler/src/lib.rs
-@@ -475,6 +475,302 @@ impl TypstCompileWorld {
+@@ -475,6 +475,303 @@ impl TypstCompileWorld {
          })
      }
  
@@ -158,18 +158,19 @@ index b9de839..cf07974 100644
 +                                // The heading may be created by a template function
 +                                // (#chapter(..)[body]); then its own span is in the template and
 +                                // the first main-file span inside its body names the place.
-+                                let hr = if name == "heading" {
-+                                    let id = wk.source.id();
-+                                    let sp = if elem.span().id() == Some(id) {
-+                                        Some(elem.span())
-+                                    } else {
-+                                        elem.to_packed::<::typst::model::HeadingElem>()
-+                                            .and_then(|h| main_span(&h.body, id))
-+                                    };
-+                                    sp.and_then(|s| wk.source.find(s)).map(|n| n.range())
++                                // Any element written in the main file (a #mitex(..) call, a
++                                // #footnote, a heading): template-made glyphs inside it that have
++                                // no main-file span are reported against it (kind 4).
++                                let id = wk.source.id();
++                                let sp = if elem.span().id() == Some(id) {
++                                    Some(elem.span())
++                                } else if name == "heading" {
++                                    elem.to_packed::<::typst::model::HeadingElem>()
++                                        .and_then(|h| main_span(&h.body, id))
 +                                } else {
 +                                    None
 +                                };
++                                let hr = sp.and_then(|s| wk.source.find(s)).map(|n| n.range());
 +                                wk.tags.push((loc, name == "entry", hr));
 +                            }
 +                        }

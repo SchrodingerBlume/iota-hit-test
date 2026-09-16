@@ -160,6 +160,18 @@ export function TableAlignTools({ editor }: { editor: Editor }) {
   const HN = { left: '左', center: '中', right: '右' };
   const VN = { top: '上', horizon: '中', bottom: '下' };
   const cw = info.colwidth ? +(info.colwidth / 37.8).toFixed(1) : '';
+  // 相对单位（fr / % / em）的列宽存在 tableFigure.cols 上，绝对单位折成像素进单元格 colwidth（列线跟着动）
+  const raw = editor.getAttributes('tableFigure').cols;
+  const cols = (raw && typeof raw === 'object' ? raw : {}) as Record<string, string>;
+  const col = info.colIndex ?? 0;
+  const setCol = (v: string | undefined) => {
+    const l = v ? parseLength(v, 'cm') : null;
+    const abs = l && ['cm', 'mm', 'in', 'pt'].includes(l.unit);
+    const next = { ...cols };
+    if (l && !abs) next[col] = v!; else delete next[col];
+    const px = l && abs ? toPx(l) : null;
+    editor.chain().setColumnWidth(px ? Math.max(1, Math.round(px)) : null).updateAttributes('tableFigure', { cols: Object.keys(next).length ? next : null }).run();
+  };
   const cur = info.align || info.valign ? `${VN[(info.valign ?? 'horizon') as keyof typeof VN]}${HN[(info.align ?? 'center') as keyof typeof HN]}` : '默认';
   return (
     <>
@@ -180,8 +192,8 @@ export function TableAlignTools({ editor }: { editor: Editor }) {
       </Popover>
       <B title={rowScope ? '对齐作用于整行（点击改为只作用于当前 / 选中的单元格）' : '对齐只作用于当前 / 选中的单元格（点击改为整行）'} on={rowScope} icon={<TableCellEdit20Regular />} run={() => setRowScope((r) => !r)}>整行</B>
       <Sep />
-      <label className="tb-field" title="当前列的宽度：cm / mm / in / pt（列线可拖，拖的是像素）。留空 = 自动">
-        列宽 <LengthInput value={cw === '' ? '' : `${cw}cm`} defaultUnit="cm" allowed={['cm', 'mm', 'in', 'pt']} placeholder="自动" width={84} onChange={(v) => { const l = v ? parseLength(v, 'cm') : null; const px = l ? toPx(l) : null; editor.chain().setColumnWidth(px && px > 0 ? Math.round(px) : null).run(); }} />
+      <label className="tb-field" title="当前列的宽度：cm / mm / in / pt / em / %（相对版心）/ fr（按份分剩余宽度；列线可拖，拖的是像素）。留空 = 自动">
+        列宽 <LengthInput value={cols[col] ?? (cw === '' ? '' : `${cw}cm`)} defaultUnit="cm" allowed={['cm', 'mm', 'in', 'pt', 'em', '%', 'fr']} placeholder="自动" width={84} onChange={setCol} />
       </label>
       <label className="tb-field" title="当前行的高度：cm / mm / pt / em。留空 = 自动">
         行高 <LengthInput value={info.rowHeight ?? ''} defaultUnit="cm" placeholder="自动" width={84} onChange={(v) => editor.chain().setRowAttribute('height', v ?? null).run()} />

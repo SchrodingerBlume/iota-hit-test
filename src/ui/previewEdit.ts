@@ -74,25 +74,23 @@ function align(text: string, cur: Cursor, cp: number, nchars: number): [number, 
 }
 
 /** 标题节点区间 [start, end) 里的那段标题正文（第一段 text） */
-function headingText(segments: Segment[], start: number, end: number, cache: Map<number, Segment | null>): Segment | null {
+interface Run { segs: Segment[]; i: number }
+// 一个区间里按阅读顺序排的文字 / 节点段：段落取整段（par 的 span 只到第一段文字），别的按源码区间
+function rangeRun(segments: Segment[], start: number, end: number, at: Segment | null, cache: Map<number, Run | null>): Run | null {
   const hit = cache.get(start);
   if (hit !== undefined) return hit;
-  let lo = 0, hi = segments.length;
-  while (lo < hi) { const mid = (lo + hi) >> 1; if (segments[mid].typFrom < start) lo = mid + 1; else hi = mid; }
-  let found: Segment | null = null;
-  for (let i = lo; i < segments.length && segments[i].typFrom < end; i++) {
-    const s = segments[i];
-    if (s.kind === 'text' && s.raw !== undefined && s.typTo <= end) { found = s; break; }
-  }
-  cache.set(start, found);
-  return found;
+  const para = at && segments.find((p) => p.kind === 'para' && p.key === at.key && p.pmFrom <= at.pmFrom && p.pmTo >= at.pmTo);
+  const segs = segments.filter((s) => (s.kind === 'text' || s.kind === 'node') && (para ? s.key === para.key && s.pmFrom >= para.pmFrom && s.pmTo <= para.pmTo : s.typFrom >= start && s.typTo <= end && s.typFrom < s.typTo));
+  const run = segs.length ? { segs, i: 0 } : null;
+  cache.set(start, run);
+  return run;
 }
 
 export function buildIndex(raw: Float64Array | null, segments: Segment[], version: number): GlyphIndex {
   if (!raw || !segments.length) return { ...EMPTY_INDEX, version };
   const glyphs: Glyph[] = [];
   const cursors = new Map<Segment, Cursor>();
-  const headingCache = new Map<number, Segment | null>();
+  const runCache = new Map<number, Run | null>();
   for (let i = 0; i + GLYPH_STRIDE - 1 < raw.length; i += GLYPH_STRIDE) {
     const start = raw[i + 5];
     const end = raw[i + 6];
@@ -102,22 +100,40 @@ export function buildIndex(raw: Float64Array | null, segments: Segment[], versio
     // 3 = 目录条目、页眉页脚里的回声：不是编辑正文的地方
     if (kind === 3) continue;
     // 4 = 标题里模板自己重排的字（章标题）：给的是标题节点的区间，对到里面那段标题文字上
-    const seg = kind === 4 ? headingText(segments, start, end, headingCache) : segmentAt(segments, start);
-    if (!seg) continue;
-    let from: number, to: number;
-    if (seg.kind === 'node' || seg.raw === undefined) {
-      from = seg.pmFrom; to = seg.pmTo;
-    } else {
-      let cur = cursors.get(seg);
-      if (!cur) { cur = { k: 0, lastStart: -1, lastEnd: -1, lastCp: -1, lastFrom: 0, lastTo: 0 }; cursors.set(seg, cur); }
+    let seg = segmentAt(segments, start);
+    let from = 0, to = 0;
+    const cursorOf = (s: Segment) => { let cur = cursors.get(s); if (!cur) { cur = { k: 0, lastStart: -1, lastEnd: -1, lastCp: -1, lastFrom: 0, lastTo: 0 }; cursors.set(s, cur); } return cur; };
+    const place = (s: Segment): boolean => {
+      const cur = cursorOf(s);
       if (cur.lastStart === start && cur.lastEnd === end && cur.lastCp === cp && nchars > 0) {
         // 同一个字符簇里的第二个字形（组合符号）：与前一个同位
-        from = cur.lastFrom; to = cur.lastTo;
-      } else {
-        const [a, b] = align(seg.raw, cur, cp, nchars);
-        from = seg.pmFrom + a; to = seg.pmFrom + b;
-        cur.lastStart = start; cur.lastEnd = end; cur.lastCp = cp; cur.lastFrom = from; cur.lastTo = to;
+        from = cur.lastFrom; to = cur.lastTo; return true;
       }
+      const [a, b] = align(s.raw!, cur, cp, nchars);
+      from = s.pmFrom + a; to = s.pmFrom + b;
+      cur.lastStart = start; cur.lastEnd = end; cur.lastCp = cp; cur.lastFrom = from; cur.lastTo = to;
+      return a < b;
+    };
+    if (kind === 4 && !(seg && seg.kind === 'node')) {
+      // 模板自己排出来的字（章号、mitex 公式、脚注号）：只给了外层节点的区间，按阅读顺序对到里面的文字 / 节点上
+      const run = rangeRun(segments, start, end, seg, runCache);
+      if (!run) continue;
+      const s = run.segs[run.i];
+      if (s.kind !== 'node' && place(s) === false && cp > 32 && run.i + 1 < run.segs.length) {
+        const cur = cursorOf(s); cur.lastStart = -1;
+        run.i++;
+      }
+      seg = run.segs[run.i];
+      if (seg.kind === 'node') {
+        const next = run.segs[run.i + 1];
+        if (next && next.kind !== 'node' && place(next)) { run.i++; seg = next; }
+        else { from = seg.pmFrom; to = seg.pmTo; }
+      } else if (seg !== s) place(seg);
+    } else if (!seg) continue;
+    else if (seg.kind === 'node' || seg.raw === undefined) {
+      from = seg.pmFrom; to = seg.pmTo;
+    } else {
+      place(seg);
     }
     glyphs.push({ page: raw[i], x: raw[i + 1], y: raw[i + 2], w: raw[i + 3], h: raw[i + 4], key: seg.key, kind: seg.kind, seg, from, to, cp });
   }
@@ -229,8 +245,15 @@ export function caretRect(index: GlyphIndex, key: string, pos: number, prefer: {
   if (!cands.length) cands.push(...zero);
   if (!cands.length) {
     // 落在原子节点（公式、引用）上：画在节点前 / 后
-    for (let i = lowerBound(arr, pos); i < arr.length && arr[i].from === pos; i++) { const g = arr[i]; cands.push({ page: g.page, x: g.x, y: g.y, h: g.h, line: lineOf(g) }); }
-    for (let i = Math.min(arr.length - 1, lowerBound(arr, pos)); i >= 0 && pos - arr[i].from < 40; i--) { const g = arr[i]; if (g.to === pos) cands.push({ page: g.page, x: g.x + g.w, y: g.y, h: g.h, line: lineOf(g) }); }
+    // 一个节点画成好几个字形（公式）：节点前取最左的，节点后取最右的
+    const edge = new Map<Line, CaretRect>();
+    const keep = (g: Glyph, after: boolean) => {
+      const line = lineOf(g), x = after ? g.x + g.w : g.x, old = edge.get(line);
+      if (!old || (after ? x > old.x : x < old.x)) edge.set(line, { page: g.page, x, y: g.y, h: g.h, line });
+    };
+    for (let i = lowerBound(arr, pos); i < arr.length && arr[i].from === pos; i++) keep(arr[i], false);
+    for (let i = Math.min(arr.length - 1, lowerBound(arr, pos)); i >= 0 && pos - arr[i].from < 40; i--) if (arr[i].to === pos) keep(arr[i], true);
+    cands.push(...edge.values());
   }
   // 同一处「字后」与下一字「字前」重合时留一个就行；prefer 决定挑哪一处印本
   return pick(cands, prefer);

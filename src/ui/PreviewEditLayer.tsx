@@ -337,7 +337,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     const pos = nowPos(key, hitPos(hit), hit.side === 'before' ? 1 : -1);
     if (pos === null) return;
     const cur = ed.state.selection;
-    if (detail === 2) { const r = wordRange(ed, pos); setSelection(ed, r.from, r.to); focusInput(); return; }
+    if (detail === 2) { const r = wordRange(ed, pos); setSelection(ed, r.from, r.to); ed.chain().focus().scrollIntoView().run(); return; }
     if (detail >= 3) { const $p = ed.state.doc.resolve(pos); setSelection(ed, $p.start(), $p.end()); focusInput(); return; }
     const anchor = e.shiftKey ? cur.anchor : pos;
     setSelection(ed, anchor, pos);
@@ -379,7 +379,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     const head = selection.head;
     const $h = doc.resolve(head);
     const nb = dir > 0 ? $h.nodeAfter : $h.nodeBefore;
-    if (!extend && nb?.isInline && nb.isAtom) {
+    if (!extend && nb?.isInline && nb.isAtom && !nb.isText) {
       const at = dir > 0 ? head : head - nb.nodeSize;
       const old = activeKey ? (stale ? toOldPos(activeKey, index.version, at, 1) : at) : null;
       const drawn = old !== null && !!index.byKey.get(activeKey!)?.some((g) => g.kind === 'node' && g.from === old);

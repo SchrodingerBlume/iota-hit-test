@@ -133,10 +133,10 @@ export const TableExtras = Extension.create({
 });
 
 /** 当前列宽（像素）与行高（厘米），给工具栏回显 */
-export function currentCellInfo(state: any): { colwidth: number | null; rowHeight: string | null; align: HAlign | null; valign: VAlign | null } {
+export function currentCellInfo(state: any): { colwidth: number | null; colIndex: number | null; rowHeight: string | null; align: HAlign | null; valign: VAlign | null } {
   const ctx = cellContext(state);
-  if (!ctx) return { colwidth: null, rowHeight: null, align: null, valign: null };
+  if (!ctx) return { colwidth: null, colIndex: null, rowHeight: null, align: null, valign: null };
   const cell = ctx.row.child(Math.min(ctx.cellIndex, ctx.row.childCount - 1));
   const cw = Array.isArray(cell?.attrs.colwidth) ? cell.attrs.colwidth[0] ?? null : null;
-  return { colwidth: cw, rowHeight: ctx.row.attrs.height ?? null, align: cell?.attrs.align ?? null, valign: cell?.attrs.valign ?? null };
+  return { colwidth: cw, colIndex: ctx.colIndex, rowHeight: ctx.row.attrs.height ?? null, align: cell?.attrs.align ?? null, valign: cell?.attrs.valign ?? null };
 }
