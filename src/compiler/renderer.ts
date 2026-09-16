@@ -59,7 +59,9 @@ export async function renderArtifact(artifact: Uint8Array, container: HTMLElemen
   const prev = container.querySelector(':scope > svg.typst-doc') as SVGSVGElement | null;
   // 整份重来时换新会话：旧会话记着上次画过什么，renderSvgDiff 只会吐差，页里就没字了
   if (fresh && prev) await newSession();
-  renderer.manipulateData({ renderSession: session!, action: fresh || !prev ? 'reset' : 'merge', data: artifact });
+  // 容器空着却只有增量：上一版在别的容器里画的，会话记的差打不进来（reflexo 的 module 会 unwrap 崩）
+  if (!fresh && !prev) throw new Error('need a full artifact');
+  renderer.manipulateData({ renderSession: session!, action: fresh ? 'reset' : 'merge', data: artifact });
   const svgStr = renderer.renderSvgDiff({ renderSession: session } as never);
   const holder = document.createElement('div');
   holder.innerHTML = svgStr;

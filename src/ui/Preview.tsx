@@ -198,6 +198,8 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
 
   useEffect(() => {
     if (!artifact || !containerRef.current) return;
+    // 预览区刚挂上（从项目管理回来）时手里只有一份增量产物，渲染器没有上一版可以打差——要整份的，让它重编
+    if (!artifactFresh && !containerRef.current.querySelector(':scope > svg.typst-doc')) { onRefresh(); return; }
     let alive = true;
     const t0 = performance.now();
     const sc = scrollRef.current;

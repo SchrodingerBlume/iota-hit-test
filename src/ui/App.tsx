@@ -63,7 +63,8 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number) {
     if (!loaded || status !== 'ready') return;
     if (restoring && doc.settings.fontset !== 'webapp') return;
     let cancelled = false;
-    const force = refresh !== lastRefresh.current || engineKey !== lastEngine.current;
+    // 换了工程：预览区已被项目管理页卸掉，渲染器没有上一版可以打差，增量产物会让它崩（reflexo 的 module unwrap），整个重编
+    const force = refresh !== lastRefresh.current || engineKey !== lastEngine.current || lastProject.current !== doc.id;
     const t = window.setTimeout(async () => {
       const project = serializeProject(doc, { preview: true });
       // 换了项目：图片名字空间变了，worker 里映射的旧图全撤掉，重新发
