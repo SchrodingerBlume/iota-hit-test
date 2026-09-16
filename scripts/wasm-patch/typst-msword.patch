@@ -1,4 +1,4 @@
-# typst-with-msword-linebreaks cb38ad7071f08f20a5692681c2cf0c3546f047fa 合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1 之上（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
+# typst-with-msword-linebreaks 19d8113fcb2e52a33931d8cac526b451ff7c4920 合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1 之上（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
 diff --git a/crates/typst-layout/src/inline/line.rs b/crates/typst-layout/src/inline/line.rs
 index 3d7f3a2..e2c672a 100644
 --- a/crates/typst-layout/src/inline/line.rs
@@ -150,10 +150,10 @@ index 259be81..50f7397 100644
          cjk_latin_spacing: shared.get(TextElem::cjk_latin_spacing).is_auto(),
 diff --git a/crates/typst-layout/src/inline/msword.rs b/crates/typst-layout/src/inline/msword.rs
 new file mode 100644
-index 0000000..eab75df
+index 0000000..f72fa62
 --- /dev/null
 +++ b/crates/typst-layout/src/inline/msword.rs
-@@ -0,0 +1,1411 @@
+@@ -0,0 +1,1421 @@
 +//! Line breaking that emulates Microsoft Word.
 +//!
 +//! Word fills a paragraph greedily, one line at a time: it puts as many
@@ -224,12 +224,17 @@ index 0000000..eab75df
 +/// two spots, half of that with three, nothing from four on (a line with six
 +/// spots was refused at 0.001 pt over the rule); with one spot the rule only
 +/// matters next to a Latin run, where almost half a point is allowed.
-+fn slop(k: usize) -> Abs {
++fn slop(k: usize, first_line: bool) -> Abs {
++    // Measured: a paragraph's first line gets about 0.65 pt shared among
++    // the k+1 parts (six-spot lines fit 0.1 pt more, two-spot lines 0.2 pt
++    // more); later lines get nothing (a six-spot second line was refused
++    // 0.001 pt over the rule).
++    if !first_line {
++        return Abs::zero();
++    }
 +    match k {
 +        1 => Abs::pt(0.45),
-+        2 => Abs::pt(0.5),
-+        3 => Abs::pt(0.4),
-+        _ => Abs::zero(),
++        _ => Abs::pt(0.65),
 +    }
 +}
 +
@@ -1037,7 +1042,9 @@ index 0000000..eab75df
 +        }
 +        let u = unit_width(first, j, m);
 +        let forgiven = if closers == 0 && (k >= 2 || adjacent || latin) {
-+            slop(k)
++            let s = slop(k, first == 0);
++            // Lines with Latin runs were fitted with a little less.
++            if gaps > 0.0 { s.min(Abs::pt(0.5)) } else { s }
 +        } else {
 +            Abs::zero()
 +        };
@@ -1068,7 +1075,10 @@ index 0000000..eab75df
 +        let own = if opener {
 +            half + half * (k.min(2) as f64)
 +        } else if k == 0 {
-+            Abs::zero()
++            // Without spots the automatic CJK-Latin spacings still shrink
++            // a little (measured in Word 2003 mode: 0.2-0.8 pt fitted).
++            let adjacent = toks[core].kind != Kind::Latin && toks[core].gap > Abs::zero();
++            auto_cap(autos_in(first, core) - adjacent as usize, adjacent)
 +        } else {
 +            half
 +        };
