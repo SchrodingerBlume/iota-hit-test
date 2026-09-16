@@ -27,7 +27,7 @@ import { MirrorCaret, mirrorCaretKey } from './extensions/MirrorCaret';
 import { Search } from './extensions/Search';
 import { useFindBar } from '../ui/Ribbon';
 import { recordTransaction, invalidatePositions } from './versions';
-import { usePreviewSurface } from '../ui/PreviewEditLayer';
+import { usePreviewSurface, usePreviewMarks } from '../ui/PreviewEditLayer';
 import { TextBold20Regular, TextItalic20Regular, TextUnderline20Regular, TextSuperscript20Regular, TextSubscript20Regular, Code20Regular, MathFormula20Regular, Book20Regular, BookmarkAdd20Regular } from '@fluentui/react-icons';
 
 /** 段落多一个「不缩进」属性：接在公式、列表后面的续段，模板里就是 first-line-indent: 0pt */
@@ -152,6 +152,14 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     editor.on('focus', onFocus);
     return () => { editor.off('focus', onFocus); unregisterEditor(richKey, editor); };
   }, [editor, richKey, blocks, headings]);
+
+  // 编辑标记（¶）与预览同一个开关：开着就给编辑区挂 show-marks，样式表画段末的 ¶
+  useEffect(() => {
+    if (!editor) return;
+    const apply = () => { if (!editor.isDestroyed) editor.view.dom.classList.toggle('show-marks', usePreviewMarks.getState().on); };
+    apply();
+    return usePreviewMarks.subscribe(apply);
+  }, [editor]);
 
   // 预览区里在编辑这份文档时，左边画影子光标；预览失焦就收
   useEffect(() => {

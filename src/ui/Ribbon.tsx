@@ -18,7 +18,7 @@ import {
   TextGrammarSettings20Regular, TableStackAbove20Regular, TableStackBelow20Regular, TableDeleteRow20Regular, TableStackLeft20Regular, TableStackRight20Regular, TableDeleteColumn20Regular,
   TableCellsMerge20Regular, TableFreezeRow20Regular, TableDismiss20Regular, PanelLeftContract20Regular, PanelLeftExpand20Regular, PanelLeft20Regular, LayoutColumnTwo20Regular, PanelRight20Regular,
   ZoomIn20Regular, ZoomOut20Regular, AutoFitWidth20Regular, AutoFitHeight20Regular, Settings20Regular, Info20Regular, ChevronUp20Regular, ChevronDown20Regular, ChevronLeft20Regular, ChevronRight20Regular, Dismiss20Regular, Pin20Regular, Grid20Regular, Navigation20Regular, TextParagraph20Regular,
-  Document20Regular, DocumentMultiple20Regular, Translate20Regular, ImageEdit20Regular, Delete20Regular,
+  Document20Regular, DocumentMultiple20Regular, Translate20Regular, ImageEdit20Regular, Delete20Regular, TableSimple20Regular, ClipboardTextLtr20Regular,
 } from '@fluentui/react-icons';
 import { useStore, type RichKey } from '../model/store';
 import { getEditor, getEditorMeta, onRegistryChange } from '../editor/registry';
@@ -32,6 +32,7 @@ import { ThesisTab, LayoutTab, PagesTab, ChoiceMenu } from './RibbonSettings';
 import { useEditorEnv } from '../editor/env';
 import { useOpenRequest } from '../editor/openRequest';
 import { useMedia, SHORT } from './useMedia';
+import { TableSizeDialog, TableTextDialog, type TableDialogKind } from './TableInsert';
 
 /** 图 / 表的浮动与跨页选项（模板：placement 交给 Typst；跨页走 show figure.where(kind:): set block(breakable:)） */
 const PLACEMENTS = [{ value: 'none', label: '不浮动', hint: '跟着文字排' }, { value: 'auto', label: '自动', hint: '本页顶或底，就近' }, { value: 'top', label: '页顶' }, { value: 'bottom', label: '页底' }];
@@ -98,6 +99,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   /** 收起状态下临时展开 */
   const [peek, setPeek] = useState(false);
   const [pop, setPop] = useState<'table' | 'symbol' | 'symbol2' | null>(null);
+  const [tableDlg, setTableDlg] = useState<TableDialogKind | null>(null);
   const [painter, setPainter] = useState<Mark[] | null>(null);
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -264,7 +266,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
       <div className="rb-tabs">
         {leading}
         {!minimal && (
-          <TabList selectedValue={bodyVisible ? tab : ''} onTabSelect={(_, d) => onTab(d.value as TabKey)} size="medium" appearance="subtle" className="rb-tablist">
+          <TabList selectedValue={bodyVisible ? tab : ''} onTabSelect={(_, d) => onTab(d.value as TabKey)} size="small" appearance="subtle" className="rb-tablist">
             {TABS.filter((t) => (t.key !== 'table' || inTable) && (t.key !== 'figure' || inFigure)).map((t) => (
               <Tab key={t.key} value={t.key} className={CTX_TABS.includes(t.key) ? 'rb-tab-ctx' : ''} onMouseDown={(e) => e.preventDefault()} onDoubleClick={() => toggleCollapsed(!collapsed)}>{t.label}</Tab>
             ))}
@@ -363,8 +365,14 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                   </PopoverTrigger>
                   <PopoverSurface className="rb-table-grid">
                     <TableGrid onPick={(rows, cols) => { ins.insertTable(rows, cols); setPop(null); afterCommand(); }} />
+                    <div className="rb-pop-menu">
+                      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setPop(null); setTableDlg('size'); }}><TableSimple20Regular />插入表格…</button>
+                      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setPop(null); setTableDlg('text'); }}><ClipboardTextLtr20Regular />从文本 / Markdown 插入…</button>
+                    </div>
                   </PopoverSurface>
                 </Popover>
+                {tableDlg === 'size' && <TableSizeDialog onClose={() => setTableDlg(null)} onInsert={(r, c, h) => { setTableDlg(null); ins.insertTable(r, c, h); afterCommand(); }} />}
+                {tableDlg === 'text' && <TableTextDialog onClose={() => setTableDlg(null)} onInsert={(t, h) => { setTableDlg(null); ins.insertTableFromText(t, h); afterCommand(); }} />}
               </Group>
               <Group label="插图">
                 <B title="插图…（也可以直接把图片粘贴进正文）" big icon={<Image20Regular />} disabled={none || !blocks} run={ins.insertFigure}>图片</B>
@@ -505,8 +513,8 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                   <B title={layout.navOpen ? '收起左栏' : '展开左栏'} icon={layout.navOpen ? <PanelLeftContract20Regular /> : <PanelLeftExpand20Regular />} on={layout.navOpen} run={() => layout.setNavOpen(!layout.navOpen)}>导航栏</B>
                   <B title="论文设置（校区、学位、阶段……）在「论文」页" icon={<Settings20Regular />} run={() => useRibbonTab.getState().go('thesis')}>论文设置</B>
                   <B title="元信息（题目、作者、导师……）" icon={<Info20Regular />} run={() => useStore.getState().setSection('info')}>元信息</B>
-                  <B title="显示 / 隐藏编辑标记（Word 的 ¶）：预览里每段末尾与空回车段上画 ¶" icon={<TextParagraph20Regular />} on={marksOn} run={toggleMarks}>编辑标记</B>
                 </Stack>
+                <B title="显示 / 隐藏编辑标记（Word 的 ¶）：编辑区与预览里每段末尾、空回车段上画 ¶" big icon={<TextParagraph20Regular />} on={marksOn} run={toggleMarks}>编辑标记</B>
               </Group>
               <Group label="编辑区字号">
                 <span className="rb-keep rb-inline"><FontSizeTool /></span>

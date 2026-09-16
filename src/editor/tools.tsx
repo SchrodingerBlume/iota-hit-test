@@ -2,11 +2,12 @@
 // 按钮的命令作用于「当前编辑器」——人在预览区里打字时，预览的光标就是编辑器的选区，
 // 命令照样生效；命令一般会把焦点拉到左侧编辑器，按完再把焦点还给预览。
 import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
-import type { Editor } from '@tiptap/core';
+import type { Editor, JSONContent } from '@tiptap/core';
 import { createTable } from '@tiptap/extension-table';
 import { Button, ToggleButton, Tooltip, Divider, Popover, PopoverTrigger, PopoverSurface } from '@fluentui/react-components';
 import { TextAlignCenter20Regular, TableCellEdit20Regular, TextFontSize20Regular } from '@fluentui/react-icons';
 import { currentCellInfo } from './extensions/table';
+import { parseTableText, tableNodeFromParsed } from './tableImport';
 import { useEditorEnv } from './env';
 import { usePreviewSurface } from '../ui/PreviewEditLayer';
 
@@ -68,8 +69,27 @@ export function useInsertActions(editor: Editor | null) {
   const env = useEditorEnv();
   const ed = () => editor!;
   const insertInline = (type: string, attrs: Record<string, any> = {}) => ed().chain().focus().insertContent({ type, attrs }).run();
-  const insertTable = (rows = 3, cols = 3) => {
-    const table = createTable(ed().schema, rows, cols, true);
+  /** 插进去后光标放进第一格，功能区顺势切到「表格工具」 */
+  const insertTableJson = (tableJson: JSONContent) => {
+    const at = ed().state.selection.from;
+    ed().chain().focus().insertContent({ type: 'tableFigure', attrs: {}, content: [tableJson] }).run();
+    let first = -1;
+    ed().state.doc.nodesBetween(at, ed().state.doc.content.size, (node, pos) => {
+      if (first >= 0) return false;
+      if (node.type.name === 'tableFigure') { node.descendants((n, p) => { if (first < 0 && n.isTextblock) first = pos + 1 + p + 1; return first < 0; }); return false; }
+      return true;
+    });
+    if (first >= 0) ed().commands.setTextSelection(first);
+  };
+  /** 从 Markdown / 制表符 / CSV 文本插表 */
+  const insertTableFromText = (text: string, header?: boolean) => {
+    const parsed = parseTableText(text);
+    if (!parsed) return false;
+    insertTableJson(tableNodeFromParsed(parsed, { header }));
+    return true;
+  };
+  const insertTable = (rows = 3, cols = 3, header = true) => {
+    const table = createTable(ed().schema, rows, cols, header);
     const at = ed().state.selection.from;
     ed().chain().focus().insertContent({ type: 'tableFigure', attrs: {}, content: [table.toJSON()] }).run();
     // 光标放进第一格（Word 也是）——功能区顺势切到「表格工具」
@@ -97,7 +117,7 @@ export function useInsertActions(editor: Editor | null) {
   const insertEquation = () => ed().chain().focus().insertContent({ type: 'equation', attrs: {} }).run();
   const insertDenote = () => ed().chain().focus().insertContent({ type: 'eqdenote', attrs: { rows: JSON.stringify([{ symbol: '', mode: 'latex', meaning: '' }]), lead: 'auto' } }).run();
   const insertPageBreak = () => ed().chain().focus().insertContent({ type: 'pageBreak' }).run();
-  return { insertInline, insertTable, insertFigure, insertEquation, insertDenote, insertPageBreak };
+  return { insertInline, insertTable, insertTableFromText, insertFigure, insertEquation, insertDenote, insertPageBreak };
 }
 
 /** 表格：九宫格对齐（像 Word）、作用于单元格或整行、列宽、行高 */
