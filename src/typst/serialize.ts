@@ -53,14 +53,18 @@ function tri(v: 'auto' | boolean | string): string {
 }
 
 /** 字符网格：预览里模板自己的字距网格关掉（引擎来排）；导出时用户改过的折成模板的 char-pitch */
+const msword = (s: Settings) => (s.linebreaker === 'auto' ? 'msword' : s.linebreaker) === 'msword';
 function layoutArg(s: Settings, preview: boolean): string[] {
   const grid = s.charGrid === 'auto' ? s.stage === 'final' : s.charGrid;
-  if (preview || !grid) return preview || s.charGrid === false ? ['layout: (char-pitch: none)'] : [];
+  // 预览走 Word 式引擎时模板自己的字距网格关掉，网格由引擎排；原版引擎与导出都交给模板
+  if (preview && msword(s)) return ['layout: (char-pitch: none)'];
+  if (!grid) return s.charGrid === false ? ['layout: (char-pitch: none)'] : [];
   return typeof s.charPitch === 'number' ? [`layout: (char-pitch: ${s.charPitch}pt)`] : [];
 }
 
 /** 预览引擎独有：Word 式断行与字符网格（Typst fork 的 par(linebreaks: "msword")）。不进导出的 .typ */
 function mswordPrelude(s: Settings): string {
+  if (!msword(s)) return `#set par(linebreaks: ${JSON.stringify(s.linebreaker)})`;
   const grid = s.charGrid === 'auto' ? s.stage === 'final' : s.charGrid;
   const compat = s.wordCompat === 'auto' ? '11' : s.wordCompat;
   const pitch = !grid ? 'auto' : typeof s.charPitch === 'number' ? `1em + (${s.charPitch}pt - zihao.xiaosi)` : 'if _grid.tracking == 0pt { auto } else { 1em + _grid.tracking }';

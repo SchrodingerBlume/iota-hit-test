@@ -13,6 +13,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import * as tar from 'tar';
+import { execFileSync } from 'node:child_process';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -26,6 +27,15 @@ const cacheDir = path.join(home, 'Library', 'Caches', 'typst', 'packages');
 // 包里不该带进浏览器的东西：测试、PDF、图片样张、构建脚本
 const EXCLUDE_DIRS = new Set(['tests', '.git', '.github', '__pycache__', 'bench', 'ci', '_probe', '.backup', '.claude', 'easy-zh-manual', 'docs', 'examples', 'gallery', 'thumbnail', 'thumbnails', 'test', 'assets/test']);
 const EXCLUDE_EXT = new Set(['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.DS_Store', '.pyc', '.py', '.sh', '.zip']);
+
+// 打包时模板的提交号（工作区有未提交改动就加 -dirty），给「模板更新了没」的检查用
+function gitHead(dir) {
+  try {
+    const head = execFileSync('git', ['-C', dir, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim();
+    const dirty = execFileSync('git', ['-C', dir, 'status', '--porcelain'], { encoding: 'utf8' }).trim() ? '-dirty' : '';
+    return head + dirty;
+  } catch { return null; }
+}
 
 function walk(dir, base = dir, out = []) {
   for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -123,7 +133,7 @@ async function main() {
   const total = manifest.reduce((s, m) => s + m.size, 0);
   fs.writeFileSync(
     path.join(outDir, 'manifest.json'),
-    JSON.stringify({ iotaHit: iotaVersion, packages: manifest.map(({ deps, ...m }) => m) }, null, 2),
+    JSON.stringify({ iotaHit: iotaVersion, iotaHitCommit: gitHead(iotaDir), packages: manifest.map(({ deps, ...m }) => m) }, null, 2),
   );
   console.log(`共 ${manifest.length} 个包，${(total / 1024 / 1024).toFixed(1)} MB`);
 }

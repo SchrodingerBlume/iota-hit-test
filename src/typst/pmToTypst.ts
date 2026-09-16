@@ -144,13 +144,18 @@ function backtick(s: string): string {
   return `${fence}${s}${fence}`;
 }
 
+const INLINE_ATOM = new Set(['ref', 'cite', 'mathInline', 'footnote', 'abbr', 'ccwd', 'idx']);
 export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {}): string {
   let out = '';
-  for (const n of nodes) {
+  for (const [i, n] of nodes.entries()) {
     switch (n.type) {
       case 'text': {
         const raw = n.text ?? '';
-        const escaped = escapeText(raw);
+        let escaped = escapeText(raw);
+        // 模板在引用 / 公式两侧发弱间距（tracking.typ 的 h(weak: true)），紧挨着的一个空格会被它吞掉；
+        // 写成 #" " 就是普通的字符空格，宽度与可断行都不变
+        if (INLINE_ATOM.has(nodes[i - 1]?.type ?? '') && /^ (?! )/.test(escaped)) escaped = '#" "' + escaped.slice(1);
+        if (INLINE_ATOM.has(nodes[i + 1]?.type ?? '') && /(?<! ) $/.test(escaped)) escaped = escaped.slice(0, -1) + '#" "';
         const pos = opts.map?.posOf.get(n);
         const isCode = n.marks?.some((m) => m.type === 'code');
         if (pos !== undefined && opts.map) {

@@ -325,7 +325,20 @@ export const SWITCHES: SwitchDef<any>[] = [
 
 // 预览引擎：本站的 wasm 是 Typst 0.15.1 + Word 式断行（par(linebreaks: "msword")）。
 // 这一组只在预览里生效；导出的 .typ 只把字符网格折成模板的 layout: (char-pitch: …)，原版 Typst 照编
+const msword = (s: Settings) => (s.linebreaker === 'auto' ? 'msword' : s.linebreaker) === 'msword';
 SWITCHES.push(
+  {
+    key: 'linebreaker',
+    label: t("断行引擎"),
+    hint: t("预览用哪套规则断行：Word 式（本站 fork 引擎，按 Word 的规则排字符网格、压标点、悬挂标点）或 Typst 原版的两种（optimized 整段最优、simple 逐行贪心，字符网格由模板自己用字距近似）"),
+    choices: [
+      { value: 'msword', label: t("Word 式") },
+      { value: 'optimized', label: t("Typst 最优") },
+      { value: 'simple', label: t("Typst 贪心") },
+    ],
+    group: t("排版引擎"),
+    resolve: () => ({ value: 'msword', reason: t("照 Word 排，与范例的行末一致") }),
+  },
   {
     key: 'wordCompat',
     label: t("Word 兼容模式"),
@@ -337,6 +350,7 @@ SWITCHES.push(
       { value: '15', label: t("2013+") },
     ],
     group: t("排版引擎"),
+    applies: msword,
     resolve: () => ({ value: '11', reason: t("学校范例是 Word 2003 的 .doc") }),
   },
   {
@@ -353,6 +367,7 @@ SWITCHES.push(
     hint: t("Word 字体对话框的「为字体调整字间距」：相邻的两个全角标点压成一格半，一行能多放一点。只影响预览"),
     choices: onOff,
     group: t("排版引擎"),
+    applies: msword,
     resolve: () => ({ value: true, reason: t("中文 Word 文档的默认样式开着") }),
   },
   {
@@ -361,7 +376,7 @@ SWITCHES.push(
     hint: t("Word 段落对话框「如果定义了文档网格，则自动调整右缩进」；只在 2003 / 2007 / 2010 模式下有意义。只影响预览"),
     choices: onOff,
     group: t("排版引擎"),
-    applies: (s) => s.wordCompat !== '15',
+    applies: (s) => msword(s) && s.wordCompat !== '15',
     resolve: () => ({ value: true, reason: t("Word 默认开着") }),
   },
 );
@@ -403,6 +418,7 @@ export const defaultSettings = (): Settings => ({
   emDash: 'auto',
   appendixNumbering: 'auto',
   titleEnXiaoer: 'auto',
+  linebreaker: 'auto',
   wordCompat: 'auto',
   charGrid: 'auto',
   charPitch: 'auto',
