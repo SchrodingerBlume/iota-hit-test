@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './ui/App';
+import { Crash } from './ui/Crash';
 import './styles/app.css';
 import { applyTheme, currentTheme } from './ui/theme';
 
@@ -9,6 +10,6 @@ applyTheme(currentTheme());
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <Crash><App /></Crash>
   </StrictMode>,
 );

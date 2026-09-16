@@ -109,7 +109,7 @@ export function buildIndex(raw: Float64Array | null, segments: Segment[], versio
         // 同一个字符簇里的第二个字形（组合符号）：与前一个同位
         from = cur.lastFrom; to = cur.lastTo; return true;
       }
-      const [a, b] = align(s.raw!, cur, cp, nchars);
+      const [a, b] = align(s.raw ?? '', cur, cp, nchars);
       from = s.pmFrom + a; to = s.pmFrom + b;
       cur.lastStart = start; cur.lastEnd = end; cur.lastCp = cp; cur.lastFrom = from; cur.lastTo = to;
       return a < b;
