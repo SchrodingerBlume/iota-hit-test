@@ -65,10 +65,10 @@ const TEMPLATE_DEFAULTS: Record<StyleKey, string> = {
 };
 
 /** 这一级叫什么：0 = 正文，其余按档位（章 / 节 / 条 / 款，报告从节起） */
-function levelName(s: Settings, level: number): string {
+function levelName(s: Settings, level: number, part: 'body' | 'appendix' = 'body'): string {
   if (level === 0) return t("正文");
   if (level === -1) return t("目录");
-  const l = levelLabels(s).find((x) => x.level === level);
+  const l = levelLabels(s, part).find((x) => x.level === level);
   return l?.name ? t("{{name}}标题", { name: l.name }) : t("{{level}} 级标题", { level: level });
 }
 
@@ -89,7 +89,8 @@ export function BlockMenu() {
     return { ed, node, headingsAllowed };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [req?.nonce]);
-  const labels = levelLabels(settings);
+  const part = req?.key === 'appendix' ? 'appendix' : 'body';
+  const labels = levelLabels(settings, part);
   const isHeading = info?.node.type.name === 'heading';
   const level: number = isHeading ? info!.node.attrs.level : 0;
 
@@ -126,7 +127,7 @@ export function BlockMenu() {
           {info && (
             <MenuList>
               <MenuGroup>
-                <MenuGroupHeader>{isHeading ? levelName(settings, level) : t("段落")}</MenuGroupHeader>
+                <MenuGroupHeader>{isHeading ? levelName(settings, level, part) : t("段落")}</MenuGroupHeader>
                 <MenuItemRadio name="level" value="0" icon={<TextParagraph20Regular />} onClick={() => setLevel(0)}>{t("正文")}</MenuItemRadio>
                 {info.headingsAllowed && labels.map((l) => (
                   <MenuItemRadio key={l.level} name="level" value={String(l.level)} icon={<TextHeader120Regular />} onClick={() => setLevel(l.level)}>
@@ -161,7 +162,7 @@ export function BlockMenu() {
                 <MenuItemCheckbox name="opts" value="noIndent" icon={<TextAlignLeft20Regular />} onClick={() => patchAttrs({ noIndent: !info.node.attrs.noIndent })}>{t("这一段不首行缩进")}</MenuItemCheckbox>
               )}
               <MenuDivider />
-              <MenuItem icon={<TextEditStyle20Regular />} onClick={() => openStyle(level)}>{t("修改「")}{levelName(settings, level)}{t("」样式…")}<span className="muted"> {' '}{t("全篇同级")}</span></MenuItem>
+              <MenuItem icon={<TextEditStyle20Regular />} onClick={() => openStyle(level)}>{t("修改「")}{levelName(settings, level, part)}{t("」样式…")}<span className="muted"> {' '}{t("全篇同级")}</span></MenuItem>
             </MenuList>
           )}
         </MenuPopover>

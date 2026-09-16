@@ -849,7 +849,12 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .table-text-dialog { max-width: 640px; }
 /* 索引登记表 */
 .page-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; }
-.nav-outline { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
+.nav-with-outline .nav-row { display: flex; align-items: stretch; }
+.nav-with-outline .nav-row > button:first-child { flex: 1; }
+.outline-fold { border: 0; background: none; color: var(--muted); width: 22px; cursor: pointer; border-radius: var(--r-s); font-size: 11px; }
+.outline-fold:hover { background: var(--panel-2); color: var(--ink); }
+.nav-with-outline .outline { margin: 0 0 4px 6px; border-left: 1px solid var(--line); }
+.outline-empty { padding: 2px 8px; font-size: 12px; }
 .outline { display: flex; flex-direction: column; }
 .outline-item { display: flex; gap: 6px; width: 100%; text-align: left; border: 0; background: none; padding: 3px 8px; border-radius: var(--r-s); color: var(--ink-2); font-size: 12.5px; line-height: 1.35; cursor: pointer; }
 .outline-item:hover { background: var(--panel-2); color: var(--ink); }

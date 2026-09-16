@@ -49,10 +49,17 @@ export function styleKeyOfLevel(s: Settings, level: number): StyleKey {
   return names[Math.max(0, Math.min(3, level - 1))];
 }
 
-export function levelLabels(s: Settings): { level: number; name: string; sample: string }[] {
+export function levelLabels(s: Settings, part: 'body' | 'appendix' = 'body'): { level: number; name: string; sample: string }[] {
   const isReport = s.stage !== 'final' && !(s.campus === 'shenzhen' && s.degreeLevel === 'bachelor');
   const en = s.lang === 'en';
   const hass = s.category === 'hass';
+  if (part === 'appendix') {
+    const pat = sw<'letters' | 'numbers' | 'hanzi'>('appendixNumbering', s);
+    if (en) return [{ level: 1, name: 'Appendix', sample: 'Appendix A' }, { level: 2, name: 'Section', sample: 'A.1' }, { level: 3, name: '', sample: 'A.1.1' }, { level: 4, name: '', sample: 'A.1.1.1' }];
+    if (pat === 'hanzi') return [{ level: 1, name: '附录', sample: '附录一' }, { level: 2, name: '节', sample: '一、' }, { level: 3, name: '条', sample: '（一）' }, { level: 4, name: '款', sample: '1.' }];
+    const m = pat === 'numbers' ? '1' : 'A';
+    return [{ level: 1, name: '附录', sample: `附录 ${m}` }, { level: 2, name: '节', sample: `${m}.1` }, { level: 3, name: '条', sample: `${m}.1.1` }, { level: 4, name: '款', sample: `${m}.1.1.1` }];
+  }
   if (isReport) return [{ level: 1, name: '节', sample: '1' }, { level: 2, name: '条', sample: '1.1' }, { level: 3, name: '款', sample: '1.1.1' }];
   if (en) return [{ level: 1, name: 'Chapter', sample: 'Chapter 1' }, { level: 2, name: 'Section', sample: '1.1' }, { level: 3, name: '', sample: '1.1.1' }, { level: 4, name: '', sample: '1.1.1.1' }];
   if (hass) return [{ level: 1, name: '章', sample: '第一章' }, { level: 2, name: '节', sample: '一、' }, { level: 3, name: '条', sample: '（一）' }, { level: 4, name: '款', sample: '1.' }];

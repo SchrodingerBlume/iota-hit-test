@@ -39,7 +39,6 @@ import { useComments, newCommentId } from '../editor/comments';
 import { commentRange } from './CommentsPane';
 import { wordAt } from '../editor/wordAt';
 import { SymbolPicker, SymbolPanel } from './SymbolPicker';
-import { useOutline } from './OutlinePane';
 import { t as tx } from '../i18n';
 const FITS = [{ value: 'content', label: tx("根据内容"), hint: tx("列宽按内容定") }, { value: 'window', label: tx("根据窗口"), hint: tx("撑满版心，各列均分") }, { value: 'fixed', label: tx("固定列宽"), hint: tx("每列同宽（厘米在插入表格对话框里定）") }];
 
@@ -91,7 +90,9 @@ export interface RibbonLayout {
 export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonLayout; leading?: ReactNode; trailing?: ReactNode; minimal?: boolean }) {
   const activeKey = usePreviewSurface((s) => s.activeKey);
   const settings = useStore((s) => s.doc.settings);
-  const levels = levelLabels(settings);
+  const section = useStore((s) => s.section);
+  // 样式格子跟着当前编辑的那一节：附录里是「附录 A / A.1」
+  const levels = levelLabels(settings, section === 'appendix' ? 'appendix' : 'body');
   const [editor, setEditor] = useState<Editor | null>(null);
   const [tab, setTab] = useState<TabKey>('home');
   const [autoTable, setAutoTable] = useState(false);
@@ -180,7 +181,6 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const marksOn = usePreviewMarks((s) => s.on);
   const mkP = usePreviewMarks((s) => s.paragraph), mkS = usePreviewMarks((s) => s.space), mkG = usePreviewMarks((s) => s.gutter);
   const markKinds = { paragraph: mkP, space: mkS, gutter: mkG };
-  const outlineOn = useOutline((s) => s.on);
   const toggleMarks = usePreviewMarks((s) => s.toggle);
   const chain = () => ed!.chain().focus();
   const findOpen = useFindBar((s) => s.open);
@@ -591,7 +591,6 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               <Group label={tx("显示")}>
                 <Stack>
                   <B title={layout.navOpen ? tx("收起左栏") : tx("展开左栏")} icon={layout.navOpen ? <PanelLeftContract20Regular /> : <PanelLeftExpand20Regular />} on={layout.navOpen} run={() => layout.setNavOpen(!layout.navOpen)}>{tx("导航窗格")}</B>
-                  <B title={tx("大纲：左栏里列出本节的标题，点一下跳过去")} icon={<TextBulletListSquare20Regular />} on={outlineOn} run={() => { useOutline.getState().toggle(); if (!layout.navOpen) layout.setNavOpen(true); }}>{tx("大纲")}</B>
                 </Stack>
                 <B title={tx("显示或隐藏段落标记")} big icon={<TextParagraph20Regular />} on={marksOn} run={toggleMarks}>{tx("显示/隐藏 ¶")}</B>
               </Group>

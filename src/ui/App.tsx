@@ -120,7 +120,7 @@ export function App() {
   const hasDocument = loaded && useStore.getState().projects.some((p) => p.id === doc.id);
   const commentsOpen = useComments((s) => s.open);
   const [about, setAbout] = useState(false);
-  const outlineOn = useOutline((s) => s.on);
+  const outlineFolded = useOutline((s) => s.folded);
 
   useEffect(() => {
     void load();
@@ -210,7 +210,7 @@ export function App() {
       case 'body': return <RichSection title={tx("正文")} richKey="body" headings placeholder={tx("输入正文…")} />;
       case 'conclusion': return <RichSection title={tx("结论")} richKey="conclusion" headings={false} />;
       case 'bibliography': return <BibPanel which="bibliography" />;
-      case 'appendix': return <RichSection title={tx("附录")} richKey="appendix" headings />;
+      case 'appendix': return <RichSection title={tx("附录")} richKey="appendix" headings placeholder={tx("输入附录…")} />;
       case 'achievements': return <BibPanel which="achievements" />;
       case 'defense': return <DefensePanel />;
       case 'acknowledgement': return <RichSection title={tx("致谢")} richKey="acknowledgement" headings={false} blocks={false} />;
@@ -285,13 +285,21 @@ export function App() {
         <div className={`main mode-${mode} ${navOpen ? '' : 'nav-closed'} ${compact ? 'is-compact' : ''} ${stacked ? 'is-stacked' : ''}`} ref={mainRef} style={{ gridTemplateColumns: gridColumns, gridTemplateRows: gridRows }}>
           {compact && navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} />}
           <nav className={`nav ${compact ? 'is-overlay' : ''}`} hidden={!navOpen} onClick={(e) => { if (compact && (e.target as HTMLElement).closest('button:not(.outline-item)')) setNavOpen(false); }}>
-            {outlineOn && <div className="nav-outline"><h4>{tx("大纲")}</h4><OutlinePane /></div>}
             {[tx("设置"), tx("前置"), tx("主体"), tx("后置")].map((g) => (
               <div key={g}>
                 <h4>{GROUP_ICON[g]}{g}</h4>
                 {NAV.filter((n) => n.group === g).map((n) => {
                   const off = loaded && ((n.key === 'abstract' && !resolvePage(doc, 'abstract').value) || (n.key === 'nomenclature' && !resolvePage(doc, 'symbolsPage').value && !resolvePage(doc, 'abbreviationsPage').value) || (n.key === 'appendix' && !resolvePage(doc, 'appendix').value) || (n.key === 'achievements' && !resolvePage(doc, 'achievements').value) || (n.key === 'defense' && !resolvePage(doc, 'defense').value) || (n.key === 'resume' && !resolvePage(doc, 'resume').value) || (n.key === 'index' && !resolvePage(doc, 'index').value));
-                  return <button key={n.key} type="button" className={`${section === n.key ? 'on' : ''} ${off ? 'off' : ''}`} aria-current={section === n.key ? 'page' : undefined} onClick={() => { setSection(n.key); if (mode === 'preview') setMode('split'); }}>{n.label}{off && <span className="k">{tx("不显示")}</span>}</button>;
+                  const btn = <button key={n.key} type="button" className={`${section === n.key ? 'on' : ''} ${off ? 'off' : ''}`} aria-current={section === n.key ? 'page' : undefined} onClick={() => { setSection(n.key); if (mode === 'preview') setMode('split'); }}>{n.label}{off && <span className="k">{tx("不显示")}</span>}</button>;
+                  // 正文与附录底下常驻大纲（Word 的导航窗格），可收起
+                  if (n.key !== 'body' && n.key !== 'appendix') return btn;
+                  const folded = !!outlineFolded[n.key];
+                  return (
+                    <div key={n.key} className="nav-with-outline">
+                      <div className="nav-row">{btn}<button type="button" className={`outline-fold ${folded ? 'is-folded' : ''}`} title={folded ? tx("展开大纲") : tx("收起大纲")} onClick={() => useOutline.getState().toggle(n.key)}>{folded ? '▸' : '▾'}</button></div>
+                      {!folded && <OutlinePane richKey={n.key as 'body' | 'appendix'} onJump={() => { if (section !== n.key) setSection(n.key); if (mode === 'preview') setMode('split'); }} />}
+                    </div>
+                  );
                 })}
               </div>
             ))}
