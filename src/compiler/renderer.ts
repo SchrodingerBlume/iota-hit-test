@@ -23,16 +23,22 @@ export function initRenderer(): Promise<void> {
       getWrapper: async () => rendererWrapper,
       getModule: () => fetch(new URL('../../vendor/typst-ts-renderer/typst_ts_renderer_bg.wasm', import.meta.url)).then((r) => r.arrayBuffer()).then((b) => new Uint8Array(b)),
     });
-    // 让会话活得比回调长：runWithSession 的 promise 永不 resolve
-    await new Promise<void>((resolveOuter) => {
-      void renderer!.runWithSession((s) => {
-        session = s;
-        resolveOuter();
-        return new Promise<void>(() => { /* 常驻 */ });
-      });
-    });
+    await newSession();
   })();
   return ready;
+}
+
+let endSession: (() => void) | null = null;
+/** 会话常驻（runWithSession 的回调不结束）；整份重来时换一个新会话，旧的结束掉 */
+function newSession(): Promise<void> {
+  endSession?.();
+  return new Promise<void>((resolveOuter) => {
+    void renderer!.runWithSession((s) => {
+      session = s;
+      resolveOuter();
+      return new Promise<void>((done) => { endSession = done; });
+    });
+  });
 }
 
 export interface PageInfo { pageOffset: number; width: number; height: number }
@@ -51,8 +57,9 @@ export async function renderArtifact(artifact: Uint8Array, container: HTMLElemen
   await initRenderer();
   if (!renderer || !session) throw new Error('renderer not ready');
   const prev = container.querySelector(':scope > svg.typst-doc') as SVGSVGElement | null;
-  renderer.manipulateData({ renderSession: session, action: fresh || !prev ? 'reset' : 'merge', data: artifact });
-  // 不给窗口 = 整篇；返回的是与 DOM 现状的差
+  // 整份重来时换新会话：旧会话记着上次画过什么，renderSvgDiff 只会吐差，页里就没字了
+  if (fresh && prev) await newSession();
+  renderer.manipulateData({ renderSession: session!, action: fresh || !prev ? 'reset' : 'merge', data: artifact });
   const svgStr = renderer.renderSvgDiff({ renderSession: session } as never);
   const holder = document.createElement('div');
   holder.innerHTML = svgStr;

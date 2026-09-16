@@ -3,7 +3,7 @@
 // 命令记在 src/data/symbols.json，以后导出 Typst / LaTeX 按表换写法。
 import { useMemo, useState } from 'react';
 import { create } from 'zustand';
-import { Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogTrigger, Button, Input, Tooltip } from '@fluentui/react-components';
+import { Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogTrigger, Button, Input } from '@fluentui/react-components';
 import { Dismiss20Regular, Search20Regular } from '@fluentui/react-icons';
 import SYMBOLS from '../data/symbols.json';
 
@@ -33,14 +33,14 @@ export const useSymbolPicker = create<State>((set) => ({ open: false, setOpen: (
 /** 常用的一排：编辑器里最常打的 */
 export const QUICK_SYMBOLS = ['—', '–', '·', '…', '「', '」', '『', '』', '《', '》', '〈', '〉', '【', '】', '×', '÷', '±', '≈', '≠', '≤', '≥', '∞', '°', '℃', 'µ', 'Ω', '‰', '′', '″', '²', '³', '½', '→', '←', '↔', '⇒', '√', '∑', '∫', '∂', '∇', 'α', 'β', 'γ', 'δ', 'ε', 'θ', 'λ', 'μ', 'π', 'ρ', 'σ', 'τ', 'φ', 'ω', 'Δ', 'Σ', 'Φ', 'Ψ', '©', '®', '™', '§', '¶', '€', '£', '¥'];
 
-export function SymbolPicker({ onPick }: { onPick: (ch: string) => void }) {
-  const open = useSymbolPicker((s) => s.open);
-  const setOpen = useSymbolPicker((s) => s.setOpen);
+/** 面板本体：搜索框 + 类别 + 格子。功能区的符号弹层直接装它（像 tinymist 的符号视图），不再另开对话框 */
+export function SymbolPanel({ onPick, autoFocus }: { onPick: (ch: string) => void; autoFocus?: boolean }) {
   const [q, setQ] = useState('');
-  const [cat, setCat] = useState('greek');
+  const [cat, setCat] = useState('quick');
   const list = useMemo(() => {
     const all = SYMBOL_TABLE.filter((s) => !SKIP.test(s.k) && /\S/.test(s.c));
     const qq = q.trim().toLowerCase().replace(/^\\/, '');
+    if (!qq && cat === 'quick') return QUICK_SYMBOLS.map((c) => SYMBOL_BY_CHAR.get(c) ?? { n: '', c, k: '' });
     if (qq) {
       // 名字整个对上的排最前，其次名字以它开头的，再次别的
       const score = (s: SymbolEntry) => (s.n === qq || s.c === q.trim() ? 0 : s.n.startsWith(qq) ? 1 : (s.l && s.l.toLowerCase() === `\\${qq}`) ? 0 : 2);
@@ -48,29 +48,37 @@ export function SymbolPicker({ onPick }: { onPick: (ch: string) => void }) {
     }
     return all.filter((s) => catOf(s.k) === cat);
   }, [q, cat]);
+  return (
+    <div className="sym-panel" onMouseDown={(e) => { if ((e.target as HTMLElement).tagName !== 'INPUT') e.preventDefault(); }}>
+      <Input size="small" contentBefore={<Search20Regular />} value={q} placeholder="搜名字 / LaTeX 命令 / 字：alpha、arrow.r、\\leq、≤" onChange={(_, d) => setQ(d.value)} autoFocus={autoFocus} className="sym-search" />
+      {!q.trim() && (
+        <div className="sym-cats" role="tablist">
+          <button type="button" role="tab" className={`sym-cat ${cat === 'quick' ? 'on' : ''}`} onClick={() => setCat('quick')}>常用</button>
+          {CATEGORIES.map((c) => <button key={c.key} type="button" role="tab" className={`sym-cat ${cat === c.key ? 'on' : ''}`} onClick={() => setCat(c.key)}>{c.label}</button>)}
+        </div>
+      )}
+      <div className="sym-grid">
+        {list.map((s) => (
+          <button key={s.n + s.c} type="button" className="sym-cell" title={`${s.c}${s.n ? `  sym.${s.n}` : ''}${s.l ? `  ·  ${s.l}` : ''}`} onClick={() => onPick(s.c)}>{s.c}</button>
+        ))}
+        {!list.length && <p className="muted" style={{ gridColumn: '1 / -1', margin: 8 }}>没有这个符号</p>}
+      </div>
+      <div className="sym-foot muted">{q.trim() ? `${list.length} 个` : cat === 'quick' ? '常打的几十个；别的类别与搜索覆盖 Typst 整张符号表' : `${list.length} 个 · 悬停看 Typst 名与 LaTeX 命令`}</div>
+    </div>
+  );
+}
+
+/** 对话框式（别处要用时留着） */
+export function SymbolPicker({ onPick }: { onPick: (ch: string) => void }) {
+  const open = useSymbolPicker((s) => s.open);
+  const setOpen = useSymbolPicker((s) => s.setOpen);
   if (!open) return null;
   return (
     <Dialog open onOpenChange={(_, d) => { if (!d.open) setOpen(false); }}>
       <DialogSurface className="style-dialog sym-dialog">
         <DialogBody>
           <DialogTitle action={<DialogTrigger action="close"><Button appearance="subtle" icon={<Dismiss20Regular />} /></DialogTrigger>}>符号</DialogTitle>
-          <DialogContent>
-            <Input contentBefore={<Search20Regular />} value={q} placeholder="按名字搜：alpha、arrow.r、\leq、≤…" onChange={(_, d) => setQ(d.value)} autoFocus style={{ width: '100%' }} />
-            {!q.trim() && (
-              <div className="sym-cats">
-                {CATEGORIES.map((c) => <button key={c.key} type="button" className={`bib-group-chip ${cat === c.key ? 'on' : ''}`} onClick={() => setCat(c.key)}>{c.label}</button>)}
-              </div>
-            )}
-            <div className="sym-grid">
-              {list.map((s) => (
-                <Tooltip key={s.n + s.c} content={`${s.c}  sym.${s.n}${s.l ? `  ·  ${s.l}` : ''}`} relationship="label" positioning="above" withArrow>
-                  <button type="button" className="sym-cell" onMouseDown={(e) => e.preventDefault()} onClick={() => { onPick(s.c); }}>{s.c}</button>
-                </Tooltip>
-              ))}
-              {!list.length && <p className="muted" style={{ gridColumn: '1 / -1' }}>没有这个符号</p>}
-            </div>
-            <p className="muted style-hint" style={{ marginTop: 8 }}>共 {SYMBOL_TABLE.length} 个 Typst 符号（codex 表），{SYMBOL_TABLE.filter((s) => s.l).length} 个带 LaTeX 命令（unicode-math 表）。悬停看名字；插进正文的是字本身。</p>
-          </DialogContent>
+          <DialogContent><SymbolPanel onPick={onPick} autoFocus /></DialogContent>
         </DialogBody>
       </DialogSurface>
     </Dialog>

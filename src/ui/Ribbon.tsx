@@ -38,7 +38,7 @@ import { useLinkDialog } from './LinkDialog';
 import { useComments, newCommentId } from '../editor/comments';
 import { commentRange } from './CommentsPane';
 import { wordAt } from '../editor/wordAt';
-import { SymbolPicker, useSymbolPicker, QUICK_SYMBOLS, SYMBOL_BY_CHAR } from './SymbolPicker';
+import { SymbolPicker, SymbolPanel } from './SymbolPicker';
 const FITS = [{ value: 'content', label: '根据内容', hint: '列宽按内容定' }, { value: 'window', label: '根据窗口', hint: '撑满版心，各列均分' }, { value: 'fixed', label: '固定列宽', hint: '每列同宽（厘米在插入表格对话框里定）' }];
 
 /** 图 / 表的浮动与跨页选项（模板：placement 交给 Typst；跨页走 show figure.where(kind:): set block(breakable:)） */
@@ -274,8 +274,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
         <span className="rb-keep"><B title="插入符号" big={big} menu icon={<Omega20Regular />} disabled={none} run={() => setPop(pop === id ? null : id)}>{big ? '符号' : undefined}</B></span>
       </PopoverTrigger>
       <PopoverSurface className="rb-symbols">
-        {QUICK_SYMBOLS.map((ch) => <button key={ch} type="button" className="rb-sym" title={`${ch}${SYMBOL_BY_CHAR.get(ch) ? `  sym.${SYMBOL_BY_CHAR.get(ch)!.n}${SYMBOL_BY_CHAR.get(ch)!.l ? ' · ' + SYMBOL_BY_CHAR.get(ch)!.l : ''}` : ''}`} onMouseDown={(e) => e.preventDefault()} onClick={() => { chain().insertContent(ch).run(); setPop(null); afterCommand(); }}>{ch}</button>)}
-        <div className="rb-pop-menu"><button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setPop(null); useSymbolPicker.getState().setOpen(true); }}><Omega20Regular />更多符号…</button></div>
+        <SymbolPanel autoFocus onPick={(ch) => { chain().insertContent(ch).run(); }} />
       </PopoverSurface>
     </Popover>
   );

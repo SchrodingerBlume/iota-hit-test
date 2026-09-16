@@ -262,7 +262,7 @@ function serializeList(node: PMNode, marker: '-' | '+', opts: SerializeOptions, 
   return items.map((item) => {
     const parts: string[] = [];
     for (const child of item.content ?? []) {
-      if (child.type === 'paragraph') parts.push(serializeInline(child.content, opts));
+      if (child.type === 'paragraph') parts.push(serializeInline(child.content, opts) + paraEnd(opts, child));
       else if (child.type === 'bulletList') parts.push('\n' + serializeList(child, '-', opts, depth + 1));
       else if (child.type === 'orderedList') parts.push('\n' + serializeList(child, '+', opts, depth + 1));
       else parts.push(serializeBlock(child, opts, depth + 1));

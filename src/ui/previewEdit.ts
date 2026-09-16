@@ -243,7 +243,9 @@ export function paragraphMarks(index: GlyphIndex, segments: Segment[]): ParaMark
   }
   for (const s of segments) {
     if (s.kind !== 'para') continue;
-    const r = caretRect(index, s.key, s.pmFrom, null);
+    // 段末是换行 / 原子节点时末位没有字形，往前找最近的一个
+    let r = null as ReturnType<typeof caretRect>;
+    for (let p = s.pmFrom; p >= s.pmFrom - 3 && !r; p--) r = caretRect(index, s.key, p, null);
     if (r) out.push({ page: r.page, x: r.x, y: r.y, h: r.h, blank: false });
   }
   return out;
