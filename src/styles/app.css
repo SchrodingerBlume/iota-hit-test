@@ -903,7 +903,7 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .rb-drawer { grid-template-columns: minmax(0, 1fr); min-width: 0; }
 .rb-drawer-inner { min-width: 0; max-width: 100%; }
 .rb-group { padding: 0 6px; }
-.rb-items { align-items: flex-start; }
+.rb-items { align-items: flex-start; min-height: 60px; }
 .rb-stack { display: flex; flex-direction: column; gap: 0; }
 .rb-stack .tb { height: 24px; justify-content: flex-start; padding: 0 6px; min-width: 0; }
 .rb-small-label { font-size: 12px; font-weight: 400; }
