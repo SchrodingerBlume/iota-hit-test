@@ -1,20 +1,25 @@
-// 明暗主题：跟系统，也能手动切；记在 localStorage。深色那套照 Typst Studio（VSCode 深色），
+// 明暗主题：浅色 / 深色 / 跟随系统（默认），记在 localStorage。深色那套照 Typst Studio（VSCode 深色），
 // 浅色那套照 hiTouyingBeamer（一个主色 #166183 配黑白灰）。
 import { useEffect, useState } from 'react';
 
 export type Theme = 'light' | 'dark';
+export type ThemePref = Theme | 'system';
 const KEY = 'iota4web-theme';
 
 function systemTheme(): Theme {
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-export function currentTheme(): Theme {
+export function themePref(): ThemePref {
   try {
     const saved = localStorage.getItem(KEY);
     if (saved === 'light' || saved === 'dark') return saved;
   } catch { /* 隐私模式 */ }
-  return systemTheme();
+  return 'system';
+}
+
+export function currentTheme(pref: ThemePref = themePref()): Theme {
+  return pref === 'system' ? systemTheme() : pref;
 }
 
 export function applyTheme(t: Theme) {
@@ -22,19 +27,21 @@ export function applyTheme(t: Theme) {
   document.documentElement.style.colorScheme = t;
 }
 
-export function useTheme(): [Theme, (t: Theme) => void] {
-  const [theme, setThemeState] = useState<Theme>(() => currentTheme());
+export function useTheme(): [Theme, ThemePref, (p: ThemePref) => void] {
+  const [pref, setPrefState] = useState<ThemePref>(() => themePref());
+  const [system, setSystem] = useState<Theme>(() => systemTheme());
+  const theme = pref === 'system' ? system : pref;
   useEffect(() => { applyTheme(theme); }, [theme]);
   useEffect(() => {
     const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
     if (!mq) return;
-    const onChange = () => { try { if (!localStorage.getItem(KEY)) setThemeState(systemTheme()); } catch { /* */ } };
+    const onChange = () => setSystem(systemTheme());
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
   }, []);
-  const setTheme = (t: Theme) => {
-    try { localStorage.setItem(KEY, t); } catch { /* */ }
-    setThemeState(t);
+  const setPref = (p: ThemePref) => {
+    try { if (p === 'system') localStorage.removeItem(KEY); else localStorage.setItem(KEY, p); } catch { /* */ }
+    setPrefState(p);
   };
-  return [theme, setTheme];
+  return [theme, pref, setPref];
 }

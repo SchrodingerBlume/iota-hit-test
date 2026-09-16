@@ -22,10 +22,10 @@ import { SettingsPanel } from './SettingsPanel';
 import { InfoPanel } from './InfoPanel';
 import { AbstractPanel, NomenclaturePanel, RichSection, BibPanel, DefensePanel, PagesPanel, IndexPanel } from './panels';
 import { Preview } from './Preview';
-import { useTheme } from './theme';
+import { useTheme, type ThemePref } from './theme';
 import { useLayoutPrefs } from './layout';
 import { Ribbon } from './Ribbon';
-import { FluentProvider, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuDivider, Button, Tooltip, Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions } from '@fluentui/react-components';
+import { FluentProvider, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuItemRadio, MenuDivider, Button, Tooltip, Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions } from '@fluentui/react-components';
 import { Apps20Regular, DocumentAdd20Regular, Save20Regular, FolderOpen20Regular, DocumentPdf20Regular, Document20Regular, Info20Regular, WeatherSunny20Regular, WeatherMoon20Regular, Navigation20Regular } from '@fluentui/react-icons';
 import { fluentLight, fluentDark } from './fluent';
 import { SlidersHorizontal, BookText, PenLine, Library } from 'lucide-react';
@@ -110,7 +110,7 @@ export function App() {
   const [refresh, setRefresh] = useState(0);
   useAutoCompile(doc, loaded && view === 'editor', refresh);
   const [busy, setBusy] = useState<string | null>(null);
-  const [theme, setTheme] = useTheme();
+  const [theme, themePref, setThemePref] = useTheme();
   const { navOpen, setNavOpen, mode, setMode, ratio, startDrag, mainRef, gridColumns, gridRows, compact, stacked } = useLayoutPrefs();
   const lastSection = useRef(section);
   useEffect(() => {
@@ -254,9 +254,20 @@ export function App() {
           <span className="rb-trailing">
             {view === 'editor' && <span className="status"><i className={`dot ${dot}`} />{statusText}</span>}
 
-            <Tooltip content={theme === 'dark' ? tx("浅色模式") : tx("深色模式")} relationship="label" positioning="below">
-              <Button appearance="subtle" size="small" className="theme-btn" icon={theme === 'dark' ? <WeatherSunny20Regular /> : <WeatherMoon20Regular />} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
-            </Tooltip>
+            <Menu positioning="below-end" checkedValues={{ theme: [themePref] }} onCheckedValueChange={(_, d) => setThemePref((d.checkedItems[0] ?? 'system') as ThemePref)}>
+              <MenuTrigger disableButtonEnhancement>
+                <Tooltip content={tx("外观：浅色 / 深色 / 跟随系统")} relationship="label" positioning="below">
+                  <Button appearance="subtle" size="small" className="theme-btn" icon={theme === 'dark' ? <WeatherMoon20Regular /> : <WeatherSunny20Regular />} />
+                </Tooltip>
+              </MenuTrigger>
+              <MenuPopover>
+                <MenuList>
+                  <MenuItemRadio name="theme" value="light" icon={<WeatherSunny20Regular />}>{tx("浅色")}</MenuItemRadio>
+                  <MenuItemRadio name="theme" value="dark" icon={<WeatherMoon20Regular />}>{tx("深色")}</MenuItemRadio>
+                  <MenuItemRadio name="theme" value="system">{tx("跟随系统")}</MenuItemRadio>
+                </MenuList>
+              </MenuPopover>
+            </Menu>
             <Menu positioning="below-end">
               <MenuTrigger disableButtonEnhancement>
                 <button type="button" className="brand-btn" title={tx("iota-hit · 关于")}><Logo size={30} /></button>
