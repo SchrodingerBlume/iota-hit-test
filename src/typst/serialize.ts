@@ -251,7 +251,9 @@ export function serializeProject(doc: ThesisDoc, { preview = false }: { preview?
   const abstractZh = rich('abstractZh', { headings: false });
   const abstractEn = rich('abstractEn', { headings: false });
   if (resolvePage(doc, 'abstract').value && (abstractZh.trim() || abstractEn.trim())) {
-    parts.push(`#abstract(en: [\n${indent(abstractEn, 2)}\n])[\n${indent(abstractZh, 2)}\n]`);
+    // 关键词上方：模板 keywords-above——none 不空、v(1fr) 挤到页底、auto 空一行（默认，不写）
+    const ka = s.abstractKeywordsAbove === 'none' ? ', keywords-above: none' : s.abstractKeywordsAbove === 'bottom' ? ', keywords-above: v(1fr)' : '';
+    parts.push(`#abstract(en: [\n${indent(abstractEn, 2)}\n]${ka})[\n${indent(abstractZh, 2)}\n]`);
   }
 
   const nomen = nomenclature(doc);

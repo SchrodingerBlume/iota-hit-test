@@ -9,6 +9,112 @@ import { BibEditor } from './BibEditor';
 import { MathPreview } from '../editor/math/MathPreview';
 import { MathEditor } from '../editor/math/MathEditor';
 import { useState } from 'react';
+import { SWITCHES } from '../model/options';
+import { indexPositions, type PMNode } from '../typst/pmToTypst';
+import { getEditor, whenEditorReady } from '../editor/registry';
+import { useOpenRequest } from '../editor/openRequest';
+
+// ── 索引词登记：正文里 #idx[词] 标的都在这儿列着，改名、删除、跳过去 ──
+const IDX_KEYS: RichKey[] = ['abstractZh', 'abstractEn', 'body', 'conclusion', 'appendix', 'acknowledgement', 'resume'];
+const SECTION_OF: Record<RichKey, string> = { abstractZh: 'abstract', abstractEn: 'abstract', body: 'body', conclusion: 'conclusion', appendix: 'appendix', acknowledgement: 'acknowledgement', resume: 'resume' };
+const KEY_LABEL: Record<RichKey, string> = { abstractZh: '中文摘要', abstractEn: '英文摘要', body: '正文', conclusion: '结论', appendix: '附录', acknowledgement: '致谢', resume: '简历' };
+interface IdxHit { key: RichKey; pos: number; text: string; context: string }
+
+function collectIdx(doc: Record<RichKey, PMNode>): IdxHit[] {
+  const out: IdxHit[] = [];
+  for (const key of IDX_KEYS) {
+    const d = doc[key];
+    if (!d) continue;
+    const posOf = indexPositions(d);
+    const walk = (n: PMNode, para: PMNode | null) => {
+      if (n.type === 'idx') {
+        const text = String(n.attrs?.text ?? '');
+        const ctx = para ? (para.content ?? []).map((c) => (c.type === 'text' ? c.text ?? '' : c.type === 'idx' ? `【${c.attrs?.text ?? ''}】` : '')).join('') : '';
+        out.push({ key, pos: posOf.get(n) ?? 0, text, context: ctx.length > 60 ? `${ctx.slice(0, 60)}…` : ctx });
+        return;
+      }
+      for (const c of n.content ?? []) walk(c, n.type === 'paragraph' || n.type === 'heading' ? n : para);
+    };
+    walk(d, null);
+  }
+  return out;
+}
+
+/** 把某份富文本里的 idx 节点改一遍（改名 / 拆成普通文字） */
+function mapIdx(d: PMNode, fn: (n: PMNode) => PMNode | PMNode[] | null): PMNode {
+  const walk = (n: PMNode): PMNode => {
+    if (!n.content) return n;
+    const content: PMNode[] = [];
+    for (const c of n.content) {
+      if (c.type === 'idx') { const r = fn(c); if (r === null) continue; if (Array.isArray(r)) content.push(...r); else content.push(r); }
+      else content.push(walk(c));
+    }
+    return { ...n, content };
+  };
+  return walk(d);
+}
+
+export function IndexPanel() {
+  const doc = useStore((s) => s.doc);
+  const setRich = useStore((s) => s.setRich);
+  const setSection = useStore((s) => s.setSection);
+  const hits = useMemo(() => collectIdx(doc as any), [doc]);
+  const terms = useMemo(() => {
+    const m = new Map<string, IdxHit[]>();
+    for (const h of hits) (m.get(h.text) ?? m.set(h.text, []).get(h.text)!).push(h);
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0], 'zh'));
+  }, [hits]);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+  const rename = (from: string, to: string) => {
+    const t = to.trim();
+    if (!t || t === from) { setEditing(null); return; }
+    for (const key of IDX_KEYS) if (doc[key]) setRich(key, mapIdx(doc[key] as any, (n) => (n.attrs?.text === from ? { ...n, attrs: { ...n.attrs, text: t } } : n)) as any);
+    setEditing(null);
+  };
+  const unregister = (term: string) => {
+    // 删掉登记、留下正文里的字
+    for (const key of IDX_KEYS) if (doc[key]) setRich(key, mapIdx(doc[key] as any, (n) => (n.attrs?.text === term ? (n.attrs?.text ? { type: 'text', text: String(n.attrs.text) } : null) : n)) as any);
+  };
+  const jump = async (h: IdxHit) => {
+    setSection(SECTION_OF[h.key] as any);
+    const ed = getEditor(h.key) ?? (await whenEditorReady(h.key));
+    if (!ed) return;
+    ed.chain().focus().setNodeSelection(Math.min(h.pos, ed.state.doc.content.size - 1)).scrollIntoView().run();
+    useOpenRequest.getState().request({ key: h.key, pos: h.pos });
+  };
+  return (
+    <>
+      <h2>索引</h2>
+      <p className="lead">正文里用「插入 → 索引词」标过的词都在这儿（模板的 #idx，印成一页「索引」，规范 2.18 说可选）。在这里改名会改全篇同名的登记；「不登记」只去掉标记、正文里的字留着。</p>
+      <div style={{ marginBottom: 12 }}><PageSwitch pageKey="index" /></div>
+      {!terms.length && <p className="muted">还没有索引词。把光标放到正文里的词上，插入页 → 文本 → 索引词。</p>}
+      {terms.length > 0 && (
+        <table className="idx-table">
+          <thead><tr><th>词</th><th>出现</th><th>位置</th><th /></tr></thead>
+          <tbody>
+            {terms.map(([term, list]) => (
+              <tr key={term}>
+                <td>
+                  {editing === term
+                    ? <input className="idx-rename" value={draft} autoFocus onChange={(e) => setDraft(e.target.value)} onBlur={() => rename(term, draft)} onKeyDown={(e) => { if (e.key === 'Enter') rename(term, draft); if (e.key === 'Escape') setEditing(null); }} />
+                    : <button type="button" className="idx-term" title="改名（全篇同名的一起改）" onClick={() => { setEditing(term); setDraft(term); }}>{term || <em className="muted">（空）</em>}</button>}
+                </td>
+                <td className="muted">{list.length} 处</td>
+                <td>
+                  <ul className="idx-hits">
+                    {list.map((h, i) => <li key={i}><button type="button" className="idx-jump" title="跳到这一处" onClick={() => void jump(h)}>{KEY_LABEL[h.key]}</button><span className="muted"> {h.context}</span></li>)}
+                  </ul>
+                </td>
+                <td><button type="button" className="btn btn-xs" onClick={() => unregister(term)}>不登记</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </>
+  );
+}
 
 export function RichSection({ title, lead, richKey, headings, blocks, placeholder }: { title: string; lead?: string; richKey: RichKey; headings: boolean; blocks?: boolean; placeholder?: string }) {
   const part = richKey === 'body' ? 'body' : richKey === 'appendix' ? 'appendix' : 'other';
@@ -35,11 +141,17 @@ export function PageSwitch({ pageKey }: { pageKey: keyof Pages }) {
 export function AbstractPanel() {
   const zh = useStore((s) => s.doc.abstractZh);
   const en = useStore((s) => s.doc.abstractEn);
+  const settings = useStore((s) => s.doc.settings);
+  const setSettings = useStore((s) => s.setSettings);
   const setRich = useStore((s) => s.setRich);
+  const def = SWITCHES.find((d) => d.key === 'abstractKeywordsAbove')!;
   return (
     <>
       <h2>摘要</h2>
       <p className="lead">关键词在「元信息」里填。缩略语在摘要里也会首次展开、正文开头再重置一次。</p>
+      <div className="field-row" style={{ marginBottom: 12 }}>
+        <TriSeg label="正文与关键词之间" hint={def.hint} choices={[{ value: 'none', label: '不空' }, { value: 'line', label: '空一行' }, { value: 'bottom', label: '关键词置于页底' }]} value={settings.abstractKeywordsAbove === 'auto' ? 'auto' : settings.abstractKeywordsAbove} auto={{ value: 'line', reason: '指南：关键词在正文之后隔一行顶格书写' }} onChange={(v) => setSettings({ abstractKeywordsAbove: v as any })} />
+      </div>
       <h3>中文摘要</h3>
       <RichEditor instanceKey="abstractZh" richKey="abstractZh" value={zh} onChange={(v) => setRich('abstractZh', v)} headings={false} blocks={false} placeholder="中文摘要……" />
       <h3 style={{ marginTop: 20 }}>Abstract</h3>

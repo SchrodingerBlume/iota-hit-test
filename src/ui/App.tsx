@@ -17,7 +17,7 @@ import { ProjectsView } from './ProjectsView';
 import { useFontState } from '../fonts/userFonts';
 import { SettingsPanel } from './SettingsPanel';
 import { InfoPanel } from './InfoPanel';
-import { AbstractPanel, NomenclaturePanel, RichSection, BibPanel, DefensePanel, PagesPanel } from './panels';
+import { AbstractPanel, NomenclaturePanel, RichSection, BibPanel, DefensePanel, PagesPanel, IndexPanel } from './panels';
 import { Preview } from './Preview';
 import { useTheme } from './theme';
 import { useLayoutPrefs } from './layout';
@@ -39,6 +39,7 @@ const NAV: { key: Section; label: string; group: string; k?: string }[] = [
   { key: 'defense', label: '答辩', group: '后置' },
   { key: 'acknowledgement', label: '致谢', group: '后置' },
   { key: 'resume', label: '个人简历', group: '后置' },
+  { key: 'index', label: '索引', group: '后置' },
 ];
 
 /** 文档一变就（防抖后）重新生成 Typst 并交给 worker */
@@ -182,6 +183,7 @@ export function App() {
       case 'achievements': return <BibPanel which="achievements" />;
       case 'defense': return <DefensePanel />;
       case 'acknowledgement': return <RichSection title="致谢" richKey="acknowledgement" headings={false} blocks={false} />;
+      case 'index': return <IndexPanel />;
       case 'resume': return <RichSection title="个人简历" lead="出生、本科、硕士、博士、获奖情况、工作经历，一段一段写。要排这一页记得在「页面开关」里打开。" richKey="resume" headings={false} blocks={false} />;
     }
   })();
@@ -236,7 +238,7 @@ export function App() {
               <div key={g}>
                 <h4>{GROUP_ICON[g]}{g}</h4>
                 {NAV.filter((n) => n.group === g).map((n) => {
-                  const off = loaded && ((n.key === 'abstract' && !resolvePage(doc, 'abstract').value) || (n.key === 'nomenclature' && !resolvePage(doc, 'symbolsPage').value && !resolvePage(doc, 'abbreviationsPage').value) || (n.key === 'appendix' && !resolvePage(doc, 'appendix').value) || (n.key === 'achievements' && !resolvePage(doc, 'achievements').value) || (n.key === 'defense' && !resolvePage(doc, 'defense').value) || (n.key === 'resume' && !resolvePage(doc, 'resume').value));
+                  const off = loaded && ((n.key === 'abstract' && !resolvePage(doc, 'abstract').value) || (n.key === 'nomenclature' && !resolvePage(doc, 'symbolsPage').value && !resolvePage(doc, 'abbreviationsPage').value) || (n.key === 'appendix' && !resolvePage(doc, 'appendix').value) || (n.key === 'achievements' && !resolvePage(doc, 'achievements').value) || (n.key === 'defense' && !resolvePage(doc, 'defense').value) || (n.key === 'resume' && !resolvePage(doc, 'resume').value) || (n.key === 'index' && !resolvePage(doc, 'index').value));
                   return <button key={n.key} type="button" className={`${section === n.key ? 'on' : ''} ${off ? 'off' : ''}`} onClick={() => setSection(n.key)}>{n.label}{off && <span className="k">关</span>}</button>;
                 })}
               </div>

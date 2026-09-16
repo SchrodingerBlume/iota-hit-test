@@ -260,6 +260,18 @@ export const SWITCHES: SwitchDef<any>[] = [
     resolve: (s) => ({ value: false, reason: s.fontset === 'webapp' ? '本站带了 FandolKai，强调用楷体，不斜切' : '本机有楷体就用楷体，不斜切' }),
   },
   {
+    key: 'abstractKeywordsAbove',
+    label: '摘要关键词上方',
+    hint: '摘要正文与「关键词」之间：指南说隔一行顶格书写（模板默认，落到页首就收掉）；也可以不空，或把关键词挤到本页最下面（v(1fr)）',
+    choices: [
+      { value: 'none', label: '不空' },
+      { value: 'line', label: '空一行' },
+      { value: 'bottom', label: '置于页底' },
+    ],
+    group: '标题与页面',
+    resolve: () => ({ value: 'line', reason: '指南：关键词在正文之后隔一行' }),
+  },
+  {
     key: 'hyphenate',
     label: '西文断字',
     hint: '行尾的英文单词按音节断开加连字符（Typst 的 text.hyphenate）。模板默认关——两份范例的 Word 都没开自动断字；两端对齐下西文多时开了更匀',
@@ -334,6 +346,7 @@ export const defaultSettings = (): Settings => ({
   fakeBold: 'auto',
   fakeItalic: 'auto',
   hyphenate: 'auto',
+  abstractKeywordsAbove: 'auto',
   emDash: 'auto',
   appendixNumbering: 'auto',
   titleEnXiaoer: 'auto',

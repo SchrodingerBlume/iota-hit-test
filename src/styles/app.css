@@ -836,6 +836,15 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .rb-pop-menu button:hover { background: var(--panel-2); }
 .rb-pop-menu button svg { width: 18px; height: 18px; color: var(--muted); }
 .table-text-dialog { max-width: 640px; }
+/* 索引登记表 */
+.idx-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.idx-table th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+.idx-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.idx-term { border: 0; background: none; font: inherit; font-weight: 600; color: var(--ink); cursor: text; padding: 2px 4px; border-radius: var(--r-xs); }
+.idx-term:hover { background: var(--panel-2); }
+.idx-rename { font: inherit; padding: 2px 4px; border: 1px solid var(--accent); border-radius: var(--r-xs); }
+.idx-hits { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.idx-jump { border: 0; background: var(--accent-soft); color: var(--accent-ink); font-size: 12px; padding: 1px 6px; border-radius: var(--r-pill); cursor: pointer; }
 /* 符号面板 */
 .sym-dialog { max-width: 720px; }
 .sym-cats { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
