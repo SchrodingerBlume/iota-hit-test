@@ -30,7 +30,7 @@ function skipReason(node) {
   if (ts.isCallExpression(p) && p.arguments.includes(node)) {
     const c = p.expression;
     if (ts.isPropertyAccessExpression(c) && SKIP_CALLS.has(c.name.text)) return 'call:' + c.name.text;
-    if (ts.isIdentifier(c) && (c.text === 't' || c.text === 'tx')) return 'already';
+    if (ts.isIdentifier(c) && (c.text === 't' || c.text === 'tx' || c.text === 'tr') && p.arguments[0] === node) return 'already';
   }
   if (ts.isNewExpression(p) && ts.isIdentifier(p.expression) && p.expression.text === 'RegExp') return 'regexp';
   if (ts.isTaggedTemplateExpression(p)) return 'tagged';
@@ -47,9 +47,10 @@ for (const file of files) {
   const lit = (s) => JSON.stringify(s);
   function visit(node) {
     if (ts.isIdentifier(node)) { if (node.text === 't') hasT = true; if (node.text === 'tx') hasTx = true; }
-    if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && HAN.test(node.text)) {
+    if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && (HAN.test(node.text) || skipReason(node) === 'already')) {
       const r = skipReason(node);
-      if (r) skipped.push(`${rel}: [${r}] ${node.text.slice(0, 60)}`);
+      if (r === 'already') key(node.text);
+      else if (r) skipped.push(`${rel}: [${r}] ${node.text.slice(0, 60)}`);
       else cands.push({ start: node.getStart(sf), end: node.getEnd(), build: (T) => (ts.isJsxAttribute(node.parent) ? `{${T}(${lit(key(node.text))})}` : `${T}(${lit(key(node.text))})`) });
     } else if (ts.isTemplateExpression(node) && (HAN.test(node.head.text) || node.templateSpans.some((s) => HAN.test(s.literal.text)))) {
       const r = skipReason(node);
