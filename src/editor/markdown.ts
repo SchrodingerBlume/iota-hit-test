@@ -101,8 +101,18 @@ function inlineSyntax(text: string): Node[] {
   return out;
 }
 
+// marked 把 \x 切成单独的 escape 记号；相邻同标记的文字并回一个节点，不然再转一次 **a****\\****b**
+function mergeText(nodes: Node[]): Node[] {
+  const out: Node[] = [];
+  for (const n of nodes) {
+    const prev = out[out.length - 1];
+    if (n.type === 'text' && prev?.type === 'text' && JSON.stringify(prev.marks ?? []) === JSON.stringify(n.marks ?? [])) prev.text = (prev.text ?? '') + (n.text ?? '');
+    else out.push(n.type === 'text' ? { ...n } : n);
+  }
+  return out;
+}
 function inlines(tokens: Token[] = []): Node[] {
-  return tokens.flatMap((token): Node[] => {
+  return mergeText(tokens.flatMap((token): Node[] => {
     const t = token as any;
     switch (t.type) {
       case 'text': case 'escape': return t.tokens ? inlines(t.tokens) : inlineSyntax(t.text);
@@ -120,7 +130,7 @@ function inlines(tokens: Token[] = []): Node[] {
       }
       default: return textNode(t.raw ?? '');
     }
-  });
+  }));
 }
 function blocks(tokens: Token[], headings: boolean): Node[] {
   const out: Node[] = [];

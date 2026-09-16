@@ -75,6 +75,7 @@ function settingsArgs(s: Settings): string[] {
     ['heading1Pagebreak', 'heading-1-pagebreak'],
     ['openright', 'openright'],
     ['enumHanging', 'enum-hanging'],
+    ['listHanging', 'list-hanging'],
     ['abbreviationLinks', 'abbreviation-links'],
     ['abbreviationIndexed', 'abbreviation-indexed'],
     ['titleSpread', 'title-spread'],

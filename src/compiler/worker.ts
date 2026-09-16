@@ -33,11 +33,13 @@ class StaticPackageRegistry {
   }
 }
 
-/** 带进度、走 Cache API 的下载 */
-async function fetchCached(url: string, onBytes?: (n: number) => void): Promise<Uint8Array> {
+/** 带进度、走 Cache API 的下载；文件名不变内容会变的（包、字体）按 version 分开存，旧版本顺手删掉 */
+async function fetchCached(url: string, version: string | number | null, onBytes?: (n: number) => void): Promise<Uint8Array> {
   let cache: Cache | undefined;
   try { cache = await caches.open(CACHE); } catch { cache = undefined; }
-  const cached = cache && (await cache.match(url));
+  const key = version == null ? url : `${url}?v=${version}`;
+  if (cache && version != null) for (const r of await cache.keys()) if (r.url !== key && (r.url === url || r.url.startsWith(`${url}?v=`))) void cache.delete(r);
+  const cached = cache && (await cache.match(key));
   if (cached) {
     const buf = new Uint8Array(await cached.arrayBuffer());
     onBytes?.(buf.length);
@@ -63,7 +65,7 @@ async function fetchCached(url: string, onBytes?: (n: number) => void): Promise<
   const out = new Uint8Array(total);
   let off = 0;
   for (const c of chunks) { out.set(c, off); off += c.length; }
-  if (cache) { try { await cache.put(url, new Response(out, { headers: { 'Content-Type': 'application/octet-stream' } })); } catch { /* 配额不够就算了 */ } }
+  if (cache) { try { await cache.put(key, new Response(out, { headers: { 'Content-Type': 'application/octet-stream' } })); } catch { /* 配额不够就算了 */ } }
   return out;
 }
 
@@ -101,7 +103,7 @@ async function init(base: string) {
   ]);
   const fonts: { file: string; size: number; lazy: boolean; info: { info?: { family?: string }[] } }[] = fontManifest.fonts;
   bundledFamilies = [...new Set(fonts.flatMap((f) => (f.info?.info ?? []).map((i) => i.family ?? '').filter(Boolean)))];
-  const packages: { namespace: string; name: string; version: string; file: string; size: number }[] = pkgManifest.packages;
+  const packages: { namespace: string; name: string; version: string; file: string; size: number; sha?: string }[] = pkgManifest.packages;
 
   const wasmUrl = new URL('../../vendor/typst-ts-web-compiler/typst_ts_web_compiler_bg.wasm', import.meta.url).href;
   const wasmSize = 30_200_000; // 进度条用的估计值
@@ -110,7 +112,7 @@ async function init(base: string) {
   progress.phase = '下载排版引擎';
   report('typst 0.15.1 · wasm');
   let wasmLoaded = 0;
-  const wasm = wasmBytes = await fetchCached(wasmUrl, (n) => { wasmLoaded += n; progress.loaded += n; report('typst 0.15.1 · wasm'); });
+  const wasm = wasmBytes = await fetchCached(wasmUrl, null, (n) => { wasmLoaded += n; progress.loaded += n; report('typst 0.15.1 · wasm'); });
   progress.loaded += Math.max(0, wasmSize - wasmLoaded);
 
   progress.phase = '下载字体';
@@ -119,7 +121,7 @@ async function init(base: string) {
   await Promise.all(fonts.map(async (f) => {
     const url = `${base}fonts/${f.file}`;
     if (f.lazy) { fontBuffers.push({ ...(f.info as object), url } as any); return; }
-    const buf = await fetchCached(url, (n) => { progress.loaded += n; report(f.file); });
+    const buf = await fetchCached(url, f.size, (n) => { progress.loaded += n; report(f.file); });
     fontBuffers.push(buf);
   }));
   bundledFonts = fontBuffers.filter((f): f is Uint8Array => f instanceof Uint8Array);
@@ -128,7 +130,7 @@ async function init(base: string) {
   const am = new MemoryAccessModel();
   const registry = new StaticPackageRegistry(am);
   await Promise.all(packages.map(async (p) => {
-    const buf = await fetchCached(`${base}packages/${p.file}`, (n) => { progress.loaded += n; report(`${p.name} ${p.version}`); });
+    const buf = await fetchCached(`${base}packages/${p.file}`, p.sha ?? p.size, (n) => { progress.loaded += n; report(`${p.name} ${p.version}`); });
     registry.add(p, await ensureGzip(buf));
   }));
 

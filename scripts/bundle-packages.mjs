@@ -8,6 +8,7 @@
 //                      或 ~/Library/Application Support/typst/packages/preview/…
 //                      本机没有的从 packages.typst.org 下载
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -86,8 +87,9 @@ async function pack(ns, name, version, dir) {
   const outPath = path.join(outDir, outName);
   await tar.c({ gzip: true, file: outPath, cwd: dir, portable: true, mtime: new Date(0) }, files);
   const size = fs.statSync(outPath).size;
+  const sha = crypto.createHash('sha256').update(fs.readFileSync(outPath)).digest('hex').slice(0, 12);
   console.log(`  ${outName}  ${(size / 1024).toFixed(0)} KB  (${files.length} 个文件)`);
-  return { namespace: ns, name, version, file: outName, size, deps: scanImports(dir, files) };
+  return { namespace: ns, name, version, file: outName, size, sha, deps: scanImports(dir, files) };
 }
 
 async function main() {

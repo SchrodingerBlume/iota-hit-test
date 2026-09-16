@@ -211,6 +211,14 @@ export const SWITCHES: SwitchDef<any>[] = [
     resolve: () => ({ value: false, reason: '跟范例：不悬挂' }),
   },
   {
+    key: 'listHanging',
+    label: '圆点列表续行悬挂',
+    hint: '指南没规定圆点列表；关掉就与编号列表一样排成段',
+    choices: onOff,
+    group: '缩略语与列表',
+    resolve: () => ({ value: true, reason: '原生的悬挂' }),
+  },
+  {
     key: 'abbreviationLinks',
     label: '缩写链到缩略语表',
     hint: '正文里的缩写点一下跳到表',
@@ -340,6 +348,7 @@ export const defaultSettings = (): Settings => ({
   heading1Pagebreak: 'auto',
   openright: 'auto',
   enumHanging: 'auto',
+  listHanging: 'auto',
   abbreviationLinks: 'auto',
   abbreviationIndexed: 'auto',
   titleSpread: 'auto',

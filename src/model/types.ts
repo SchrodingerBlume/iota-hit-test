@@ -63,6 +63,7 @@ export interface Settings {
   heading1Pagebreak: TriBool;
   openright: TriBool;
   enumHanging: TriBool;
+  listHanging: TriBool;
   abbreviationLinks: TriBool;
   abbreviationIndexed: TriBool;
   titleSpread: TriBool;
