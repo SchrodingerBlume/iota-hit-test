@@ -92,6 +92,14 @@ typst.ts 主分支已经升到 0.15.1，所以 `vendor/` 里的两颗 wasm 是�
 符号表（codex 的 `sym.txt`，1200 多个）配 unicode-math 的 LaTeX 命令，`src/data/symbols.json` 记着字 ↔
 `sym.名` ↔ `\命令` 的对照，以后导出 LaTeX / Typst 按表换写法（`scripts/build-symbols.mjs` 生成）。
 
+编辑区可以切到 **Markdown 模式**（GFM，`marked` 解析）：标题、粗斜体、列表、表格、代码块、链接照常写，
+行内公式 `$…$`、行间 `$$…$$`、引文 `[@key]`、交叉引用 `@fig:x`、脚注 `^[…]`、图 `![题注](图片名)` 都认；
+GFM 说不出的属性（英文标题、标签、浮动……）放在 `<!--iota-attrs:{…}-->` 注释里，整块说不出的（分图、
+带对齐的表）放在 ```` ```iota-node ```` 围栏里原样存，来回切换不丢东西。没转换完的草稿随工程一起保存。
+
+本机字体丢了（换了浏览器会话、权限被收回）会自动弹「需要重新读取字体」，一键重读或选文件；已授权过的
+Local Font Access 进站自动重读。
+
 审阅页：批注（`@sereneinserenade/tiptap-comment-extension` 的标记圈范围，本体存在工程文件里），老师导入、
 写批注、再导出，学生导入就看得见；编辑区与预览都加亮，PDF 不印。长度输入统一收 Typst 单位
 （cm / mm / in / pt / em / % / fr / 行）。

@@ -14,7 +14,7 @@ import { resolvePage } from '../model/pages';
 import { EditorEnvContext, type EditorEnv } from '../editor/env';
 import { imageBytes, putImage, safeImageName, imageDimensions } from '../editor/imageCache';
 import { ProjectsView } from './ProjectsView';
-import { useFontState } from '../fonts/userFonts';
+import { FontRecovery } from './FontRecovery';
 import { SettingsPanel } from './SettingsPanel';
 import { InfoPanel } from './InfoPanel';
 import { AbstractPanel, NomenclaturePanel, RichSection, BibPanel, DefensePanel, PagesPanel, IndexPanel } from './panels';
@@ -114,15 +114,7 @@ export function App() {
     void load();
   }, []);
 
-  const fontsLoaded = useRef(false);
-  useEffect(() => {
-    if (!loaded || view !== 'editor') return;
-    startCompiler();
-    if (!fontsLoaded.current) {
-      fontsLoaded.current = true;
-      void useFontState.getState().loadStored();
-    }
-  }, [loaded, view]);
+  useEffect(() => { if (loaded && view === 'editor') startCompiler(); }, [loaded, view]);
 
   // 编辑器周边：文献、可引用对象、缩略语、图片
   const env = useMemo<EditorEnv>(() => ({
@@ -222,6 +214,7 @@ export function App() {
   return (
     <EditorEnvContext.Provider value={env}>
       <FluentProvider theme={theme === 'dark' ? fluentDark : fluentLight} className="fluent-root">
+      <FontRecovery />
       <div className="app">
         {/* 顶栏并进功能区那一行：左边品牌与「文件」菜单，右边状态、导出、主题 */}
         {(() => { const leading = (

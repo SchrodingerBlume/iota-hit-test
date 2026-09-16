@@ -1,6 +1,6 @@
 // 富文本编辑器：TipTap + 我们的节点。value 是 ProseMirror JSON，onChange 回同样的 JSON。
 // 工具栏一行：常用的摆在外面，插入类的收进「插入」菜单；选中文字时浮出气泡菜单。
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { useBlockMenu } from './BlockMenu';
@@ -29,6 +29,7 @@ import { registerEditor, unregisterEditor, getEditor } from './registry';
 import { B, Sep, useEditorTick, useInsertActions, useRichSize } from './tools';
 import { MirrorCaret, mirrorCaretKey } from './extensions/MirrorCaret';
 import { Search } from './extensions/Search';
+import { fromMarkdown, toMarkdown } from './markdown';
 import { useFindBar } from '../ui/Ribbon';
 import { recordTransaction, invalidatePositions } from './versions';
 import { usePreviewSurface, usePreviewMarks } from '../ui/PreviewEditLayer';
@@ -62,6 +63,10 @@ export interface RichEditorProps {
 }
 
 export function RichEditor({ value, onChange, headings = true, blocks = true, placeholder, className, instanceKey, part = 'other', richKey }: RichEditorProps) {
+  const savedSource = useStore.getState().doc.sourceDrafts?.[instanceKey];
+  const [sourceMode, setSourceMode] = useState(savedSource !== undefined);
+  const [source, setSource] = useState(() => savedSource ?? '');
+  const [sourceError, setSourceError] = useState('');
   const lastEmitted = useRef<RichDoc | null>(null);
   const [richSize] = useRichSize();
   const env = useEditorEnv();
@@ -152,7 +157,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
 
   // 登记到编辑器表里：预览区直接编辑要找到它（挂上来时内容就是工程里那份，位置不必作废）
   useEffect(() => {
-    if (!editor || !richKey) return;
+    if (!editor || !richKey || sourceMode) return;
     registerEditor(richKey, editor, { blocks, headings });
     // 没有当前编辑器（或它已经没了）就把这份当作当前的，功能区才有东西可作用
     const cur = usePreviewSurface.getState().activeKey;
@@ -160,7 +165,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     const onFocus = () => usePreviewSurface.getState().set({ activeKey: richKey });
     editor.on('focus', onFocus);
     return () => { editor.off('focus', onFocus); unregisterEditor(richKey, editor); };
-  }, [editor, richKey, blocks, headings]);
+  }, [editor, richKey, blocks, headings, sourceMode]);
 
   // 当前批注：正文里那一段加亮
   useEffect(() => {
@@ -196,12 +201,59 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     return usePreviewSurface.subscribe(apply);
   }, [editor, richKey]);
 
+  const applySource = (text: string) => {
+    if (!editor) return false;
+    try {
+      const next = fromMarkdown(text, headings);
+      editor.schema.nodeFromJSON(next).check();
+      if (JSON.stringify(editor.getJSON()) !== JSON.stringify(next)) editor.commands.setContent(next);
+      setSourceError('');
+      return true;
+    } catch (error) { setSourceError((error as Error).message); return false; }
+  };
+  useEffect(() => { if (editor) editor.setEditable(!sourceMode, false); }, [editor, sourceMode]);
+  const restoredSource = useRef(false);
+  useEffect(() => {
+    if (!editor || restoredSource.current) return;
+    restoredSource.current = true;
+    if (savedSource !== undefined) { applySource(savedSource); useStore.getState().setSourceDraft(instanceKey, savedSource); }
+  }, [editor]);
+  const changeSource = (text: string, composing: boolean) => {
+    setSource(text);
+    if (!composing) applySource(text);
+    useStore.getState().setSourceDraft(instanceKey, text);
+  };
+  const switchMode = (code: boolean) => {
+    if (code === sourceMode || !editor) return;
+    if (code) setSource(toMarkdown(editor.getJSON() as RichDoc));
+    else {
+      if (!applySource(source)) return;
+      useStore.getState().setSourceDraft(instanceKey, undefined);
+    }
+    setSourceMode(code);
+  };
+
   return (
     <NumberingContext.Provider value={numbering}>
       <RichKeyContext.Provider value={richKey}>
         <div className={`editor ${className ?? ''}`} style={{ '--rich-size': `${richSize}px` } as React.CSSProperties}>
-          {editor && <Bubble editor={editor} />}
-          <EditorContent editor={editor} className="editor-body" />
+          <div className="editor-mode" role="group" aria-label="编辑模式">
+            <button type="button" className={`btn btn-xs ${!sourceMode ? 'btn-primary' : ''}`} aria-pressed={!sourceMode} onClick={() => switchMode(false)}>富文本</button>
+            <button type="button" className={`btn btn-xs ${sourceMode ? 'btn-primary' : ''}`} aria-pressed={sourceMode} onClick={() => switchMode(true)}>Markdown</button>
+            {sourceMode && <span className="muted">GFM</span>}
+          </div>
+          {sourceMode && <>
+            <textarea className="markdown-source" aria-label="Markdown 源代码" value={source} spellCheck={false}
+              onChange={(event) => changeSource(event.target.value, (event.nativeEvent as InputEvent).isComposing)}
+              onCompositionEnd={(event) => changeSource(event.currentTarget.value, false)}
+              onKeyDown={(event) => { if (event.nativeEvent.isComposing || event.keyCode === 229) return; if (event.key === 'Tab') { event.preventDefault(); const el = event.currentTarget; const start = el.selectionStart, end = el.selectionEnd; changeSource(source.slice(0, start) + '  ' + source.slice(end), false); requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = start + 2; }); } }} />
+            {sourceError && <p className="diag err" role="alert">{sourceError} 草稿已保存，预览保留上次有效内容。</p>}
+            <details className="markdown-help"><summary>Markdown 语法</summary><p># 标题 · **加粗** · *斜体* · ~~删除线~~ · 列表 · 表格 · 代码块</p><p>公式、图片、题注和引用等专用内容保留在 iota-node 代码块或 iota 注释中。任务列表在富文本中显示为 [ ] / [x]。</p></details>
+          </>}
+          <div hidden={sourceMode}>
+            {editor && !sourceMode && <Bubble editor={editor} />}
+            <EditorContent editor={editor} className="editor-body" />
+          </div>
         </div>
       </RichKeyContext.Provider>
     </NumberingContext.Provider>

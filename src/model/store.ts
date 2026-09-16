@@ -110,6 +110,7 @@ interface State {
   setSettings: (patch: Partial<Settings>) => void;
   setComments: (comments: Comment[]) => void;
   setInfo: (patch: Partial<Info>) => void;
+  setSourceDraft: (key: string, source: string | undefined) => void;
   setRich: (key: RichKey, value: RichDoc) => void;
   setPages: (patch: Partial<Pages>) => void;
   setReferences: (e: BibEntry[]) => void;
@@ -178,7 +179,8 @@ export const useStore = create<State>((set, get) => {
     setSettings: (patch) => update((d) => ({ ...d, settings: { ...d.settings, ...patch } })),
     setComments: (comments) => update((d) => ({ ...d, comments })),
     setInfo: (patch) => update((d) => ({ ...d, info: { ...d.info, ...patch } })),
-    setRich: (key, value) => update((d) => ({ ...d, [key]: value })),
+    setSourceDraft: (key, source) => update((d) => { const sourceDrafts = { ...d.sourceDrafts }; if (source === undefined) delete sourceDrafts[key]; else sourceDrafts[key] = source; return { ...d, sourceDrafts }; }),
+    setRich: (key, value) => update((d) => { const sourceDrafts = { ...d.sourceDrafts }; delete sourceDrafts[key]; return { ...d, [key]: value, sourceDrafts }; }),
     setPages: (patch) => update((d) => ({ ...d, pages: { ...d.pages, ...patch } })),
     setReferences: (references) => update((d) => ({ ...d, references })),
     setAchievementEntries: (achievementEntries) => update((d) => ({ ...d, achievementEntries })),

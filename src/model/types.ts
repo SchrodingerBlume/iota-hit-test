@@ -73,7 +73,7 @@ export interface Settings {
   /** 摘要正文与关键词之间：auto ＝ 空一行（指南），none ＝ 不空，bottom ＝ 关键词挤到页底（v(1fr)） */
   abstractKeywordsAbove: Tri<'none' | 'line' | 'bottom'>;
   emDash: Tri<'cjk' | 'latin'>;
-  appendixNumbering: Tri<'letters' | 'numbers'>;
+  appendixNumbering: Tri<'letters' | 'numbers' | 'hanzi'>;
   /** 英文题目强制小二号（封面与内封的 title-en-xiaoer） */
   titleEnXiaoer: TriBool;
 }
@@ -205,6 +205,8 @@ export interface Comment {
 }
 
 export interface ThesisDoc {
+  /** 未转换完成的 Markdown 也随文档保存，避免切换章节丢失输入。 */
+  sourceDrafts?: Record<string, string>;
   version: 1;
   id: string;
   /** 项目名（项目管理界面里起的） */

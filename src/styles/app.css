@@ -1032,3 +1032,7 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 .triseg-seg button.on.t-on,
 .triseg-seg button.on.t-off { background: var(--accent); color: #fff; }
 .preview .pane-bar .preview-progress { top: auto; bottom: 0; }
+
+.editor-mode { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.markdown-source { display: block; box-sizing: border-box; width: 100%; min-height: 55vh; padding: 14px; resize: vertical; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--panel); color: var(--ink); font: 14px/1.65 var(--mono); tab-size: 2; }
+.markdown-help { margin-top: 8px; color: var(--muted); font-size: 12px; }

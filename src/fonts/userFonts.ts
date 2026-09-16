@@ -73,7 +73,7 @@ async function fingerprint(buf: ArrayBuffer): Promise<string> {
 
 async function apply(add: { id: string; data: ArrayBuffer }[], remove: string[]) {
   const r = await updateUserFonts(add, remove);
-  if (r.error) useFontState.setState({ error: `字体表重建失败：${r.error}` });
+  if (r.error) throw new Error(`字体加载失败：${r.error}`);
 }
 
 interface FontData { family: string; fullName: string; postscriptName: string; style: string; blob(): Promise<Blob> }
@@ -85,15 +85,16 @@ export const useFontState = create<FontState>((set, get) => ({
   canQuery: typeof window !== 'undefined' && 'queryLocalFonts' in window,
 
   readLocal: async () => {
+    if (get().busy) return;
     const query = (window as unknown as { queryLocalFonts?: () => Promise<FontData[]> }).queryLocalFonts;
-    if (!query) { set({ error: '这个浏览器没有 Local Font Access API（Chrome / Edge 103+ 桌面版才有），改用「选择字体文件」' }); return; }
+    if (!query) { set({ error: '当前浏览器不支持读取本机字体，请选择字体文件。' }); return; }
     set({ busy: '正在读取本机字体…', error: null });
     try {
       const all = await query.call(window);
       const hits = all.filter((f) => WANTED.has(f.family.toLowerCase()));
-      if (!hits.length) { set({ busy: null, error: '本机没有模板这一档要的任何字体（按家族名找：SimSun、Songti SC、Times New Roman……）' }); return; }
+      if (!hits.length) { set({ busy: null, error: '未找到所需字体，请选择字体文件或使用内置字体。' }); return; }
       const fonts = [...get().fonts];
-      const seen = new Set(fonts.map((f) => f.id));
+      const seen = new Set<string>();
       const add: { id: string; data: ArrayBuffer }[] = [];
       let n = 0;
       for (const f of hits) {
@@ -102,19 +103,22 @@ export const useFontState = create<FontState>((set, get) => ({
         const id = await fingerprint(data);
         if (seen.has(id)) continue; // 同一个 .ttc 里的几个字面共用一份字节
         seen.add(id);
-        fonts.push({ id, name: f.postscriptName || f.fullName, size: data.byteLength, source: 'local' });
+        if (!fonts.some((font) => font.id === id)) fonts.push({ id, name: f.postscriptName || f.fullName, size: data.byteLength, source: 'local' });
         add.push({ id, data });
       }
-      set({ fonts, busy: '正在重建字体表…' });
+      set({ busy: '正在加载字体…' });
       await apply(add, []);
-      set({ busy: null });
+      set({ fonts, busy: null });
     } catch (e) {
       const msg = String((e as Error)?.message ?? e);
-      set({ busy: null, error: /denied|NotAllowed|permission/i.test(msg) ? '没有拿到本机字体的授权。刷新后再点一次，在浏览器弹出的提示里选「允许」' : msg });
+      set({ busy: null, error: /denied|NotAllowed|permission/i.test(msg) ? '未获得字体访问权限。请再次读取字体，并在浏览器提示中选择“允许”。' : msg });
     }
   },
 
   addFiles: async (files) => {
+    if (get().busy) return;
+    set({ busy: '正在加载字体…', error: null });
+    try {
     const list = [...files].filter((f) => /\.(otf|ttf|ttc|otc)$/i.test(f.name));
     if (!list.length) { set({ error: '只认 .otf / .ttf / .ttc 文件' }); return; }
     set({ busy: '读取字体文件…', error: null });
@@ -130,17 +134,25 @@ export const useFontState = create<FontState>((set, get) => ({
       fonts.push({ id, name: f.name, size: data.byteLength, source: 'file' });
       add.push({ id, data });
     }
-    set({ fonts, busy: '正在重建字体表…' });
+    set({ busy: '正在加载字体…' });
     await apply(add, []);
+    set({ fonts });
     set({ busy: null });
+    } catch (error) { set({ error: String((error as Error)?.message ?? error) }); }
+    finally { set({ busy: null }); }
   },
 
   removeFile: async (name) => {
+    if (get().busy) return;
+    set({ busy: '正在加载字体…', error: null });
+    try {
     await deleteFontFile(name);
     const gone = get().fonts.filter((f) => f.source === 'file' && f.name === name).map((f) => f.id);
     set({ fonts: get().fonts.filter((f) => !gone.includes(f.id)), busy: '正在重建字体表…' });
     await apply([], gone);
     set({ busy: null });
+    } catch (error) { set({ error: String((error as Error)?.message ?? error) }); }
+    finally { set({ busy: null }); }
   },
 
   autoReadLocal: async () => {
@@ -152,6 +164,9 @@ export const useFontState = create<FontState>((set, get) => ({
   },
 
   loadStored: async () => {
+    if (get().busy) return;
+    set({ busy: '正在加载字体…', error: null });
+    try {
     const names = await listFontFiles();
     if (!names.length) return;
     const fonts = [...get().fonts];
@@ -167,8 +182,10 @@ export const useFontState = create<FontState>((set, get) => ({
       fonts.push({ id, name, size: data.byteLength, source: 'file' });
       add.push({ id, data });
     }
-    set({ fonts });
     if (add.length) await apply(add, []);
+    set({ fonts });
+    } catch (error) { set({ error: String((error as Error)?.message ?? error) }); }
+    finally { set({ busy: null }); }
   },
 }));
 

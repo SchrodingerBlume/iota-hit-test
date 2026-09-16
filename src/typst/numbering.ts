@@ -72,6 +72,8 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
 
   const counters = [0, 0, 0, 0];
   let fig = 0, tab = 0, eq = 0, alg = 0, lst = 0;
+  // 附录只有一章时不编号（模板数出来的：编号的一级标题 ≤ 1）——章标题光印「附录」，中文档的图表少一位（附图1）
+  const single = part === 'appendix' && (doc.content ?? []).filter((n) => n.type === 'heading' && (n.attrs?.level ?? 1) === 1 && n.attrs?.numbered !== false).length <= 1;
   const text = (n: PMNode): string => (n.content ?? []).map((c) => (c.type === 'text' ? c.text ?? '' : c.content ? text(c) : '')).join('');
 
   /** 章那一位的记号：正文是数字，附录按 A / 1 / 一 */
@@ -89,8 +91,10 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
     const n = counters.slice(0, level);
     const last = n[level - 1];
     if (part === 'appendix') {
-      if (level === 1) return en ? `Appendix ${chapterMark()}` : `附录 ${chapterMark()}`;
+      if (level === 1) return single ? (en ? 'Appendix' : '附录') : en ? `Appendix ${chapterMark()}` : `附录 ${chapterMark()}`;
       if (appPattern === 'hanzi') return level === 2 ? `${toHanzi(last)}、` : level === 3 ? `（${toHanzi(last)}）` : `${last}.`;
+      // 只有一个附录：章号那一位不存在，中文档节往下也少一位（1、1.1）；英文档照 APA 仍带字母（A.1）
+      if (single && !en) return n.slice(1).join('.');
       return [chapterMark(), ...n.slice(1)].join('.');
     }
     if (isReportBody) return n.join('.');
@@ -102,6 +106,27 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
   const numbered = (byChapter: boolean, k: number) => {
     const mark = chapterMark();
     return byChapter && mark ? `${mark}-${k}` : String(k);
+  };
+  /**
+   * 附录里图表公式的号与名（模板 src/blocks/chapter.typ 一处定）：
+   *   英文档一律字母 Fig. A-1（单个附录也是 A）；中文·字母 图A-1；
+   *   中文·数（1 / 一）附图1-1（章号那一位用阿拉伯数）；中文·只有一个附录 附图1。
+   * 连续编号（不按章）那一档不加「附」，接着正文数。
+   */
+  const figLike = (zhName: string, enName: string, byChapter: boolean, k: number): string => {
+    if (part !== 'appendix' || !byChapter || !counters[0]) return `${en ? enName : zhName}${numbered(byChapter, k)}`;
+    if (en) return `${enName}${letter(counters[0])}-${k}`;
+    if (single) return `附${zhName.trim()} ${k}`;
+    if (appPattern === 'letters') return `${zhName}${letter(counters[0])}-${k}`;
+    return `附${zhName.trim()} ${counters[0]}-${k}`;
+  };
+  const eqNum = (byChapter: boolean, k: number, fullwidth: boolean): string => {
+    const wrap = (s: string) => (fullwidth ? `（${s}）` : `(${s})`);
+    if (part !== 'appendix' || !byChapter || !counters[0]) return wrap(numbered(byChapter, k));
+    if (en) return wrap(`${letter(counters[0])}-${k}`);
+    if (single) return wrap(`附 ${k}`);
+    if (appPattern === 'letters') return wrap(`${letter(counters[0])}-${k}`);
+    return wrap(`附 ${counters[0]}-${k}`);
   };
 
   const walk = (n: PMNode) => {
@@ -124,28 +149,28 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
     if (n.type === 'figure') {
       fig++;
       const label = labelOf(n.attrs, 'fig');
-      const num = `${en ? 'Fig. ' : '图 '}${numbered(figByChapter, fig)}`;
+      const num = figLike('图 ', 'Fig. ', figByChapter, fig);
       if (label) out.set(label, { kind: 'fig', label, number: num, ref: num, title: n.attrs?.caption ?? '' });
       return;
     }
     if (n.type === 'tableFigure') {
       tab++;
       const label = labelOf(n.attrs, 'tab');
-      const num = `${en ? 'Table ' : '表 '}${numbered(figByChapter, tab)}`;
+      const num = figLike('表 ', 'Table ', figByChapter, tab);
       if (label) out.set(label, { kind: 'tab', label, number: num, ref: num, title: n.attrs?.caption ?? '' });
       return;
     }
     if (n.type === 'algorithm') {
       alg++;
       const label = labelOf(n.attrs, 'alg');
-      const num = `${en ? 'Algo. ' : '算法 '}${numbered(figByChapter, alg)}`;
+      const num = figLike('算法 ', 'Algo. ', figByChapter, alg);
       if (label) out.set(label, { kind: 'alg', label, number: num, ref: num, title: n.attrs?.caption ?? '' });
       return;
     }
     if (n.type === 'codeFigure') {
       lst++;
       const label = labelOf(n.attrs, 'lst');
-      const num = `${en ? 'Listing ' : '代码 '}${numbered(figByChapter, lst)}`;
+      const num = figLike('代码 ', 'Listing ', figByChapter, lst);
       if (label) out.set(label, { kind: 'lst', label, number: num, ref: num, title: n.attrs?.caption ?? '' });
       return;
     }
@@ -153,7 +178,7 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
       eq++;
       const label = labelOf(n.attrs, 'eq');
       const fullwidth = sw<boolean>('equationNumberingFullwidth', s);
-      const num = fullwidth ? `（${numbered(eqByChapter, eq)}）` : `(${numbered(eqByChapter, eq)})`;
+      const num = eqNum(eqByChapter, eq, fullwidth);
       if (label) out.set(label, { kind: 'eq', label, number: num, ref: `${en ? 'Eq. ' : '式 '}${num}`, title: n.attrs?.src ?? '' });
       return;
     }
