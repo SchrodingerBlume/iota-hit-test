@@ -12,7 +12,7 @@ for (const p of manifest.packages) reg.add(p.namespace, p.name, p.version, new U
 const dirs = [path.join(pub, 'fonts'), ...(process.env.EXTRA_FONTS ? process.env.EXTRA_FONTS.split(':') : [])];
 const fonts = dirs.flatMap((d) => fs.readdirSync(d).filter((f) => /\.(otf|ttf|ttc)$/i.test(f)).map((f) => new Uint8Array(fs.readFileSync(path.join(d, f)))));
 const compiler = createTypstCompiler();
-await compiler.init({ getModule: () => new Uint8Array(fs.readFileSync(path.join(root, 'vendor/typst-ts-web-compiler/typst_ts_web_compiler_bg.wasm'))), beforeBuild: [withAccessModel(am), withPackageRegistry(reg), loadFonts(fonts, { assets: false })] });
+await compiler.init({ getModule: () => new Uint8Array(fs.readFileSync(process.env.WASM ?? path.join(root, 'vendor/typst-ts-web-compiler/typst_ts_web_compiler_bg.wasm'))), beforeBuild: [withAccessModel(am), withPackageRegistry(reg), loadFonts(fonts, { assets: false })] });
 const dir = process.argv[2];
 let main = fs.readFileSync(path.join(dir, 'main.typ'), 'utf8');
 const enc = new TextEncoder();
