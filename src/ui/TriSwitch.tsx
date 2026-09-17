@@ -1,9 +1,5 @@
-// 统一的分段控件：所有「auto / 值」型的选项都用它——布尔开关、多档选项、页面排不排。
-//
-//   [ Auto → 开 ] [ 关 ] [ 开 ]         布尔：开绿、关红、Auto 橙
-//   [ Auto → A ] [ A ] [ 1 ] [ 一 ]     多档：选中的蓝
-//
-// Auto 段直接写出它现在映射到什么，下面一行小字说为什么。
+// 统一的分段控件：所有「自动 / 值」型选项都用它。控件只放档位，
+// 自动档的实际结果和原因统一写在下面，避免同一条信息挤在按钮里重复出现。
 import type { Settings } from '../model/types';
 import { resolveSwitch, type SwitchDef, type Choice } from '../model/options';
 import { t } from '../i18n';
@@ -31,9 +27,7 @@ export function TriSeg<V>({ label, hint, choices, value, auto, onChange, showAut
     <div className="triseg">
       <div className="triseg-lab" title={hint}>{label}</div>
       <div className="seg triseg-seg" role="radiogroup" aria-label={label}>
-        <button type="button" role="radio" aria-checked={isAuto} className={`auto ${isAuto ? 'on' : ''}`} onClick={() => onChange('auto')} title={t("自动：{{reason}}", { reason: auto.reason })}>
-          Auto<span className="triseg-arrow">→</span>{auto.mixed ? <b className="t-mixed">{auto.mixed}</b> : <b className={`t-${toneOf(auto.value)}`}>{labelOf(auto.value)}</b>}
-        </button>
+        <button type="button" role="radio" aria-checked={isAuto} className={`auto ${isAuto ? 'on' : ''}`} onClick={() => onChange('auto')} title={t("自动：{{reason}}", { reason: auto.reason })}>{t("自动")}</button>
         {choices.map((c) => (
           <button key={String(c.value)} type="button" role="radio" aria-checked={!isAuto && value === c.value} className={`${!isAuto && value === c.value ? `on t-${c.tone ?? 'accent'}` : ''}`} onClick={() => onChange(c.value)} title={c.hint ?? t("固定为「{{label}}」", { label: c.label })}>{c.label}</button>
         ))}

@@ -4,7 +4,7 @@ import { useMedia, COMPACT, PORTRAIT } from './useMedia';
 
 type Mode = 'editor' | 'split' | 'preview';
 const KEY = 'iota4web-layout';
-const NAV_W = 216;
+const NAV_W = 200;
 const SPLIT_W = 6;
 
 function load(): { navOpen: boolean; mode: Mode; ratio: number } {
