@@ -41,7 +41,7 @@ export function FontRecovery() {
       <DialogBody>
         <DialogTitle>{t("需要重新读取字体")}</DialogTitle>
         <DialogContent>
-          <p>{t("当前文档缺少以下字体，预览暂时使用替代字体：")}</p>
+          <p>{t("以下字体未加载，当前预览使用替代字体：")}</p>
           <p>{missing.map((font) => font.family).join('、')}</p>
           {busy && <p role="status">{busy}</p>}
           {error && <p role="alert">{error}</p>}

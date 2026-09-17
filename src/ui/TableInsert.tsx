@@ -80,11 +80,11 @@ export function TableTextDialog({ onInsert, onClose }: { onInsert: (text: string
             <Textarea value={text} onChange={(_, d) => setText(d.value)} placeholder={EXAMPLE} rows={9} resize="vertical" className="table-text-input" autoFocus spellCheck={false} />
             <div className="style-row" style={{ marginTop: 8, justifyContent: 'space-between' }}>
               <Checkbox label={t("第一行是表头")} checked={parsed ? (parsed.header || header) : header} disabled={!!parsed?.header} onChange={(_, d) => setHeader(!!d.checked)} />
-              <span className="muted">{parsed ? t("识别到 {{length}} 行 × {{v1}} 列{{v2}}", { length: parsed.rows.length, v1: parsed.rows[0].length, v2: parsed.header ? t("（含表头）") : '' }) : text.trim() ? t("还认不出表来") : ''}</span>
+              <span className="muted">{parsed ? t("识别到 {{length}} 行 × {{v1}} 列{{v2}}", { length: parsed.rows.length, v1: parsed.rows[0].length, v2: parsed.header ? t("（含表头）") : '' }) : text.trim() ? t("未识别到表格。") : ''}</span>
             </div>
           </DialogContent>
           <DialogActions>
-            <Button appearance="subtle" onClick={() => setText(EXAMPLE)}>{t("填个示例")}</Button>
+            <Button appearance="subtle" onClick={() => setText(EXAMPLE)}>{t("插入示例")}</Button>
             <Button appearance="secondary" onClick={onClose}>{t("取消")}</Button>
             <Button appearance="primary" disabled={!parsed} onClick={() => onInsert(text, parsed?.header || header)}>{t("插入")}</Button>
           </DialogActions>

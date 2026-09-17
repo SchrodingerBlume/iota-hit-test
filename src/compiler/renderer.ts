@@ -29,6 +29,7 @@ export function initRenderer(): Promise<void> {
 }
 
 let endSession: (() => void) | null = null;
+const layoutCache = new WeakMap<HTMLElement, { signature: string; positions: { x: number; y: number; w: number; h: number; rowH: number }[]; width: number; height: number }>();
 /** 会话常驻（runWithSession 的回调不结束）；整份重来时换一个新会话，旧的结束掉 */
 function newSession(): Promise<void> {
   endSession?.();
@@ -96,7 +97,6 @@ function layoutPages(container: HTMLElement, pages: PageInfo[], perRow = 1) {
     chrome.setAttribute('class', 'page-chrome');
     container.insertBefore(chrome, svg);
   }
-  chrome.replaceChildren();
   // 每行 perRow 页（Word 的「多页」视图）：一行里按最高的那页定行高
   const cols = Math.max(1, Math.min(3, perRow));
   const size = (i: number) => {
@@ -106,19 +106,33 @@ function layoutPages(container: HTMLElement, pages: PageInfo[], perRow = 1) {
       h: pages[i]?.height ?? parseFloat(g.getAttribute('data-page-height') ?? '0'),
     };
   };
-  let y = 0;
-  let width = 0;
-  for (let r = 0; r * cols < groups.length; r++) {
-    const rowH = Math.max(...Array.from({ length: Math.min(cols, groups.length - r * cols) }, (_, k) => size(r * cols + k).h));
-    let x = 0;
-    for (let c = 0; c < cols && r * cols + c < groups.length; c++) {
-      const i = r * cols + c;
-      const g = groups[i];
-      const { w, h } = size(i);
-      g.setAttribute('transform', `translate(${x}, ${y})`);
+  const signature = `${cols}|${groups.map((_, i) => { const s = size(i); return `${s.w}x${s.h}`; }).join(',')}`;
+  let cached = layoutCache.get(container);
+  if (!cached || cached.signature !== signature) {
+    let y = 0;
+    let width = 0;
+    const positions: { x: number; y: number; w: number; h: number; rowH: number }[] = [];
+    for (let r = 0; r * cols < groups.length; r++) {
+      const rowH = Math.max(...Array.from({ length: Math.min(cols, groups.length - r * cols) }, (_, k) => size(r * cols + k).h));
+      let x = 0;
+      for (let c = 0; c < cols && r * cols + c < groups.length; c++) {
+        const i = r * cols + c;
+        const { w, h } = size(i);
+        positions[i] = { x, y, w, h, rowH };
+        x += w + PAGE_GAP;
+        width = Math.max(width, x - PAGE_GAP);
+      }
+      y += rowH + PAGE_GAP;
+    }
+    cached = { signature, positions, width, height: Math.max(0, y - PAGE_GAP) };
+    layoutCache.set(container, cached);
+    // 页数和纸张尺寸没变时沿用纸张层，避免一次输入就重建数百个 SVG 节点。
+    chrome.replaceChildren();
+    for (let i = 0; i < cached.positions.length; i++) {
+      const { x, y: py, w, h, rowH } = cached.positions[i];
       const sheet = document.createElementNS(NS, 'rect');
       sheet.setAttribute('class', 'page-sheet');
-      sheet.setAttribute('x', String(x)); sheet.setAttribute('y', String(y));
+      sheet.setAttribute('x', String(x)); sheet.setAttribute('y', String(py));
       sheet.setAttribute('width', String(w)); sheet.setAttribute('height', String(h));
       sheet.setAttribute('rx', '1.5');
       chrome!.appendChild(sheet);
@@ -126,23 +140,27 @@ function layoutPages(container: HTMLElement, pages: PageInfo[], perRow = 1) {
         const label = document.createElementNS(NS, 'text');
         label.setAttribute('class', 'page-label');
         label.setAttribute('x', String(x + w - 2));
-        label.setAttribute('y', String(y + rowH + PAGE_GAP * 0.62));
+        label.setAttribute('y', String(py + rowH + PAGE_GAP * 0.62));
         label.setAttribute('text-anchor', 'end');
         label.textContent = `${i + 1} / ${groups.length}`;
         chrome!.appendChild(label);
       }
-      x += w + PAGE_GAP;
-      width = Math.max(width, x - PAGE_GAP);
     }
-    y += rowH + PAGE_GAP;
   }
-  const height = Math.max(0, y - PAGE_GAP);
+  // SVG 补丁会还原页组自身的 transform，因此每次只恢复轻量的位置信息。
+  groups.forEach((g, i) => {
+    const p = cached!.positions[i];
+    if (!p) return;
+    g.setAttribute('transform', `translate(${p.x}, ${p.y})`);
+    g.setAttribute('data-layout-x', String(p.x));
+    g.setAttribute('data-layout-y', String(p.y));
+  });
   for (const el of [svg, chrome]) {
-    el.setAttribute('viewBox', `0 0 ${width} ${height}`);
-    el.setAttribute('width', String(width));
-    el.setAttribute('height', String(height));
+    el.setAttribute('viewBox', `0 0 ${cached.width} ${cached.height}`);
+    el.setAttribute('width', String(cached.width));
+    el.setAttribute('height', String(cached.height));
   }
-  svg.setAttribute('data-height', String(height));
+  svg.setAttribute('data-height', String(cached.height));
 }
 
 /** 小片段：产物 → SVG 字符串（临时会话，用完即弃） */

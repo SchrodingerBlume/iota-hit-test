@@ -184,7 +184,8 @@ export const useStore = create<State>((set, get) => {
     setOpenright: (patch) => update((d) => ({ ...d, openright: { ...d.openright, ...patch } })),
     setInfo: (patch) => update((d) => ({ ...d, info: { ...d.info, ...patch } })),
     setSourceDraft: (key, source) => update((d) => { const sourceDrafts = { ...d.sourceDrafts }; if (source === undefined) delete sourceDrafts[key]; else sourceDrafts[key] = source; return { ...d, sourceDrafts }; }),
-    setRich: (key, value) => update((d) => { const sourceDrafts = { ...d.sourceDrafts }; delete sourceDrafts[key]; return { ...d, [key]: value, sourceDrafts }; }),
+    // Markdown 模式会在每次成功解析后同步富文本；草稿由模式切换显式清理，避免一次输入触发两次整篇保存与排版。
+    setRich: (key, value) => update((d) => ({ ...d, [key]: value })),
     setPages: (patch) => update((d) => ({ ...d, pages: { ...d.pages, ...patch } })),
     setReferences: (references) => update((d) => ({ ...d, references })),
     setAchievementEntries: (achievementEntries) => update((d) => ({ ...d, achievementEntries })),
@@ -265,14 +266,14 @@ export const useStore = create<State>((set, get) => {
 
     createProject: async ({ name, settings, template }) => {
       await flushSave();
-      const doc = template === 'sample' ? sampleDoc() : newDoc();
+      const doc = template === 'sample' ? sampleDoc({ ...defaultSettings(), ...settings }) : newDoc();
       doc.id = crypto.randomUUID();
-      doc.name = name.trim() || (template === 'sample' ? t("示例论文") : t("未命名论文"));
+      doc.name = name.trim() || (template === 'sample' ? doc.name : t("未命名论文"));
       doc.settings = { ...doc.settings, ...settings };
       doc.updatedAt = new Date().toISOString();
       await saveProject(doc.id, doc);
       setImageNamespace(doc.id);
-      if (template === 'sample') await ensureSampleImage();
+      if (doc.images.some((image) => image.name === SAMPLE_IMAGE)) await ensureSampleImage();
       await get().refreshProjects();
       await activate(doc);
       return doc.id;

@@ -34,6 +34,7 @@ import { Search } from './extensions/Search';
 import { fromMarkdown, toMarkdown } from './markdown';
 import { useFindBar } from '../ui/Ribbon';
 import { recordTransaction, invalidatePositions } from './versions';
+import { useInputState } from './inputState';
 import { usePreviewSurface, usePreviewMarks } from '../ui/PreviewEditLayer';
 import { TextBold20Regular, TextItalic20Regular, TextUnderline20Regular, TextSuperscript20Regular, TextSubscript20Regular, Code20Regular, MathFormula20Regular, Book20Regular, BookmarkAdd20Regular } from '@fluentui/react-icons';
 import { t } from '../i18n';
@@ -70,6 +71,12 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
   const [sourceMode, setSourceMode] = useState(savedSource !== undefined);
   const [source, setSource] = useState(() => savedSource ?? '');
   const [sourceError, setSourceError] = useState('');
+  const sourceRef = useRef(source);
+  const parseTimer = useRef(0);
+  const saveTimer = useRef(0);
+  const changeTimer = useRef(0);
+  const pendingChange = useRef<Editor | null>(null);
+  const compositionActive = useRef(false);
   const lastEmitted = useRef<RichDoc | null>(null);
   const [richSize] = useRichSize();
   const env = useEditorEnv();
@@ -83,6 +90,16 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     numRef.current = { sig, map };
     return map;
   }, [value, settings, part]);
+
+  const commitChange = (target?: Editor | null) => {
+    const ed = target ?? pendingChange.current;
+    if (!ed || ed.isDestroyed || pendingChange.current !== ed) return;
+    window.clearTimeout(changeTimer.current);
+    pendingChange.current = null;
+    const json = ed.getJSON() as RichDoc;
+    lastEmitted.current = json;
+    onChange(json);
+  };
 
   const editor = useEditor({
     extensions: [
@@ -102,10 +119,13 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     ],
     content: value,
     onUpdate: ({ editor }) => {
-      const json = editor.getJSON() as RichDoc;
-      lastEmitted.current = json;
-      onChange(json);
+      // getJSON 会遍历整节文档。长论文连续输入时只在短暂停顿后做一次，
+      // 否则每个按键都会同步扫描上百页，直接阻塞输入事件。
+      pendingChange.current = editor;
+      window.clearTimeout(changeTimer.current);
+      changeTimer.current = window.setTimeout(() => commitChange(editor), 100);
     },
+    onBlur: ({ editor }) => commitChange(editor),
     // 每一笔改动的 mapping 记下来：预览区的字形表要靠它把老位置换算成新位置
     onTransaction: ({ transaction }) => { if (richKey) recordTransaction(richKey, transaction); },
     editorProps: {
@@ -119,6 +139,20 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
       },
       // 右键一段 / 一条标题：块级样式菜单（Word 右键的「段落」「样式」那一组）
       handleDOMEvents: {
+        compositionstart: () => {
+          if (!compositionActive.current) {
+            compositionActive.current = true;
+            useInputState.getState().begin();
+          }
+          return false;
+        },
+        compositionend: () => {
+          if (compositionActive.current) {
+            compositionActive.current = false;
+            useInputState.getState().end();
+          }
+          return false;
+        },
         contextmenu: (view, event) => {
           if (!richKey || !view.editable) return false;
           const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
@@ -146,6 +180,14 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
         return true;
       },
     },
+  }, [instanceKey]);
+
+  // 切换章节或工程时浏览器不一定补发 compositionend，避免排版永久停在“输入中”。
+  useEffect(() => () => {
+    if (compositionActive.current) {
+      compositionActive.current = false;
+      useInputState.getState().end();
+    }
   }, [instanceKey]);
 
   // 外面换了文档（打开工程、换节）才 setContent；自己发出去的不回灌
@@ -229,15 +271,26 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     restoredSource.current = true;
     if (savedSource !== undefined) { applySource(savedSource); useStore.getState().setSourceDraft(instanceKey, savedSource); }
   }, [editor]);
+  useEffect(() => () => {
+    window.clearTimeout(parseTimer.current);
+    window.clearTimeout(saveTimer.current);
+    commitChange();
+  }, [instanceKey]);
   const changeSource = (text: string, composing: boolean) => {
+    sourceRef.current = text;
     setSource(text);
-    if (!composing) applySource(text);
-    useStore.getState().setSourceDraft(instanceKey, text);
+    window.clearTimeout(parseTimer.current);
+    window.clearTimeout(saveTimer.current);
+    // GFM 解析和 ProseMirror 校验都会遍历整节内容。连续输入时合并处理，避免受控文本框丢键。
+    if (!composing) parseTimer.current = window.setTimeout(() => applySource(sourceRef.current), 160);
+    saveTimer.current = window.setTimeout(() => useStore.getState().setSourceDraft(instanceKey, sourceRef.current), 400);
   };
   const switchMode = (code: boolean) => {
     if (code === sourceMode || !editor) return;
     if (code) setSource(toMarkdown(editor.getJSON() as RichDoc));
     else {
+      window.clearTimeout(parseTimer.current);
+      window.clearTimeout(saveTimer.current);
       if (!applySource(source)) return;
       useStore.getState().setSourceDraft(instanceKey, undefined);
     }
@@ -256,7 +309,27 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
           {sourceMode && <>
             <textarea className="markdown-source" aria-label={t("Markdown 源代码")} value={source} spellCheck={false}
               onChange={(event) => changeSource(event.target.value, (event.nativeEvent as InputEvent).isComposing)}
-              onCompositionEnd={(event) => changeSource(event.currentTarget.value, false)}
+              onCompositionStart={() => {
+                if (!compositionActive.current) {
+                  compositionActive.current = true;
+                  useInputState.getState().begin();
+                }
+              }}
+              onCompositionEnd={(event) => {
+                if (compositionActive.current) {
+                  compositionActive.current = false;
+                  useInputState.getState().end();
+                }
+                changeSource(event.currentTarget.value, false);
+              }}
+              onBlur={() => {
+                if (compositionActive.current) {
+                  compositionActive.current = false;
+                  useInputState.getState().end();
+                  changeSource(sourceRef.current, false);
+                }
+                useStore.getState().setSourceDraft(instanceKey, sourceRef.current);
+              }}
               onKeyDown={(event) => { if (event.nativeEvent.isComposing || event.keyCode === 229) return; if (event.key === 'Tab') { event.preventDefault(); const el = event.currentTarget; const start = el.selectionStart, end = el.selectionEnd; changeSource(source.slice(0, start) + '  ' + source.slice(end), false); requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = start + 2; }); } }} />
             {sourceError && <p className="diag err" role="alert">{sourceError} {' '}{t("草稿已保存，预览保留上次有效内容。")}</p>}
             <details className="markdown-help"><summary>{t("Markdown 语法")}</summary><p>{t("# 标题 · **加粗** · *斜体* · ~~删除线~~ · 列表 · 表格 · 代码块")}</p><p>{t("公式、图片、题注和引用等专用内容保留在 iota-node 代码块或 iota 注释中。任务列表在富文本中显示为 [ ] / [x]。")}</p></details>

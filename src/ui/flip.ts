@@ -59,7 +59,7 @@ export function flipAfter(container: HTMLElement, viewportTop: number, viewportB
   runs.clear();
   if (!moved.length && !fresh.length) return;
   // 太多块一起动（整页重排）就别做了，动画本身会成负担
-  if (moved.length > 160 || fresh.length > 400) return;
+  if (moved.length > 80 || fresh.length > 180) return;
   for (const { el, dx, dy } of moved) {
     el.classList.remove('flip-move');
     el.style.translate = `${dx}px ${dy}px`;
@@ -71,6 +71,6 @@ export function flipAfter(container: HTMLElement, viewportTop: number, viewportB
   requestAnimationFrame(() => {
     for (const { el } of moved) { el.classList.add('flip-move'); el.style.translate = '0px 0px'; }
     for (const el of fresh) { el.classList.add('flip-in'); el.style.opacity = ''; }
-    cleanupTimer = window.setTimeout(settleInflight, 220);
+    cleanupTimer = window.setTimeout(settleInflight, 180);
   });
 }

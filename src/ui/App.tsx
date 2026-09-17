@@ -12,6 +12,7 @@ import { useComments } from '../editor/comments';
 import { collectRefTargets } from '../typst/pmToTypst';
 import { computeNumbering } from '../typst/numbering';
 import { docVersion } from '../editor/versions';
+import { useInputState } from '../editor/inputState';
 import { resolvePage } from '../model/pages';
 import { EditorEnvContext, type EditorEnv } from '../editor/env';
 import { imageBytes, putImage, safeImageName, imageDimensions } from '../editor/imageCache';
@@ -22,6 +23,7 @@ import { SettingsPanel } from './SettingsPanel';
 import { InfoPanel } from './InfoPanel';
 import { AbstractPanel, NomenclaturePanel, RichSection, BibPanel, DefensePanel, PagesPanel, IndexPanel } from './panels';
 import { Preview } from './Preview';
+import { usePreviewSurface } from './PreviewEditLayer';
 import { useTheme, type ThemePref } from './theme';
 import { useLayoutPrefs } from './layout';
 import { Ribbon } from './Ribbon';
@@ -49,7 +51,7 @@ const NAV: { key: Section; label: string; group: string; k?: string }[] = [
 ];
 
 /** 文档一变就（防抖后）重新生成 Typst 并交给 worker */
-function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number) {
+function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previewFocused: boolean, composing: boolean) {
   const status = useCompileState((s) => s.status);
   const fontsVersion = useCompileState((s) => s.fontsVersion);
   const sent = useRef(new Map<string, number>());
@@ -60,11 +62,12 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number) {
   const lastEngine = useRef(engineKey);
   const restoring = useFontState((s) => s.restoring);
   useEffect(() => {
-    if (!loaded || status !== 'ready') return;
+    if (!loaded || status !== 'ready' || composing) return;
     if (restoring && doc.settings.fontset !== 'webapp') return;
     let cancelled = false;
     // 换了工程：预览区已被项目管理页卸掉，渲染器没有上一版可以打差，增量产物会让它崩（reflexo 的 module unwrap），整个重编
     const force = refresh !== lastRefresh.current || engineKey !== lastEngine.current || lastProject.current !== doc.id;
+    const pageCount = useCompileState.getState().pageCount;
     const t = window.setTimeout(async () => {
       const project = serializeProject(doc, { preview: true });
       // 换了项目：图片名字空间变了，worker 里映射的旧图全撤掉，重新发
@@ -90,10 +93,21 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number) {
       lastProject.current = doc.id;
       lastRefresh.current = refresh;
       lastEngine.current = engineKey;
-      requestCompile({ force, main: project.main, files: project.files, images, removeImages, segments: project.segments, version: docVersion() });
-    }, force ? 0 : 130);
+      requestCompile({
+        force,
+        // 首次排版、小文档与预览直接编辑需要精确字形表。长文档在左侧连续输入时沿用旧表，
+        // 避免每次击键都扫描约 200 页；位置映射会把旧表换算到当前文档。
+        glyphs: force || previewFocused || pageCount < 80,
+        main: project.main,
+        files: project.files,
+        images,
+        removeImages,
+        segments: project.segments,
+        version: docVersion(),
+      });
+    }, force ? 0 : pageCount >= 150 ? 900 : pageCount >= 80 ? 600 : pageCount >= 30 ? 320 : 180);
     return () => { cancelled = true; window.clearTimeout(t); };
-  }, [doc, loaded, status, fontsVersion, refresh, restoring]);
+  }, [doc, loaded, status, fontsVersion, refresh, restoring, previewFocused, composing]);
   return sent;
 }
 
@@ -109,7 +123,9 @@ export function App() {
   const { doc, section, loaded, view, setView, setSection, load, importProject, setImages } = useStore();
   const compile = useCompileState();
   const [refresh, setRefresh] = useState(0);
-  useAutoCompile(doc, loaded && view === 'editor', refresh);
+  const previewFocused = usePreviewSurface((s) => s.focused);
+  const composing = useInputState((s) => s.composing);
+  useAutoCompile(doc, loaded && view === 'editor', refresh, previewFocused, composing);
   const [busy, setBusy] = useState<string | null>(null);
   const [theme, themePref, setThemePref] = useTheme();
   const { navOpen, setNavOpen, mode, setMode, ratio, startDrag, mainRef, gridColumns, gridRows, compact, stacked } = useLayoutPrefs();
@@ -325,9 +341,9 @@ export function App() {
               <DialogBody>
                 <DialogTitle><span className="about-title"><Logo size={40} />iota-hit</span></DialogTitle>
                 <DialogContent>
-                  <p>{tx("哈尔滨工业大学学位论文在线编辑器。排版用 iota-hit 模板（hithesis 的 Typst 复刻），引擎是本站基于 Typst 0.15.1 修改的非官方版本（加了 Word 式断行），经 typst.ts 编成 wasm 在浏览器里运行。")}</p>
+                  <p>{tx("哈尔滨工业大学学位论文在线编辑器。文档使用 iota-hit 模板排版；预览引擎基于 Typst 0.15.1，并加入接近 Microsoft Word 的中文断行规则。所有排版均在浏览器中完成。")}</p>
                   <p>{tx("字体：Noto Serif / Sans CJK SC、FandolKai、TeX Gyre Termes / Heros、DejaVu Sans Mono；也可读本机字体切到 Windows / macOS 档。")}</p>
-                  <p className="muted">{tx("整站静态，没有服务器；工程与图片只存在这台浏览器里，记得定期「文件 → 保存工程」。")}</p>
+                  <p className="muted">{tx("文档和图片保存在当前浏览器中。请定期通过“文件 → 下载副本”备份。")}</p>
                   <p className="muted">{tx("导出 Word 时的参考文献由 citeproc-js（Frank Bennett，CPAL 许可）按 GB/T 7714 排版。")}</p>
                   <p className="muted">{tx("Typst 是 Typst GmbH 的商标；本站与 Typst GmbH、typst.ts 及各项目作者无关。随站分发的软件、字体、Typst 包的版权与许可证全文见")}<a href={`${import.meta.env.BASE_URL}licenses.txt`} target="_blank" rel="noopener">{tx("开源许可与声明")}</a>{tx("。")}</p>
                 </DialogContent>

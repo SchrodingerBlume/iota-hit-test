@@ -142,11 +142,11 @@ export function MathEditor({ value, mode, display, onChange, onMode, autoFocus, 
       {latex ? (
         <div className="math-field-box" ref={box}>
           <math-field ref={mf as any} default-mode={display ? 'math' : 'inline-math'} style={{ fontSize: compact ? 18 : 22 }} />
-          {!value.trim() && <span className="math-field-hint">{tx("在这里直接写公式：打")}{' '}<code>/</code> {' '}{tx("成分式、")}<code>^</code> {' '}{tx("上标、")}<code>alpha</code> {' '}{tx("变 α；或从面板里点")}</span>}
+          {!value.trim() && <span className="math-field-hint">{tx("输入公式：按")}{' '}<code>/</code> {' '}{tx("插入分式，按")}<code>^</code> {' '}{tx("输入上标，输入")}<code>alpha</code> {' '}{tx("得到 α；也可从符号面板选择。")}</span>}
         </div>
       ) : (
         <div className="math-preview-box">
-          <MathPreview src={forPreview(value, mode)} mode={mode} display={display} onError={setError} empty={<span className="muted">{tx("在下面写公式，或从面板里点")}</span>} />
+          <MathPreview src={forPreview(value, mode)} mode={mode} display={display} onError={setError} empty={<span className="muted">{tx("输入公式，或从符号面板中选择")}</span>} />
         </div>
       )}
       {(!latex || showSource) && (
@@ -167,7 +167,7 @@ export function MathEditor({ value, mode, display, onChange, onMode, autoFocus, 
           <button type="button" className={latex ? 'on' : ''} onMouseDown={(e) => e.preventDefault()} onClick={() => onMode('latex')}>LaTeX</button>
           <button type="button" className={!latex ? 'on' : ''} onMouseDown={(e) => e.preventDefault()} onClick={() => onMode('typst')}>Typst</button>
         </span>
-        {latex && <button type="button" className={`btn btn-xs btn-icon ${showSource ? 'on' : ''}`} title={tx("看 / 改 LaTeX 源码")} onMouseDown={(e) => e.preventDefault()} onClick={() => setShowSource((s) => !s)}><Code2 /></button>}
+        {latex && <button type="button" className={`btn btn-xs btn-icon ${showSource ? 'on' : ''}`} title={tx("查看或编辑 LaTeX 源代码")} onMouseDown={(e) => e.preventDefault()} onClick={() => setShowSource((s) => !s)}><Code2 /></button>}
         {latex && <button type="button" className={`btn btn-xs btn-icon ${kbd ? 'on' : ''}`} title={tx("屏幕数学键盘")} onMouseDown={(e) => e.preventDefault()} onClick={toggleKeyboard}><Keyboard /></button>}
         <span className="spacer" />
         {latex ? <span className="muted math-tip">{tx("Tab 跳到下一个空位 ·")}{' '}{compact ? tx("回车") : tx("⌘/Ctrl + 回车")}{tx("完成")}</span> : <span className="muted math-tip">{tx("□ 是占位，Tab 跳到下一个")}</span>}

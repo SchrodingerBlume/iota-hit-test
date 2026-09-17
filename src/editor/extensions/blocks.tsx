@@ -164,7 +164,7 @@ function TableFigureView({ node, updateAttributes, selected, deleteNode, editor,
       <NodeViewContent className="tab-body" />
       <Tools>
         <LabelField node={node} updateAttributes={updateAttributes} prefix="tab" editable={editable} />
-        <span className="blk-hint">{t("光标进单元格后工具栏有加减行列")}</span>
+        <span className="blk-hint">{t("将光标置于单元格内，可在功能区添加或删除行列。")}</span>
         <button type="button" className="blk-tool is-btn is-danger" title={t("删除整张表")} disabled={!editable} onClick={deleteNode}><Trash2 /></button>
       </Tools>
     </NodeViewWrapper>
@@ -181,7 +181,7 @@ function CodeFigureView({ node, updateAttributes, selected, deleteNode, editor }
       <NodeViewContent className="lst-body" />
       <Tools>
         <LabelField node={node} updateAttributes={updateAttributes} prefix="lst" editable={editable} />
-        <span className="blk-hint">{t("框与行号按模板的 raw-style 排，不另设")}</span>
+        <span className="blk-hint">{t("边框和行号使用模板样式。")}</span>
         <button type="button" className="blk-tool is-btn is-danger" title={t("删除代码清单")} disabled={!editable} onClick={deleteNode}><Trash2 /></button>
       </Tools>
     </NodeViewWrapper>

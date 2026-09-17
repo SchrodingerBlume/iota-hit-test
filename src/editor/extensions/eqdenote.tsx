@@ -12,8 +12,8 @@ import { Trash2, Plus, X } from 'lucide-react';
 import { t } from '../../i18n';
 
 const LEADS: { value: string; label: string; hint: string }[] = [
-  { value: 'auto', label: t("式中"), hint: t("引导词按文档语言取：中文「式中」、英文 where") },
-  { value: 'none', label: t("不印"), hint: t("手动拆成两段时后半段用：不重复引导词，左缘照旧对齐") },
+  { value: 'auto', label: t("式中"), hint: t("根据文档语言显示“式中”或“where”。") },
+  { value: 'none', label: t("不印"), hint: t("续接上一段符号说明，不重复显示引导词。") },
 ];
 
 function SymbolCell({ row, onChange, editable }: { row: DenoteRow; onChange: (r: Partial<DenoteRow>) => void; editable: boolean }) {
@@ -38,7 +38,7 @@ function SymbolCell({ row, onChange, editable }: { row: DenoteRow; onChange: (r:
       {open && (
         <span className="chip-pop chip-pop-wide" onMouseDown={(e) => e.stopPropagation()}>
           <MathEditor value={row.symbol} mode={mode} display={false} compact autoFocus onChange={(v) => onChange({ symbol: v })} onMode={(m) => onChange({ mode: m })} onEnter={() => setOpen(false)} />
-          <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>{t("一条挂多个符号用「、」隔开，如")}{' '}<code>R_t、\omega_t</code></div>
+          <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>{t("同一说明对应多个符号时，请用“、”分隔，例如")}{' '}<code>R_t、\omega_t</code></div>
         </span>
       )}
     </span>
@@ -73,12 +73,12 @@ function EqDenoteView({ node, updateAttributes, selected, deleteNode, editor, ge
                   if (e.key === 'Backspace' && !r.meaning && !r.symbol && rows.length > 1) { e.preventDefault(); remove(i); requestAnimationFrame(() => focusAttrInput(wrap.current, `rows.${Math.max(0, i - 1)}.meaning`, undefined)); }
                 }} />
             </span>
-            <button type="button" className="blk-tool is-btn is-danger denote-del" title={t("删掉这一条")} disabled={!editable} onClick={() => remove(i)}><X /></button>
+            <button type="button" className="blk-tool is-btn is-danger denote-del" title={t("删除此项")} disabled={!editable} onClick={() => remove(i)}><X /></button>
           </div>
         ))}
       </div>
       <div className="denote-foot" contentEditable={false}>
-        <button type="button" className="btn btn-xs" disabled={!editable} onClick={() => add(rows.length - 1)}><Plus />{t("加一条")}</button>
+        <button type="button" className="btn btn-xs" disabled={!editable} onClick={() => add(rows.length - 1)}><Plus />{t("添加一项")}</button>
         <span className="seg" title={t("引导词")}>
           {LEADS.map((l) => <button key={l.value} type="button" className={lead === l.value ? 'on' : ''} title={l.hint} disabled={!editable} onClick={() => updateAttributes({ lead: l.value })}>{l.label}</button>)}
         </span>

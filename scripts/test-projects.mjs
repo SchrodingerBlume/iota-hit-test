@@ -77,6 +77,17 @@ try {
   assert.equal(records.size, 0);
   assert.equal(state().view, 'projects');
   assert.notEqual(state().doc.id, first, 'last deleted document cannot remain active');
+
+  const report = await state().createProject({ name: '', settings: { campus: 'shenzhen', degreeLevel: 'bachelor', stage: 'proposal', lang: 'en' }, template: 'sample' });
+  assert.match(state().doc.body.content[0].content[0].text, /Background/);
+  assert.match(state().doc.name, /开题报告/);
+  assert.equal(state().doc.images.length, 0, 'report samples must not retain an unused thesis image');
+  await state().deleteProject(report);
+
+  const humanities = await state().createProject({ name: '', settings: { category: 'hass', stage: 'final' }, template: 'sample' });
+  assert.match(state().doc.body.content[1].content[0].text, /研究背景/);
+  assert.ok(state().doc.appendix.content.length > 0, 'final sample should demonstrate appendix numbering');
+  await state().deleteProject(humanities);
   // A manual refresh must survive a newer edit queued behind an active compile.
   let worker;
   globalThis.Worker = class {
@@ -104,7 +115,7 @@ try {
   assert.equal(compiler.useCompileState.getState().artifactFresh, true);
   assert.equal(compiler.useCompileState.getState().compiling, false);
   console.log('PASS: manual refresh queue, latest text, image replacement, fresh preview');
-  console.log('PASS: first visit, creation, rename/autosave, import isolation, deletion/autosave, empty library');
+  console.log('PASS: first visit, creation, branch-specific samples, rename/autosave, import isolation, deletion/autosave, empty library');
 } finally {
   await server.close();
   delete globalThis.__projectTestPersistence;

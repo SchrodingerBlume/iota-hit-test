@@ -28,6 +28,8 @@ export interface CompileState {
   mapVersion: number;
   /** 上一次把产物画成 SVG 花的毫秒（主线程） */
   renderMs: number | null;
+  /** 最近一次排版得到的页数，长文档据此降低自动排版频率。 */
+  pageCount: number;
 }
 
 export const useCompileState = create<CompileState>(() => ({
@@ -49,11 +51,14 @@ export const useCompileState = create<CompileState>(() => ({
   diagSegments: [],
   mapVersion: -1,
   renderMs: null,
+  pageCount: 0,
 }));
 
 export interface CompileInput {
   /** 手动刷新时重建完整预览。 */
   force?: boolean;
+  /** 是否生成整篇字形映射。长文档仅在预览编辑时需要。 */
+  glyphs?: boolean;
   main: string;
   files: Record<string, string>;
   images: { name: string; data: ArrayBuffer }[];
@@ -109,16 +114,20 @@ export function startCompiler() {
         const s = useCompileState.getState();
         const input = inFlightInput;
         inFlightInput = null;
+        const failed = m.diagnostics.some((d) => d.severity === 'error');
+        // 富文本的中间状态不应把底层 Typst 诊断推给用户。失败版本不覆盖上一份
+        // 可用预览；公式语法由公式编辑器就地提示，其余情况会在下一次输入时自动重试。
+        if (failed) console.warn('[iota4web] 已忽略未能排版的中间版本', m.diagnostics);
         useCompileState.setState({
           compiling: false,
           artifact: m.artifact ? new Uint8Array(m.artifact) : s.artifact,
           artifactFresh: m.artifact ? m.fresh : s.artifactFresh,
-          diagnostics: m.diagnostics,
+          diagnostics: [],
           diagMain: input?.main ?? s.diagMain,
           diagSegments: input?.segments ?? s.diagSegments,
           lastMs: m.ms,
           compileCount: s.compileCount + 1,
-          ...(m.artifact ? { glyphs: m.glyphs ? new Float64Array(m.glyphs) : null, segments: input?.segments ?? [], mapVersion: input?.version ?? -1 } : {}),
+          ...(m.glyphs ? { glyphs: new Float64Array(m.glyphs), segments: input?.segments ?? [], mapVersion: input?.version ?? -1 } : {}),
         });
         flush();
         break;

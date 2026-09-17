@@ -178,7 +178,7 @@ export function TableAlignTools({ editor }: { editor: Editor }) {
     <>
       <Popover open={open} onOpenChange={(_, d) => setOpen(d.open)} positioning="below-start" trapFocus={false}>
         <PopoverTrigger disableButtonEnhancement>
-          <ToggleButton appearance="subtle" className="rb-btn rb-menu" icon={<TextAlignCenter20Regular />} checked={open} onMouseDown={(e) => e.preventDefault()} onClick={() => setOpen((o) => !o)} title={tx("单元格对齐：{{cur}}（点开九宫格）", { cur: cur })}>{cur}</ToggleButton>
+          <ToggleButton appearance="subtle" className="rb-btn rb-menu" icon={<TextAlignCenter20Regular />} checked={open} onMouseDown={(e) => e.preventDefault()} onClick={() => setOpen((o) => !o)} title={tx("单元格对齐方式：{{cur}}", { cur: cur })}>{cur}</ToggleButton>
         </PopoverTrigger>
         <PopoverSurface className="align-pop">
           <div className="align-grid">
@@ -216,7 +216,7 @@ export function useRichSize(): [number, (n: number) => void] {
 export function FontSizeTool() {
   const [size, setSize] = useRichSize();
   return (
-    <span className="tb-size" title={tx("编辑区显示字号（只影响这里，不影响排版结果）")}>
+    <span className="tb-size" title={tx("调整编辑区显示字号，不影响文档排版。")}>
       <TextFontSize20Regular className="tb-size-ico" />
       <B title={tx("字号小一点")} run={() => setSize(size - 1)} disabled={size <= 13}>A−</B>
       <span className="tb-size-val">{Math.round(size)}</span>

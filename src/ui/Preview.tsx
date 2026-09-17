@@ -47,7 +47,6 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
   const main = useCompileState((s) => s.diagMain);
   const segments = useCompileState((s) => s.diagSegments);
   const lastMs = useCompileState((s) => s.lastMs);
-  const compileCount = useCompileState((s) => s.compileCount);
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
@@ -236,15 +235,44 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
       before: (c) => { const [a, b] = view(); flipBefore(c, a, b); },
       after: (c) => { const [a, b] = view(); flipAfter(c, a, b); },
     }, usePreviewZoom.getState().perRow)
-      .then((info) => { if (alive) { useCompileState.setState({ renderMs: Math.round(performance.now() - t0) }); setPages(info.length); setRenderError(null); setRenderTick((t) => t + 1); } })
+      .then((info) => { if (alive) { useCompileState.setState({ renderMs: Math.round(performance.now() - t0), pageCount: info.length }); setPages(info.length); setRenderError(null); setRenderTick((t) => t + 1); } })
       .catch((e) => { if (alive) setRenderError(String(e?.message ?? e)); });
     return () => { alive = false; };
-  }, [artifact, compileCount]);
+  }, [artifact]);
+
+  // 长文档仍保留完整 SVG 供增量补丁复用，但只让视口附近的页参与绘制。
+  // 纸张背景始终可见，快速滚动时不会出现高度跳变或滚动条抖动。
+  useEffect(() => {
+    const sc = scrollRef.current;
+    if (!sc) return;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const svg = containerRef.current?.querySelector<SVGSVGElement>('svg.typst-doc');
+      if (!svg) return;
+      const sr = svg.getBoundingClientRect();
+      const vr = sc.getBoundingClientRect();
+      const scale = sr.width / (svg.viewBox.baseVal.width || 1);
+      if (!scale) return;
+      const top = (vr.top - sr.top) / scale;
+      const bottom = (vr.bottom - sr.top) / scale;
+      const buffer = Math.max(400, (bottom - top) * 1.5);
+      svg.querySelectorAll<SVGGElement>(':scope > g.typst-page').forEach((g) => {
+        const y = parseFloat(g.getAttribute('data-layout-y') ?? '0');
+        const h = parseFloat(g.getAttribute('data-page-height') ?? '0');
+        g.classList.toggle('is-virtual', y + h < top - buffer || y > bottom + buffer);
+      });
+    };
+    const schedule = () => { if (!raf) raf = requestAnimationFrame(update); };
+    schedule();
+    sc.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule, { passive: true });
+    return () => { cancelAnimationFrame(raf); sc.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); };
+  }, [renderTick, zoom, perRow]);
 
   const errors = diagnostics.filter((d) => d.severity === 'error');
-  const warnings = diagnostics.filter((d) => d.severity !== 'error');
-  // 探针那几条「unknown font family」是模板故意问的（windows 档才有的字），不值得吵
-  const shown = [...errors, ...warnings.filter((w) => !/unknown font family: (kaiti_gb2312|lisu|stxinwei|simsun|simhei|kaiti|fangsong)/i.test(w.message))];
+  // 富文本生成的 Typst 不要求用户处理编译器警告；真正阻止排版的错误才在这里显示。
+  const shown = errors;
 
   return (
     <div className={`preview ${compiling ? 'is-compiling' : ''}`}>
@@ -270,7 +298,7 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
         {status === 'booting' && (
           <div className="boot">
             <h3><Loader2 />{tx("正在准备排版引擎")}</h3>
-            <div className="muted">{tx("首次使用需要下载排版资源，可能需要一些时间。")}</div>
+            <div className="muted">{tx("首次打开时需加载排版引擎、模板和字体。")}</div>
             <div className="bar"><i style={{ width: progress && progress.total ? `${Math.min(100, (progress.loaded / progress.total) * 100)}%` : '2%' }} /></div>
             <div className="detail">{progress ? `${progress.phase} · ${fmtMB(progress.loaded)} / ${fmtMB(progress.total)} MB${progress.detail ? ' · ' + progress.detail : ''}` : '…'}</div>
           </div>
@@ -279,7 +307,7 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
           <div className="boot">
             <h3>{tx("排版引擎启动失败")}</h3>
             <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{fatal}</pre>
-            <div className="muted">{tx("请刷新页面重试。")}</div>
+            <div className="muted">{tx("重新加载页面后再试。")}</div>
           </div>
         )}
         {status === 'ready' && shown.length > 0 && (

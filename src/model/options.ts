@@ -26,7 +26,7 @@ export const AXES: AxisDef[] = [
   {
     key: 'campus',
     label: t("校区"),
-    hint: t("深圳校区的开题与中期报告是另发的一套表单；终稿全校一套"),
+    hint: t("深圳校区的开题报告和中期报告使用单独表单；终稿使用全校统一模板。"),
     choices: [
       { value: 'harbin', label: t("哈尔滨（本部）") },
       { value: 'shenzhen', label: t("深圳") },
@@ -35,7 +35,7 @@ export const AXES: AxisDef[] = [
   {
     key: 'degreeLevel',
     label: t("学位级别"),
-    hint: t("决定封面字样、内封字段、题注双语、右翻页、附录编号……"),
+    hint: t("用于设置封面、内封、双语题注、奇数页起始和附录编号。"),
     choices: [
       { value: 'bachelor', label: t("本科") },
       { value: 'master', label: t("硕士") },
@@ -44,8 +44,8 @@ export const AXES: AxisDef[] = [
   },
   {
     key: 'form',
-    label: t("交什么"),
-    hint: t("学位论文，还是实践成果（本科叫毕业设计）；实践成果只有专业学位才交"),
+    label: t("成果形式"),
+    hint: t("选择学位论文、实践成果或本科毕业设计。实践成果仅适用于专业学位。"),
     choices: [
       { value: 'dissertation', label: t("学位论文") },
       { value: 'practice', label: t("实践成果 / 毕业设计") },
@@ -54,7 +54,7 @@ export const AXES: AxisDef[] = [
   {
     key: 'stage',
     label: t("阶段"),
-    hint: t("终稿是那份成果本身；开题与中期是两份表单，摘要、内封、声明这些终稿专有的页自动跳过"),
+    hint: t("开题报告和中期报告使用阶段表单，并自动省略终稿专有页面。"),
     choices: [
       { value: 'final', label: t("终稿") },
       { value: 'proposal', label: t("开题报告") },
@@ -64,7 +64,7 @@ export const AXES: AxisDef[] = [
   {
     key: 'category',
     label: t("学科门类"),
-    hint: t("理工类与人文社科类两份指南，版面一字不差，只差正文层次编号（第一章 / 一、）"),
+    hint: t("按学科门类设置正文标题编号，例如“第一章”或“一、”。"),
     choices: [
       { value: 'stem', label: t("理工类") },
       { value: 'hass', label: t("人文社科类") },
@@ -73,7 +73,7 @@ export const AXES: AxisDef[] = [
   {
     key: 'lang',
     label: t("文档语言"),
-    hint: t("一篇一个值：标题、词条、目录份数、页眉、编号全按它走"),
+    hint: t("用于设置标题、术语、目录、页眉和编号语言。"),
     choices: [
       { value: 'zh', label: t("中文") },
       { value: 'en', label: 'English' },
@@ -176,7 +176,7 @@ export const SWITCHES: SwitchDef<any>[] = [
     choices: onOff,
     group: t("标题与页面"),
     resolve: (s) => (isReportBody(s)
-      ? { value: false, reason: t("报告的一级是节，一节一页会把五千字排成五页") }
+      ? { value: false, reason: t("报告的一级标题按节处理，不自动分页。") }
       : { value: true, reason: t("论文每一章另起一页") }),
   },
   {
@@ -224,7 +224,7 @@ export const SWITCHES: SwitchDef<any>[] = [
   {
     key: 'abbreviationLinks',
     label: t("缩写链到缩略语表"),
-    hint: t("正文里的缩写点一下跳到表"),
+    hint: t("将正文中的缩写链接到缩略语表。"),
     choices: onOff,
     group: t("缩略语与列表"),
     resolve: () => ({ value: true, reason: t("默认链") }),

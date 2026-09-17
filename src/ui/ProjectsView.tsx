@@ -70,7 +70,7 @@ export function ProjectsView() {
       <div className="projects-head">
         <div>
           <h2>{tx("我的文档")}</h2>
-          <p className="lead">{tx("文档自动保存在此浏览器中。备份或换设备时，请下载副本。")}</p>
+          <p className="lead">{tx("文档保存在当前浏览器中。跨设备使用或长期保存时，请下载副本。")}</p>
         </div>
         {canBack && <button type="button" className="btn" onClick={() => setView('editor')}><ArrowLeft />{tx("回到「")}{doc.name}」</button>}
       </div>
@@ -106,7 +106,7 @@ export function ProjectsView() {
         </div>
         <div className="proj-list">
           <h3 className="proj-list-title">{tx("最近使用")}{' '}<span className="muted">{projects.length}</span></h3>
-          {!projects.length && <div className="muted">{tx("暂无文档。")}</div>}
+          {!projects.length && <div className="muted">{tx("还没有文档。")}</div>}
           {projects.map((p) => <ProjectCard key={p.id} p={p} active={p.id === doc.id && loaded} />)}
         </div>
       </div>

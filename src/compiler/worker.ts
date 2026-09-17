@@ -230,15 +230,26 @@ async function compile(msg: Extract<ToWorker, { type: 'compile' }>) {
     world = raw.snapshot(undefined, '/main.typ', [['preview', '1']]);
     if (msg.force && incr) { incr.free(); incr = null; }
     if (!incr) { incr = raw.create_incr_server(); incrFresh = true; }
-    const res = world.incr_compile(incr, 3); // 3 = full diagnostics；结果是与上一版的差
-    // 成功那一支只带 result，诊断（警告）另问一次——编译结果是缓存的，不重编
-    const diagnostics = res?.diagnostics ?? (res?.result ? world.compile(0, 3)?.diagnostics : undefined);
+    let res = world.incr_compile(incr, 3); // 3 = full diagnostics；结果是与上一版的差
+    // incr_compile 已经完成诊断。再调一次 compile 即使命中缓存，也会在长文档上造成明显停顿。
+    let diagnostics = normalizeDiagnostics(res?.diagnostics);
+    // 长文档经历很多次增量补丁后，服务偶尔会把可编译内容误报成语法错误。
+    // 只在出错时丢弃增量状态重试一次；成功就发完整产物，失败才把真实诊断交给界面。
+    if (!msg.force && diagnostics.some((d) => d.severity === 'error')) {
+      try { incr.free(); } catch { /* */ }
+      incr = raw.create_incr_server();
+      incrFresh = true;
+      res = world.incr_compile(incr, 3);
+      diagnostics = normalizeDiagnostics(res?.diagnostics);
+    }
     // 拷贝一份：结果是 wasm 内存上的视图，直接拿 .buffer 会把整块内存搬走
     const artifact = res?.result ? new Uint8Array(res.result as Uint8Array).buffer : null;
-    const glyphs = artifact ? glyphMap(msg.main) : null;
+    // 字形映射覆盖整篇文档，近 200 页时比增量排版本身还贵。左侧输入期间沿用旧映射；
+    // 用户进入预览编辑或手动刷新时再生成最新映射。
+    const glyphs = msg.glyphs !== false && !diagnostics.some((d) => d.severity === 'error') ? glyphMap(msg.main) : null;
     const fresh = incrFresh;
     if (artifact) incrFresh = false;
-    post({ type: 'compiled', id: msg.id, artifact, fresh, diagnostics: normalizeDiagnostics(diagnostics), ms: Math.round(performance.now() - t0), glyphs }, [artifact, glyphs].filter((x): x is ArrayBuffer => !!x));
+    post({ type: 'compiled', id: msg.id, artifact, fresh, diagnostics, ms: Math.round(performance.now() - t0), glyphs }, [artifact, glyphs].filter((x): x is ArrayBuffer => !!x));
   } catch (e) {
     post({ type: 'compiled', id: msg.id, artifact: null, fresh: false, diagnostics: [{ severity: 'error', message: String((e as Error)?.message ?? e), where: '' }], ms: Math.round(performance.now() - t0), glyphs: null });
   }

@@ -254,7 +254,7 @@ function StyleDialog({ level }: { level: number }) {
             {field(t("字符间距"), (
               <LengthInput value={draft.tracking ?? ''} defaultUnit="pt" allowed={ABS_UNITS} placeholder="Auto" onChange={(v) => set({ tracking: v })} width={110} />
             ), t("Word 字体对话框的「字符间距」：光写数按磅，也可写 0.1mm"))}
-            {key === 'body' && <p className="muted style-hint">{t("首行缩进与两端对齐由模板按规范定，这里不开口子。")}</p>}
+            {key === 'body' && <p className="muted style-hint">{t("首行缩进和两端对齐使用当前论文模板。")}</p>}
           </DialogContent>
           <DialogActions>
             <Button appearance="subtle" onClick={reset}>{t("恢复模板默认")}</Button>

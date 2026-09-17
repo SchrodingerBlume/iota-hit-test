@@ -94,9 +94,14 @@ function tag(opts: SerializeOptions, n: PMNode, kind: 'node' | 'attr', inner: st
 const INLINE_SPECIAL = /[\\*_`#$@<>\[\]~/]/g;
 
 export function escapeText(s: string): string {
+  // 控制字符和源码映射使用的私用字符不应进入生成的 Typst；普通换行由编辑器节点表示。
+  s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\uE000-\uE003]/g, '�');
   // 连打的空格照排：Typst 会把多个空格合成一个，多出来的写成 ~（不断行空格，宽度同空格）
   return s.replace(INLINE_SPECIAL, (c) => '\\' + c).replace(/ {2,}/g, (run) => '~'.repeat(run.length - 1) + ' ').replace(/-{2,}/g, (run) => run.split('').map((c) => '\\' + c).join(''));
 }
+
+/** Typst 标签只允许保守的 ASCII 子集；引用、文献和缩略语统一走同一条清洗规则。 */
+const safeLabel = (value: unknown): string => String(value ?? '').trim().replace(/[^A-Za-z0-9_:.-]/g, '-').replace(/^-+|-+$/g, '');
 
 /** 一段开头如果长得像列表、标题、词条，补一个反斜杠（跳过映射记号看内容） */
 export function escapeLineStart(s: string): string {
@@ -133,8 +138,27 @@ function rawOf(escaped: string): string {
 function mathInline(attrs: Record<string, any> = {}): string {
   const src = String(attrs.src ?? '').trim();
   if (!src) return '';
+  if (!mathReady(src)) return '#box[]';
   if (attrs.mode === 'latex') return `#mi(${backtick(src)})`;
   return `$${src}$`;
+}
+
+/** 输入公式的过程中允许括号、引号和占位符暂时不完整；主文档先留空，由公式编辑器就地提示。 */
+function mathReady(src: string): boolean {
+  if (!src || src.includes('□')) return false;
+  const stack: string[] = [];
+  const pairs: Record<string, string> = { ')': '(', ']': '[', '}': '{' };
+  let quote = false;
+  let escaped = false;
+  for (const ch of src) {
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\') { escaped = true; continue; }
+    if (ch === '"') { quote = !quote; continue; }
+    if (quote) continue;
+    if (ch === '(' || ch === '[' || ch === '{') stack.push(ch);
+    else if (pairs[ch] && stack.pop() !== pairs[ch]) return false;
+  }
+  return !quote && !escaped && stack.length === 0;
 }
 
 function backtick(s: string): string {
@@ -199,24 +223,24 @@ export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {
       case 'hardBreak': emit(' \\\n', false); break;
       case 'mathInline': emit(tag(opts, n, 'node', mathInline(n.attrs)), n.attrs?.mode === 'latex'); break;
       case 'cite': {
-        const keys = String(n.attrs?.keys ?? '').split(/[,，;；\s]+/).filter(Boolean);
+        const keys = String(n.attrs?.keys ?? '').split(/[,，;；\s]+/).map(safeLabel).filter(Boolean);
         // 写成函数调用而不是 @key：Typst 0.15 的 @ 引用会把紧跟的汉字也吞进 label
         emit(tag(opts, n, 'node', keys.map((k) => `#cite(<${k}>)`).join('')), true);
         break;
       }
       case 'ref': {
-        const t = n.attrs?.target;
+        const t = safeLabel(n.attrs?.target);
         if (!t) break;
         emit(tag(opts, n, 'node', opts.knownLabels && !opts.knownLabels.has(t) ? '#text(red)[??]' : `#ref(<${t}>)`), true);
         break;
       }
-      case 'abbr': if (n.attrs?.key) emit(tag(opts, n, 'node', `#ref(<${n.attrs.key}>)`), true); break;
+      case 'abbr': { const key = safeLabel(n.attrs?.key); if (key) emit(tag(opts, n, 'node', `#ref(<${key}>)`), true); break; }
       case 'footnote': {
         const text = String(n.attrs?.text ?? '');
         emit(tag(opts, n, 'node', `#footnote[${tag(opts, n, 'attr', escapeText(text), { attr: 'text', raw: text })}]`), true);
         break;
       }
-      case 'ccwd': emit(tag(opts, n, 'node', `#ccwd(${n.attrs?.n ?? 1})`), true); break;
+      case 'ccwd': { const count = Math.max(-20, Math.min(20, Number(n.attrs?.n) || 1)); emit(tag(opts, n, 'node', `#ccwd(${count})`), true); break; }
       case 'idx': if (n.attrs?.text) emit(tag(opts, n, 'node', `#idx[${escapeText(String(n.attrs.text))}]`), true); break;
       default:
         if (n.content) emit(serializeInline(n.content, opts), false);
@@ -231,7 +255,7 @@ export function labelOf(attrs: Record<string, any> | undefined, prefix: string):
   if (!attrs) return '';
   const custom = String(attrs.label ?? '').trim();
   const base = custom || (attrs.uid ? `${prefix}:${attrs.uid}` : '');
-  return base.replace(/[^A-Za-z0-9_:.\-]/g, '-');
+  return safeLabel(base);
 }
 
 function caption(n: PMNode, opts: SerializeOptions): string {
@@ -369,6 +393,7 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
     case 'equation': {
       const src = String(n.attrs?.src ?? '').trim();
       if (!src) return '';
+      if (!mathReady(src)) return tag(opts, n, 'node', '#box[]');
       const unnumbered = n.attrs?.numbered === false;
       const label = unnumbered ? '' : labelOf(n.attrs, 'eq');
       const body = n.attrs?.mode === 'latex' ? `#mitex(${backtick(src)})` : `$ ${src} $`;
@@ -380,7 +405,7 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
       // 公式底下的「式中　x——…」：模板收原生 terms 语法，一行一个 / 符号: 说明
       const rows = parseDenoteRows(n.attrs?.rows);
       if (!rows.length) return '';
-      const term = (sym: string, mode: string) => sym.split(/[、,，]/).map((x) => x.trim()).filter(Boolean).map((x) => (mode === 'latex' ? `#mi(${backtick(x)})` : `$${x}$`)).join('、');
+      const term = (sym: string, mode: string) => sym.split(/[、,，]/).map((x) => x.trim()).filter(Boolean).map((x) => !mathReady(x) ? '#box[]' : mode === 'latex' ? `#mi(${backtick(x)})` : `$${x}$`).join('、');
       const lines = rows.map((r, i) => {
         const meaning = r.meaning.trim();
         const body = opts.map ? mark('attr', opts.map.key, opts.map.posOf.get(n) ?? 0, (opts.map.posOf.get(n) ?? 0) + 1, escapeText(meaning), { attr: `rows.${i}.meaning`, raw: meaning }) : escapeText(meaning);
@@ -390,7 +415,7 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
       return tag(opts, n, 'node', `#eqdenote(${lead})[\n${lines.join('\n')}\n]`);
     }
     case 'codeBlock': {
-      const lang = String(n.attrs?.language ?? '').trim();
+      const lang = String(n.attrs?.language ?? '').trim().replace(/[^A-Za-z0-9_+.-]/g, '');
       const text = (n.content ?? []).map((t) => t.text ?? '').join('');
       let fence = '```';
       while (text.includes(fence)) fence += '`';
@@ -405,8 +430,8 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
     }
     case 'algorithm': {
       // 伪代码：模板的 lovelace 那一路——`-` 不编号（输入输出），`+` 编号，嵌套就是缩进；行里是 Typst 标记
-      const io = parseIo(n.attrs?.io).map((t) => `  - ${t.trim()}`);
-      const lines = parseLines(n.attrs?.lines).filter((l) => l.text.trim()).map((l) => `  ${'  '.repeat(Math.max(0, l.level))}+ ${l.text.trim()}`);
+      const io = parseIo(n.attrs?.io).map((t) => `  - ${escapeText(t.trim())}`);
+      const lines = parseLines(n.attrs?.lines).filter((l) => l.text.trim()).map((l) => `  ${'  '.repeat(Math.max(0, Math.min(8, Number(l.level) || 0)))}+ ${escapeText(l.text.trim())}`);
       if (!lines.length) return '';
       const label = labelOf(n.attrs, 'alg');
       return tag(opts, n, 'node', `#figure(lovelace[\n${[...io, ...lines].join('\n')}\n], caption: [${caption(n, opts)}])`) + (label ? ` <${label}>` : '');
@@ -417,7 +442,7 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
     case 'orderedList': return serializeList(n, '+', opts, depth);
     case 'pageBreak': return '#pagebreak()';
     case 'horizontalRule': return '#line(length: 100%)';
-    case 'enter': return `#enter(${n.attrs?.n ?? 1})`;
+    case 'enter': return `#enter(${Math.max(1, Math.min(100, Number(n.attrs?.n) || 1))})`;
     default:
       return n.content ? serializeBlocks(n.content, opts, depth) : '';
   }

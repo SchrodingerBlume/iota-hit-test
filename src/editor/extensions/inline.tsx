@@ -66,7 +66,7 @@ function CiteView({ node, updateAttributes, selected, deleteNode, editor, getPos
     <InlineChip onSelect={() => { const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }} kind="cite" openNonce={open.nonce} text={keys.length ? `[${keys.join(', ')}]` : <em>{t("引用")}</em>} title={t("参考文献引用")} selected={selected} editable={editor.isEditable} autoOpen={!keys.length} onDelete={deleteNode}>
       {() => (
         <>
-          <Field label={t("文献")} hint={env.bibKeys.length ? t("点选，可多选") : t("先在「参考文献」里粘贴 BibTeX")}>
+          <Field label={t("文献")} hint={env.bibKeys.length ? t("选择一项或多项") : t("请先在“参考文献”中添加文献。")}>
             <input autoFocus value={q} placeholder={t("搜索 key 或标题")} onChange={(e) => setQ(e.target.value)} />
           </Field>
           <ul className="pick-list">
@@ -130,7 +130,7 @@ function RefPicker({ env, target, onPick }: { env: ReturnType<typeof useEditorEn
             </ul>
           </li>
         ))}
-        {!items.length && <li className="muted">{env.refTargets.length ? t("没有匹配的") : t("文档里还没有图、表、公式或标题")}</li>}
+        {!items.length && <li className="muted">{env.refTargets.length ? t("没有匹配的") : t("文档中没有可引用的图、表、公式或标题。")}</li>}
       </ul>
     </>
   );
@@ -140,7 +140,7 @@ function RefView({ node, updateAttributes, selected, deleteNode, editor, getPos 
   const env = useEditorEnv();
   const target = String(node.attrs.target ?? '');
   const hit = env.refTargets.find((r) => r.label === target);
-  const text = hit ? (hit.ref ?? `${KIND_NAME[hit.kind]} ${hit.index}`) : target ? <span className="ref-dangling" title={t("引用的对象不存在了（删了，或公式取消了编号）")}>??</span> : <em>{t("引用")}</em>;
+  const text = hit ? (hit.ref ?? `${KIND_NAME[hit.kind]} ${hit.index}`) : target ? <span className="ref-dangling" title={t("找不到引用对象。该对象可能已删除或取消编号。")}>??</span> : <em>{t("引用")}</em>;
   return (
     <InlineChip onSelect={() => { const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }} kind="ref" openNonce={open.nonce} text={text} title={hit ? `${KIND_NAME[hit.kind]}：${hit.title}` : t("交叉引用")} selected={selected} editable={editor.isEditable} autoOpen={!target} onDelete={deleteNode}>
       {(close) => <RefPicker env={env} target={target} onPick={(l) => { updateAttributes({ target: l }); close(); }} />}
@@ -166,7 +166,7 @@ function AbbrView({ node, updateAttributes, selected, deleteNode, editor, getPos
                 <button type="button" onClick={() => { updateAttributes({ key: a.key }); close(); }}><b>{a.key}</b> <span className="muted">{a.long}</span></button>
               </li>
             ))}
-            {!env.abbrs.length && <li className="muted">{t("先在「符号与缩略语」里登记")}</li>}
+            {!env.abbrs.length && <li className="muted">{t("请先在“符号与缩略语”中添加缩略语。")}</li>}
           </ul>
         </>
       )}
@@ -214,7 +214,7 @@ function IdxView({ node, updateAttributes, selected, deleteNode, editor, getPos 
   return (
     <InlineChip onSelect={() => { const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }} kind="idx" openNonce={open.nonce} text={text || <em>{t("索引词")}</em>} title={t("登记进索引页的词（正文里照常印出）")} selected={selected} editable={editor.isEditable} autoOpen={!text} onDelete={deleteNode}>
       {(close) => (
-        <Field label={t("索引词")} hint={t("印在正文里，同时登记进索引页（要排索引页记得在「页面开关」里打开）")}>
+        <Field label={t("索引词")} hint={t("在正文中标记该词，并将它收录到索引。索引页可在“页面设置”中启用。")}>
           <input autoFocus value={text} onChange={(e) => updateAttributes({ text: e.target.value })} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); close(); } }} />
         </Field>
       )}

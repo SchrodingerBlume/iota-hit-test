@@ -17,6 +17,7 @@ import { useBlockMenu } from '../editor/BlockMenu';
 import { useComments } from '../editor/comments';
 import { buildIndex, caretRect, hitPos, hitTest, lineStep, selectionRects, paragraphMarks, EMPTY_INDEX, type CaretRect, type Glyph, type Hit, type Line } from './previewEdit';
 import { t as tx } from '../i18n';
+import { useInputState } from '../editor/inputState';
 
 const KEY_SECTION: Record<RichKey, Section> = {
   body: 'body', appendix: 'appendix', conclusion: 'conclusion', acknowledgement: 'acknowledgement', resume: 'resume',
@@ -98,15 +99,18 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   const measure = useCallback(() => {
     const doc = docRef.current;
     if (!doc) return;
-    const base = doc.getBoundingClientRect();
+    const svg = doc.querySelector<SVGSVGElement>('svg.typst-doc');
+    if (!svg) return;
+    const vb = svg.viewBox.baseVal;
+    const scale = (svg.clientWidth || parseFloat(svg.getAttribute('width') ?? '0')) / (vb.width || 1);
     const out: PageGeom[] = [];
-    // 页的位置从变换矩阵取：页组的 bbox 只是内容的外框（白纸画在另一张 SVG 里），量它会偏
-    doc.querySelectorAll<SVGGElement>('svg.typst-doc > g.typst-page').forEach((g, i) => {
-      const m = g.getScreenCTM();
-      if (!m) return;
+    // 用版面坐标换算到覆盖层坐标。getScreenCTM 会把手势缩放再算一遍，导致缩放时光标漂移。
+    svg.querySelectorAll<SVGGElement>(':scope > g.typst-page').forEach((g, i) => {
       const w = parseFloat(g.getAttribute('data-page-width') ?? '0') || 1;
       const h = parseFloat(g.getAttribute('data-page-height') ?? '0') || 1;
-      out[i] = { left: m.e - base.left, top: m.f - base.top, scale: m.a, w, h };
+      const x = parseFloat(g.getAttribute('data-layout-x') ?? '0');
+      const y = parseFloat(g.getAttribute('data-layout-y') ?? '0');
+      out[i] = { left: (x - vb.x) * scale, top: (y - vb.y) * scale, scale, w, h };
     });
     setGeom(out);
   }, [docRef]);
@@ -516,17 +520,33 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     if (!text || !editor || !activeKey) return;
     insertText(editor, text);
   };
-  const onCompositionStart = () => { compositionActive.current = true; compositionCommit.current = null; setComposing(''); };
+  const onCompositionStart = () => {
+    if (!compositionActive.current) {
+      compositionActive.current = true;
+      useInputState.getState().begin();
+    }
+    compositionCommit.current = null;
+    setComposing('');
+  };
   const onCompositionUpdate = (e: React.CompositionEvent<HTMLTextAreaElement>) => setComposing(e.data ?? '');
   const onCompositionEnd = (e: React.CompositionEvent<HTMLTextAreaElement>) => {
     const text = e.data ?? '';
-    compositionActive.current = false;
+    if (compositionActive.current) {
+      compositionActive.current = false;
+      useInputState.getState().end();
+    }
     compositionCommit.current = text;
     window.setTimeout(() => { compositionCommit.current = null; }, 0);
     setComposing(null);
     if (inputRef.current) inputRef.current.value = '';
     if (text && editor && activeKey) insertText(editor, text);
   };
+  useEffect(() => () => {
+    if (compositionActive.current) {
+      compositionActive.current = false;
+      useInputState.getState().end();
+    }
+  }, []);
   const selectedText = (ed: Editor) => {
     const { from, to } = ed.state.selection;
     return ed.state.doc.textBetween(from, to, '\n', (n) => (n.type.name === 'mathInline' ? `$${n.attrs.src}$` : n.type.name === 'hardBreak' ? '\n' : ''));
@@ -579,7 +599,15 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
         aria-label={tx("在预览里直接编辑")}
         autoCapitalize="off" autoCorrect="off" spellCheck={false} autoComplete="off"
         onFocus={() => setSurface({ focused: true })}
-        onBlur={() => { setSurface({ focused: false }); setComposing(null); }}
+        onBlur={() => {
+          if (compositionActive.current) {
+            compositionActive.current = false;
+            useInputState.getState().end();
+          }
+          compositionCommit.current = null;
+          setSurface({ focused: false });
+          setComposing(null);
+        }}
         onKeyDown={onKeyDown}
         onInput={onInput}
         onCompositionStart={onCompositionStart}

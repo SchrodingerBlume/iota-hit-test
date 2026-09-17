@@ -64,7 +64,7 @@ export function SymbolPanel({ onPick, autoFocus }: { onPick: (ch: string) => voi
         ))}
         {!list.length && <p className="muted" style={{ gridColumn: '1 / -1', margin: 8 }}>{t("没有这个符号")}</p>}
       </div>
-      <div className="sym-foot muted">{q.trim() ? t("{{length}} 个", { length: list.length }) : cat === 'quick' ? t("常打的几十个；别的类别与搜索覆盖 Typst 整张符号表") : t("{{length}} 个 · 悬停看 Typst 名与 LaTeX 命令", { length: list.length })}</div>
+      <div className="sym-foot muted">{q.trim() ? t("{{length}} 个", { length: list.length }) : cat === 'quick' ? t("显示常用符号；可通过分类或搜索查找其他 Typst 符号。") : t("{{length}} 个 · 悬停看 Typst 名与 LaTeX 命令", { length: list.length })}</div>
     </div>
   );
 }
