@@ -4,9 +4,10 @@
 import {
   Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, TabStopType, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle,
   FootnoteReferenceRun, TableOfContents, PageBreak, PageNumber, Header, Footer, NumberFormat, CommentRangeStart, CommentRangeEnd, CommentReference,
-  ImportedXmlComponent, LineRuleType, DocumentGridType, ExternalHyperlink, VerticalAlign, type ParagraphChild, type ISectionOptions,
+  ImportedXmlComponent, LineRuleType, DocumentGridType, ExternalHyperlink, VerticalAlign, SimpleField, type ParagraphChild, type ISectionOptions,
 } from 'docx';
 import { convertLatexToMathMl } from 'mathlive/ssr';
+import JSZip from 'jszip';
 import type { ThesisDoc, Settings, RichDoc, Comment } from '../../model/types';
 import type { PMNode } from '../../typst/pmToTypst';
 import { labelOf } from '../../typst/pmToTypst';
@@ -53,19 +54,23 @@ function styles(s: Settings, L: Layout) {
     : { run: { size: ZIHAO.xiaoer * HALF, font: fonts(FONT.hei) }, paragraph: { alignment: AlignmentType.CENTER, spacing: { before: lines(1), after: lines(0.8), line: 300, lineRule: LineRuleType.AUTO } } };
   const sub = (size: number, gap: boolean) => ({ run: { size: size * HALF, font: fonts(FONT.hei) }, paragraph: { spacing: { before: gap ? lines(0.5) : 0, after: gap ? lines(0.5) : 0, line: 300, lineRule: LineRuleType.AUTO } } });
   const toc = (level: number) => ({ id: `TOC${level}`, name: `toc ${level}`, basedOn: 'Normal', next: 'Normal', run: { size: ZIHAO.xiaosi * HALF, font: fonts(level === 1 ? FONT.hei : FONT.zh) }, paragraph: { indent: { left: (level - 1) * 12 * PT, firstLine: 0 }, spacing: hass ? { line: 23 * PT, lineRule: LineRuleType.EXACT } : { line: s.degreeLevel === 'bachelor' ? 300 : 288, lineRule: LineRuleType.AUTO } } });
+  // 标题 1～4 与脚注文字是 docx 库自带的样式，只能从 default 里改，另写同名的会出现两份
+  const h2 = sub(isReport ? ZIHAO.sihao : ZIHAO.xiaosan, true), h3 = sub(isReport ? ZIHAO.xiaosi : ZIHAO.sihao, true), h4 = sub(ZIHAO.xiaosi, false);
   return {
-    default: { document: { run: { size: ZIHAO.xiaosi * HALF, font: fonts() }, paragraph: { spacing: { line: 300, lineRule: LineRuleType.AUTO }, alignment: AlignmentType.JUSTIFIED } } },
+    default: {
+      document: { run: { size: ZIHAO.xiaosi * HALF, font: fonts() }, paragraph: { spacing: { line: 300, lineRule: LineRuleType.AUTO }, alignment: AlignmentType.JUSTIFIED } },
+      heading1: { run: h1.run, paragraph: { ...h1.paragraph, indent: { firstLine: 0 }, outlineLevel: 0, keepNext: true, keepLines: true } },
+      heading2: { run: h2.run, paragraph: { ...h2.paragraph, indent: { firstLine: 0 }, outlineLevel: 1, keepNext: true, keepLines: true, alignment: AlignmentType.LEFT } },
+      heading3: { run: h3.run, paragraph: { ...h3.paragraph, indent: { firstLine: 0 }, outlineLevel: 2, keepNext: true, keepLines: true, alignment: AlignmentType.LEFT } },
+      heading4: { run: h4.run, paragraph: { ...h4.paragraph, indent: { firstLine: 0 }, outlineLevel: 3, keepNext: true, keepLines: true, alignment: AlignmentType.LEFT } },
+      footnoteText: { run: { size: ZIHAO.xiaowu * HALF }, paragraph: { indent: { firstLine: 0 }, spacing: { line: 240, lineRule: LineRuleType.AUTO } } },
+    },
     paragraphStyles: [
       { id: 'Normal', name: 'Normal', run: { size: ZIHAO.xiaosi * HALF, font: fonts() }, paragraph: { indent: { firstLine: L.firstLine }, spacing: { line: 300, lineRule: LineRuleType.AUTO }, alignment: AlignmentType.JUSTIFIED } },
-      { id: 'Heading1', name: 'heading 1', basedOn: 'Normal', next: 'Normal', quickFormat: true, ...h1, paragraph: { ...h1.paragraph, indent: { firstLine: 0 }, outlineLevel: 0, keepNext: true } },
-      { id: 'Heading2', name: 'heading 2', basedOn: 'Normal', next: 'Normal', quickFormat: true, ...sub(isReport ? ZIHAO.sihao : ZIHAO.xiaosan, true), paragraph: { ...sub(ZIHAO.xiaosan, true).paragraph, indent: { firstLine: 0 }, outlineLevel: 1, keepNext: true, alignment: AlignmentType.LEFT } },
-      { id: 'Heading3', name: 'heading 3', basedOn: 'Normal', next: 'Normal', quickFormat: true, ...sub(isReport ? ZIHAO.xiaosi : ZIHAO.sihao, true), paragraph: { ...sub(ZIHAO.sihao, true).paragraph, indent: { firstLine: 0 }, outlineLevel: 2, keepNext: true, alignment: AlignmentType.LEFT } },
-      { id: 'Heading4', name: 'heading 4', basedOn: 'Normal', next: 'Normal', quickFormat: true, ...sub(ZIHAO.xiaosi, false), paragraph: { ...sub(ZIHAO.xiaosi, false).paragraph, indent: { firstLine: 0 }, outlineLevel: 3, keepNext: true, alignment: AlignmentType.LEFT } },
       { id: 'Caption', name: 'caption', basedOn: 'Normal', next: 'Normal', run: { size: ZIHAO.wuhao * HALF }, paragraph: { alignment: AlignmentType.CENTER, indent: { firstLine: 0 }, spacing: { line: 300, lineRule: LineRuleType.AUTO }, keepNext: true } },
       { id: 'TableText', name: 'Table Text', basedOn: 'Normal', run: { size: ZIHAO.wuhao * HALF }, paragraph: { alignment: AlignmentType.CENTER, indent: { firstLine: 0 }, spacing: { line: 240, lineRule: LineRuleType.AUTO } } },
       { id: 'Code', name: 'Code', basedOn: 'Normal', run: { size: ZIHAO.wuhao * HALF, font: fonts(FONT.mono, FONT.mono) }, paragraph: { indent: { firstLine: 0 }, spacing: { line: 240, lineRule: LineRuleType.AUTO }, alignment: AlignmentType.LEFT } },
       { id: 'Reference', name: 'Reference', basedOn: 'Normal', run: { size: ZIHAO.wuhao * HALF }, paragraph: { indent: { firstLine: 0, left: 24 * PT, hanging: 24 * PT }, spacing: { line: 300, lineRule: LineRuleType.AUTO } } },
-      { id: 'FootnoteText', name: 'footnote text', basedOn: 'Normal', run: { size: ZIHAO.xiaowu * HALF }, paragraph: { indent: { firstLine: 0 }, spacing: { line: 240, lineRule: LineRuleType.AUTO } } },
       { id: 'Header', name: 'header', basedOn: 'Normal', run: { size: ZIHAO.xiaowu * HALF }, paragraph: { alignment: AlignmentType.CENTER, indent: { firstLine: 0 }, spacing: { line: 240, lineRule: LineRuleType.AUTO } } },
       { id: 'Footer', name: 'footer', basedOn: 'Normal', run: { size: ZIHAO.xiaowu * HALF }, paragraph: { alignment: AlignmentType.CENTER, indent: { firstLine: 0 }, spacing: { line: 240, lineRule: LineRuleType.AUTO } } },
       { id: 'Abstract', name: 'Abstract Title', basedOn: 'Heading1', next: 'Normal', paragraph: { outlineLevel: 0 } },
@@ -409,9 +414,13 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
   });
 
   const isReport = s.stage !== 'final';
-  const header = L.header ? new Header({ children: [new Paragraph({ style: 'Header', border: { bottom: { style: BorderStyle.THIN_THICK_SMALL_GAP, size: 18, space: 1 } }, children: [new TextRun({ text: `哈尔滨工业大学${DOC_TYPE[s.degreeLevel]}` })] })] }) : undefined;
+  // 页眉：范例里校名式「哈尔滨工业大学博士学位论文」；博士双面交替，奇数页排本章章标题（STYLEREF 1 取当前标题 1）
+  const headerPara = (kids: ParagraphChild[]) => new Paragraph({ style: 'Header', border: { bottom: { style: BorderStyle.THIN_THICK_SMALL_GAP, size: 18, space: 1 } }, children: kids });
+  const school = `哈尔滨工业大学${DOC_TYPE[s.degreeLevel]}`;
+  const header = L.header ? new Header({ children: [headerPara(s.degreeLevel === 'doctor' && !isReport ? [new SimpleField('STYLEREF 1 \\* MERGEFORMAT', school)] : [new TextRun({ text: school })])] }) : undefined;
+  const evenHeader = L.header && s.degreeLevel === 'doctor' && !isReport ? new Header({ children: [headerPara([new TextRun({ text: school })])] }) : undefined;
   const footer = L.footer ? new Footer({ children: [new Paragraph({ style: 'Footer', children: [new TextRun({ children: [PageNumber.CURRENT] })] })] }) : undefined;
-  const props = (roman: boolean) => ({ page: { size: A4, margin: L.margin, pageNumbers: { start: 1, formatType: roman ? NumberFormat.UPPER_ROMAN : NumberFormat.DECIMAL } }, grid: L.grid ? { type: L.grid.charSpace ? DocumentGridType.LINES_AND_CHARS : DocumentGridType.LINES, linePitch: L.grid.linePitch, charSpace: L.grid.charSpace } : undefined });
+  const props = (roman: boolean) => ({ page: { size: A4, margin: L.margin, pageNumbers: { start: 1, formatType: roman ? NumberFormat.UPPER_ROMAN : NumberFormat.NUMBER_IN_DASH } }, grid: L.grid ? { type: L.grid.charSpace ? DocumentGridType.LINES_AND_CHARS : DocumentGridType.LINES, linePitch: L.grid.linePitch, charSpace: L.grid.charSpace } : undefined });
 
   const sections: ISectionOptions[] = [];
   // 前置：摘要、目录、符号表 / 缩略语表（罗马页码）
@@ -425,7 +434,8 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
     const nom = nomenclature(ctx);
     if (nom.length) front.push(new Paragraph({ children: [new PageBreak()] }), ...nom);
   }
-  if (front.length) sections.push({ properties: props(true), headers: header ? { default: header } : undefined, footers: footer ? { default: footer } : undefined, children: front });
+  const hf = (roman: boolean) => ({ properties: props(roman), headers: header ? { default: roman ? new Header({ children: [headerPara([new TextRun({ text: school })])] }) : header, ...(evenHeader && !roman ? { even: evenHeader } : {}) } : undefined, footers: footer ? { default: footer, ...(evenHeader ? { even: footer } : {}) } : undefined });
+  if (front.length) sections.push({ ...hf(true), children: front });
 
   // 主体与后置（阿拉伯页码）
   const main: Block[] = [...blocks(ctx, (doc.body as PMNode).content, 'body')];
@@ -443,7 +453,7 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
   if (resolvePage(doc, 'resume').value && text(resume).trim()) main.push(new Paragraph({ children: [new PageBreak()] }), titlePara("个人简历"), ...blocks(ctx, resume.content, 'other'));
   // 第一章自己带「段前分页」，主体段开头不用再空一页
   if (main[0] instanceof Paragraph && (main[0] as any).properties?.root?.some?.((r: any) => r?.rootKey === 'w:pageBreakBefore')) { /* 首页由分节起 */ }
-  sections.push({ properties: props(false), headers: header ? { default: header } : undefined, footers: footer ? { default: footer } : undefined, children: main });
+  sections.push({ ...hf(false), children: main });
 
   const document = new Document({
     creator: doc.info.author || 'iota-hit', title: doc.info.title,
@@ -452,9 +462,29 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
     footnotes: ctx.footnotes,
     comments: { children: ctx.comments },
     features: { updateFields: true },
+    evenAndOddHeaderAndFooters: !!evenHeader,
     sections,
   });
-  return Packer.toBlob(document);
+  return unsnap(await Packer.toBlob(document));
+}
+
+// 段落对话框的「对齐到网格」：范例里除表格之外全都不勾（模板每条样式的 snap-to-docgrid: false），
+// docx 库没有段落级的开关，包好之后往 styles.xml 里补 <w:snapToGrid w:val="0"/>（要放在 pPr 的 spacing 之前）
+const UNSNAP = ['Normal', 'Heading1', 'Heading2', 'Heading3', 'Heading4', 'Caption', 'Code', 'Reference', 'FootnoteText', 'Header', 'Footer', 'Abstract', 'TOC1', 'TOC2', 'TOC3', 'TOC4'];
+async function unsnap(blob: Blob): Promise<Blob> {
+  const zip = await JSZip.loadAsync(blob);
+  const path = 'word/styles.xml';
+  let xml = await zip.file(path)!.async('string');
+  for (const id of UNSNAP) {
+    xml = xml.replace(new RegExp(`(<w:style [^>]*w:styleId="${id}"[^>]*>[\\s\\S]*?)(<w:pPr>)([\\s\\S]*?)(</w:pPr>)`), (_m, head, open, body, close) => {
+      if (body.includes('w:snapToGrid')) return _m;
+      const at = body.search(/<w:(spacing|ind|contextualSpacing|jc|outlineLevel)\b/);
+      const inner = at < 0 ? body + '<w:snapToGrid w:val="0"/>' : body.slice(0, at) + '<w:snapToGrid w:val="0"/>' + body.slice(at);
+      return head + open + inner + close;
+    });
+  }
+  zip.file(path, xml);
+  return zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
 }
 
 export type { RichDoc };
