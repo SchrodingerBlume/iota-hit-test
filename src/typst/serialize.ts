@@ -72,6 +72,17 @@ function mswordRule(s: Settings, page?: string): string {
   it
 }`;
 }
+/** 表单页（封面 / 内封）暂用 Typst 原版断行：fork 的 msword 模式量不准 text(spacing:) 撑开的空格串（报告封面的填空线），
+ *  字距按模板本段的网格补回来。fork 修好后可去掉 */
+function stockRule(s: Settings): string {
+  if (!msword(s)) return '';
+  return `#show: it => context {
+  let l = state("iota-hit-layout", none).get()
+  set text(tracking: if l == none { 0pt } else { l.docgrid.tracking })
+  set par(linebreaks: "optimized")
+  it
+}`;
+}
 function mswordPrelude(s: Settings): string {
   return msword(s) ? mswordRule(s) : `#set par(linebreaks: ${JSON.stringify(s.linebreaker)})`;
 }
@@ -277,8 +288,10 @@ export function serializeProject(doc: ThesisDoc, { preview = false }: { preview?
   parts.push(or('frontmatter') ? `#show: frontmatter.with(${or('frontmatter')})` : '#show: frontmatter');
   if (preview && msword(s)) parts.push(mswordRule(s));
   const coverArgs = s.titleEnXiaoer !== 'auto' ? `title-en-xiaoer: ${tri(s.titleEnXiaoer)}` : '';
-  if (resolvePage(doc, 'cover').value) parts.push(`#cover(${coverArgs})`);
-  if (resolvePage(doc, 'titlepage').value) parts.push(`#titlepage(${coverArgs})`);
+  const covers = (['cover', 'titlepage'] as const).filter((k) => resolvePage(doc, k).value);
+  if (covers.length && preview && msword(s)) parts.push(stockRule(s));
+  for (const k of covers) parts.push(`#${k}(${coverArgs})`);
+  if (covers.length && preview && msword(s)) parts.push(mswordRule(s));
 
   const rich = (key: RichKey, opts: { headings: boolean; headingBase?: number }) => serializeDoc(doc[key], { ...opts, knownLabels, preview, map: { key, posOf: indexPositions(doc[key] as any) } });
   const abstractZh = rich('abstractZh', { headings: false });
