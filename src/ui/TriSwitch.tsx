@@ -16,7 +16,7 @@ interface SegProps<V> {
   choices: SegChoice<V>[];
   /** 当前值：'auto' 或某个 choice 的 value */
   value: 'auto' | V;
-  auto: { value: V; reason: string };
+  auto: { value: V; reason: string; mixed?: string };
   onChange: (v: 'auto' | V) => void;
   /** 固定为某值时也提示自动档会是什么 */
   showAutoWhenFixed?: boolean;
@@ -32,7 +32,7 @@ export function TriSeg<V>({ label, hint, choices, value, auto, onChange, showAut
       <div className="triseg-lab" title={hint}>{label}</div>
       <div className="seg triseg-seg" role="radiogroup" aria-label={label}>
         <button type="button" role="radio" aria-checked={isAuto} className={`auto ${isAuto ? 'on' : ''}`} onClick={() => onChange('auto')} title={t("自动：{{reason}}", { reason: auto.reason })}>
-          Auto<span className="triseg-arrow">→</span><b className={`t-${toneOf(auto.value)}`}>{labelOf(auto.value)}</b>
+          Auto<span className="triseg-arrow">→</span>{auto.mixed ? <b className="t-mixed">{auto.mixed}</b> : <b className={`t-${toneOf(auto.value)}`}>{labelOf(auto.value)}</b>}
         </button>
         {choices.map((c) => (
           <button key={String(c.value)} type="button" role="radio" aria-checked={!isAuto && value === c.value} className={`${!isAuto && value === c.value ? `on t-${c.tone ?? 'accent'}` : ''}`} onClick={() => onChange(c.value)} title={c.hint ?? t("固定为「{{label}}」", { label: c.label })}>{c.label}</button>
@@ -40,8 +40,8 @@ export function TriSeg<V>({ label, hint, choices, value, auto, onChange, showAut
       </div>
       <div className="triseg-note">
         {isAuto
-          ? <>{t("自动 →")}{' '}<b className={`t-${toneOf(eff)}`}>{labelOf(eff)}</b> · {auto.reason}</>
-          : <>{t("已固定为")}{' '}<b className={`t-${toneOf(eff)}`}>{labelOf(eff)}</b>{showAutoWhenFixed && auto.value !== value && <span className="muted">{t("（自动档会是「")}{labelOf(auto.value)}」：{auto.reason}）</span>}</>}
+          ? <>{t("自动 →")}{' '}{auto.mixed ? <b className="t-mixed">{auto.mixed}</b> : <b className={`t-${toneOf(eff)}`}>{labelOf(eff)}</b>} · {auto.reason}</>
+          : <>{t("已固定为")}{' '}<b className={`t-${toneOf(eff)}`}>{labelOf(eff)}</b>{showAutoWhenFixed && (auto.mixed || auto.value !== value) && <span className="muted">{t("（自动档会是「")}{auto.mixed ?? labelOf(auto.value)}」：{auto.reason}）</span>}</>}
       </div>
     </div>
   );

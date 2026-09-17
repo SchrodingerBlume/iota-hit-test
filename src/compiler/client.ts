@@ -22,6 +22,9 @@ export interface CompileState {
   /** 与 artifact 配套的字形表、源码映射、文档版本（预览区直接编辑用） */
   glyphs: Float64Array | null;
   segments: Segment[];
+  /** 诊断对着的那份 main.typ 文本与段表（编译失败也更新，产物那一套只在成功时换） */
+  diagMain: string;
+  diagSegments: Segment[];
   mapVersion: number;
   /** 上一次把产物画成 SVG 花的毫秒（主线程） */
   renderMs: number | null;
@@ -42,6 +45,8 @@ export const useCompileState = create<CompileState>(() => ({
   families: [],
   glyphs: null,
   segments: [],
+  diagMain: '',
+  diagSegments: [],
   mapVersion: -1,
   renderMs: null,
 }));
@@ -109,6 +114,8 @@ export function startCompiler() {
           artifact: m.artifact ? new Uint8Array(m.artifact) : s.artifact,
           artifactFresh: m.artifact ? m.fresh : s.artifactFresh,
           diagnostics: m.diagnostics,
+          diagMain: input?.main ?? s.diagMain,
+          diagSegments: input?.segments ?? s.diagSegments,
           lastMs: m.ms,
           compileCount: s.compileCount + 1,
           ...(m.artifact ? { glyphs: m.glyphs ? new Float64Array(m.glyphs) : null, segments: input?.segments ?? [], mapVersion: input?.version ?? -1 } : {}),

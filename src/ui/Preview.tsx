@@ -3,11 +3,37 @@ import { useCompileState } from '../compiler/client';
 import { renderArtifact, relayoutPages } from '../compiler/renderer';
 import { flipBefore, flipAfter } from './flip';
 import { usePreviewZoom } from './previewZoom';
+import { humanize, locateDiagnostic, type DiagTarget } from './diagnostics';
+import { getEditor } from '../editor/registry';
+import { useStore, type RichKey } from '../model/store';
+import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { Eye, ZoomIn, ZoomOut, Maximize2, Minimize2, Loader2, RefreshCw } from 'lucide-react';
 import { PreviewEditLayer } from './PreviewEditLayer';
 import { t as tx } from '../i18n';
+import { t as tr } from '../i18n';
 
 const fmtMB = (n: number) => (n / 1024 / 1024).toFixed(1);
+
+const SECTION_NAME: Record<string, string> = { body: tr("正文"), appendix: tr("附录"), abstractZh: tr("中文摘要"), abstractEn: tr("英文摘要"), conclusion: tr("结论"), acknowledgement: tr("致谢"), resume: tr("简历"), info: tr("论文信息") };
+const SECTION_OF: Record<string, string> = { abstractZh: 'abstract', abstractEn: 'abstract', body: 'body', conclusion: 'conclusion', appendix: 'appendix', acknowledgement: 'acknowledgement', resume: 'resume', info: 'info' };
+/** 跳到诊断指的那一处：切到那一节，选中那个节点或把光标放过去 */
+function jumpTo(target: DiagTarget) {
+  const st = useStore.getState();
+  const section = SECTION_OF[target.key];
+  if (section && st.section !== section) st.setSection(section as never);
+  if (target.key === 'info') return;
+  const go = (tries: number) => {
+    const ed = getEditor(target.key as RichKey);
+    if (!ed) { if (tries) setTimeout(() => go(tries - 1), 120); return; }
+    const doc = ed.state.doc; const pos = Math.max(0, Math.min(doc.content.size, target.pos));
+    let sel;
+    try { sel = target.node ? NodeSelection.create(doc, pos) : TextSelection.near(doc.resolve(pos)); } catch { sel = TextSelection.near(doc.resolve(Math.min(pos, doc.content.size))); }
+    ed.view.dispatch(ed.state.tr.setSelection(sel).scrollIntoView());
+    ed.view.focus();
+    (ed.view.nodeDOM(pos) as HTMLElement | null)?.scrollIntoView?.({ block: 'center' });
+  };
+  go(6);
+}
 
 export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () => void; refreshDisabled?: boolean }) {
   // 只订阅要画的几项：glyphs / segments 那些大数组换了不必重画这里
@@ -18,6 +44,8 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
   const artifact = useCompileState((s) => s.artifact);
   const artifactFresh = useCompileState((s) => s.artifactFresh);
   const diagnostics = useCompileState((s) => s.diagnostics);
+  const main = useCompileState((s) => s.diagMain);
+  const segments = useCompileState((s) => s.diagSegments);
   const lastMs = useCompileState((s) => s.lastMs);
   const compileCount = useCompileState((s) => s.compileCount);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -257,9 +285,18 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
         {status === 'ready' && shown.length > 0 && (
           <div className={`diag ${errors.length ? 'err' : ''}`} style={{ marginBottom: 12, borderRadius: 'var(--r-m)', border: '1px solid' }}>
             <ul>
-              {shown.slice(0, 30).map((d, i) => (
-                <li key={i}><span className={`sev ${d.severity}`}>{d.severity === 'error' ? tx("错误") : tx("警告")}</span><span className="where">{d.where}</span><span>{d.message}</span></li>
-              ))}
+              {shown.slice(0, 30).map((d, i) => {
+                const h = humanize(d.message);
+                const target = locateDiagnostic(d.where, main, segments);
+                const where = target ? tx("{{name}}", { name: SECTION_NAME[target.key] ?? target.key }) : d.where.replace(/^main\.typ:[\d:-]+$/, '');
+                return (
+                  <li key={i} title={`${d.message}${d.where ? `\n${d.where}` : ''}`}>
+                    <span className={`sev ${d.severity}`}>{d.severity === 'error' ? tx("错误") : tx("警告")}</span>
+                    {target ? <button type="button" className="where diag-jump" onClick={() => jumpTo(target)}>{where} ↗</button> : where && <span className="where">{where}</span>}
+                    <span>{h.text}</span>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}

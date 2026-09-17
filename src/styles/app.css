@@ -267,6 +267,7 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .triseg-note b.t-on, .triseg-seg button.auto:not(.on) b.t-on { color: var(--ok); }
 .triseg-note b.t-off, .triseg-seg button.auto:not(.on) b.t-off { color: var(--danger); }
 .triseg-note b.t-accent, .triseg-seg button.auto:not(.on) b.t-accent { color: var(--accent-ink); }
+.triseg-note b.t-mixed, .triseg-seg button.auto:not(.on) b.t-mixed { color: var(--orange); }
 
 .toggle { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); }
 .toggle:last-child { border-bottom: 0; }
@@ -1076,3 +1077,6 @@ body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: non
 
 .projects-foot { max-width: 1200px; margin: 32px auto 0; font-size: 12px; text-align: center; }
 .projects-foot a { color: inherit; margin-left: 6px; }
+
+.diag-jump { border: 0; background: var(--accent-soft); color: var(--accent-ink); border-radius: var(--r-s); padding: 0 6px; cursor: pointer; font: inherit; }
+.diag-jump:hover { background: var(--accent-soft-2); }

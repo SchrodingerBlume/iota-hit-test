@@ -58,13 +58,15 @@ const msword = (s: Settings) => (s.linebreaker === 'auto' ? 'msword' : s.linebre
  *  网格按部件动态取：模板把版面记在 state "iota-hit-layout" 里（每个部件各更新一次），
  *  读出字距增量 tracking（= 跨度 − 字号），把模板自己发的 text(tracking:) 清零，
  *  换成引擎的 char-pitch: 1em + tracking。这段规则在 iota-hit 与每个部件的 show 之后各发一次 */
-function mswordRule(s: Settings): string {
+function mswordRule(s: Settings, page?: string): string {
   if (!msword(s)) return '';
   // 紧缩与右缩进照中文 Word 的默认
   const compat = s.wordCompat === 'auto' ? '11' : s.wordCompat;
+  // 有自己一格字符网格的页（成果页、研究生声明页）：按模板给页函数算版面的那条路取，与页里排的一致
+  const tr = page ? `_layout.layout-for(${JSON.stringify(page)}, auto).docgrid.tracking` : 'if l == none { 0pt } else { l.docgrid.tracking }';
   return `#show: it => context {
   let l = state("iota-hit-layout", none).get()
-  let tr = if l == none { 0pt } else { l.docgrid.tracking }
+  let tr = ${tr}
   set text(tracking: 0pt)
   set par(linebreaks: (mode: "msword", compat: ${compat}, char-pitch: if tr == 0pt { auto } else { 1em + tr }, kern: true, adjust-right-indent: true))
   it
@@ -319,13 +321,19 @@ export function serializeProject(doc: ThesisDoc, { preview = false }: { preview?
   const ach = generateBibtex(doc.achievementEntries ?? []);
   if (resolvePage(doc, 'achievements').value && ach.trim()) {
     files['achievements.bib'] = ach;
+    if (preview && msword(s)) parts.push(mswordRule(s, 'achievements'));
     parts.push(`#achievements(${orLead('achievements')}read("achievements.bib"))`);
+    if (preview && msword(s)) parts.push(mswordRule(s));
   }
 
   const def = defense(doc, knownLabels, or('defense'));
   if (def) parts.push(def);
 
-  if (resolvePage(doc, 'declarations').value) parts.push(`#declarations${orArgs('declarations')}`);
+  if (resolvePage(doc, 'declarations').value) {
+    if (preview && msword(s)) parts.push(mswordRule(s, s.degreeLevel === 'bachelor' ? 'declarations' : 'declarations-graduate'));
+    parts.push(`#declarations${orArgs('declarations')}`);
+    if (preview && msword(s)) parts.push(mswordRule(s));
+  }
   if (resolvePage(doc, 'index').value) parts.push(`#index${orArgs('index')}`);
 
   const ack = rich('acknowledgement', { headings: false });

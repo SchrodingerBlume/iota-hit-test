@@ -3,8 +3,7 @@ import { useMemo } from 'react';
 import { useStore, type RichKey } from '../model/store';
 import { PAGE_DEFS, resolvePage } from '../model/pages';
 import { TriSeg, ON_OFF } from './TriSwitch';
-import type { Abbreviation, SymbolEntry, DefensePerson, Pages, OpenrightKey } from '../model/types';
-import { SWITCHES, resolveSwitch } from '../model/options';
+import type { Abbreviation, SymbolEntry, DefensePerson, Pages, OpenrightKey, ThesisDoc } from '../model/types';
 import { RichEditor } from '../editor/RichEditor';
 import { BibEditor } from './BibEditor';
 import { MathPreview } from '../editor/math/MathPreview';
@@ -286,12 +285,27 @@ export function DefensePanel() {
 
 const OPENRIGHT_OF: Partial<Record<keyof Pages, OpenrightKey>> = { abstract: 'abstract', symbolsPage: 'nomenclature', tableOfContents: 'tableOfContents', listOfFigures: 'listOfFigures', listOfTables: 'listOfTables', listOfEquations: 'listOfEquations', achievements: 'achievements', defense: 'defense', declarations: 'declarations', index: 'index', resume: 'resume' };
 
+// 右手页起的四层：这一页自己 → 所在的段（前置 / 正文 / 后置） → 全篇总闸 → 模板按学位的表
+// （openright-auto：博士只有内封 true，各段都 false）。auto 显示的就是往上找到的那一档
+const MATTER_OF: Record<OpenrightKey, 'frontmatter' | 'mainmatter' | 'backmatter'> = {
+  frontmatter: 'frontmatter', abstract: 'frontmatter', nomenclature: 'frontmatter', tableOfContents: 'frontmatter', listOfFigures: 'frontmatter', listOfTables: 'frontmatter', listOfEquations: 'frontmatter',
+  mainmatter: 'mainmatter', conclusion: 'mainmatter',
+  achievements: 'backmatter', defense: 'backmatter', declarations: 'backmatter', index: 'backmatter', acknowledgement: 'backmatter', resume: 'backmatter',
+};
+function openrightAuto(doc: ThesisDoc, orKey: OpenrightKey): { value: boolean; reason: string } {
+  const matter = MATTER_OF[orKey];
+  const m = orKey !== matter ? doc.openright?.[matter as OpenrightKey] : undefined;
+  if (m === true || m === false) return { value: m, reason: tx("跟随所在部分的设定") };
+  const gate = doc.settings.openright;
+  if (gate === true || gate === false) return { value: gate, reason: tx("跟随全篇总闸（论文设置里的「右翻页」）") };
+  return { value: false, reason: doc.settings.degreeLevel === 'doctor' ? tx("模板按学位：博士只内封右翻，各段都不跳") : tx("模板按学位：{{v0}}各段都不跳", { v0: doc.settings.degreeLevel === 'master' ? tx("硕士") : tx("本科") }) };
+}
+
 function OpenrightSwitch({ orKey, label }: { orKey: OpenrightKey; label: string }) {
   const doc = useStore((s) => s.doc);
   const setOpenright = useStore((s) => s.setOpenright);
-  const g = resolveSwitch<boolean>(SWITCHES.find((d) => d.key === 'openright')!, doc.settings);
   const v = doc.openright?.[orKey] ?? 'auto';
-  return <TriSeg label={label} hint={tx("从右手页（奇数页）起，前面不够就补一张空白页；Auto 跟随所在部分（模板按学位定）")} choices={ON_OFF} value={v} auto={{ value: g.effective, reason: tx("跟随所在部分") }} onChange={(x) => setOpenright({ [orKey]: x })} />;
+  return <TriSeg label={label} hint={tx("从右手页（奇数页）起，前面不够就补一张空白页；Auto 往上跟：所在部分 → 全篇总闸 → 模板按学位的表")} choices={ON_OFF} value={v} auto={openrightAuto(doc, orKey)} onChange={(x) => setOpenright({ [orKey]: x })} />;
 }
 
 export function PagesPanel() {

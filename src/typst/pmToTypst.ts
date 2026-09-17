@@ -321,7 +321,8 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
         const subLabel = (i: number) => (label ? ` <${label}-${letter(i)}>` : '');
         const img = (s: { image: string; width: string | number }) => `image(${JSON.stringify(`${opts.imageDir ?? 'images'}/${s.image}`)}, width: ${lengthTypst(s.width, 'cm', '6cm')})`;
         const cells = subs.filter((s) => s.image).map((s, i) => (under ? `    [#subfigure(${img(s)}, caption: [${escapeText(s.caption ?? '')}])${subLabel(i)}],` : `    ${img(s)},`));
-        const subsArg = under ? '' : `#subs(${subs.map((s, i) => `[${escapeText(s.caption ?? '')}${subLabel(i)}]`).join(', ')},)`;
+        // 分图题连排那一档标签写在条目里（模板 README 的写法）；题空着时标签得有东西可挂，给个空盒
+        const subsArg = under ? '' : `#subs(${subs.map((s, i) => `[${(s.caption ?? '').trim() ? escapeText(s.caption ?? '') : '#box[]'}${subLabel(i)}]`).join(', ')},)`;
         const body = `#figure(\n  grid(\n    columns: ${cols}, column-gutter: 1cm, row-gutter: 12pt,\n${cells.join('\n')}\n  ),\n  caption: [${caption(n, opts)}${subsArg}],${placementArg(n)}\n)`;
         return floatWrap(n, 'image', tag(opts, n, 'node', body) + (label ? ` <${label}>` : ''));
       }

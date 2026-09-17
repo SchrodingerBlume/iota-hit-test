@@ -87,6 +87,8 @@ export interface Resolved<V> {
   value: V;
   /** 一句话说清楚为什么 auto 落在这一档 */
   reason: string;
+  /** auto 不是单一的一档（各段 / 各字体不同）时显示这个字，value 只是主要那一档 */
+  mixed?: string;
 }
 
 export interface SwitchDef<V extends string | boolean = boolean> {
@@ -184,7 +186,7 @@ export const SWITCHES: SwitchDef<any>[] = [
     choices: onOff,
     group: t("标题与页面"),
     resolve: (s) => (s.degreeLevel === 'doctor'
-      ? { value: true, reason: t("博士只内封右翻，其余各段不跳") }
+      ? { value: true, mixed: t("只内封"), reason: t("博士只内封右翻，前置、正文、后置各段不跳") }
       : { value: false, reason: t("{{v0}}各段都不跳", { v0: degreeName[s.degreeLevel] }) }),
   },
   {
@@ -257,8 +259,8 @@ export const SWITCHES: SwitchDef<any>[] = [
     resolve: (s) => (s.fontset === 'windows'
       ? { value: true, reason: t("中易宋体、楷体没有粗体面，与 Word 一样描边合成") }
       : s.fontset === 'macos'
-        ? { value: false, reason: t("问字体：Songti SC 有真粗面就不合成") }
-        : { value: true, reason: t("问字体：Noto Serif 有真粗面就不合成，FandolKai 没有就合成") }),
+        ? { value: false, mixed: t("按字体"), reason: t("逐副字体探：Songti SC 有真粗面就不合成，没有的才描边") }
+        : { value: true, mixed: t("按字体"), reason: t("逐副字体探：Noto Serif 有真粗面就不合成，FandolKai 没有就描边") }),
   },
   {
     key: 'fakeItalic',
