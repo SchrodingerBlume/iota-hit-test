@@ -1,5 +1,5 @@
 // 编辑器里显示的编号：章节、图、表、公式。规则照模板——
-//   标题：src/config/numbering.typ（理工「第 1 章 / 1.1」、人文社科「第一章 / 一、/（一）/ 1.」、
+//   标题：src/heading/numbering.typ（理工「第 1 章 / 1.1」、人文社科「第一章 / 一、/（一）/ 1.」、
 //         英文「Chapter 1 / 1.1」、报告「1 / 1.1」、附录「附录 A / A.1」）
 //   图表：caption-numbering-by-chapter（图 1-1 或图 1），公式：equation-numbering-by-chapter
 // 两个「按章编号」开关走 options.ts 里的 auto 映射，所以这里显示的就是模板最终会印的。
@@ -31,6 +31,7 @@ export function toHanzi(n: number): string {
 }
 const EN_WORDS = ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen', 'Twenty'];
 const letter = (n: number) => String.fromCharCode(64 + ((n - 1) % 26) + 1);
+const toRoman = (n: number) => { let out = ''; for (const [v, r] of [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']] as [number, string][]) while (n >= v) { out += r; n -= v; } return out; };
 
 function sw<V>(key: keyof Settings, s: Settings): V {
   const def = SWITCHES.find((d) => d.key === key)!;
@@ -54,10 +55,10 @@ export function levelLabels(s: Settings, part: 'body' | 'appendix' = 'body'): { 
   const en = s.lang === 'en';
   const hass = s.category === 'hass';
   if (part === 'appendix') {
-    const pat = sw<'letters' | 'numbers' | 'hanzi'>('appendixNumbering', s);
+    const pat = sw<'letters' | 'roman' | 'numbers' | 'hanzi'>('appendixNumbering', s);
     if (en) return [{ level: 1, name: 'Appendix', sample: 'Appendix A' }, { level: 2, name: 'Section', sample: 'A.1' }, { level: 3, name: '', sample: 'A.1.1' }, { level: 4, name: '', sample: 'A.1.1.1' }];
     if (pat === 'hanzi') return [{ level: 1, name: '附录', sample: '附录一' }, { level: 2, name: '节', sample: '一、' }, { level: 3, name: '条', sample: '（一）' }, { level: 4, name: '款', sample: '1.' }];
-    const m = pat === 'numbers' ? '1' : 'A';
+    const m = pat === 'numbers' ? '1' : pat === 'roman' ? 'I' : 'A';
     return [{ level: 1, name: '附录', sample: `附录 ${m}` }, { level: 2, name: '节', sample: `${m}.1` }, { level: 3, name: '条', sample: `${m}.1.1` }, { level: 4, name: '款', sample: `${m}.1.1.1` }];
   }
   if (isReport) return [{ level: 1, name: '节', sample: '1' }, { level: 2, name: '条', sample: '1.1' }, { level: 3, name: '款', sample: '1.1.1' }];
@@ -73,7 +74,7 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
   const isReportBody = s.stage !== 'final' && !(s.campus === 'shenzhen' && s.degreeLevel === 'bachelor');
   const figByChapter = sw<boolean>('captionNumberingByChapter', s);
   const eqByChapter = sw<boolean>('equationNumberingByChapter', s);
-  const appPattern = sw<'letters' | 'numbers' | 'hanzi'>('appendixNumbering', s);
+  const appPattern = sw<'letters' | 'roman' | 'numbers' | 'hanzi'>('appendixNumbering', s);
   const en = s.lang === 'en';
   const hass = s.category === 'hass';
 
@@ -88,6 +89,7 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
     if (!counters[0]) return '';
     if (part === 'appendix') {
       if (appPattern === 'letters') return letter(counters[0]);
+      if (appPattern === 'roman') return toRoman(counters[0]);
       if (appPattern === 'numbers') return String(counters[0]);
       return en ? EN_WORDS[counters[0] - 1] ?? String(counters[0]) : toHanzi(counters[0]);
     }
@@ -115,24 +117,25 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
     return byChapter && mark ? `${mark}-${k}` : String(k);
   };
   /**
-   * 附录里图表公式的号与名（模板 src/blocks/chapter.typ 一处定）：
+   * 附录里图表公式的号与名（模板 src/heading/chapter.typ 一处定）：
    *   英文档一律字母 Fig. A-1（单个附录也是 A）；中文·字母 图A-1；
    *   中文·数（1 / 一）附图1-1（章号那一位用阿拉伯数）；中文·只有一个附录 附图1。
    * 连续编号（不按章）那一档不加「附」，接着正文数。
    */
   const figLike = (zhName: string, enName: string, byChapter: boolean, k: number): string => {
     if (part !== 'appendix' || !byChapter || !counters[0]) return `${en ? enName : zhName}${numbered(byChapter, k)}`;
-    if (en) return `${enName}${letter(counters[0])}-${k}`;
+    if (en) return `${enName}${appPattern === 'roman' ? toRoman(counters[0]) : letter(counters[0])}-${k}`;
     if (single) return `附${zhName.trim()} ${k}`;
-    if (appPattern === 'letters') return `${zhName}${letter(counters[0])}-${k}`;
+    // 字母与罗马数字两档与正文的号本来分得开，不加「附」（模板 appendix-numeric）
+    if (appPattern === 'letters' || appPattern === 'roman') return `${zhName}${chapterMark()}-${k}`;
     return `附${zhName.trim()} ${counters[0]}-${k}`;
   };
   const eqNum = (byChapter: boolean, k: number, fullwidth: boolean): string => {
     const wrap = (s: string) => (fullwidth ? `（${s}）` : `(${s})`);
     if (part !== 'appendix' || !byChapter || !counters[0]) return wrap(numbered(byChapter, k));
-    if (en) return wrap(`${letter(counters[0])}-${k}`);
+    if (en) return wrap(`${appPattern === 'roman' ? toRoman(counters[0]) : letter(counters[0])}-${k}`);
     if (single) return wrap(`附 ${k}`);
-    if (appPattern === 'letters') return wrap(`${letter(counters[0])}-${k}`);
+    if (appPattern === 'letters' || appPattern === 'roman') return wrap(`${chapterMark()}-${k}`);
     return wrap(`附 ${counters[0]}-${k}`);
   };
 

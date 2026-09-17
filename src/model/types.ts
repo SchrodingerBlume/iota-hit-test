@@ -74,7 +74,9 @@ export interface Settings {
   /** 摘要正文与关键词之间：auto ＝ 空一行（指南），none ＝ 不空，bottom ＝ 关键词挤到页底（v(1fr)） */
   abstractKeywordsAbove: Tri<'none' | 'line' | 'bottom'>;
   emDash: Tri<'cjk' | 'latin'>;
-  appendixNumbering: Tri<'letters' | 'numbers' | 'hanzi'>;
+  appendixNumbering: Tri<'letters' | 'roman' | 'numbers' | 'hanzi'>;
+  /** 目录出哪几份：auto ＝ 模板按学位（博士中英两份、硕本只中文；英文档只英文） */
+  tocLang: Tri<'zh' | 'en' | 'both'>;
   /** 英文题目强制小二号（封面与内封的 title-en-xiaoer） */
   titleEnXiaoer: TriBool;
   /** 预览的断行引擎：Word 式（本站 fork，只进预览）或 Typst 原版的两种 */

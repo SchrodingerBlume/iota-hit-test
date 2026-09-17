@@ -63,7 +63,9 @@ function mswordRule(s: Settings, page?: string): string {
   // 紧缩与右缩进照中文 Word 的默认
   const compat = s.wordCompat === 'auto' ? '11' : s.wordCompat;
   // 有自己一格字符网格的页（成果页、研究生声明页）：按模板给页函数算版面的那条路取，与页里排的一致
-  const tr = page ? `_layout.layout-for(${JSON.stringify(page)}, auto).docgrid.tracking` : 'if l == none { 0pt } else { l.docgrid.tracking }';
+  // 成果页与研究生声明页自带一格字符网格（模板 6461d2f：Word 的 charSpace 2752，= 2752/4096 pt 的字距增量）。
+  // 模板 d44831b 起 layout-for 不再公开，先按模板量的那个数写死；本科声明页跟正文的网格
+  const tr = page && page !== 'declarations' ? `${(2752 / 4096).toFixed(4)}pt` : 'if l == none { 0pt } else { l.docgrid.tracking }';
   return `#show: it => context {
   let l = state("iota-hit-layout", none).get()
   let tr = ${tr}
@@ -125,7 +127,7 @@ function settingsArgs(s: Settings): string[] {
   const styles = stylesArg(s.styles ?? {});
   if (styles) args.push(styles);
   if (s.appendixNumbering !== 'auto') {
-    const pattern = { letters: 'A', numbers: '1', hanzi: '一' }[s.appendixNumbering];
+    const pattern = { letters: 'A', roman: 'I', numbers: '1', hanzi: '一' }[s.appendixNumbering];
     args.push(`appendix-numbering: ${JSON.stringify(pattern)}`);
   }
   return args;
@@ -305,7 +307,11 @@ export function serializeProject(doc: ThesisDoc, { preview = false }: { preview?
   const nomen = nomenclature(doc, or('nomenclature'));
   if (nomen) parts.push(nomen);
 
-  if (resolvePage(doc, 'tableOfContents').value) parts.push(`#table-of-contents${orArgs('tableOfContents')}`);
+  // 目录出哪几份：模板 lang: auto 按学位（博士两份）；lang 只收一种语言，要两份就各出一次（模板按语言计次，不算重复）
+  if (resolvePage(doc, 'tableOfContents').value) {
+    const langs = s.tocLang === 'auto' ? [''] : s.tocLang === 'both' ? ['lang: "zh"', 'lang: "en"'] : [`lang: "${s.tocLang}"`];
+    for (const l of langs) parts.push(`#table-of-contents(${[or('tableOfContents'), l].filter(Boolean).join(', ')})`);
+  }
   if (resolvePage(doc, 'listOfFigures').value) parts.push(`#list-of-figures${orArgs('listOfFigures')}`);
   if (resolvePage(doc, 'listOfTables').value) parts.push(`#list-of-tables${orArgs('listOfTables')}`);
   if (resolvePage(doc, 'listOfEquations').value) parts.push(`#list-of-equations${orArgs('listOfEquations')}`);

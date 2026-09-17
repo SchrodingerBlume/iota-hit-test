@@ -180,7 +180,7 @@ npm run test:compile # 不开浏览器，在 Node 里用同一颗 wasm 编一份
 
 文件菜单「导出 Word 文档」：不经过 Typst，从编辑器的 JSON 直接用 docx 库生成，样式照学校范例——页面设置、文档网格
 （linesAndChars 391 / 1861）、正文 / 标题 1～4 / 题注 / 目录 1～4 / 脚注 / 页眉页脚的字体字号行距段距全取自模板
-config/layout.typ 与 config/styles.typ 量下来的数；编号用 numbering.ts 算，参考文献用 GB/T 7714-2015 的 CSL 排
+layout/presets.typ 与 styles/presets.typ 量下来的数；编号用 numbering.ts 算，参考文献用 GB/T 7714-2015 的 CSL 排
 （citation-js），LaTeX 公式转成 Word 原生公式（MathML → OMML，src/export/docx/omml.ts），Typst 写法的公式由站内引擎
 画成图；脚注、批注（Word 批注）、三线表、分图、算法、代码都有。打开时 Word 会问「是否更新域」，答「是」目录才有页码。
 封面 / 内封 / 声明页 / 答辩信息表这些表单页还没做（第二阶段）。

@@ -39,8 +39,9 @@ async function main() {
     registry.add(p.namespace, p.name, p.version, new Uint8Array(fs.readFileSync(path.join(pub, 'packages', p.file))));
   }
   const fontDir = path.join(pub, 'fonts');
-  const fonts = fs.readdirSync(fontDir).filter((f) => /\.(otf|ttf)$/i.test(f))
-    .map((f) => new Uint8Array(fs.readFileSync(path.join(fontDir, f))));
+  // EXTRA_FONTS=目录：再加一批本机字体（比如 Windows 档要的 SimSun / Times New Roman）
+  const fontDirs = [fontDir, ...(process.env.EXTRA_FONTS ? process.env.EXTRA_FONTS.split(':') : [])];
+  const fonts = fontDirs.flatMap((d) => fs.readdirSync(d).filter((f) => /\.(otf|ttf|ttc)$/i.test(f)).map((f) => new Uint8Array(fs.readFileSync(path.join(d, f)))));
 
   const wasmPath = path.join(root, 'vendor', 'typst-ts-web-compiler', 'typst_ts_web_compiler_bg.wasm');
   const compiler = createTypstCompiler();

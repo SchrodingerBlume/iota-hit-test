@@ -111,7 +111,12 @@ export function parseBibtex(src: string): BibEntry[] {
   return out;
 }
 
-function escapeValue(v: string): string {
+// 逐字照排的字段（omni-gb7714 与 biblatex 都不做 LaTeX 转换）
+const VERBATIM = new Set(['url', 'doi', 'eprint', 'file']);
+
+function escapeValue(v: string, field = ''): string {
+  // 界面上照常写 & _ # %（Genes & development），进 .bib 得按 LaTeX 转义，已转义的不重复
+  if (!VERBATIM.has(field)) v = v.replace(/(^|[^\\])([&%#_])/g, '$1\\$2');
   // 值里已经有的花括号原样保留（用户可能故意写 {NASA} 保护大小写）；只保证平衡
   let depth = 0;
   for (const c of v) { if (c === '{') depth++; else if (c === '}') depth = Math.max(0, depth - 1); }
@@ -128,7 +133,7 @@ export function generateBibtex(entries: BibEntry[], opts: { withGroups?: boolean
     .map((e) => {
       const lines = Object.entries(e.fields)
         .filter(([k, v]) => k !== 'groups' && v != null && String(v).trim() !== '')
-        .map(([k, v]) => `  ${k} = {${escapeValue(String(v).trim())}},`);
+        .map(([k, v]) => `  ${k} = {${escapeValue(String(v).trim(), k)}},`);
       if (opts.withGroups && e.group?.trim()) lines.push(`  groups = {${escapeValue(e.group.trim())}},`);
       return `@${e.type || 'misc'}{${e.key.trim()},\n${lines.join('\n')}\n}`;
     })

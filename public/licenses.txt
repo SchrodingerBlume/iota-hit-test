@@ -40,7 +40,7 @@ iota-hit 在线编辑器 · 开源许可与声明
     来源：https://github.com/Myriad-Dreamin/typst.ts
     修改：有修改（lib.rs、patch.mjs）
 
-· iota-hit（哈工大学位论文 Typst 模板） 0.1.0（a965c9e-dirty）
+· iota-hit（哈工大学位论文 Typst 模板） 0.1.0（d44831b）
     版权：模板作者
     许可：LPPL-1.3c
     来源：本机 ../iota-hit，原样打包
@@ -154,12 +154,6 @@ iota-hit 在线编辑器 · 开源许可与声明
     来源：本机 typst local 包
     修改：原样打包
 
-· @preview/glossy 0.9.2
-    版权：各自作者
-    许可：见「三」
-    来源：https://typst.app/universe
-    修改：原样打包
-
 · @preview/lovelace 0.3.1
     版权：各自作者
     许可：见「三」
@@ -178,13 +172,19 @@ iota-hit 在线编辑器 · 开源许可与声明
     来源：https://typst.app/universe
     修改：原样打包
 
-· @preview/auto-pinyin 0.1.0
+· @preview/zhconv 0.3.1
     版权：各自作者
     许可：见「三」
     来源：https://typst.app/universe
     修改：原样打包
 
-· @preview/zhconv 0.3.1
+· @preview/glossy 0.9.2
+    版权：各自作者
+    许可：见「三」
+    来源：https://typst.app/universe
+    修改：原样打包
+
+· @preview/auto-pinyin 0.1.0
     版权：各自作者
     许可：见「三」
     来源：https://typst.app/universe
@@ -2864,32 +2864,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-@preview/glossy 0.9.2
-------------------------------------------
-
-MIT License
-
-Copyright (c) 2025, 2026 Stephen Waits <steve@waits.net>
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-
 @preview/lovelace 0.3.1
 ----------------------------------------------
 
@@ -2939,32 +2913,6 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 MIT License
 
 Copyright (c) 2026 SchrodingerBlume (Andrew Junhao Wu)
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-
-@preview/auto-pinyin 0.1.0
-----------------------------------------------------
-
-MIT License
-
-Copyright (c) 2026 lucifer1004
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -3662,6 +3610,58 @@ may consider it more useful to permit linking proprietary applications with
 the library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.  But first, please read
 <https://www.gnu.org/licenses/why-not-lgpl.html>.
+
+
+@preview/glossy 0.9.2
+------------------------------------------
+
+MIT License
+
+Copyright (c) 2025, 2026 Stephen Waits <steve@waits.net>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+@preview/auto-pinyin 0.1.0
+----------------------------------------------------
+
+MIT License
+
+Copyright (c) 2026 lucifer1004
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 
 @preview/auto-bihua 0.2.0

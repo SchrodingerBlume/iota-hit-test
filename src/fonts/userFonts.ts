@@ -9,7 +9,7 @@ import { saveFontFile, loadFontFile, deleteFontFile, listFontFiles } from '../mo
 import type { Fontset } from '../model/types';
 import { t } from '../i18n';
 
-/** 模板各档的角色 → 家族名（抄自 iota-hit/src/config/fonts.typ 的 presets） */
+/** 模板各档的角色 → 家族名（抄自 iota-hit/src/fonts/presets.typ 的 presets） */
 export const PRESET_ROLES: Record<Exclude<Fontset, 'webapp'>, { role: string; label: string; family: string; optional?: boolean }[]> = {
   windows: [
     { role: 'songti', label: t("宋体"), family: 'SimSun' },

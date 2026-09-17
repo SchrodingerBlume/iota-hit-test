@@ -1,5 +1,5 @@
 // 从编辑器的 JSON 直接生成 Word 文档（docx 库），样式照学校范例：页面设置、文档网格、各级标题、题注、目录
-// 的每个数都取自模板 iota-hit 的 config/layout.typ 与 config/styles.typ（那里是从范例 .docx 逐个量出来的）。
+// 的每个数都取自模板 iota-hit 的 page/presets.typ 与 styles/presets.typ（那里是从范例 .docx 逐个量出来的）。
 // 不经过 Typst；编号用 numbering.ts 算，参考文献用 GB/T 7714 的 CSL 排。封面 / 内封 / 声明页这些表单页第二阶段再做。
 import {
   Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, TabStopType, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle,
@@ -30,7 +30,7 @@ const fonts = (zh = FONT.zh, en = FONT.en) => ({ ascii: en, hAnsi: en, eastAsia:
 const A4 = { width: 11906, height: 16838 };
 
 interface Layout { margin: { top: number; right: number; bottom: number; left: number; header: number; footer: number }; grid?: { linePitch: number; charSpace?: number }; line: number; firstLine: number; header: boolean; footer: boolean }
-/** 页面设置：终稿一份，报告按校区 / 学位（config/layout.typ 那张表） */
+/** 页面设置：终稿一份，报告按校区 / 学位（page/presets.typ 那张表） */
 function layoutOf(s: Settings): Layout {
   const report = s.stage !== 'final';
   if (!report) return { margin: { top: cm(3.8), right: cm(3), bottom: cm(3), left: cm(3), header: cm(3), footer: cm(2.3) }, grid: { linePitch: 391, charSpace: 1861 }, line: 391, firstLine: 498, header: true, footer: true };

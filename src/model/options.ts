@@ -1,6 +1,6 @@
 // 版式选项的登记表：下拉框的档位、三态开关的两端、auto 映射到什么值。
 //
-// *auto 的映射规则抄自模板*（iota-hit/src/config/settings.typ 与 lib.typ 的注释），
+// *auto 的映射规则抄自模板*（iota-hit/src/settings/defaults.typ 与 src/api.typ 的注释），
 // 这里只为了在界面上告诉用户「自动档现在等于什么」，真正生效的仍是模板自己算的
 // ——我们往 Typst 传的就是 auto，不替它决定。规则变了两边都要改；对拍见 tests。
 import type { Settings, TriBool, Tri, DegreeLevel, Stage, Campus } from './types';
@@ -283,6 +283,21 @@ export const SWITCHES: SwitchDef<any>[] = [
     resolve: () => ({ value: 'line', reason: t("指南：关键词在正文之后隔一行") }),
   },
   {
+    key: 'tocLang',
+    label: t("目录语言"),
+    hint: t("目录出中文、英文还是两份；作者自己的 Word 稿常常只有中文目录"),
+    choices: [
+      { value: 'zh', label: t("只中文") },
+      { value: 'en', label: t("只英文") },
+      { value: 'both', label: t("中英两份") },
+    ],
+    group: t("标题与页面"),
+    resolve: (s) => {
+      if (s.lang === 'en') return { value: 'en', reason: t("英文档只出英文目录") };
+      return s.degreeLevel === 'doctor' ? { value: 'both', reason: t("博士档中英两份（范例）") } : { value: 'zh', reason: t("硕本只有中文目录") };
+    },
+  },
+  {
     key: 'hyphenate',
     label: t("西文断字"),
     hint: t("行尾的英文单词按音节断开加连字符（Typst 的 text.hyphenate）。模板默认关——两份范例的 Word 都没开自动断字；两端对齐下西文多时开了更匀"),
@@ -293,9 +308,10 @@ export const SWITCHES: SwitchDef<any>[] = [
   {
     key: 'appendixNumbering',
     label: t("附录编号"),
-    hint: t("附录 A / 附录 1 / 附录一"),
+    hint: t("附录 A / 附录 I / 附录 1 / 附录一"),
     choices: [
       { value: 'letters', label: 'A' },
+      { value: 'roman', label: 'I' },
       { value: 'numbers', label: '1' },
       { value: 'hanzi', label: t("一") },
     ],
@@ -389,6 +405,7 @@ export const defaultSettings = (): Settings => ({
   abstractKeywordsAbove: 'auto',
   emDash: 'auto',
   appendixNumbering: 'auto',
+  tocLang: 'auto',
   titleEnXiaoer: 'auto',
   linebreaker: 'auto',
   wordCompat: 'auto',

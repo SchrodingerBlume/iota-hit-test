@@ -157,6 +157,9 @@ const marksOf = (n: PMNode, skip: Mark[]) => (n.marks ?? []).filter((x) => !skip
 
 export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {}, skip: Mark[] = []): string {
   let out = '';
+  // 上一段输出是不是 #调用：紧跟的 ( 或 . 会被 Typst 当成续写的参数 / 字段（#cite(<a>)(图 1)），要用 ; 收住
+  let code = false;
+  const emit = (s: string, isCode: boolean) => { out += s; code = isCode; };
   for (let i = 0; i < nodes.length; i++) {
     const n = nodes[i];
     if (n.type === 'text' && i + 1 < nodes.length && nodes[i + 1].type === 'text') {
@@ -167,7 +170,7 @@ export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {
         if (j > i + 1 && (!best || j > best.end || (j === best.end && GROUPABLE.indexOf(m.type) < GROUPABLE.indexOf(best.mark.type)))) best = { mark: m, end: j };
       }
       if (best) {
-        out += wrapMarks(serializeInline(nodes.slice(i, best.end), opts, [...skip, best.mark]), [best.mark]);
+        emit(wrapMarks(serializeInline(nodes.slice(i, best.end), opts, [...skip, best.mark]), [best.mark]), true);
         i = best.end - 1;
         continue;
       }
@@ -183,39 +186,40 @@ export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {
         const pos = opts.map?.posOf.get(n);
         const marks = marksOf(n, skip);
         const isCode = marks.some((m) => m.type === 'code');
+        if (code && marks.length === 0 && /^[(.]/.test(escaped)) out += ';';
         if (pos !== undefined && opts.map) {
           // 等宽代码走 #raw("…")：记号套在引号里面，字形偏移就是从引号后数的
           const rawArg = isCode ? `"${mark('text', opts.map.key, pos, pos + raw.length, JSON.stringify(raw).slice(1, -1), { raw })}"` : undefined;
-          out += wrapMarks(mark('text', opts.map.key, pos, pos + raw.length, escaped, { raw }), marks, rawArg);
+          emit(wrapMarks(mark('text', opts.map.key, pos, pos + raw.length, escaped, { raw }), marks, rawArg), marks.length > 0);
         } else {
-          out += wrapMarks(escaped, marks);
+          emit(wrapMarks(escaped, marks), marks.length > 0);
         }
         break;
       }
-      case 'hardBreak': out += ' \\\n'; break;
-      case 'mathInline': out += tag(opts, n, 'node', mathInline(n.attrs)); break;
+      case 'hardBreak': emit(' \\\n', false); break;
+      case 'mathInline': emit(tag(opts, n, 'node', mathInline(n.attrs)), n.attrs?.mode === 'latex'); break;
       case 'cite': {
         const keys = String(n.attrs?.keys ?? '').split(/[,，;；\s]+/).filter(Boolean);
         // 写成函数调用而不是 @key：Typst 0.15 的 @ 引用会把紧跟的汉字也吞进 label
-        out += tag(opts, n, 'node', keys.map((k) => `#cite(<${k}>)`).join(''));
+        emit(tag(opts, n, 'node', keys.map((k) => `#cite(<${k}>)`).join('')), true);
         break;
       }
       case 'ref': {
         const t = n.attrs?.target;
         if (!t) break;
-        out += tag(opts, n, 'node', opts.knownLabels && !opts.knownLabels.has(t) ? '#text(red)[??]' : `#ref(<${t}>)`);
+        emit(tag(opts, n, 'node', opts.knownLabels && !opts.knownLabels.has(t) ? '#text(red)[??]' : `#ref(<${t}>)`), true);
         break;
       }
-      case 'abbr': out += n.attrs?.key ? tag(opts, n, 'node', `#ref(<${n.attrs.key}>)`) : ''; break;
+      case 'abbr': if (n.attrs?.key) emit(tag(opts, n, 'node', `#ref(<${n.attrs.key}>)`), true); break;
       case 'footnote': {
         const text = String(n.attrs?.text ?? '');
-        out += tag(opts, n, 'node', `#footnote[${tag(opts, n, 'attr', escapeText(text), { attr: 'text', raw: text })}]`);
+        emit(tag(opts, n, 'node', `#footnote[${tag(opts, n, 'attr', escapeText(text), { attr: 'text', raw: text })}]`), true);
         break;
       }
-      case 'ccwd': out += tag(opts, n, 'node', `#ccwd(${n.attrs?.n ?? 1})`); break;
-      case 'idx': out += n.attrs?.text ? tag(opts, n, 'node', `#idx[${escapeText(String(n.attrs.text))}]`) : ''; break;
+      case 'ccwd': emit(tag(opts, n, 'node', `#ccwd(${n.attrs?.n ?? 1})`), true); break;
+      case 'idx': if (n.attrs?.text) emit(tag(opts, n, 'node', `#idx[${escapeText(String(n.attrs.text))}]`), true); break;
       default:
-        if (n.content) out += serializeInline(n.content, opts);
+        if (n.content) emit(serializeInline(n.content, opts), false);
     }
   }
   return out;
