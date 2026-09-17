@@ -105,7 +105,8 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
         segments: project.segments,
         version: docVersion(),
       });
-    }, force ? 0 : pageCount >= 150 ? 900 : pageCount >= 80 ? 600 : pageCount >= 30 ? 320 : 180);
+    // 防抖按上一次编译的耗时来：编译在 worker 里，主线程不等它，排队的只留最新一份，所以不必等用户停手太久
+    }, force ? 0 : Math.min(600, Math.max(180, (useCompileState.getState().lastMs ?? 0) * 0.3)));
     return () => { cancelled = true; window.clearTimeout(t); };
   }, [doc, loaded, status, fontsVersion, refresh, restoring, previewFocused, composing]);
   return sent;

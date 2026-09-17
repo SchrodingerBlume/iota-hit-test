@@ -55,20 +55,17 @@ function tri(v: 'auto' | boolean | string): string {
 /** 字符网格：预览里模板自己的字距网格关掉（引擎来排）；导出时用户改过的折成模板的 char-pitch */
 const msword = (s: Settings) => (s.linebreaker === 'auto' ? 'msword' : s.linebreaker) === 'msword';
 /** 预览引擎独有（Typst fork 的 par(linebreaks: "msword")），不进导出的 .typ。
- *  网格按部件动态取：模板把版面记在 state "iota-hit-layout" 里（每个部件各更新一次），
+ *  网格按部件动态取：模板公开的 current-layout() / layout-of(part) 给出这一层折好的版面，
  *  读出字距增量 tracking（= 跨度 − 字号），把模板自己发的 text(tracking:) 清零，
  *  换成引擎的 char-pitch: 1em + tracking。这段规则在 iota-hit 与每个部件的 show 之后各发一次 */
 function mswordRule(s: Settings, page?: string): string {
   if (!msword(s)) return '';
   // 紧缩与右缩进照中文 Word 的默认
   const compat = s.wordCompat === 'auto' ? '11' : s.wordCompat;
-  // 有自己一格字符网格的页（成果页、研究生声明页）：按模板给页函数算版面的那条路取，与页里排的一致
-  // 成果页与研究生声明页自带一格字符网格（模板 6461d2f：Word 的 charSpace 2752，= 2752/4096 pt 的字距增量）。
-  // 模板 d44831b 起 layout-for 不再公开，先按模板量的那个数写死；本科声明页跟正文的网格
-  const tr = page && page !== 'declarations' ? `${(2752 / 4096).toFixed(4)}pt` : 'if l == none { 0pt } else { l.docgrid.tracking }';
+  // 网格从模板公开的口子读：layout-of(部件) 是成果页 / 声明页这类自带一格网格的页，current-layout() 是当前生效的那一层
+  const l = page ? `layout-of(${JSON.stringify(page)})` : 'current-layout()';
   return `#show: it => context {
-  let l = state("iota-hit-layout", none).get()
-  let tr = ${tr}
+  let tr = ${l}.docgrid.tracking
   set text(tracking: 0pt)
   set par(linebreaks: (mode: "msword", compat: ${compat}, char-pitch: if tr == 0pt { auto } else { 1em + tr }, kern: true, adjust-right-indent: true))
   it
@@ -79,8 +76,7 @@ function mswordRule(s: Settings, page?: string): string {
 function stockRule(s: Settings): string {
   if (!msword(s)) return '';
   return `#show: it => context {
-  let l = state("iota-hit-layout", none).get()
-  set text(tracking: if l == none { 0pt } else { l.docgrid.tracking })
+  set text(tracking: current-layout().docgrid.tracking)
   set par(linebreaks: "optimized")
   it
 }`;

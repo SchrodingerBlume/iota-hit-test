@@ -114,15 +114,12 @@ export function startCompiler() {
         const s = useCompileState.getState();
         const input = inFlightInput;
         inFlightInput = null;
-        const failed = m.diagnostics.some((d) => d.severity === 'error');
-        // 富文本的中间状态不应把底层 Typst 诊断推给用户。失败版本不覆盖上一份
-        // 可用预览；公式语法由公式编辑器就地提示，其余情况会在下一次输入时自动重试。
-        if (failed) console.warn('[iota4web] 已忽略未能排版的中间版本', m.diagnostics);
+        // 编不过的版本不覆盖上一份能看的预览，但诊断照给（预览区里人话化、可跳转）
         useCompileState.setState({
           compiling: false,
           artifact: m.artifact ? new Uint8Array(m.artifact) : s.artifact,
           artifactFresh: m.artifact ? m.fresh : s.artifactFresh,
-          diagnostics: [],
+          diagnostics: m.diagnostics,
           diagMain: input?.main ?? s.diagMain,
           diagSegments: input?.segments ?? s.diagSegments,
           lastMs: m.ms,

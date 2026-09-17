@@ -5,12 +5,18 @@
 // 新出现的块淡入。只处理视口附近的页，别的页看不见，不必花这个功夫。
 // SVG 元素的 translate 属性是用户单位，要按页的缩放比换算。
 
-const runs = new Map<Element, { x: number; y: number }>();
+// 展示层的页是母本的克隆，补丁后节点会换，所以按「页序 + 文字块 tid + 同页第几次出现」记
+const runs = new Map<string, { x: number; y: number }>();
+function keysOf(g: SVGGElement, i: number): [SVGGElement, string][] {
+  const seen = new Map<string, number>();
+  return [...g.querySelectorAll<SVGGElement>('g.typst-text')].map((t) => { const tid = t.getAttribute('data-tid') ?? ''; const n = seen.get(tid) ?? 0; seen.set(tid, n + 1); return [t, `${i}:${tid}:${n}`]; });
+}
 let scaleOf = new Map<Element, number>();
 
-function pagesNear(container: HTMLElement, viewportTop: number, viewportBottom: number): SVGGElement[] {
+function pagesNear(container: HTMLElement, viewportTop: number, viewportBottom: number): [SVGGElement, number][] {
   const groups = [...container.querySelectorAll<SVGGElement>(':scope > svg.typst-doc > g.typst-page')];
-  return groups.filter((g) => {
+  return groups.map((g, i): [SVGGElement, number] => [g, i]).filter(([g]) => {
+    if (g.getAttribute('data-shown') !== '1') return false;
     const m = g.getScreenCTM();
     if (!m) return false;
     const h = (parseFloat(g.getAttribute('data-page-height') ?? '0') || 0) * m.a;
@@ -32,10 +38,10 @@ export function flipBefore(container: HTMLElement, viewportTop: number, viewport
   settleInflight();
   runs.clear();
   scaleOf = new Map();
-  for (const g of pagesNear(container, viewportTop, viewportBottom)) {
-    for (const t of g.querySelectorAll<SVGGElement>('g.typst-text')) {
+  for (const [g, i] of pagesNear(container, viewportTop, viewportBottom)) {
+    for (const [t, k] of keysOf(g, i)) {
       const r = t.getBoundingClientRect();
-      runs.set(t, { x: r.left, y: r.top });
+      runs.set(k, { x: r.left, y: r.top });
     }
   }
 }
@@ -44,11 +50,11 @@ export function flipBefore(container: HTMLElement, viewportTop: number, viewport
 export function flipAfter(container: HTMLElement, viewportTop: number, viewportBottom: number) {
   const moved: { el: SVGGElement; dx: number; dy: number }[] = [];
   const fresh: SVGGElement[] = [];
-  for (const g of pagesNear(container, viewportTop, viewportBottom)) {
+  for (const [g, i] of pagesNear(container, viewportTop, viewportBottom)) {
     const scale = g.getScreenCTM()?.a ?? 1;
     scaleOf.set(g, scale);
-    for (const t of g.querySelectorAll<SVGGElement>('g.typst-text')) {
-      const old = runs.get(t);
+    for (const [t, k] of keysOf(g, i)) {
+      const old = runs.get(k);
       if (!old) { fresh.push(t); continue; }
       const r = t.getBoundingClientRect();
       const dx = (old.x - r.left) / scale;

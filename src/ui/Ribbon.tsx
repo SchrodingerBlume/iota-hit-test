@@ -244,10 +244,11 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const drawerRef = useRef<HTMLDivElement>(null);
   const openHeight = useRef(0);
   const firstRender = useRef(true);
+  // 只在抽屉开着、且换了页签时量高度：每次渲染都量会在预览刚打完补丁时逼着整份 SVG 重排
   useLayoutEffect(() => {
     const drawer = drawerRef.current;
     if (drawer && bodyVisible) openHeight.current = drawer.getBoundingClientRect().height || openHeight.current;
-  });
+  }, [bodyVisible, tab]);
   const wasOpen = useRef(bodyVisible);
   /** 正在跑的动画：快速连点时从它们当下的位置接着动，不跳、不叠加 */
   const anim = useRef<{ main: Animation; ghost: Animation; clip: HTMLElement } | null>(null);

@@ -54,10 +54,16 @@ export interface RenderHooks {
 /** 页与页之间留的空当（SVG 单位 = pt） */
 export const PAGE_GAP = 22;
 
+/**
+ * 补丁打在一张藏着的「母本」SVG 上（display: none，Blink 不给它建版面对象），展示的另一张只放视口附近
+ * 几页的克隆，别的页留一个空壳占位。整份 SVG 摆在版面里时（两百页四十万个版面对象）随便动一个字
+ * 都要全树重排三百毫秒，页藏起来（display: none 的 <g>）也照样算在树里；把它们整个挪出版面才省得掉。
+ * 母本里的字形 <defs> 与 <style> 留在文档里，克隆页的 <use href="#…"> 照样解析得到。
+ */
 export async function renderArtifact(artifact: Uint8Array, container: HTMLElement, fresh: boolean, hooks: RenderHooks = {}, perRow = 1): Promise<PageInfo[]> {
   await initRenderer();
   if (!renderer || !session) throw new Error('renderer not ready');
-  const prev = container.querySelector(':scope > svg.typst-doc') as SVGSVGElement | null;
+  const prev = container.querySelector(':scope > svg.typst-master') as SVGSVGElement | null;
   // 整份重来时换新会话：旧会话记着上次画过什么，renderSvgDiff 只会吐差，页里就没字了
   if (fresh && prev) await newSession();
   // 容器空着却只有增量：上一版在别的容器里画的，会话记的差打不进来（reflexo 的 module 会 unwrap 崩）
@@ -69,12 +75,86 @@ export async function renderArtifact(artifact: Uint8Array, container: HTMLElemen
   const next = holder.firstElementChild as SVGSVGElement | null;
   if (!next) throw new Error('renderer returned no svg');
   hooks.before?.(container);
-  if (prev && !fresh) patchRoot(prev, next);
-  else { container.querySelector(':scope > svg.typst-doc')?.remove(); container.appendChild(next); }
+  let master: SVGSVGElement;
+  if (prev && !fresh) { patchRoot(prev, next); master = prev; }
+  else {
+    prev?.remove();
+    container.querySelector(':scope > svg.typst-doc')?.remove();
+    master = next;
+    container.appendChild(master);
+  }
+  // 补丁会把根上的属性整个换成新的那份，藏起来的记号每次都要补回去
+  master.classList.add('typst-master');
+  master.classList.remove('typst-doc');
+  master.style.display = 'none';
   const pages = session.retrievePagesInfo() as PageInfo[];
+  syncView(container, master);
   layoutPages(container, pages, perRow);
   hooks.after?.(container, pages);
   return pages;
+}
+
+const NS = 'http://www.w3.org/2000/svg';
+const COPY_ATTRS = ['data-tid', 'data-page-width', 'data-page-height'];
+/** 展示用的那张 SVG：母本的页一一对应，视口附近的是克隆，其余是空壳 */
+function syncView(container: HTMLElement, master: SVGSVGElement) {
+  let view = container.querySelector(':scope > svg.typst-doc') as SVGSVGElement | null;
+  if (!view) {
+    view = document.createElementNS(NS, 'svg') as SVGSVGElement;
+    view.setAttribute('class', 'typst-doc');
+    for (const a of ['xmlns', 'xmlns:xlink', 'viewBox', 'width', 'height', 'data-width', 'data-height']) { const v = master.getAttribute(a); if (v != null) view.setAttribute(a, v); }
+    container.insertBefore(view, master);
+  }
+  const src = [...master.querySelectorAll<SVGGElement>(':scope > g.typst-page')];
+  const cur = [...view.querySelectorAll<SVGGElement>(':scope > g.typst-page')];
+  // 多了的页删掉、少了的补空壳；已经克隆出来的页按母本对应页的 data-tid 判要不要重克隆
+  for (let i = cur.length - 1; i >= src.length; i--) cur[i].remove();
+  for (let i = 0; i < src.length; i++) {
+    const m = src[i];
+    let g = cur[i];
+    if (!g) { g = shell(m); view.appendChild(g); continue; }
+    for (const a of COPY_ATTRS) { const v = m.getAttribute(a); if (v == null) g.removeAttribute(a); else if (g.getAttribute(a) !== v) g.setAttribute(a, v); }
+    // 页变了（tid 变）且是克隆出来的：换成新克隆
+    if (g.getAttribute('data-shown') === '1' && g.getAttribute('data-src-tid') !== m.getAttribute('data-tid')) { const n = clone(m); n.setAttribute('transform', g.getAttribute('transform') ?? ''); view.replaceChild(n, g); }
+  }
+}
+function shell(m: SVGGElement): SVGGElement {
+  const g = document.createElementNS(NS, 'g') as SVGGElement;
+  g.setAttribute('class', 'typst-page is-virtual');
+  for (const a of COPY_ATTRS) { const v = m.getAttribute(a); if (v != null) g.setAttribute(a, v); }
+  return g;
+}
+function clone(m: SVGGElement): SVGGElement {
+  const g = m.cloneNode(true) as SVGGElement;
+  g.setAttribute('data-shown', '1');
+  g.setAttribute('data-src-tid', m.getAttribute('data-tid') ?? '');
+  g.classList.remove('is-virtual');
+  return g;
+}
+
+/** 哪些页要真画出来：视口附近的克隆母本，离开的换回空壳。返回有没有动过 */
+export function showPages(container: HTMLElement, visible: (i: number, y: number, h: number) => boolean): boolean {
+  const master = container.querySelector(':scope > svg.typst-master') as SVGSVGElement | null;
+  const view = container.querySelector(':scope > svg.typst-doc') as SVGSVGElement | null;
+  if (!master || !view) return false;
+  const src = [...master.querySelectorAll<SVGGElement>(':scope > g.typst-page')];
+  const cur = [...view.querySelectorAll<SVGGElement>(':scope > g.typst-page')];
+  const chrome = container.querySelectorAll<SVGGElement>(':scope > svg.page-chrome > g.page-chrome-page');
+  let changed = false;
+  for (let i = 0; i < cur.length && i < src.length; i++) {
+    const g = cur[i];
+    const y = parseFloat(g.getAttribute('data-layout-y') ?? '0');
+    const h = parseFloat(g.getAttribute('data-page-height') ?? '0');
+    const want = visible(i, y, h);
+    const shown = g.getAttribute('data-shown') === '1';
+    if (want === shown) continue;
+    const n = want ? clone(src[i]) : shell(src[i]);
+    for (const a of ['transform', 'data-layout-x', 'data-layout-y']) { const v = g.getAttribute(a); if (v != null) n.setAttribute(a, v); }
+    view.replaceChild(n, g);
+    changed = true;
+    chrome[i]?.classList.toggle('is-virtual', !want);
+  }
+  return changed;
 }
 
 /**
@@ -90,7 +170,6 @@ function layoutPages(container: HTMLElement, pages: PageInfo[], perRow = 1) {
   const svg = container.querySelector(':scope > svg.typst-doc') as SVGSVGElement | null;
   if (!svg) return;
   const groups = [...svg.querySelectorAll<SVGGElement>(':scope > g.typst-page')];
-  const NS = 'http://www.w3.org/2000/svg';
   let chrome = container.querySelector(':scope > svg.page-chrome') as SVGSVGElement | null;
   if (!chrome) {
     chrome = document.createElementNS(NS, 'svg');

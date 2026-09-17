@@ -173,10 +173,23 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     const m = mappingSince(activeKey, index.version);
     const arr = index.byKey.get(activeKey);
     if (!m || !arr) return [];
+    // 只看被改动过的那几段（按 from 二分定位），长文档几十万字形逐个映射一遍要几百毫秒
+    const ranges: [number, number][] = [];
+    for (let i = 0; i < m.maps.length; i++) {
+      const back = m.slice(0, i).invert();
+      m.maps[i].forEach((oldStart, oldEnd) => { if (oldEnd > oldStart) ranges.push([back.map(oldStart, -1), back.map(oldEnd, 1)]); });
+    }
     const out: { page: number; x: number; y: number; w: number; h: number }[] = [];
-    for (const g of arr) {
-      if (g.kind !== 'text' || g.from === g.to) continue;
-      if (m.map(g.to, -1) <= m.map(g.from, 1)) out.push({ page: g.page, x: g.x, y: g.y, w: g.w, h: g.h });
+    const seen = new Set<Glyph>();
+    for (const [a, b] of ranges) {
+      let lo = 0, hi = arr.length;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (arr[mid].from < a - 1) lo = mid + 1; else hi = mid; }
+      for (let i = lo; i < arr.length && arr[i].from <= b + 1; i++) {
+        const g = arr[i];
+        if (seen.has(g) || g.kind !== 'text' || g.from === g.to) continue;
+        seen.add(g);
+        if (m.map(g.to, -1) <= m.map(g.from, 1)) out.push({ page: g.page, x: g.x, y: g.y, w: g.w, h: g.h });
+      }
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps

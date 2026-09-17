@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCompileState } from '../compiler/client';
-import { renderArtifact, relayoutPages } from '../compiler/renderer';
+import { renderArtifact, relayoutPages, showPages } from '../compiler/renderer';
 import { flipBefore, flipAfter } from './flip';
 import { usePreviewZoom } from './previewZoom';
 import { humanize, locateDiagnostic, type DiagTarget } from './diagnostics';
@@ -35,6 +35,8 @@ function jumpTo(target: DiagTarget) {
   go(6);
 }
 
+const NO_VIRTUALIZE = { schedule: () => {}, snapshot: () => {}, apply: () => {} };
+
 export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () => void; refreshDisabled?: boolean }) {
   // 只订阅要画的几项：glyphs / segments 那些大数组换了不必重画这里
   const status = useCompileState((s) => s.status);
@@ -56,7 +58,7 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
   const [pages, setPages] = useState(0);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [renderTick, setRenderTick] = useState(0);
-  const virtualizeRef = useRef<() => void>(() => {});
+  const virtualizeRef = useRef(NO_VIRTUALIZE);
 
   // ── 缩放 ──────────────────────────────────────────────────────
   // 捏合的每一帧都改宽度会让整张 SVG 重排（十几页文字），必卡。做法照 PDF 阅读器：
@@ -92,7 +94,7 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
     sc.scrollTop = g.top + Y * sNew - (g.cy - scRect.top);
     sc.scrollLeft = 18 + centered + X * sNew - (g.cx - scRect.left);
     if (zoomLabelRef.current) zoomLabelRef.current.textContent = `${Math.round(target * 100)}%`;
-    virtualizeRef.current();
+    virtualizeRef.current.schedule();
     window.clearTimeout(g.commit);
     g.commit = window.setTimeout(commitGesture, 150);
   };
@@ -117,7 +119,7 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
     sc.classList.remove('is-zooming');
     sc.scrollTop = top;
     sc.scrollLeft = left;
-    virtualizeRef.current();
+    virtualizeRef.current.schedule();
   };
 
   /** 以视口里 (clientX, clientY) 为中心缩放 factor 倍；不给坐标就以视口中心 */
@@ -234,11 +236,13 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
     const sc = scrollRef.current;
     const view = () => { const r = sc?.getBoundingClientRect(); return r ? [r.top, r.bottom] as const : [0, window.innerHeight] as const; };
     const animate = !artifactFresh && useCompileState.getState().pageCount < 60 && !gesture.current;
-    renderArtifact(artifact, containerRef.current, artifactFresh, animate ? {
-      before: (c) => { const [a, b] = view(); flipBefore(c, a, b); },
-      after: (c) => { const [a, b] = view(); flipAfter(c, a, b); },
-    } : {}, usePreviewZoom.getState().perRow)
-      .then((info) => { if (alive) { virtualizeRef.current(); useCompileState.setState({ renderMs: Math.round(performance.now() - t0), pageCount: info.length }); setPages(info.length); setRenderError(null); setRenderTick((t) => t + 1); } })
+    // 补丁会把页组的 class 整个换掉，is-virtual 全丢；版面在打补丁前量好（那时是干净的），打完立刻按旧几何把
+    // 视口外的页藏回去，谁再量版面都只排视口附近那几页，不用等两百页全排一遍
+    renderArtifact(artifact, containerRef.current, artifactFresh, {
+      before: (c) => { virtualizeRef.current.snapshot(); if (animate) { const [a, b] = view(); flipBefore(c, a, b); } },
+      after: (c) => { virtualizeRef.current.apply(); if (animate) { const [a, b] = view(); flipAfter(c, a, b); } },
+    }, usePreviewZoom.getState().perRow)
+      .then((info) => { if (alive) { useCompileState.setState({ renderMs: Math.round(performance.now() - t0), pageCount: info.length }); setPages(info.length); setRenderError(null); setRenderTick((t) => t + 1); } })
       .catch((e) => { if (alive) setRenderError(String(e?.message ?? e)); });
     return () => { alive = false; };
   }, [artifact]);
@@ -249,39 +253,37 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
     const sc = scrollRef.current;
     if (!sc) return;
     let raf = 0;
-    const update = () => {
-      raf = 0;
+    // 视口在版面坐标里的范围与缩放：量一次记下来，打补丁前后共用
+    let geom: { top: number; bottom: number } | null = null;
+    const measure = () => {
       const svg = containerRef.current?.querySelector<SVGSVGElement>('svg.typst-doc');
-      if (!svg) return;
+      if (!svg) return null;
       const sr = svg.getBoundingClientRect();
       const vr = sc.getBoundingClientRect();
       const scale = sr.width / (svg.viewBox.baseVal.width || 1);
-      if (!scale) return;
-      const top = (vr.top - sr.top) / scale;
-      const bottom = (vr.bottom - sr.top) / scale;
-      const buffer = Math.max(300, bottom - top);
-      const pageGroups = svg.querySelectorAll<SVGGElement>(':scope > g.typst-page');
-      const chromeGroups = containerRef.current?.querySelectorAll<SVGGElement>('svg.page-chrome > g.page-chrome-page');
-      pageGroups.forEach((g, i) => {
-        const y = parseFloat(g.getAttribute('data-layout-y') ?? '0');
-        const h = parseFloat(g.getAttribute('data-page-height') ?? '0');
-        const hidden = y + h < top - buffer || y > bottom + buffer;
-        if (g.classList.contains('is-virtual') !== hidden) g.classList.toggle('is-virtual', hidden);
-        const chrome = chromeGroups?.[i];
-        if (chrome && chrome.classList.contains('is-virtual') !== hidden) chrome.classList.toggle('is-virtual', hidden);
-      });
+      if (!scale) return null;
+      return { top: (vr.top - sr.top) / scale, bottom: (vr.bottom - sr.top) / scale };
     };
+    const apply = (g0: { top: number; bottom: number } | null) => {
+      const c = containerRef.current;
+      if (!c || !g0) return;
+      const { top, bottom } = g0;
+      const buffer = Math.max(300, bottom - top);
+      showPages(c, (_i, y, h) => !(y + h < top - buffer || y > bottom + buffer));
+    };
+    const update = () => { raf = 0; apply(measure()); };
     const schedule = () => { if (!raf) raf = requestAnimationFrame(update); };
-    virtualizeRef.current = schedule;
+    virtualizeRef.current = { schedule, snapshot: () => { geom = measure(); }, apply: () => apply(geom) };
     schedule();
     sc.addEventListener('scroll', schedule, { passive: true });
     window.addEventListener('resize', schedule, { passive: true });
-    return () => { if (virtualizeRef.current === schedule) virtualizeRef.current = () => {}; cancelAnimationFrame(raf); sc.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); };
+    return () => { if (virtualizeRef.current.schedule === schedule) virtualizeRef.current = NO_VIRTUALIZE; cancelAnimationFrame(raf); sc.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); };
   }, [renderTick, zoom, perRow]);
 
   const errors = diagnostics.filter((d) => d.severity === 'error');
-  // 富文本生成的 Typst 不要求用户处理编译器警告；真正阻止排版的错误才在这里显示。
-  const shown = errors;
+  const warnings = diagnostics.filter((d) => d.severity !== 'error');
+  // 警告也给（标签没挂上这类要用户处理）；只滤掉本机字体档缺字体那几条噪音
+  const shown = [...errors, ...warnings.filter((w) => !/unknown font family: (kaiti_gb2312|lisu|stxinwei|simsun|simhei|kaiti|fangsong)/i.test(w.message))];
 
   return (
     <div className={`preview ${compiling ? 'is-compiling' : ''}`}>
