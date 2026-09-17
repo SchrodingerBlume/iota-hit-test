@@ -1,4 +1,4 @@
-# typst-with-msword-linebreaks a21cb4c5ebb7528967fe74a83311167bfd4deaae 合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1 之上（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
+# typst-with-msword-linebreaks 09c2c276e4d06061885a707e0e389fce0b38aacb 合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1 之上（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
 diff --git a/crates/typst-layout/src/inline/line.rs b/crates/typst-layout/src/inline/line.rs
 index 3d7f3a28c..e25d98f05 100644
 --- a/crates/typst-layout/src/inline/line.rs
@@ -160,10 +160,10 @@ index 259be8101..50f73975d 100644
          cjk_latin_spacing: shared.get(TextElem::cjk_latin_spacing).is_auto(),
 diff --git a/crates/typst-layout/src/inline/msword.rs b/crates/typst-layout/src/inline/msword.rs
 new file mode 100644
-index 000000000..52c1eacba
+index 000000000..9827be30c
 --- /dev/null
 +++ b/crates/typst-layout/src/inline/msword.rs
-@@ -0,0 +1,1474 @@
+@@ -0,0 +1,1486 @@
 +// 本文件基于 Typst（typst/typst）与 typst-with-msword-linebreaks 修改（iota4web 合并到 Myriad-Dreamin/typst 之上，见 scripts/wasm-patch/typst-msword.patch）
 +//! Line breaking that emulates Microsoft Word.
 +//!
@@ -541,6 +541,7 @@ index 000000000..52c1eacba
 +    for (range, item) in p.items.iter() {
 +        match item {
 +            Item::Text(shaped) => {
++                let tracking = shaped.styles.resolve(TextElem::tracking);
 +                let glyphs = &shaped.glyphs[..];
 +                let mut i = 0;
 +                while i < glyphs.len() {
@@ -587,6 +588,13 @@ index 000000000..52c1eacba
 +                    };
 +
 +                    if super::shaping::is_space(c) {
++                        // A space whose advance was set by `text(spacing:)`
++                        // (or tracking) is explicit spacing: it keeps that
++                        // width instead of Word's half-cell rule for spaces
++                        // next to CJK text (fill lines made of underlined
++                        // spaces rely on this).
++                        let explicit = c != '\u{00A0}'
++                            && (shaped_w - natural).abs() > Abs::pt(0.01);
 +                        toks.push(Tok {
 +                            kind: Kind::Space,
 +                            range: g.range.clone(),
@@ -595,8 +603,8 @@ index 000000000..52c1eacba
 +                            tail: None,
 +                            size,
 +                            w: shaped_w,
-+                            rigid: false,
-+                            user: false,
++                            rigid: explicit,
++                            user: explicit,
 +                            weak: false,
 +                            nw: Abs::zero(),
 +                            gap: Abs::zero(),
@@ -609,6 +617,9 @@ index 000000000..52c1eacba
 +                            tail_hang: Abs::zero(),
 +                                });
 +                    } else if let Some(kind) = cjk_kind {
++                        // The font advance plus `text(tracking:)`; the shaped
++                        // advance cannot be used because typst's shaping
++                        // already halves adjacent CJK punctuation.
 +                        toks.push(Tok {
 +                            kind,
 +                            range: g.range.clone(),
@@ -616,7 +627,7 @@ index 000000000..52c1eacba
 +                            head: None,
 +                            tail: None,
 +                            size,
-+                            w: natural,
++                            w: natural + tracking,
 +                            rigid: false,
 +                            user: false,
 +                            weak: false,
@@ -1620,7 +1631,8 @@ index 000000000..52c1eacba
 +                    let glyph = &mut glyphs[g];
 +                    glyph.adjustability = Default::default();
 +                    glyph.is_justifiable = false;
-+                    let target = if (k == first && first > 0) || k == last {
++                    let target = if !it.user && ((k == first && first > 0) || k == last)
++                    {
 +                        Abs::zero()
 +                    } else {
 +                        it.nw + delta[idx] + extra

@@ -194,6 +194,15 @@ export function App() {
     };
     input.click();
   };
+  const onExportDocx = async () => {
+    setBusy(tx("正在生成 Word 文档…"));
+    try {
+      const { buildDocx } = await import('../export/docx/build');
+      const blob = await buildDocx(doc);
+      download(`${doc.info.title.split('\n')[0] || tx("论文")}.docx`, blob, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    } catch (e) { alert(tx("生成 Word 文档失败：") + String((e as Error)?.message ?? e)); }
+    finally { setBusy(null); }
+  };
   const onExportTypst = () => {
     const project = serializeProject(doc);
     download('main.typ', project.main, 'text/plain');
@@ -246,6 +255,7 @@ export function App() {
                   <MenuDivider />
                   <MenuItem icon={<DocumentPdf20Regular />} disabled={!hasDocument || compile.status !== 'ready' || !!busy} onClick={() => void onExportPdf()}>{tx("导出 PDF")}</MenuItem>
                   <MenuItem icon={<Document20Regular />} disabled={!hasDocument} onClick={onExportTypst}>{tx("导出 Typst 源文件")}</MenuItem>
+                  <MenuItem icon={<Document20Regular />} disabled={!hasDocument} onClick={() => void onExportDocx()}>{tx("导出 Word 文档（.docx）")}</MenuItem>
                 </MenuList>
               </MenuPopover>
             </Menu>
@@ -318,6 +328,7 @@ export function App() {
                   <p>{tx("哈尔滨工业大学学位论文在线编辑器。排版用 iota-hit 模板（hithesis 的 Typst 复刻），引擎是本站基于 Typst 0.15.1 修改的非官方版本（加了 Word 式断行），经 typst.ts 编成 wasm 在浏览器里运行。")}</p>
                   <p>{tx("字体：Noto Serif / Sans CJK SC、FandolKai、TeX Gyre Termes / Heros、DejaVu Sans Mono；也可读本机字体切到 Windows / macOS 档。")}</p>
                   <p className="muted">{tx("整站静态，没有服务器；工程与图片只存在这台浏览器里，记得定期「文件 → 保存工程」。")}</p>
+                  <p className="muted">{tx("导出 Word 时的参考文献由 citeproc-js（Frank Bennett，CPAL 许可）按 GB/T 7714 排版。")}</p>
                   <p className="muted">{tx("Typst 是 Typst GmbH 的商标；本站与 Typst GmbH、typst.ts 及各项目作者无关。随站分发的软件、字体、Typst 包的版权与许可证全文见")}<a href={`${import.meta.env.BASE_URL}licenses.txt`} target="_blank" rel="noopener">{tx("开源许可与声明")}</a>{tx("。")}</p>
                 </DialogContent>
                 <DialogActions><Button appearance="primary" onClick={() => setAbout(false)}>{tx("好")}</Button></DialogActions>

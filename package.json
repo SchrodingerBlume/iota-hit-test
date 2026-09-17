@@ -16,6 +16,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@citation-js/core": "^0.8.2",
+    "@citation-js/plugin-bibtex": "^0.8.2",
+    "@citation-js/plugin-csl": "^0.8.2",
     "@fluentui/react-components": "^9.74.7",
     "@fluentui/react-icons": "^2.0.341",
     "@myriaddreamin/typst-ts-renderer": "file:./vendor/typst-ts-renderer",
@@ -30,6 +33,7 @@
     "@tiptap/pm": "^3.31.3",
     "@tiptap/react": "^3.31.3",
     "@tiptap/starter-kit": "^3.31.3",
+    "docx": "^9.7.1",
     "i18next": "^26.4.2",
     "katex": "^0.18.7",
     "lucide-react": "^1.46.0",

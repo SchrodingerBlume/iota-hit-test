@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'src');
 const WRITE = process.argv.includes('--write');
 const HAN = /[一-鿿]/;
-const SKIP_DIRS = new Set(['data', 'i18n', 'typst']);
+const SKIP_DIRS = new Set(['data', 'i18n', 'typst', 'export']);
 const SKIP_ATTRS = new Set(['className', 'key', 'id', 'htmlFor', 'href', 'src', 'type', 'name', 'role', 'style', 'lang', 'data-testid']);
 const SKIP_CALLS = new Set(['includes', 'startsWith', 'endsWith', 'indexOf', 'split', 'replace', 'test', 'match', 'log', 'warn', 'error', 'debug', 'getItem', 'setItem', 'removeItem', 'querySelector', 'querySelectorAll', 'getAttribute', 'setAttribute', 'localeCompare']);
 const files = [];

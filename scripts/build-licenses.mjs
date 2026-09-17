@@ -52,6 +52,9 @@ const rows = [
   ['marked', pkgVersion('marked'), 'Christopher Jeffrey 及贡献者', 'MIT', 'https://marked.js.org', '无'],
   ['i18next', pkgVersion('i18next'), 'i18next', 'MIT', 'https://www.i18next.com', '无'],
   ['zustand', pkgVersion('zustand'), 'Paul Henschel', 'MIT', 'https://github.com/pmndrs/zustand', '无'],
+  ['docx（生成 Word 文档）', pkgVersion('docx'), 'Dolan Miu', 'MIT', 'https://github.com/dolanmiu/docx', '无'],
+  ['citation-js（core、plugin-bibtex、plugin-csl，含 citeproc-js）', pkgVersion('@citation-js/core'), 'Lars Willighagen 等；citeproc-js: Frank Bennett', 'MIT；citeproc-js: CPAL-1.0 / AGPL-3.0 双许可（本站按 CPAL 使用）', 'https://citation.js.org', '无'],
+  ['CSL 样式 china-national-standard-gb-t-7714-2015-numeric 与 zh-CN 区域文件', '', 'Citation Style Language 项目贡献者', 'CC BY-SA 3.0', 'https://github.com/citation-style-language/styles', '无（随站分发，见 scripts/data/）'],
   ['Noto Serif CJK SC、Noto Sans CJK SC', '', 'Google / Adobe', 'SIL Open Font License 1.1', 'https://github.com/notofonts/noto-cjk', '无'],
   ['FandolKai', '', 'Fandol team（Clerk Ma、Jie Su）', 'GPL-3.0 + 字体例外', 'CTAN fonts/fandol', '无'],
   ['TeX Gyre Termes、TeX Gyre Heros、TeX Gyre Termes Math', '', 'GUST e-foundry（B. Jackowski、J. M. Nowacki 等）', 'GUST Font License', 'https://www.gust.org.pl/projects/e-foundry', '无'],
@@ -71,6 +74,11 @@ out.push(sub('Typst 的 NOTICE（原文）'));
 out.push(lic('typst-NOTICE.txt') + '\n');
 out.push(sub('MIT License（各项目的版权声明）'));
 for (const f of ['MIT-react.txt', 'MIT-fluentui.txt', 'MIT-tiptap.txt', 'MIT-tiptap-comment-extension.txt', 'MIT-mathlive.txt', 'MIT-marked.txt', 'MIT-i18next.txt', 'MIT-zustand.txt']) out.push(`[${f.replace(/^MIT-|\.txt$/g, '')}]\n${lic(f)}\n`);
+out.push(sub('citeproc-js 的许可声明（CPAL-1.0 或 AGPL，本站按 CPAL 使用；导出 Word 时的参考文献由它按 CSL 排版）'));
+out.push(lic('citeproc-LICENSE.txt') + '\n');
+out.push(`本站按 CPAL 第 14 条的要求作署名：参考文献排版功能由 citeproc-js 提供（Frank Bennett，https://github.com/Juris-M/citeproc-js）。\n`);
+out.push(sub('Common Public Attribution License 1.0'));
+out.push(lic('CPAL-1.0.txt') + '\n');
 out.push(sub('SIL Open Font License 1.1（Noto CJK）'));
 out.push(lic('OFL-1.1.txt') + '\n');
 out.push(sub('GNU General Public License 3.0 + 字体例外（FandolKai）'));

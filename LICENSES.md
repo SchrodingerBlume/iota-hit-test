@@ -10,6 +10,9 @@
 | 其余 `@preview/*` 包（glossy、lovelace、algorithmic、quan、auto-pinyin、zhconv、auto-bihua、glotter、jurlstify、mitex、valkyrie） | 各自的许可，见各包 `typst.toml` / LICENSE | packages.typst.org |
 | Fluent UI React v9（`@fluentui/react-components`、`@fluentui/react-icons`） | MIT | github.com/microsoft/fluentui — 功能区的组件与图标 |
 | i18next | MIT | github.com/i18next/i18next — 界面文字层（`src/i18n`） |
+| docx | MIT | github.com/dolanmiu/docx — 导出 Word 文档 |
+| citation-js（含 citeproc-js） | MIT；citeproc-js CPAL-1.0 / AGPL-3.0 双许可 | citation.js.org — 导出 Word 时按 GB/T 7714 排参考文献 |
+| CSL 样式 `scripts/data/chinese-gb7714-2015-numeric.csl`、区域文件 `locales-zh-CN.xml` | CC BY-SA 3.0 | github.com/citation-style-language/styles、/locales |
 | `src/compiler/svgPatch.mjs`（typst.ts 的增量 SVG 补丁算法，包没导出，抄了一份） | Apache-2.0 | github.com/Myriad-Dreamin/typst.ts |
 | typst.ts 编译器 / 渲染器 wasm（`vendor/`） | Apache-2.0 | github.com/Myriad-Dreamin/typst.ts 主分支自建，提交号见 `vendor/*/COMMIT` |
 | Typst | Apache-2.0 | 编进 wasm 里，0.15.1 |
