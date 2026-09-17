@@ -51,10 +51,12 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
   const stageRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
   const zoomRef = useRef(1);
+  const zoomLabelRef = useRef<HTMLSpanElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [pages, setPages] = useState(0);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [renderTick, setRenderTick] = useState(0);
+  const virtualizeRef = useRef<() => void>(() => {});
 
   // ── 缩放 ──────────────────────────────────────────────────────
   // 捏合的每一帧都改宽度会让整张 SVG 重排（十几页文字），必卡。做法照 PDF 阅读器：
@@ -89,7 +91,8 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
     const centered = Math.max(0, (contentW - g.w * sNew) / 2);
     sc.scrollTop = g.top + Y * sNew - (g.cy - scRect.top);
     sc.scrollLeft = 18 + centered + X * sNew - (g.cx - scRect.left);
-    setZoom(target);
+    if (zoomLabelRef.current) zoomLabelRef.current.textContent = `${Math.round(target * 100)}%`;
+    virtualizeRef.current();
     window.clearTimeout(g.commit);
     g.commit = window.setTimeout(commitGesture, 150);
   };
@@ -99,10 +102,10 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
     const sc = scrollRef.current, stage = stageRef.current, canvas = canvasRef.current;
     if (!g || !sc || !stage || !canvas) return;
     gesture.current = null;
-    const sNew = g.target / zoomRef.current;
     const top = sc.scrollTop, left = sc.scrollLeft;
     zoomRef.current = g.target;
-    // 真正改宽度：与 transform 画出来的完全一样，滚动位置照旧
+    // 真正改宽度：与 transform 画出来的完全一样。不要在这里读取新尺寸，
+    // 否则浏览器会同步重排整份 SVG；轻微的百分比取整误差不值得这次全量计算。
     stage.style.transform = '';
     stage.style.margin = '';
     stage.style.willChange = '';
@@ -112,10 +115,9 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
     canvas.style.height = '';
     setZoom(g.target);
     sc.classList.remove('is-zooming');
-    // 宽度按百分比取整会差一点点，按实际尺寸修正滚动量
-    const ratio = stage.getBoundingClientRect().width / (g.w * sNew);
-    sc.scrollTop = top * ratio;
-    sc.scrollLeft = left * ratio;
+    sc.scrollTop = top;
+    sc.scrollLeft = left;
+    virtualizeRef.current();
   };
 
   /** 以视口里 (clientX, clientY) 为中心缩放 factor 倍；不给坐标就以视口中心 */
@@ -231,11 +233,12 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
     const t0 = performance.now();
     const sc = scrollRef.current;
     const view = () => { const r = sc?.getBoundingClientRect(); return r ? [r.top, r.bottom] as const : [0, window.innerHeight] as const; };
-    renderArtifact(artifact, containerRef.current, artifactFresh, {
+    const animate = !artifactFresh && useCompileState.getState().pageCount < 60 && !gesture.current;
+    renderArtifact(artifact, containerRef.current, artifactFresh, animate ? {
       before: (c) => { const [a, b] = view(); flipBefore(c, a, b); },
       after: (c) => { const [a, b] = view(); flipAfter(c, a, b); },
-    }, usePreviewZoom.getState().perRow)
-      .then((info) => { if (alive) { useCompileState.setState({ renderMs: Math.round(performance.now() - t0), pageCount: info.length }); setPages(info.length); setRenderError(null); setRenderTick((t) => t + 1); } })
+    } : {}, usePreviewZoom.getState().perRow)
+      .then((info) => { if (alive) { virtualizeRef.current(); useCompileState.setState({ renderMs: Math.round(performance.now() - t0), pageCount: info.length }); setPages(info.length); setRenderError(null); setRenderTick((t) => t + 1); } })
       .catch((e) => { if (alive) setRenderError(String(e?.message ?? e)); });
     return () => { alive = false; };
   }, [artifact]);
@@ -256,18 +259,24 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
       if (!scale) return;
       const top = (vr.top - sr.top) / scale;
       const bottom = (vr.bottom - sr.top) / scale;
-      const buffer = Math.max(400, (bottom - top) * 1.5);
-      svg.querySelectorAll<SVGGElement>(':scope > g.typst-page').forEach((g) => {
+      const buffer = Math.max(300, bottom - top);
+      const pageGroups = svg.querySelectorAll<SVGGElement>(':scope > g.typst-page');
+      const chromeGroups = containerRef.current?.querySelectorAll<SVGGElement>('svg.page-chrome > g.page-chrome-page');
+      pageGroups.forEach((g, i) => {
         const y = parseFloat(g.getAttribute('data-layout-y') ?? '0');
         const h = parseFloat(g.getAttribute('data-page-height') ?? '0');
-        g.classList.toggle('is-virtual', y + h < top - buffer || y > bottom + buffer);
+        const hidden = y + h < top - buffer || y > bottom + buffer;
+        if (g.classList.contains('is-virtual') !== hidden) g.classList.toggle('is-virtual', hidden);
+        const chrome = chromeGroups?.[i];
+        if (chrome && chrome.classList.contains('is-virtual') !== hidden) chrome.classList.toggle('is-virtual', hidden);
       });
     };
     const schedule = () => { if (!raf) raf = requestAnimationFrame(update); };
+    virtualizeRef.current = schedule;
     schedule();
     sc.addEventListener('scroll', schedule, { passive: true });
     window.addEventListener('resize', schedule, { passive: true });
-    return () => { cancelAnimationFrame(raf); sc.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); };
+    return () => { if (virtualizeRef.current === schedule) virtualizeRef.current = () => {}; cancelAnimationFrame(raf); sc.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); };
   }, [renderTick, zoom, perRow]);
 
   const errors = diagnostics.filter((d) => d.severity === 'error');
@@ -278,18 +287,18 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
     <div className={`preview ${compiling ? 'is-compiling' : ''}`}>
       <div className="pane-bar">
         <span className="pane-title"><Eye />{tx("预览")}</span>
-        <button type="button" className="btn btn-xs" title={tx("重新排版当前文档")} disabled={refreshDisabled || status !== 'ready' || compiling} onMouseDown={(e) => e.preventDefault()} onClick={onRefresh}><RefreshCw />{compiling ? tx("正在刷新…") : tx("刷新预览")}</button>
-        {status === 'ready' && lastMs !== null && <span className="muted">{pages} {' '}{tx("页")}{compiling ? tx(" · 排版中…") : ''}</span>}
+        <button type="button" className="btn btn-xs preview-refresh" title={tx("重新排版当前文档")} disabled={refreshDisabled || status !== 'ready' || compiling} onMouseDown={(e) => e.preventDefault()} onClick={onRefresh}><RefreshCw /><span>{compiling ? tx("正在刷新…") : tx("刷新预览")}</span></button>
+        {status === 'ready' && lastMs !== null && <span className="muted page-status">{pages} {' '}{tx("页")}{compiling ? tx(" · 排版中…") : ''}</span>}
         {status === 'ready' && errors.length > 0 && <span className="err-badge" title={tx("下面列了出错的位置")}>{errors.length} {' '}{tx("个错误")}</span>}
         <span className="spacer" />
-        <span className="join">
+        <span className="join zoom-tools">
           <button type="button" className="btn btn-xs btn-icon" title={tx("缩小（触控板捏合、⌘/Ctrl + 滚轮也行）")} onClick={() => zoomBy(1 / 1.1)}><ZoomOut /></button>
-          <button type="button" className="btn btn-xs" style={{ width: 52, justifyContent: 'center' }} title={tx("回到 100%")} onClick={() => zoomTo(1)}>{Math.round(zoom * 100)}%</button>
+          <button type="button" className="btn btn-xs" style={{ width: 52, justifyContent: 'center' }} title={tx("回到 100%")} onClick={() => zoomTo(1)}><span ref={zoomLabelRef}>{Math.round(zoom * 100)}%</span></button>
           <button type="button" className="btn btn-xs btn-icon" title={tx("放大（触控板捏合、⌘/Ctrl + 滚轮也行）")} onClick={() => zoomBy(1.1)}><ZoomIn /></button>
           <button type="button" className="btn btn-xs btn-icon" title={tx("适宽")} onClick={() => zoomTo(1)}><Maximize2 /></button>
           <button type="button" className="btn btn-xs btn-icon" title={tx("整页：一页正好放进视口")} onClick={fitPage}><Minimize2 /></button>
         </span>
-        <span className="join" title={tx("每行几页（Word 的「多页」视图）")}>
+        <span className="join page-layout-tools" title={tx("每行几页（Word 的「多页」视图）")}>
           {([1, 2, 3] as const).map((n) => <button key={n} type="button" className={`btn btn-xs per-row ${perRow === n ? 'on' : ''}`} title={tx("每行 {{n}} 页", { n: n })} onClick={() => setPerRow(n)}>{n}</button>)}
         </span>
         <div className="preview-progress" aria-hidden />

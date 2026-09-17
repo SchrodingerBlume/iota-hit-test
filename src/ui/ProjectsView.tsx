@@ -66,7 +66,7 @@ export function ProjectsView() {
   };
 
   return (
-    <div className="projects work-inner">
+    <div className={`projects work-inner ${projects.length ? '' : 'is-empty'}`}>
       <div className="projects-head">
         <div>
           <h2>{tx("我的文档")}</h2>
@@ -104,11 +104,10 @@ export function ProjectsView() {
           </div>
           <button type="button" className="btn btn-primary" disabled={creating || !loaded} onClick={() => void onCreate()}><FilePlus2 />{creating ? tx("正在创建…") : tx("创建")}</button>
         </div>
-        <div className="proj-list">
+        {projects.length > 0 && <div className="proj-list">
           <h3 className="proj-list-title">{tx("最近使用")}{' '}<span className="muted">{projects.length}</span></h3>
-          {!projects.length && <div className="muted">{tx("还没有文档。")}</div>}
           {projects.map((p) => <ProjectCard key={p.id} p={p} active={p.id === doc.id && loaded} />)}
-        </div>
+        </div>}
       </div>
       <footer className="projects-foot muted">
         {tx("排版引擎是基于 Typst 修改的非官方版本。")}<a href={`${import.meta.env.BASE_URL}licenses.txt`} target="_blank" rel="noopener">{tx("开源许可与声明")}</a>

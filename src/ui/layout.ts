@@ -34,15 +34,35 @@ export function useLayoutPrefs() {
     const width = rect.width - navW - SPLIT_W;
     const top = rect.top;
     const height = rect.height - SPLIT_W;
+    let nextRatio = prefs.ratio;
+    let raf = 0;
     document.body.classList.add('is-resizing');
-    const move = (ev: PointerEvent) => {
-      const r = Math.min(0.8, Math.max(0.2, stacked ? (ev.clientY - top) / height : (ev.clientX - left) / width));
-      setPrefs((p) => ({ ...p, ratio: r }));
+    const paint = () => {
+      raf = 0;
+      if (stacked) {
+        el.style.gridTemplateColumns = 'minmax(0, 1fr)';
+        el.style.gridTemplateRows = `minmax(0, ${nextRatio}fr) ${SPLIT_W}px minmax(0, ${1 - nextRatio}fr)`;
+      } else {
+        const nav = prefs.navOpen && !compact ? `${NAV_W}px ` : '';
+        el.style.gridTemplateColumns = `${nav}minmax(${compact ? 0 : 360}px, ${nextRatio}fr) ${SPLIT_W}px minmax(${compact ? 0 : 320}px, ${1 - nextRatio}fr)`;
+      }
     };
-    const up = () => { document.body.classList.remove('is-resizing'); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    const move = (ev: PointerEvent) => {
+      nextRatio = Math.min(0.8, Math.max(0.2, stacked ? (ev.clientY - top) / height : (ev.clientX - left) / width));
+      if (!raf) raf = requestAnimationFrame(paint);
+    };
+    const up = () => {
+      if (raf) { cancelAnimationFrame(raf); paint(); }
+      document.body.classList.remove('is-resizing');
+      setPrefs((p) => ({ ...p, ratio: nextRatio }));
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
-  }, [prefs.navOpen, compact, stacked]);
+    window.addEventListener('pointercancel', up);
+  }, [prefs.navOpen, prefs.ratio, compact, stacked]);
 
   // 左栏收起时它是 display:none，网格里没有这个孩子，列表里也不能给它留位
   const nav = prefs.navOpen && !compact ? `${NAV_W}px ` : '';

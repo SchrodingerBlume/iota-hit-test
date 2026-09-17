@@ -130,12 +130,17 @@ function layoutPages(container: HTMLElement, pages: PageInfo[], perRow = 1) {
     chrome.replaceChildren();
     for (let i = 0; i < cached.positions.length; i++) {
       const { x, y: py, w, h, rowH } = cached.positions[i];
+      const pageChrome = document.createElementNS(NS, 'g');
+      pageChrome.setAttribute('class', 'page-chrome-page');
+      pageChrome.setAttribute('data-page-index', String(i));
+      pageChrome.setAttribute('data-layout-y', String(py));
+      pageChrome.setAttribute('data-page-height', String(h));
       const sheet = document.createElementNS(NS, 'rect');
       sheet.setAttribute('class', 'page-sheet');
       sheet.setAttribute('x', String(x)); sheet.setAttribute('y', String(py));
       sheet.setAttribute('width', String(w)); sheet.setAttribute('height', String(h));
       sheet.setAttribute('rx', '1.5');
-      chrome!.appendChild(sheet);
+      pageChrome.appendChild(sheet);
       if (i < groups.length - 1 || cols > 1) {
         const label = document.createElementNS(NS, 'text');
         label.setAttribute('class', 'page-label');
@@ -143,8 +148,9 @@ function layoutPages(container: HTMLElement, pages: PageInfo[], perRow = 1) {
         label.setAttribute('y', String(py + rowH + PAGE_GAP * 0.62));
         label.setAttribute('text-anchor', 'end');
         label.textContent = `${i + 1} / ${groups.length}`;
-        chrome!.appendChild(label);
+        pageChrome.appendChild(label);
       }
+      chrome!.appendChild(pageChrome);
     }
   }
   // SVG 补丁会还原页组自身的 transform，因此每次只恢复轻量的位置信息。
