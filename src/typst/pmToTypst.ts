@@ -145,9 +145,33 @@ function backtick(s: string): string {
 }
 
 const INLINE_ATOM = new Set(['ref', 'cite', 'mathInline', 'footnote', 'abbr', 'ccwd', 'idx']);
+// 相邻文字节点共有的标记只包一层：编辑器里「H₂O」带下划线存成三个节点，逐个包成
+// #underline[H]#sub[#underline[2]]#underline[O]，模板的下划线就在上下标处断开、错位；
+// 合成 #underline[H#sub[2]O] 才是用户手写的样子。挑覆盖最长一段的那个标记先包，里面递归
+const GROUPABLE = ['link', 'underline', 'strike', 'bold', 'italic', 'superscript', 'subscript'];
+type Mark = NonNullable<PMNode['marks']>[number];
+const sameMark = (a: Mark, b: Mark) => a.type === b.type && JSON.stringify(a.attrs ?? {}) === JSON.stringify(b.attrs ?? {});
+const hasMark = (n: PMNode, m: Mark) => n.type === 'text' && (n.marks ?? []).some((x) => sameMark(x, m));
+function stripMark(n: PMNode, m: Mark): PMNode { return { ...n, marks: (n.marks ?? []).filter((x) => !sameMark(x, m)) }; }
+
 export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {}): string {
   let out = '';
-  for (const [i, n] of nodes.entries()) {
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    if (n.type === 'text' && i + 1 < nodes.length && nodes[i + 1].type === 'text') {
+      let best: { mark: Mark; end: number } | null = null;
+      for (const m of (n.marks ?? []).filter((x) => GROUPABLE.includes(x.type))) {
+        let j = i + 1;
+        while (j < nodes.length && hasMark(nodes[j], m)) j++;
+        if (j > i + 1 && (!best || j > best.end || (j === best.end && GROUPABLE.indexOf(m.type) < GROUPABLE.indexOf(best.mark.type)))) best = { mark: m, end: j };
+      }
+      if (best) {
+        const inner = serializeInline(nodes.slice(i, best.end).map((x) => stripMark(x, best!.mark)), opts);
+        out += wrapMarks(inner, [best.mark]);
+        i = best.end - 1;
+        continue;
+      }
+    }
     switch (n.type) {
       case 'text': {
         const raw = n.text ?? '';
