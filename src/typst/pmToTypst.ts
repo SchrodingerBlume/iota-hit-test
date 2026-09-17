@@ -152,22 +152,22 @@ const GROUPABLE = ['link', 'underline', 'strike', 'bold', 'italic', 'superscript
 type Mark = NonNullable<PMNode['marks']>[number];
 const sameMark = (a: Mark, b: Mark) => a.type === b.type && JSON.stringify(a.attrs ?? {}) === JSON.stringify(b.attrs ?? {});
 const hasMark = (n: PMNode, m: Mark) => n.type === 'text' && (n.marks ?? []).some((x) => sameMark(x, m));
-function stripMark(n: PMNode, m: Mark): PMNode { return { ...n, marks: (n.marks ?? []).filter((x) => !sameMark(x, m)) }; }
+// 节点对象不能复制（源码映射按对象身份查位置），外层已包掉的标记用 skip 传下去
+const marksOf = (n: PMNode, skip: Mark[]) => (n.marks ?? []).filter((x) => !skip.some((s) => sameMark(s, x)));
 
-export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {}): string {
+export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {}, skip: Mark[] = []): string {
   let out = '';
   for (let i = 0; i < nodes.length; i++) {
     const n = nodes[i];
     if (n.type === 'text' && i + 1 < nodes.length && nodes[i + 1].type === 'text') {
       let best: { mark: Mark; end: number } | null = null;
-      for (const m of (n.marks ?? []).filter((x) => GROUPABLE.includes(x.type))) {
+      for (const m of marksOf(n, skip).filter((x) => GROUPABLE.includes(x.type))) {
         let j = i + 1;
         while (j < nodes.length && hasMark(nodes[j], m)) j++;
         if (j > i + 1 && (!best || j > best.end || (j === best.end && GROUPABLE.indexOf(m.type) < GROUPABLE.indexOf(best.mark.type)))) best = { mark: m, end: j };
       }
       if (best) {
-        const inner = serializeInline(nodes.slice(i, best.end).map((x) => stripMark(x, best!.mark)), opts);
-        out += wrapMarks(inner, [best.mark]);
+        out += wrapMarks(serializeInline(nodes.slice(i, best.end), opts, [...skip, best.mark]), [best.mark]);
         i = best.end - 1;
         continue;
       }
@@ -181,13 +181,14 @@ export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {
         if (INLINE_ATOM.has(nodes[i - 1]?.type ?? '')) { const n = /^ */.exec(raw)![0].length; if (n) escaped = ' ' + '~'.repeat(n) + escaped.replace(/^~* /, ''); }
         if (INLINE_ATOM.has(nodes[i + 1]?.type ?? '')) { const n = / *$/.exec(raw)![0].length; if (n) escaped = escaped.replace(/~* $/, '') + '~'.repeat(n); }
         const pos = opts.map?.posOf.get(n);
-        const isCode = n.marks?.some((m) => m.type === 'code');
+        const marks = marksOf(n, skip);
+        const isCode = marks.some((m) => m.type === 'code');
         if (pos !== undefined && opts.map) {
           // 等宽代码走 #raw("…")：记号套在引号里面，字形偏移就是从引号后数的
           const rawArg = isCode ? `"${mark('text', opts.map.key, pos, pos + raw.length, JSON.stringify(raw).slice(1, -1), { raw })}"` : undefined;
-          out += wrapMarks(mark('text', opts.map.key, pos, pos + raw.length, escaped, { raw }), n.marks, rawArg);
+          out += wrapMarks(mark('text', opts.map.key, pos, pos + raw.length, escaped, { raw }), marks, rawArg);
         } else {
-          out += wrapMarks(escaped, n.marks);
+          out += wrapMarks(escaped, marks);
         }
         break;
       }
