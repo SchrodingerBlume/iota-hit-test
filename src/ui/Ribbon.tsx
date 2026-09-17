@@ -16,7 +16,7 @@ import {
   Search20Regular, ArrowSwap20Regular, SelectAllOn20Regular, MathFormula20Regular, MathSymbols20Regular, TextDescription20Regular, Image20Regular, Table20Regular, Braces20Regular, TextFootnote20Regular,
   BookmarkAdd20Regular, Spacebar20Regular, DocumentPageBreak20Regular, Omega20Regular, ArrowEnter20Regular, Book20Regular, Link20Regular, Library20Regular, DocumentTableSearch20Regular,
   TextGrammarSettings20Regular, TableStackAbove20Regular, TableStackBelow20Regular, TableDeleteRow20Regular, TableStackLeft20Regular, TableStackRight20Regular, TableDeleteColumn20Regular,
-  TableCellsMerge20Regular, TableFreezeRow20Regular, TableDismiss20Regular, PanelLeftContract20Regular, PanelLeftExpand20Regular, PanelLeft20Regular, LayoutColumnTwo20Regular, PanelRight20Regular,
+  TableCellsMerge20Regular, TableFreezeRow20Regular, TableDismiss20Regular, PanelLeft20Regular, LayoutColumnTwo20Regular, PanelRight20Regular,
   ChevronUp20Regular, ChevronDown20Regular, ChevronLeft20Regular, ChevronRight20Regular, Dismiss20Regular, Pin20Regular, Grid20Regular, TextParagraph20Regular,
   Translate20Regular, ImageEdit20Regular, Delete20Regular, TableSimple20Regular, ClipboardTextLtr20Regular,
   CommentAdd20Regular, CommentDismiss20Regular, Comment20Regular, TextBulletListSquare20Regular, TextEditStyle20Regular,
@@ -222,6 +222,23 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   };
 
   const bodyVisible = !minimal && (!collapsed || peek);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [scrollEdges, setScrollEdges] = useState({ left: false, right: false });
+  const syncRibbonScroll = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    setScrollEdges({ left: el.scrollLeft > 2, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 2 });
+  }, []);
+  useLayoutEffect(() => {
+    const el = scrollerRef.current;
+    if (!el || !bodyVisible) return;
+    const frame = requestAnimationFrame(syncRibbonScroll);
+    const resize = new ResizeObserver(syncRibbonScroll);
+    resize.observe(el);
+    if (el.firstElementChild) resize.observe(el.firstElementChild);
+    el.addEventListener('scroll', syncRibbonScroll, { passive: true });
+    return () => { cancelAnimationFrame(frame); resize.disconnect(); el.removeEventListener('scroll', syncRibbonScroll); };
+  }, [bodyVisible, tab, inTable, inFigure, syncRibbonScroll]);
   // 收起 / 展开的动画不动版面：版面一步到位，抽屉克隆一份盖在原位按高度裁，底下的内容区
   // 整块平移过去。逐帧改高度会让编辑区和十几页的预览每帧重排，跟不上；合成层动画怎么都稳。
   const drawerRef = useRef<HTMLDivElement>(null);
@@ -316,8 +333,11 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
       </div>
       {!minimal && (
         <div ref={drawerRef} className={`rb-drawer ${bodyVisible ? '' : 'is-closed'}`} aria-hidden={!bodyVisible}>
-        <div className="rb-drawer-inner">
-        <div className="rb-body">
+          <div className="rb-drawer-inner">
+            <div className="rb-scroll-shell">
+              {scrollEdges.left && <button type="button" className="rb-scroll-arrow is-left" aria-label={tx("向左滚动功能区")} onClick={() => scrollerRef.current?.scrollBy({ left: -320, behavior: 'smooth' })}><ChevronLeft20Regular /></button>}
+              <div ref={scrollerRef} className="rb-scroller" onWheel={(event) => { const el = scrollerRef.current; if (!el || el.scrollWidth <= el.clientWidth || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return; event.preventDefault(); el.scrollLeft += event.deltaY; }}>
+                <div className="rb-body">
           {tab === 'home' && (
             <>
               <Group label={tx("剪贴板")}>
@@ -357,9 +377,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                     <B title={tx("这一段不首行缩进（接在公式、列表后面的续段）")} icon={<TextIndentDecreaseLtr20Regular />} on={!!ed?.isActive('paragraph', { noIndent: true })} disabled={none} run={() => chain().updateAttributes('paragraph', { noIndent: !ed!.getAttributes('paragraph').noIndent }).run()} />
                   </Row>
                   <Row>
-                    <B title={tx("空一个汉字宽（#ccwd）")} icon={<Spacebar20Regular />} disabled={none} run={() => ins.insertInline('ccwd', { n: 1 })} />
                     <B title={tx("空回车段：连续空段落会排成 #enter(n)，真占一行")} icon={<ArrowEnter20Regular />} disabled={none} run={() => chain().splitBlock().run()} />
-                    <B title={tx("分页")} icon={<DocumentPageBreak20Regular />} disabled={none || !blocks} run={ins.insertPageBreak} />
                     <B title={tx("显示 / 隐藏编辑标记（¶、空格、顶格符；只在编辑区与预览里画，PDF 不受影响）")} icon={<TextParagraph20Regular />} on={marksOn} run={toggleMarks} />
                     <Menu checkedValues={{ k: (['paragraph', 'space', 'gutter'] as const).filter((k) => markKinds[k]) }} onCheckedValueChange={(_, d) => { for (const k of ['paragraph', 'space', 'gutter'] as const) usePreviewMarks.getState().setKind(k, d.checkedItems.includes(k)); }} positioning="below-start">
                       <MenuTrigger disableButtonEnhancement>
@@ -394,10 +412,13 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
           )}
           {tab === 'insert' && (
             <>
-              <Group label={tx("页面")}>
+              <Group label={tx("页面与文本")}>
                 <B title={tx("分页")} big icon={<DocumentPageBreak20Regular />} disabled={none || !blocks} run={ins.insertPageBreak}>{tx("分页")}</B>
+                <Stack>
+                  <B title={tx("空一个汉字宽")} icon={<Spacebar20Regular />} disabled={none} run={() => ins.insertInline('ccwd', { n: 1 })}>{tx("空格")}</B>
+                </Stack>
               </Group>
-              <Group label={tx("表格")}>
+              <Group label={tx("表格与插图")}>
                 <Popover open={pop === 'table'} onOpenChange={(_, d) => setPop(d.open ? 'table' : null)} positioning="below-start" trapFocus={false}>
                   <PopoverTrigger disableButtonEnhancement>
                     <span className="rb-keep"><B title={tx("插入表格：拖着选行列数")} big menu icon={<Table20Regular />} disabled={none || !blocks} run={() => setPop(pop === 'table' ? null : 'table')}>{tx("表格")}</B></span>
@@ -412,12 +433,11 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                 </Popover>
                 {tableDlg === 'size' && <TableSizeDialog onClose={() => setTableDlg(null)} onInsert={(r, c, h, fit, cw) => { setTableDlg(null); ins.insertTable(r, c, h, fit, cw); afterCommand(); }} />}
                 {tableDlg === 'text' && <TableTextDialog onClose={() => setTableDlg(null)} onInsert={(t, h) => { setTableDlg(null); ins.insertTableFromText(t, h); afterCommand(); }} />}
-              </Group>
-              <Group label={tx("插图")}>
                 <B title={tx("插图…（也可以直接把图片粘贴进正文）")} big icon={<Image20Regular />} disabled={none || !blocks} run={ins.insertFigure}>{tx("图片")}</B>
               </Group>
-              <Group label={tx("链接")}>
+              <Group label={tx("链接与符号")}>
                 <B title={tx("插入链接（⌘K）")} big icon={<Link20Regular />} disabled={none} run={() => useLinkDialog.getState().open()}>{tx("链接")}</B>
+                {symbolPop('symbol2', true)}
               </Group>
               <Group label={tx("公式")}>
                 <B title={tx("行间公式（编号）")} big icon={<MathFormula20Regular />} disabled={none || !blocks} run={ins.insertEquation}>{tx("公式")}</B>
@@ -431,14 +451,6 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                 <Stack>
                   <B title={tx("代码块（不带题注，按模板的代码样式排）")} icon={<Braces20Regular />} disabled={none || !blocks} run={() => chain().toggleCodeBlock().run()}>{tx("代码块")}</B>
                   <B title={tx("代码清单：带题注「代码 1-1」、可引用的代码块（光标在代码块里就给它加题注）")} icon={<Code20Regular />} disabled={none || !blocks} run={ins.insertCodeFigure}>{tx("代码清单")}</B>
-                </Stack>
-              </Group>
-              <Group label={tx("符号")}>
-                {symbolPop('symbol2', true)}
-              </Group>
-              <Group label={tx("文本")}>
-                <Stack>
-                  <B title={tx("空一个汉字宽")} icon={<Spacebar20Regular />} disabled={none} run={() => ins.insertInline('ccwd', { n: 1 })}>{tx("空格")}</B>
                 </Stack>
               </Group>
             </>
@@ -588,19 +600,16 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                 <B title={tx("编辑 + 预览")} big icon={<LayoutColumnTwo20Regular />} on={layout.mode === 'split'} run={() => layout.setMode('split')}>{tx("并排查看")}</B>
                 <B title={tx("只看预览")} big icon={<PanelRight20Regular />} on={layout.mode === 'preview'} run={() => layout.setMode('preview')}>{tx("预览")}</B>
               </Group>
-              <Group label={tx("显示")}>
-                <Stack>
-                  <B title={layout.navOpen ? tx("收起左栏") : tx("展开左栏")} icon={layout.navOpen ? <PanelLeftContract20Regular /> : <PanelLeftExpand20Regular />} on={layout.navOpen} run={() => layout.setNavOpen(!layout.navOpen)}>{tx("导航窗格")}</B>
-                </Stack>
-                <B title={tx("显示或隐藏段落标记")} big icon={<TextParagraph20Regular />} on={marksOn} run={toggleMarks}>{tx("显示/隐藏 ¶")}</B>
-              </Group>
               <Group label={tx("编辑区字号")}>
                 <span className="rb-keep rb-inline"><FontSizeTool /></span>
               </Group>
             </>
           )}
-        </div>
-        </div>
+                </div>
+              </div>
+              {scrollEdges.right && <button type="button" className="rb-scroll-arrow is-right" aria-label={tx("向右滚动功能区")} onClick={() => scrollerRef.current?.scrollBy({ left: 320, behavior: 'smooth' })}><ChevronRight20Regular /></button>}
+            </div>
+          </div>
         </div>
       )}
       {findOpen && <FindBar editor={ed} />}

@@ -5,7 +5,7 @@ import { useMedia, COMPACT, PORTRAIT } from './useMedia';
 type Mode = 'editor' | 'split' | 'preview';
 const KEY = 'iota4web-layout';
 const NAV_W = 200;
-const SPLIT_W = 6;
+const SPLIT_W = 4;
 
 function load(): { navOpen: boolean; mode: Mode; ratio: number } {
   try { const v = JSON.parse(localStorage.getItem(KEY) ?? '{}'); return { navOpen: v.navOpen ?? true, mode: v.mode ?? 'split', ratio: Math.min(0.8, Math.max(0.2, v.ratio ?? 0.54)) }; }
@@ -36,7 +36,7 @@ export function useLayoutPrefs() {
     const height = rect.height - SPLIT_W;
     let nextRatio = prefs.ratio;
     let raf = 0;
-    document.body.classList.add('is-resizing');
+    document.body.classList.add(stacked ? 'is-resizing-row' : 'is-resizing');
     const paint = () => {
       raf = 0;
       if (stacked) {
@@ -53,7 +53,7 @@ export function useLayoutPrefs() {
     };
     const up = () => {
       if (raf) { cancelAnimationFrame(raf); paint(); }
-      document.body.classList.remove('is-resizing');
+      document.body.classList.remove('is-resizing', 'is-resizing-row');
       setPrefs((p) => ({ ...p, ratio: nextRatio }));
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);

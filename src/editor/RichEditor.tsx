@@ -28,7 +28,7 @@ import { useEditorEnv, NumberingContext, RichKeyContext } from './env';
 import { computeNumbering, type Part } from '../typst/numbering';
 import { useStore, type RichKey } from '../model/store';
 import { registerEditor, unregisterEditor, getEditor } from './registry';
-import { B, Sep, useEditorTick, useInsertActions, useRichSize } from './tools';
+import { B, useEditorTick, useInsertActions, useRichSize } from './tools';
 import { MirrorCaret, mirrorCaretKey } from './extensions/MirrorCaret';
 import { Search } from './extensions/Search';
 import { fromMarkdown, toMarkdown } from './markdown';
@@ -36,7 +36,7 @@ import { useFindBar } from '../ui/Ribbon';
 import { recordTransaction, invalidatePositions } from './versions';
 import { useInputState } from './inputState';
 import { usePreviewSurface, usePreviewMarks } from '../ui/PreviewEditLayer';
-import { TextBold20Regular, TextItalic20Regular, TextUnderline20Regular, TextSuperscript20Regular, TextSubscript20Regular, Code20Regular, MathFormula20Regular, Book20Regular, BookmarkAdd20Regular } from '@fluentui/react-icons';
+import { MathFormula20Regular, Book20Regular, BookmarkAdd20Regular } from '@fluentui/react-icons';
 import { t } from '../i18n';
 
 /** 段落多一个「不缩进」属性：接在公式、列表后面的续段，模板里就是 first-line-indent: 0pt */
@@ -360,13 +360,6 @@ function Bubble({ editor }: { editor: Editor }) {
   const { insertInline } = useInsertActions(editor);
   return (
     <BubbleMenu editor={editor} className="bubble" options={bubbleOptions} shouldShow={bubbleShouldShow}>
-      <B title={t("加粗")} icon={<TextBold20Regular />} on={editor.isActive('bold')} run={() => editor.chain().focus().toggleBold().run()} />
-      <B title={t("强调")} icon={<TextItalic20Regular />} on={editor.isActive('italic')} run={() => editor.chain().focus().toggleItalic().run()} />
-      <B title={t("下划线")} icon={<TextUnderline20Regular />} on={editor.isActive('underline')} run={() => editor.chain().focus().toggleUnderline().run()} />
-      <B title={t("下标")} icon={<TextSubscript20Regular />} on={editor.isActive('subscript')} run={() => editor.chain().focus().toggleSubscript().run()} />
-      <B title={t("上标")} icon={<TextSuperscript20Regular />} on={editor.isActive('superscript')} run={() => editor.chain().focus().toggleSuperscript().run()} />
-      <B title={t("等宽代码")} icon={<Code20Regular />} on={editor.isActive('code')} run={() => editor.chain().focus().toggleCode().run()} />
-      <Sep />
       <B title={t("变成行内公式（LaTeX）")} icon={<MathFormula20Regular />} run={() => { const { from, to } = editor.state.selection; const text = editor.state.doc.textBetween(from, to, ' '); editor.chain().focus().insertContent({ type: 'mathInline', attrs: { src: text, mode: 'latex' } }).run(); }} />
       <B title={t("在此引用文献")} icon={<Book20Regular />} run={() => { editor.chain().focus().setTextSelection(editor.state.selection.to).run(); insertInline('cite'); }} />
       <B title={t("登记为索引词")} icon={<BookmarkAdd20Regular />} run={() => { const { from, to } = editor.state.selection; const text = editor.state.doc.textBetween(from, to, ' '); editor.chain().focus().insertContent({ type: 'idx', attrs: { text } }).run(); }} />
