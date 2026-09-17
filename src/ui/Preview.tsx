@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCompileState } from '../compiler/client';
-import { renderArtifact, relayoutPages, showPages } from '../compiler/renderer';
+import { renderArtifact, renderFocus, relayoutPages, showPages } from '../compiler/renderer';
 import { flipBefore, flipAfter } from './flip';
 import { usePreviewZoom } from './previewZoom';
 import { humanize, locateDiagnostic, type DiagTarget } from './diagnostics';
@@ -45,6 +45,7 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
   const compiling = useCompileState((s) => s.compiling);
   const artifact = useCompileState((s) => s.artifact);
   const artifactFresh = useCompileState((s) => s.artifactFresh);
+  const focusArtifact = useCompileState((s) => s.focusArtifact);
   const diagnostics = useCompileState((s) => s.diagnostics);
   const main = useCompileState((s) => s.diagMain);
   const segments = useCompileState((s) => s.diagSegments);
@@ -246,6 +247,23 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
       .catch((e) => { if (alive) setRenderError(String(e?.message ?? e)); });
     return () => { alive = false; };
   }, [artifact]);
+
+  // 只编一章的产物：顶进整编预览里这一章的位置
+  useEffect(() => {
+    const c = containerRef.current;
+    const { focusAt, focusFresh } = useCompileState.getState();
+    if (!focusArtifact || !focusAt || !c || !c.querySelector(':scope > svg.typst-master')) return;
+    let alive = true;
+    const t0 = performance.now();
+    renderFocus(focusArtifact, c, focusFresh, focusAt.start, focusAt.baseCount, {
+      before: () => virtualizeRef.current.snapshot(),
+      after: () => virtualizeRef.current.apply(),
+    }, usePreviewZoom.getState().perRow)
+      .then(() => { if (alive) { useCompileState.setState({ renderMs: Math.round(performance.now() - t0) }); setRenderError(null); setRenderTick((t) => t + 1); } })
+      // 预览区重挂过，这一章的差分接不上：让下一次从头编，这一份不显示
+      .catch(() => { if (alive) useCompileState.setState((s) => ({ focusGen: s.focusGen + 1, focusArtifact: null, focusAt: null })); });
+    return () => { alive = false; };
+  }, [focusArtifact]);
 
   // 长文档仍保留完整 SVG 供增量补丁复用，但只让视口附近的页参与绘制。
   // 纸张背景始终可见，快速滚动时不会出现高度跳变或滚动条抖动。

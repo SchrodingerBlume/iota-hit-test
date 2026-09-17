@@ -2,7 +2,9 @@
 // 结构照 iota-hit/template/example.typ：前置 → 主体 → 附录 → 后置。
 import type { ThesisDoc, Settings, Info, StyleEntry, OpenrightKey } from '../model/types';
 import { INFO_FIELDS } from '../model/info';
-import { serializeDoc, escapeText, collectImages, collectRefTargets, indexPositions } from './pmToTypst';
+import { serializeDoc, escapeText, collectImages, collectRefTargets, collectCiteKeys, indexPositions } from './pmToTypst';
+import { computeNumbering } from './numbering';
+import type { RichDoc } from '../model/types';
 import { generateBibtex } from '../bib/bibtex';
 import { resolvePage } from '../model/pages';
 import { mark, stripMarks, type Segment } from './sourcemap';
@@ -173,13 +175,9 @@ function infoArgs(info: Info, s: Settings): string[] {
   return args;
 }
 
-function nomenclature(doc: ThesisDoc, openright = ''): string {
-  const abbrs = doc.abbreviations.filter((a) => a.key.trim());
-  const symbols = doc.symbols.filter((s) => s.symbol.trim());
-  const o = doc.nomenclatureOptions ?? { sort: 'auto', usedOnly: 'auto', header: 'auto', hangingIndent: '', form: 'auto' };
-  if (!abbrs.length && !symbols.length) return '';
+function abbrDictOf(abbrs: ThesisDoc['abbreviations']): string {
   const q = (v: string) => JSON.stringify(v.trim());
-  const abbrDict = abbrs.length
+  return abbrs.length
     ? `(${abbrs.map((a) => {
         const parts = [`long: ${q(a.long)}`];
         if (a.longEn?.trim()) parts.push(`long-en: ${q(a.longEn)}`);
@@ -189,6 +187,14 @@ function nomenclature(doc: ThesisDoc, openright = ''): string {
         return `${q(a.key)}: (${parts.join(', ')})`;
       }).join(', ')},)`
     : '(:)';
+}
+
+function nomenclature(doc: ThesisDoc, openright = ''): string {
+  const abbrs = doc.abbreviations.filter((a) => a.key.trim());
+  const symbols = doc.symbols.filter((s) => s.symbol.trim());
+  const o = doc.nomenclatureOptions ?? { sort: 'auto', usedOnly: 'auto', header: 'auto', hangingIndent: '', form: 'auto' };
+  if (!abbrs.length && !symbols.length) return '';
+  const abbrDict = abbrDictOf(abbrs);
   // 符号：Typst 数学直接 $…$，LaTeX 走 mitex 的 #mi
   const term = (s: { symbol: string; mode?: string }) => {
     const src = s.symbol.trim();
@@ -264,7 +270,20 @@ const PREVIEW_PRELUDE = `// 站内预览用：空回车段上各放一个隐形�
 }
 #let blank-item(m) = if "preview" in sys.inputs { text(fill: rgb(0, 0, 0, 0), m) }`;
 
-export function serializeProject(doc: ThesisDoc, { preview = false }: { preview?: boolean } = {}): Project {
+/** 只编正文的一章（长文档打字时用）：chapter 是一级标题的序号（1 起），page 是这一章首页在上次整编里的页码（正文计数） */
+export interface Focus { chapter: number; page?: number }
+
+/** 正文按一级标题切成章：每章的节点下标区间 [from, to) */
+export function chapterRanges(body: RichDoc): { from: number; to: number }[] {
+  const nodes = body.content ?? [];
+  const starts: number[] = [];
+  nodes.forEach((n, i) => { if (n.type === 'heading' && (n.attrs?.level ?? 1) === 1) starts.push(i); });
+  if (!starts.length) return nodes.length ? [{ from: 0, to: nodes.length }] : [];
+  return starts.map((a, k) => ({ from: k === 0 ? 0 : a, to: starts[k + 1] ?? nodes.length }));
+}
+
+export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { preview?: boolean; focus?: Focus } = {}): Project {
+  if (focus) return serializeFocus(doc, focus);
   const s = doc.settings;
   const files: Record<string, string> = {};
   const parts: string[] = [];
@@ -364,4 +383,45 @@ export function serializeProject(doc: ThesisDoc, { preview = false }: { preview?
 
   const { text: main, segments } = stripMarks(parts.join('\n\n') + '\n');
   return { main, files, images: [...images], segments };
+}
+
+/**
+ * 只编当前一章：前置页一律不排，章号与页码用 counter 钉在上次整编的位置上，章外的引用印成字面，
+ * 文献只带这一章引到的那些。预览专用（断行规则同整编），导出的 .typ 不走这里。
+ */
+function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
+  const s = doc.settings;
+  const files: Record<string, string> = {};
+  const parts: string[] = [];
+  const ranges = chapterRanges(doc.body);
+  const r = ranges[focus.chapter - 1] ?? { from: 0, to: (doc.body.content ?? []).length };
+  const nodes = (doc.body.content ?? []).slice(r.from, r.to);
+  const chapterDoc: RichDoc = { type: 'doc', content: nodes };
+  const knownLabels = new Set<string>(collectRefTargets(chapterDoc).map((x) => x.label));
+  const refText = new Map<string, string>();
+  for (const [label, info] of computeNumbering(doc.body as any, s, 'body')) if (!knownLabels.has(label)) refText.set(label, info.ref);
+  for (const [label, info] of computeNumbering(doc.appendix as any, s, 'appendix')) if (!knownLabels.has(label)) refText.set(label, info.ref);
+
+  parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n#import "@preview/mitex:0.2.7": mitex, mi`);
+  parts.push(PREVIEW_PRELUDE);
+  parts.push(`#show: iota-hit.with(\n  ${[...settingsArgs(s), ...infoArgs(doc.info, s)].join(',\n  ')},\n)`);
+  parts.push(mswordPrelude(s));
+  if (s.hyphenate === true) parts.push('#set text(hyphenate: true)');
+  else if (s.hyphenate === false) parts.push('#set text(hyphenate: false)');
+  const or = (k: OpenrightKey): string => { const v = doc.openright?.[k]; return v === true || v === false ? `openright: ${v}` : ''; };
+  // 缩略语的定义在前置页那一函数里；不印页，只登记
+  const abbrs = doc.abbreviations.filter((a) => a.key.trim());
+  if (abbrs.length) parts.push(`#list-of-abbreviations(${abbrDictOf(abbrs)}, form: none, shown: true)`);
+  parts.push(or('mainmatter') ? `#show: mainmatter.with(${or('mainmatter')})` : '#show: mainmatter');
+  if (msword(s)) parts.push(mswordRule(s));
+  // 章号从上一章数起；首页页码钉在上次整编的位置
+  parts.push(`#counter(heading).update(${Math.max(0, focus.chapter - 1)})${focus.page && focus.page > 1 ? `\n#counter(page).update(${focus.page})` : ''}`);
+  const body = serializeDoc(chapterDoc as any, { headings: true, headingBase: 1, knownLabels, refText, preview: true, map: { key: 'body', posOf: indexPositions(doc.body as any) } });
+  parts.push(body || '= 绪论');
+  const cited = collectCiteKeys(chapterDoc as any);
+  const refs = generateBibtex((doc.references ?? []).filter((e) => cited.has(e.key.trim())));
+  // 旁文件也另起名字（worker 给只编一章的文件加 focus- 前缀）
+  if (refs.trim()) { files['refs.bib'] = refs; parts.push('#bibliography(read("focus-refs.bib"), full: true)'); }
+  const { text: main, segments } = stripMarks(parts.join('\n\n') + '\n');
+  return { main, files, images: [...collectImages(chapterDoc as any)], segments };
 }

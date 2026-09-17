@@ -41,6 +41,8 @@ export interface SerializeOptions {
   imageDir?: string;
   /** 全工程里存在的标签；引用了不存在的（比如公式取消了编号）就印红色 ??，别让整篇编译失败 */
   knownLabels?: Set<string>;
+  /** 只编当前章时，章外的引用不在这份文档里：按上次算好的编号印成字面（图 2-1） */
+  refText?: Map<string, string>;
   /** 打源码映射记号：这份富文本的 key，以及每个节点的 ProseMirror 位置 */
   map?: { key: RichKey; posOf: WeakMap<PMNode, number> };
   /**
@@ -231,6 +233,8 @@ export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {
       case 'ref': {
         const t = safeLabel(n.attrs?.target);
         if (!t) break;
+        const outside = opts.knownLabels && !opts.knownLabels.has(t) ? opts.refText?.get(t) : undefined;
+        if (outside !== undefined) { emit(tag(opts, n, 'node', `#[${escapeText(outside)}]`), true); break; }
         emit(tag(opts, n, 'node', opts.knownLabels && !opts.knownLabels.has(t) ? '#text(red)[??]' : `#ref(<${t}>)`), true);
         break;
       }
@@ -566,4 +570,15 @@ export function collectImages(doc: PMNode | undefined | null): string[] {
   };
   if (doc) walk(doc);
   return [...out];
+}
+
+/** 文档里引用过的文献键 */
+export function collectCiteKeys(doc: PMNode | undefined | null): Set<string> {
+  const out = new Set<string>();
+  const walk = (n: PMNode) => {
+    if (n.type === 'cite') for (const k of String(n.attrs?.keys ?? '').split(/[,，;；\s]+/).map(safeLabel).filter(Boolean)) out.add(k);
+    for (const c of n.content ?? []) walk(c);
+  };
+  if (doc) walk(doc);
+  return out;
 }

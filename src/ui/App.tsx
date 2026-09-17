@@ -3,6 +3,8 @@ import { useStore, type Section } from '../model/store';
 import type { ThesisDoc } from '../model/types';
 import { startCompiler, requestCompile, exportPdf, useCompileState } from '../compiler/client';
 import { serializeProject } from '../typst/serialize';
+import { chapterAt, chapterPages } from '../compiler/focus';
+import { getEditor } from '../editor/registry';
 import { BlockMenu } from '../editor/BlockMenu';
 import { CommentsPane } from './CommentsPane';
 import { Logo } from './Logo';
@@ -61,15 +63,40 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
   const engineKey = `${doc.settings.linebreaker}|${doc.settings.wordCompat}`;
   const lastEngine = useRef(engineKey);
   const restoring = useFontState((s) => s.restoring);
+  // 长文档：打字时只编光标所在的一章，停手后再整编一次校准
+  const fullTimer = useRef(0);
+  const lastFocusId = useRef('');
+  const [fullTick, setFullTick] = useState(0);
+  const lastFull = useRef(0);
+  useEffect(() => () => window.clearTimeout(fullTimer.current), []);
   useEffect(() => {
     if (!loaded || status !== 'ready' || composing) return;
     if (restoring && doc.settings.fontset !== 'webapp') return;
     let cancelled = false;
     // 换了工程：预览区已被项目管理页卸掉，渲染器没有上一版可以打差，增量产物会让它崩（reflexo 的 module unwrap），整个重编
     const force = refresh !== lastRefresh.current || engineKey !== lastEngine.current || lastProject.current !== doc.id;
-    const pageCount = useCompileState.getState().pageCount;
+    const cs = useCompileState.getState();
+    const pageCount = cs.pageCount;
+    // 只编一章的条件：整编过、页数多、光标在正文的某一章里、不在预览里直接编辑
+    const wantFull = fullTick !== lastFull.current;
+    lastFull.current = fullTick;
+    let focus: { id: string; chapter: number; start: number; baseCount: number; page: number } | null = null;
+    if (!force && !wantFull && !previewFocused && pageCount >= FOCUS_PAGES && cs.artifact) {
+      const k = chapterAt(doc.body, getEditor('body'));
+      const cp = k ? chapterPages(doc.body, cs.glyphs, cs.segments, cs.mapVersion, pageCount) : null;
+      if (k && cp && cp.pages[k - 1] !== undefined) {
+        const start = cp.pages[k - 1];
+        const next = cp.pages[k] ?? cp.end;
+        focus = { id: `${doc.id}:body:${k}:${cs.focusGen}`, chapter: k, start, baseCount: Math.max(0, next - start), page: start - cp.pages[0] + 1 };
+      }
+    }
+    if (focus) {
+      // 停手一会儿再整编（校准页码、目录、跨章引用）
+      window.clearTimeout(fullTimer.current);
+      fullTimer.current = window.setTimeout(() => setFullTick((n) => n + 1), FULL_AFTER_IDLE);
+    }
     const t = window.setTimeout(async () => {
-      const project = serializeProject(doc, { preview: true });
+      const project = serializeProject(doc, { preview: true, focus: focus ? { chapter: focus.chapter, page: focus.page } : undefined });
       // 换了项目：图片名字空间变了，worker 里映射的旧图全撤掉，重新发
       let stale: string[] = [];
       const nextSent = new Map(sent.current);
@@ -93,11 +120,13 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
       lastProject.current = doc.id;
       lastRefresh.current = refresh;
       lastEngine.current = engineKey;
+      lastFocusId.current = focus?.id ?? '';
       requestCompile({
         force,
         // 首次排版、小文档与预览直接编辑需要精确字形表。长文档在左侧连续输入时沿用旧表，
         // 避免每次击键都扫描约 200 页；位置映射会把旧表换算到当前文档。
-        glyphs: force || previewFocused || pageCount < 80,
+        glyphs: !focus && (force || previewFocused || pageCount < 80),
+        focus: focus ? { id: focus.id, start: focus.start, baseCount: focus.baseCount } : undefined,
         main: project.main,
         files: project.files,
         images,
@@ -106,11 +135,14 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
         version: docVersion(),
       });
     // 防抖按上一次编译的耗时来：编译在 worker 里，主线程不等它，排队的只留最新一份，所以不必等用户停手太久
-    }, force ? 0 : Math.min(600, Math.max(180, (useCompileState.getState().lastMs ?? 0) * 0.3)));
+    }, force ? 0 : focus ? 150 : Math.min(600, Math.max(180, (useCompileState.getState().lastMs ?? 0) * 0.3)));
     return () => { cancelled = true; window.clearTimeout(t); };
-  }, [doc, loaded, status, fontsVersion, refresh, restoring, previewFocused, composing]);
+  }, [doc, loaded, status, fontsVersion, refresh, restoring, previewFocused, composing, fullTick]);
   return sent;
 }
+/** 页数到了这个数才只编一章；停手这么久之后整编 */
+const FOCUS_PAGES = 40;
+const FULL_AFTER_IDLE = 2500;
 
 function download(name: string, data: BlobPart, type: string) {
   const a = document.createElement('a');

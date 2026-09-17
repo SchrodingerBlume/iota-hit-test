@@ -14,7 +14,7 @@ function offsetOf(main: string, line: number, col: number): number {
 
 /** 诊断落在文档的哪一段：取包住那个位置的最里层文字 / 节点 / 属性段 */
 export function locateDiagnostic(where: string, main: string, segments: Segment[]): DiagTarget | null {
-  const m = /^main\.typ:(\d+):(\d+)/.exec(where);
+  const m = /^(?:main|focus)\.typ:(\d+):(\d+)/.exec(where);
   if (!m || !main) return null;
   const off = offsetOf(main, +m[1], +m[2]);
   if (off < 0) return null;

@@ -96,7 +96,24 @@ export async function renderArtifact(artifact: Uint8Array, container: HTMLElemen
 
 const NS = 'http://www.w3.org/2000/svg';
 const COPY_ATTRS = ['data-tid', 'data-page-width', 'data-page-height'];
-/** 展示用的那张 SVG：母本的页一一对应，视口附近的是克隆，其余是空壳 */
+/** 展示层每一页的来源：整编母本的第 i 页，或只编一章那份母本的第 j 页 */
+type Src = { kind: 'm' | 'f'; i: number };
+/** 只编一章的产物顶进展示层的位置：从整编的第 start 页起、顶掉 baseCount 页 */
+const focusOf = new WeakMap<HTMLElement, { start: number; baseCount: number; count: number }>();
+
+function pagesOf(svg: SVGSVGElement | null): SVGGElement[] {
+  return svg ? [...svg.querySelectorAll<SVGGElement>(':scope > g.typst-page')] : [];
+}
+function srcOf(g: SVGGElement): Src {
+  const v = g.getAttribute('data-src') ?? 'm:0';
+  return { kind: v[0] === 'f' ? 'f' : 'm', i: Number(v.slice(2)) || 0 };
+}
+function masterPage(container: HTMLElement, src: Src): SVGGElement | undefined {
+  const svg = container.querySelector(`:scope > svg.${src.kind === 'f' ? 'typst-focus' : 'typst-master'}`) as SVGSVGElement | null;
+  return pagesOf(svg)[src.i];
+}
+
+/** 展示用的那张 SVG：整编母本的页一一对应（中间可能顶着一章的页），视口附近的是克隆，其余是空壳 */
 function syncView(container: HTMLElement, master: SVGSVGElement) {
   let view = container.querySelector(':scope > svg.typst-doc') as SVGSVGElement | null;
   if (!view) {
@@ -105,28 +122,45 @@ function syncView(container: HTMLElement, master: SVGSVGElement) {
     for (const a of ['xmlns', 'xmlns:xlink', 'viewBox', 'width', 'height', 'data-width', 'data-height']) { const v = master.getAttribute(a); if (v != null) view.setAttribute(a, v); }
     container.insertBefore(view, master);
   }
-  const src = [...master.querySelectorAll<SVGGElement>(':scope > g.typst-page')];
-  const cur = [...view.querySelectorAll<SVGGElement>(':scope > g.typst-page')];
-  // 多了的页删掉、少了的补空壳；已经克隆出来的页按母本对应页的 data-tid 判要不要重克隆
-  for (let i = cur.length - 1; i >= src.length; i--) cur[i].remove();
-  for (let i = 0; i < src.length; i++) {
-    const m = src[i];
-    let g = cur[i];
-    if (!g) { g = shell(m); view.appendChild(g); continue; }
-    for (const a of COPY_ATTRS) { const v = m.getAttribute(a); if (v == null) g.removeAttribute(a); else if (g.getAttribute(a) !== v) g.setAttribute(a, v); }
-    // 页变了（tid 变）且是克隆出来的：换成新克隆
-    if (g.getAttribute('data-shown') === '1' && g.getAttribute('data-src-tid') !== m.getAttribute('data-tid')) { const n = clone(m); n.setAttribute('transform', g.getAttribute('transform') ?? ''); view.replaceChild(n, g); }
-  }
+  focusOf.delete(container);
+  rebuild(container, view, pagesOf(master).map((_, i): Src => ({ kind: 'm', i })));
 }
-function shell(m: SVGGElement): SVGGElement {
+
+/** 按来源列表重排展示层：能留的克隆留下（同一来源、tid 没变），其余换成空壳或新克隆 */
+function rebuild(container: HTMLElement, view: SVGSVGElement, srcs: Src[]) {
+  const cur = pagesOf(view);
+  const keep = new Map<string, SVGGElement>();
+  for (const g of cur) keep.set(g.getAttribute('data-src') ?? '', g);
+  const next: SVGGElement[] = [];
+  for (const src of srcs) {
+    const m = masterPage(container, src);
+    if (!m) continue;
+    const key = `${src.kind}:${src.i}`;
+    const old = keep.get(key);
+    keep.delete(key);
+    let g: SVGGElement;
+    if (old && old.getAttribute('data-shown') === '1' && old.getAttribute('data-src-tid') === m.getAttribute('data-tid')) g = old;
+    else if (old && old.getAttribute('data-shown') === '1') { g = clone(m, src); g.setAttribute('transform', old.getAttribute('transform') ?? ''); }
+    else if (old) { g = old; for (const a of COPY_ATTRS) { const v = m.getAttribute(a); if (v == null) g.removeAttribute(a); else if (g.getAttribute(a) !== v) g.setAttribute(a, v); } }
+    else g = shell(m, src);
+    next.push(g);
+  }
+  for (const g of keep.values()) g.remove();
+  // 顺序对上：只挪位置不对的
+  next.forEach((g, i) => { if (view.children[i] !== g) view.insertBefore(g, view.children[i] ?? null); });
+  for (let i = view.children.length - 1; i >= next.length; i--) view.children[i].remove();
+}
+function shell(m: SVGGElement, src: Src): SVGGElement {
   const g = document.createElementNS(NS, 'g') as SVGGElement;
   g.setAttribute('class', 'typst-page is-virtual');
+  g.setAttribute('data-src', `${src.kind}:${src.i}`);
   for (const a of COPY_ATTRS) { const v = m.getAttribute(a); if (v != null) g.setAttribute(a, v); }
   return g;
 }
-function clone(m: SVGGElement): SVGGElement {
+function clone(m: SVGGElement, src: Src): SVGGElement {
   const g = m.cloneNode(true) as SVGGElement;
   g.setAttribute('data-shown', '1');
+  g.setAttribute('data-src', `${src.kind}:${src.i}`);
   g.setAttribute('data-src-tid', m.getAttribute('data-tid') ?? '');
   g.classList.remove('is-virtual');
   return g;
@@ -134,27 +168,82 @@ function clone(m: SVGGElement): SVGGElement {
 
 /** 哪些页要真画出来：视口附近的克隆母本，离开的换回空壳。返回有没有动过 */
 export function showPages(container: HTMLElement, visible: (i: number, y: number, h: number) => boolean): boolean {
-  const master = container.querySelector(':scope > svg.typst-master') as SVGSVGElement | null;
   const view = container.querySelector(':scope > svg.typst-doc') as SVGSVGElement | null;
-  if (!master || !view) return false;
-  const src = [...master.querySelectorAll<SVGGElement>(':scope > g.typst-page')];
-  const cur = [...view.querySelectorAll<SVGGElement>(':scope > g.typst-page')];
+  if (!view) return false;
+  const cur = pagesOf(view);
   const chrome = container.querySelectorAll<SVGGElement>(':scope > svg.page-chrome > g.page-chrome-page');
   let changed = false;
-  for (let i = 0; i < cur.length && i < src.length; i++) {
+  for (let i = 0; i < cur.length; i++) {
     const g = cur[i];
     const y = parseFloat(g.getAttribute('data-layout-y') ?? '0');
     const h = parseFloat(g.getAttribute('data-page-height') ?? '0');
     const want = visible(i, y, h);
     const shown = g.getAttribute('data-shown') === '1';
     if (want === shown) continue;
-    const n = want ? clone(src[i]) : shell(src[i]);
+    const src = srcOf(g);
+    const m = masterPage(container, src);
+    if (!m) continue;
+    const n = want ? clone(m, src) : shell(m, src);
     for (const a of ['transform', 'data-layout-x', 'data-layout-y']) { const v = g.getAttribute(a); if (v != null) n.setAttribute(a, v); }
     view.replaceChild(n, g);
     changed = true;
     chrome[i]?.classList.toggle('is-virtual', !want);
   }
   return changed;
+}
+
+let focusSession: RenderSession | null = null;
+let endFocusSession: (() => void) | null = null;
+function newFocusSession(): Promise<void> {
+  endFocusSession?.();
+  return new Promise<void>((resolveOuter) => {
+    void renderer!.runWithSession((s) => {
+      focusSession = s;
+      resolveOuter();
+      return new Promise<void>((done) => { endFocusSession = done; });
+    });
+  });
+}
+
+/**
+ * 只编一章的产物：画进自己的（藏着的）母本，再把这一章的页顶进展示层——整编第 start 页起的 baseCount 页
+ * 换成这一章的页。下一次整编到了，syncView 会把展示层整个换回整编的页。
+ */
+export async function renderFocus(artifact: Uint8Array, container: HTMLElement, fresh: boolean, start: number, baseCount: number, hooks: RenderHooks = {}, perRow = 1): Promise<PageInfo[]> {
+  await initRenderer();
+  if (!renderer) throw new Error('renderer not ready');
+  const master = container.querySelector(':scope > svg.typst-master') as SVGSVGElement | null;
+  const view = container.querySelector(':scope > svg.typst-doc') as SVGSVGElement | null;
+  if (!master || !view) throw new Error('need a full render first');
+  const prev = container.querySelector(':scope > svg.typst-focus') as SVGSVGElement | null;
+  if (!focusSession || (fresh && prev)) await newFocusSession();
+  if (!fresh && !prev) throw new Error('need a full focus artifact');
+  renderer.manipulateData({ renderSession: focusSession!, action: fresh ? 'reset' : 'merge', data: artifact });
+  const svgStr = renderer.renderSvgDiff({ renderSession: focusSession } as never);
+  const holder = document.createElement('div');
+  holder.innerHTML = svgStr;
+  const next = holder.firstElementChild as SVGSVGElement | null;
+  if (!next) throw new Error('renderer returned no svg');
+  hooks.before?.(container);
+  let fm: SVGSVGElement;
+  if (prev && !fresh) { patchRoot(prev, next); fm = prev; }
+  else { prev?.remove(); fm = next; container.appendChild(fm); }
+  fm.classList.add('typst-focus');
+  fm.classList.remove('typst-doc');
+  fm.style.display = 'none';
+  const pages = focusSession!.retrievePagesInfo() as PageInfo[];
+  const total = pagesOf(master).length;
+  const s0 = Math.max(0, Math.min(start, total));
+  const bc = Math.max(0, Math.min(baseCount, total - s0));
+  const srcs: Src[] = [];
+  for (let i = 0; i < s0; i++) srcs.push({ kind: 'm', i });
+  for (let j = 0; j < pages.length; j++) srcs.push({ kind: 'f', i: j });
+  for (let i = s0 + bc; i < total; i++) srcs.push({ kind: 'm', i });
+  focusOf.set(container, { start: s0, baseCount: bc, count: pages.length });
+  rebuild(container, view, srcs);
+  layoutPages(container, [], perRow);
+  hooks.after?.(container, pages);
+  return pages;
 }
 
 /**

@@ -15,7 +15,8 @@ export const GLYPH_STRIDE = 10;
 
 export type ToWorker =
   | { type: 'init'; baseUrl: string }
-  | { type: 'compile'; id: number; force?: boolean; glyphs?: boolean; main: string; files: Record<string, string>; images: { name: string; data: ArrayBuffer }[]; removeImages: string[] }
+  /** focus：只编当前一章的那份文档，值是章的标识（换章就换一套增量状态） */
+  | { type: 'compile'; id: number; force?: boolean; glyphs?: boolean; focus?: string; main: string; files: Record<string, string>; images: { name: string; data: ArrayBuffer }[]; removeImages: string[] }
   /** main：正式排版用的 main.typ（不带预览记号），与预览编的那份不同 */
   | { type: 'pdf'; id: number; main: string }
   /** 编一个 Typst 数学片段，给编辑器里的公式预览用 */

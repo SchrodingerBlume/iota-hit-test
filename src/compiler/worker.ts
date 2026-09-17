@@ -83,6 +83,10 @@ let world: any = null;
 /** 增量服务：每次只给渲染器发「与上一版的差」，主线程只补丁变了的页 */
 let incr: any = null;
 let incrFresh = true;
+// 只编一章那条路自己一套增量状态：与整编的差分不相干
+let incrFocus: any = null;
+let incrFocusFresh = true;
+let focusId = '';
 const mappedImages = new Map<string, number>();
 /** 站内字体留一份，换字体表时要连它们一起重建 */
 let bundledFonts: Uint8Array[] = [];
@@ -213,8 +217,11 @@ function glyphMap(main: string): ArrayBuffer | null {
 async function compile(msg: Extract<ToWorker, { type: 'compile' }>) {
   if (!compiler) return;
   const t0 = performance.now();
-  compiler.addSource('/main.typ', msg.main);
-  for (const [name, text] of Object.entries(msg.files)) compiler.mapShadow(`/${name}`, enc.encode(text));
+  // 只编一章的那份另起一个文件：同一个文件里换整份文本会把没变的节点的 span 也重编，
+  // comemo 里整篇的记忆全部失效（实测停手后的整编要 9 s）；两份各占一个文件互不打扰
+  const mainPath = msg.focus ? '/focus.typ' : '/main.typ';
+  compiler.addSource(mainPath, msg.main);
+  for (const [name, text] of Object.entries(msg.files)) compiler.mapShadow(`/${msg.focus ? 'focus-' : ''}${name}`, enc.encode(text));
   for (const img of msg.images) {
     compiler.mapShadow(`/images/${img.name}`, new Uint8Array(img.data));
     mappedImages.set(img.name, img.data.byteLength);
@@ -227,28 +234,40 @@ async function compile(msg: Extract<ToWorker, { type: 'compile' }>) {
     const raw = (compiler as any).compiler;
     try { world?.free(); } catch { /* 已经释放过 */ }
     // sys.inputs.preview：main.typ 里预览专用的东西（空行上的隐形 ¶）只在这儿生效，PDF 不带
-    world = raw.snapshot(undefined, '/main.typ', [['preview', '1']]);
-    if (msg.force && incr) { incr.free(); incr = null; }
-    if (!incr) { incr = raw.create_incr_server(); incrFresh = true; }
-    let res = world.incr_compile(incr, 3); // 3 = full diagnostics；结果是与上一版的差
-    // incr_compile 已经完成诊断。再调一次 compile 即使命中缓存，也会在长文档上造成明显停顿。
-    let diagnostics = normalizeDiagnostics(res?.diagnostics);
-    // 长文档经历很多次增量补丁后，服务偶尔会把可编译内容误报成语法错误。
-    // 只在出错时丢弃增量状态重试一次；成功就发完整产物，失败才把真实诊断交给界面。
-    if (!msg.force && diagnostics.some((d) => d.severity === 'error')) {
-      try { incr.free(); } catch { /* */ }
-      incr = raw.create_incr_server();
-      incrFresh = true;
-      res = world.incr_compile(incr, 3);
+    world = raw.snapshot(undefined, mainPath, [['preview', '1']]);
+    let res: any;
+    let diagnostics: Diagnostic[];
+    let fresh: boolean;
+    if (msg.focus) {
+      if (incrFocus && focusId !== msg.focus) { try { incrFocus.free(); } catch { /* */ } incrFocus = null; }
+      if (!incrFocus) { incrFocus = raw.create_incr_server(); incrFocusFresh = true; focusId = msg.focus; }
+      res = world.incr_compile(incrFocus, 3);
       diagnostics = normalizeDiagnostics(res?.diagnostics);
+      fresh = incrFocusFresh;
+      if (res?.result) incrFocusFresh = false;
+    } else {
+      if (msg.force && incr) { incr.free(); incr = null; }
+      if (!incr) { incr = raw.create_incr_server(); incrFresh = true; }
+      res = world.incr_compile(incr, 3); // 3 = full diagnostics；结果是与上一版的差
+      // incr_compile 已经完成诊断。再调一次 compile 即使命中缓存，也会在长文档上造成明显停顿。
+      diagnostics = normalizeDiagnostics(res?.diagnostics);
+      // 长文档经历很多次增量补丁后，服务偶尔会把可编译内容误报成语法错误。
+      // 只在出错时丢弃增量状态重试一次；成功就发完整产物，失败才把真实诊断交给界面。
+      if (!msg.force && diagnostics.some((d) => d.severity === 'error')) {
+        try { incr.free(); } catch { /* */ }
+        incr = raw.create_incr_server();
+        incrFresh = true;
+        res = world.incr_compile(incr, 3);
+        diagnostics = normalizeDiagnostics(res?.diagnostics);
+      }
+      fresh = incrFresh;
+      if (res?.result) incrFresh = false;
     }
     // 拷贝一份：结果是 wasm 内存上的视图，直接拿 .buffer 会把整块内存搬走
     const artifact = res?.result ? new Uint8Array(res.result as Uint8Array).buffer : null;
     // 字形映射覆盖整篇文档，近 200 页时比增量排版本身还贵。左侧输入期间沿用旧映射；
     // 用户进入预览编辑或手动刷新时再生成最新映射。
     const glyphs = msg.glyphs !== false && !diagnostics.some((d) => d.severity === 'error') ? glyphMap(msg.main) : null;
-    const fresh = incrFresh;
-    if (artifact) incrFresh = false;
     post({ type: 'compiled', id: msg.id, artifact, fresh, diagnostics, ms: Math.round(performance.now() - t0), glyphs }, [artifact, glyphs].filter((x): x is ArrayBuffer => !!x));
   } catch (e) {
     post({ type: 'compiled', id: msg.id, artifact: null, fresh: false, diagnostics: [{ severity: 'error', message: String((e as Error)?.message ?? e), where: '' }], ms: Math.round(performance.now() - t0), glyphs: null });

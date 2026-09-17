@@ -30,6 +30,12 @@ export interface CompileState {
   renderMs: number | null;
   /** 最近一次排版得到的页数，长文档据此降低自动排版频率。 */
   pageCount: number;
+  /** 只编一章的产物（长文档打字时）：顶进整编预览的第 start 页起、顶掉 baseCount 页 */
+  focusArtifact: Uint8Array | null;
+  focusFresh: boolean;
+  focusAt: { start: number; baseCount: number; id: string } | null;
+  /** 预览区重挂后旧的一章产物接不上差分：加一代，让下一次只编一章从头来 */
+  focusGen: number;
 }
 
 export const useCompileState = create<CompileState>(() => ({
@@ -52,6 +58,10 @@ export const useCompileState = create<CompileState>(() => ({
   mapVersion: -1,
   renderMs: null,
   pageCount: 0,
+  focusArtifact: null,
+  focusFresh: false,
+  focusAt: null,
+  focusGen: 0,
 }));
 
 export interface CompileInput {
@@ -59,6 +69,8 @@ export interface CompileInput {
   force?: boolean;
   /** 是否生成整篇字形映射。长文档仅在预览编辑时需要。 */
   glyphs?: boolean;
+  /** 只编当前一章：id 是章的标识，start / baseCount 是它在整编预览里占的页 */
+  focus?: { id: string; start: number; baseCount: number };
   main: string;
   files: Record<string, string>;
   images: { name: string; data: ArrayBuffer }[];
@@ -88,8 +100,8 @@ function flush() {
   inFlight = nextId++;
   inFlightInput = input;
   useCompileState.setState({ compiling: true });
-  const { segments: _s, version: _v, ...msg } = input;
-  send({ type: 'compile', id: inFlight, ...msg }, input.images.map((i) => i.data));
+  const { segments: _s, version: _v, focus, ...msg } = input;
+  send({ type: 'compile', id: inFlight, ...msg, focus: focus?.id }, input.images.map((i) => i.data));
 }
 
 export function startCompiler() {
@@ -115,10 +127,12 @@ export function startCompiler() {
         const input = inFlightInput;
         inFlightInput = null;
         // 编不过的版本不覆盖上一份能看的预览，但诊断照给（预览区里人话化、可跳转）
+        const focus = input?.focus;
         useCompileState.setState({
           compiling: false,
-          artifact: m.artifact ? new Uint8Array(m.artifact) : s.artifact,
-          artifactFresh: m.artifact ? m.fresh : s.artifactFresh,
+          ...(focus
+            ? (m.artifact ? { focusArtifact: new Uint8Array(m.artifact), focusFresh: m.fresh, focusAt: focus } : {})
+            : { artifact: m.artifact ? new Uint8Array(m.artifact) : s.artifact, artifactFresh: m.artifact ? m.fresh : s.artifactFresh, ...(m.artifact ? { focusArtifact: null, focusAt: null } : {}) }),
           diagnostics: m.diagnostics,
           diagMain: input?.main ?? s.diagMain,
           diagSegments: input?.segments ?? s.diagSegments,
