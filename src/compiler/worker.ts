@@ -98,8 +98,9 @@ async function init(base: string) {
   const report = (detail?: string) => post({ type: 'progress', progress: { ...progress, detail } });
 
   const [fontManifest, pkgManifest] = await Promise.all([
-    fetch(`${base}fonts/manifest.json`).then((r) => r.json()),
-    fetch(`${base}packages/manifest.json`).then((r) => r.json()),
+    // 清单每次都向服务器核对（GitHub Pages 给 10 分钟的缓存，模板刚更新那会儿会拿到旧清单、进而用旧包）
+    fetch(`${base}fonts/manifest.json`, { cache: 'no-cache' }).then((r) => r.json()),
+    fetch(`${base}packages/manifest.json`, { cache: 'no-cache' }).then((r) => r.json()),
   ]);
   const fonts: { file: string; size: number; lazy: boolean; info: { info?: { family?: string }[] } }[] = fontManifest.fonts;
   bundledFamilies = [...new Set(fonts.flatMap((f) => (f.info?.info ?? []).map((i) => i.family ?? '').filter(Boolean)))];
