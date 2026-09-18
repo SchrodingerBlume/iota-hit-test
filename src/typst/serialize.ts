@@ -63,6 +63,10 @@ export function linebreaksInput(s: Settings): string | null {
   // 紧缩与右缩进照中文 Word 的默认
   return JSON.stringify({ mode: 'msword', compat, kern: true, 'adjust-right-indent': true });
 }
+/** 预览里走 fork 时表格单元格的那一档（闭标点只压半格不挂出、老模式不按整格）：模板只发原版认得的字典，
+ *  这一键站内在单元格上补——读到模板发的那份原样加一键，模板不用认识 fork */
+const MSWORD_CELL = `// 表格单元格：断行引擎的 cell 档（闭标点只压半格不挂出、老模式不按整格取整）
+#show table.cell: it => context { if type(par.linebreaks) == dictionary { set par(linebreaks: par.linebreaks + (cell: true)); it } else { it } }`;
 /** 预览里选了 Typst 原版的两种断行：写死在源码里（引擎是 fork 也认） */
 function stockPrelude(s: Settings): string {
   return msword(s) ? '' : `#set par(linebreaks: ${JSON.stringify(s.linebreaker)})`;
@@ -288,6 +292,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   if (preview) parts.push(PREVIEW_PRELUDE);
   parts.push(`#show: iota-hit.with(\n  ${[...settingsArgs(s), ...infoArgs(doc.info, s)].join(',\n  ')},\n)`);
   if (preview && stockPrelude(s)) parts.push(stockPrelude(s));
+  if (preview && msword(s)) parts.push(MSWORD_CELL);
   // 西文断字：模板在 show 规则里 set text(hyphenate: false)，之后再 set 一句就压回来（模板自己这么说明的）
   if (s.hyphenate === true) parts.push('// 西文断字：模板默认关，这里打开\n#set text(hyphenate: true)');
   else if (s.hyphenate === false) parts.push('#set text(hyphenate: false)');
@@ -413,6 +418,7 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   parts.push(PREVIEW_PRELUDE);
   parts.push(`#show: iota-hit.with(\n  ${[...settingsArgs(s), ...infoArgs(doc.info, s)].join(',\n  ')},\n)`);
   if (stockPrelude(s)) parts.push(stockPrelude(s));
+  if (msword(s)) parts.push(MSWORD_CELL);
   if (s.hyphenate === true) parts.push('#set text(hyphenate: true)');
   else if (s.hyphenate === false) parts.push('#set text(hyphenate: false)');
   const or = (k: OpenrightKey): string => { const v = doc.openright?.[k]; return v === true || v === false ? `openright: ${v}` : ''; };

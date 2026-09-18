@@ -134,7 +134,7 @@ npm run test:compile # 不开浏览器，在 Node 里用同一颗 wasm 编一份
 设置里只有「断行引擎」（Word 式 / Typst 最优 / Typst 贪心）与「Word 兼容模式」两项，只进预览；**导出的 .typ 不带这些**，原版 Typst 照编。
 引擎是环境，不是文档参数：预览编译时 worker 用 `sys.inputs` 传 `linebreaks=<JSON>`（`{"mode":"msword","compat":15,"kern":true,"adjust-right-indent":true}`），
 模板读到它就不再发模拟网格用的 `text(tracking:)` 与西文补偿那几条规则，改在每次换版面（文档级、各段、带自己网格的成果页 / 声明页）
-处自己发 `set par(linebreaks: (mode: "msword", char-excess: 网格增量, …))`——各部件用的就是模板算的那份网格，站内不再注入任何规则。
+处自己发 `set par(linebreaks: (mode: "msword", char-excess: 网格增量, …))`——各部件用的就是模板算的那份网格，站内不再注入任何规则；只有表格单元格例外：fork 的 `cell: true` 档（闭标点只压半格不挂出、老模式不按整格取整）模板不认识，站内在预览里发一条 `show table.cell`，读到模板发的那份字典原样加一键。
 要让某一页退回原版断行，工程 JSON 里给那页 `layout: { "linebreaks": "none" }` 即可（见下面「版面的局部改写」）。
 
 fork 主线已并入 typst 上游 main（带 #792：中日文旁的换行空格丢掉），而 typst.ts 0.8.1 的导出 / world 层编不过 main 的 Format API，
