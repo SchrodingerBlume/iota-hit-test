@@ -43,6 +43,8 @@ export interface SerializeOptions {
   knownLabels?: Set<string>;
   /** 只编当前章时，章外的引用不在这份文档里：按上次算好的编号印成字面（图 2-1） */
   refText?: Map<string, string>;
+  /** 章级文档网格（模板 #chapter(layout: (char-pitch: …))）：这份文档里头一个一级标题带上它 */
+  chapterLayout?: string;
   /** 打源码映射记号：这份富文本的 key，以及每个节点的 ProseMirror 位置 */
   map?: { key: RichKey; posOf: WeakMap<PMNode, number> };
   /**
@@ -373,6 +375,7 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
           const v = n.attrs?.[k];
           if (v === 'true' || v === 'false' || v === true || v === false) fnArgs.push(`${k}: ${v}`);
         }
+        if (opts.chapterLayout) { fnArgs.push(`layout: ${opts.chapterLayout}`); opts.chapterLayout = undefined; }
       }
       if (fnArgs.length) return `#${['chapter', 'section', 'subsection', 'subsubsection'][level - 1]}(${fnArgs.join(', ')})[${zh}${en}]${label ? ` <${label}>` : ''}` + paraEnd(opts, n);
       return `${'='.repeat(level)} ${zh}${en}${label ? ` <${label}>` : ''}` + paraEnd(opts, n);

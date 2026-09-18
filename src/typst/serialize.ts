@@ -327,7 +327,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
 
   // ── 主体 ──
   parts.push(withArgs('mainmatter', or('mainmatter'), layoutArg(s.layout?.mainmatter)));
-  const body = bodyByChapters(doc, s, preview, (r) => serializeDoc({ type: 'doc', content: (doc.body.content ?? []).slice(r.from, r.to) } as any, { headings: true, headingBase: 1, knownLabels, preview, map: { key: 'body', posOf: indexPositions(doc.body as any) } }));
+  const body = bodyByChapters(doc, s, (r, chapterLayout) => serializeDoc({ type: 'doc', content: (doc.body.content ?? []).slice(r.from, r.to) } as any, { headings: true, headingBase: 1, knownLabels, preview, chapterLayout, map: { key: 'body', posOf: indexPositions(doc.body as any) } }));
   parts.push(body || '= 绪论');
 
   const conclusion = rich('conclusion', { headings: false });
@@ -375,6 +375,25 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   return { main, files, images: [...images], segments };
 }
 
+/** 正文按章序列化；工程 JSON 里给了某章的版面就交给模板：文档网格那几个键走 #chapter(layout:)，页边距 / 页眉页脚走 new-layout / restore-layout */
+const GRID_KEYS = new Set(['char-pitch', 'chars-per-line', 'line-pitch', 'lines-per-page', 'base-size', 'latin-line-height']);
+function splitChapterLayout(d: LayoutDict | undefined): { grid: string; section: string } {
+  if (!d) return { grid: '', section: '' };
+  const grid = Object.fromEntries(Object.entries(d).filter(([k]) => GRID_KEYS.has(k)));
+  const section = Object.fromEntries(Object.entries(d).filter(([k]) => !GRID_KEYS.has(k)));
+  return { grid: Object.keys(grid).length ? typstDict(grid) : '', section: Object.keys(section).length ? typstDict(section) : '' };
+}
+function bodyByChapters(doc: ThesisDoc, s: Settings, ser: (r: { from: number; to: number }, chapterLayout: string) => string): string {
+  const chapters = s.layout?.chapters ?? {};
+  const ranges = chapterRanges(doc.body);
+  if (!ranges.length || !Object.keys(chapters).length) return ser({ from: 0, to: (doc.body.content ?? []).length }, '');
+  return ranges.map((r, k) => chapterWrap(chapters[String(k + 1)], (grid) => ser(r, grid))).join('\n\n');
+}
+export function chapterWrap(d: LayoutDict | undefined, ser: (grid: string) => string): string {
+  const { grid, section } = splitChapterLayout(d);
+  const body = ser(grid);
+  return section ? `#show: new-layout.with(${section})\n${body}\n#show: restore-layout` : body;
+}
 /**
  * 只编当前一章：前置页一律不排，章号与页码用 counter 钉在上次整编的位置上，章外的引用印成字面，
  * 文献只带这一章引到的那些。预览专用（断行规则同整编），导出的 .typ 不走这里。
@@ -406,7 +425,7 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   parts.push(mm.length ? `#show: mainmatter.with(${mm.join(', ')})` : '#show: mainmatter');
   // 章号从上一章数起；首页页码钉在上次整编的位置
   parts.push(`#counter(heading).update(${Math.max(0, focus.chapter - 1)})${focus.page && focus.page > 1 ? `\n#counter(page).update(${focus.page})` : ''}`);
-  const body = chapterWrap(s.layout?.chapters?.[String(focus.chapter)], s, true, serializeDoc(chapterDoc as any, { headings: true, headingBase: 1, knownLabels, refText, preview: true, map: { key: 'body', posOf: indexPositions(doc.body as any) } }));
+  const body = chapterWrap(s.layout?.chapters?.[String(focus.chapter)], (chapterLayout) => serializeDoc(chapterDoc as any, { headings: true, headingBase: 1, knownLabels, refText, preview: true, chapterLayout, map: { key: 'body', posOf: indexPositions(doc.body as any) } }));
   parts.push(body || '= 绪论');
   const cited = collectCiteKeys(chapterDoc as any);
   const refs = generateBibtex((doc.references ?? []).filter((e) => cited.has(e.key.trim())));
@@ -416,21 +435,3 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   return { main, files, images: [...collectImages(chapterDoc as any)], segments };
 }
 
-/** 正文按章序列化；工程 JSON 里给了某章的 char-pitch，就把那一章包起来改字距（预览是引擎的 char-excess，导出是 text(tracking:)） */
-function bodyByChapters(doc: ThesisDoc, s: Settings, preview: boolean, ser: (r: { from: number; to: number }) => string): string {
-  const chapters = s.layout?.chapters ?? {};
-  const ranges = chapterRanges(doc.body);
-  if (!ranges.length || !Object.keys(chapters).length) return ser({ from: 0, to: (doc.body.content ?? []).length });
-  return ranges.map((r, k) => chapterWrap(chapters[String(k + 1)], s, preview, ser(r))).join('\n\n');
-}
-export function chapterWrap(d: LayoutDict | undefined, s: Settings, preview: boolean, body: string): string {
-  const pitch = d && typeof d['char-pitch'] === 'string' ? String(d['char-pitch']).trim() : '';
-  if (!pitch) return body;
-  const base = d && typeof d['base-size'] === 'string' ? String(d['base-size']).trim() : 'zihao.xiaosi';
-  const compat = s.wordCompat === 'auto' ? '11' : s.wordCompat;
-  // 章级给的是这一章的格宽（正文字号那一格），各字号按「字号 + 增量」：增量 = 格宽 − 基准字号
-  const rule = preview && msword(s)
-    ? `#set par(linebreaks: (mode: "msword", compat: ${compat}, char-excess: ${pitch} - ${base}, kern: true, adjust-right-indent: true))`
-    : `#set text(tracking: ${pitch} - ${base})`;
-  return `#[\n${rule}\n${body}\n]`;
-}
