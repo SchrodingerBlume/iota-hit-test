@@ -10,7 +10,7 @@ import { convertLatexToMathMl } from 'mathlive/ssr';
 import JSZip from 'jszip';
 import type { ThesisDoc, Settings, RichDoc, Comment } from '../../model/types';
 import type { PMNode } from '../../typst/pmToTypst';
-import { labelOf } from '../../typst/pmToTypst';
+import { labelOf, CAPTION_CITE, captionCiteKeys } from '../../typst/pmToTypst';
 import { computeNumbering, type NumberInfo } from '../../typst/numbering';
 import { resolvePage } from '../../model/pages';
 import { parseLines } from '../../editor/extensions/algorithm';
@@ -173,10 +173,12 @@ function inline(ctx: Ctx, nodes: PMNode[] = [], base: { size?: number; font?: st
 // ── 块 ───────────────────────────────────────────────────────────
 type Block = Paragraph | Table;
 const centered = (children: ParagraphChild[], extra: object = {}) => new Paragraph({ alignment: AlignmentType.CENTER, indent: { firstLine: 0 }, children, ...extra });
+/** 题注串：[@key] 排成上标的文献号 */
+const captionRuns = (ctx: Ctx, s: string): TextRun[] => s.split(CAPTION_CITE).flatMap((piece, i) => (i % 2 ? [new TextRun({ text: citeText(ctx, piece.split(/[,，;；\s]+/).filter(Boolean)), superScript: true })] : piece ? [new TextRun({ text: piece })] : []));
 const captionPara = (ctx: Ctx, num: string, title: PMNode[] | string, en?: string) => {
-  const kids = typeof title === 'string' ? [new TextRun({ text: title })] : inline(ctx, title);
+  const kids = typeof title === 'string' ? captionRuns(ctx, title) : inline(ctx, title);
   const out = [new Paragraph({ style: 'Caption', children: [new TextRun({ text: num ? `${num}  ` : '' }), ...kids] })];
-  if (en && ctx.s.lang !== 'en') out.push(new Paragraph({ style: 'Caption', children: [new TextRun({ text: en })] }));
+  if (en && ctx.s.lang !== 'en') out.push(new Paragraph({ style: 'Caption', children: captionRuns(ctx, en) }));
   return out;
 };
 const numOf = (ctx: Ctx, n: PMNode, prefix: string) => tidy(ctx.nums.get(labelOf(n.attrs, prefix))?.number ?? '');
@@ -373,8 +375,12 @@ function achievements(ctx: Ctx): Block[] {
 
 // ── 引用序、图片 ───────────────────────────────────────────────────
 function collectCites(ctx: Ctx, docs: PMNode[]) {
+  const add = (k: string) => { if (!ctx.cites.has(k)) ctx.cites.set(k, ctx.cites.size + 1); };
   const walk = (n: PMNode) => {
-    if (n.type === 'cite') for (const k of String(n.attrs?.keys ?? '').split(/[,，;；\s]+/).filter(Boolean)) if (!ctx.cites.has(k)) ctx.cites.set(k, ctx.cites.size + 1);
+    if (n.type === 'cite') for (const k of String(n.attrs?.keys ?? '').split(/[,，;；\s]+/).filter(Boolean)) add(k);
+    // 题注里的 [@key]，按出现顺序编号
+    for (const a of ['caption', 'captionEn'] as const) if (typeof n.attrs?.[a] === 'string') captionCiteKeys(n.attrs[a]).forEach(add);
+    if (typeof n.attrs?.subs === 'string') for (const sub of (() => { try { return JSON.parse(n.attrs.subs) as { caption?: string }[]; } catch { return []; } })()) captionCiteKeys(String(sub.caption ?? '')).forEach(add);
     for (const c of n.content ?? []) walk(c);
   };
   docs.forEach(walk);

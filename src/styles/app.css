@@ -353,7 +353,10 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .pv-comment { position: absolute; background: rgba(250, 204, 21, 0.28); pointer-events: none; z-index: 0; }
 .pv-comment.is-active { background: rgba(250, 204, 21, 0.5); }
 .len-input { display: inline-flex; gap: 2px; align-items: center; }
-.len-input .len-num { flex: 1; min-width: 0; }
+.len-input .len-num { flex: 1; min-width: 64px; }
+.len-input .len-num input { font-variant-numeric: tabular-nums; padding-inline: 6px 2px; }
+.len-input .len-num input::-webkit-outer-spin-button, .len-input .len-num input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.len-input .len-num input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .len-input .len-unit { flex: none; }
 .len-input .len-unit select { min-width: 0; padding-right: 20px; }
 /* 批注面板：右边一栏（像 Word 的批注窗格） */
@@ -437,7 +440,7 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .blk-tool { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: var(--r-s); color: var(--ink-2); border: 0; background: none; font-size: 12px; white-space: nowrap; }
 .blk-tool svg { width: 14px; height: 14px; color: var(--muted); }
 .blk-tool input { border: 1px solid var(--line-2); border-radius: var(--r-s); padding: 1px 5px; font-size: 12px; background: var(--panel); color: var(--ink); font-family: var(--mono); }
-.blk-tool input[type=number] { width: 52px; }
+.blk-tool input[type=number] { width: 64px; font-variant-numeric: tabular-nums; }
 .blk-tool input:not([type]) { width: 110px; }
 .blk-tool input[type=checkbox] { accent-color: var(--ok); }
 .blk-tool.is-btn { cursor: pointer; transition: background-color var(--fast) var(--ease); }

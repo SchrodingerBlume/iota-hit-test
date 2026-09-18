@@ -29,11 +29,11 @@ sub('crates/typst-layout/src/inline/linebreak.rs',
 p = f"{tree}/crates/typst-layout/src/inline/msword.rs"; s = open(p).read()
 if 'HashMap<usize, char>' not in s:
     pairs = [
-      ("    let (breaks, mandatory) = collect_breaks(p, &params);", "    let (breaks, mandatory, eaten) = collect_breaks(p, &params);"),
+      ("    let (mut breaks, mandatory) = collect_breaks(p, &params, &symbols);", "    let (mut breaks, mandatory, eaten) = collect_breaks(p, &params, &symbols);"),
       ("        return vec![line(engine, p, 0..p.text.len(), Breakpoint::Mandatory, None)];", "        return vec![line(engine, p, 0..p.text.len(), Breakpoint::Mandatory, None, '\\0')];"),
       ("        let mut built = line(engine, p, start..d.end, d.breakpoint, lines.last());", "        let ate = eaten.get(&d.end).copied().unwrap_or('\\0');\n        let mut built = line(engine, p, start..d.end, d.breakpoint, lines.last(), ate);"),
-      ("fn collect_breaks(p: &Preparation, params: &Params) -> (Vec<usize>, Vec<usize>) {\n    let mut breaks = Vec::new();\n    let mut mandatory = Vec::new();\n    breakpoints(p, |offset, bp| match bp {",
-       "fn collect_breaks(\n    p: &Preparation,\n    params: &Params,\n) -> (Vec<usize>, Vec<usize>, HashMap<usize, char>) {\n    let mut breaks = Vec::new();\n    let mut mandatory = Vec::new();\n    let mut eaten = HashMap::new();\n    breakpoints(p, |offset, bp, ate| match bp {"),
+      ("    symbols: &[std::ops::Range<usize>],\n) -> (Vec<usize>, Vec<usize>) {\n    let mut breaks = Vec::new();\n    let mut mandatory = Vec::new();\n    breakpoints(p, |offset, bp| match bp {",
+       "    symbols: &[std::ops::Range<usize>],\n) -> (Vec<usize>, Vec<usize>, HashMap<usize, char>) {\n    let mut breaks = Vec::new();\n    let mut mandatory = Vec::new();\n    let mut eaten = HashMap::new();\n    breakpoints(p, |offset, bp, ate| match bp {"),
       ("    (breaks, mandatory)\n}", "    (breaks, mandatory, eaten)\n}"),
       ("use typst_library::engine::Engine;\n", "use std::collections::HashMap;\nuse typst_library::engine::Engine;\n"),
     ]

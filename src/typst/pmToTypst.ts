@@ -262,12 +262,22 @@ export function labelOf(attrs: Record<string, any> | undefined, prefix: string):
   return safeLabel(base);
 }
 
+/** 题注里的文献引用写成 [@key] 或 [@k1, k2]（题注是一串字，放不下 cite 节点） */
+export const CAPTION_CITE = /\[@([^\]]+)\]/g;
+export function captionCiteKeys(s: string): string[] {
+  return [...s.matchAll(CAPTION_CITE)].flatMap((m) => m[1].split(/[,，;；\s]+/).map(safeLabel).filter(Boolean));
+}
+/** 题注文字 → Typst：转义之外把 [@key] 换成 #cite */
+export function captionText(raw: string): string {
+  return raw.split(CAPTION_CITE).map((piece, i) => (i % 2 ? piece.split(/[,，;；\s]+/).map(safeLabel).filter(Boolean).map((k) => `#cite(<${k}>)`).join('') : escapeText(piece))).join('');
+}
+
 function caption(n: PMNode, opts: SerializeOptions): string {
   const attrs = n.attrs ?? {};
   const zhRaw = String(attrs.caption ?? '').trim();
   const enRaw = String(attrs.captionEn ?? '').trim();
-  const zh = tag(opts, n, 'attr', escapeText(zhRaw), { attr: 'caption', raw: zhRaw });
-  const en = tag(opts, n, 'attr', escapeText(enRaw), { attr: 'captionEn', raw: enRaw });
+  const zh = tag(opts, n, 'attr', captionText(zhRaw), { attr: 'caption', raw: zhRaw });
+  const en = tag(opts, n, 'attr', captionText(enRaw), { attr: 'captionEn', raw: enRaw });
   return enRaw ? `${zh}#en[${en}]` : zh;
 }
 
@@ -373,7 +383,7 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
       // 一张合成图（(a)(b) 画在图里）配连排分图题：分图条目都没有图、母图有图 → 单图 + 图题里的 #subs
       if (subs.length && n.attrs?.image && !subs.some((s) => s.image)) {
         const letter = (i: number) => 'abcdefghijklmnopqrstuvwxyz'[i] ?? String(i + 1);
-        const subsArg = `#subs(${subs.map((s, i) => `[${(s.caption ?? '').trim() ? escapeText(s.caption ?? '') : '#box[]'}${label ? ` <${label}-${letter(i)}>` : ''}]`).join(', ')},)`;
+        const subsArg = `#subs(${subs.map((s, i) => `[${(s.caption ?? '').trim() ? captionText(s.caption ?? '') : '#box[]'}${label ? ` <${label}-${letter(i)}>` : ''}]`).join(', ')},)`;
         const width = lengthTypst(n.attrs?.width ?? 8, 'cm', '8cm');
         return floatWrap(n, 'image', tag(opts, n, 'node', `#figure(\n  image(${JSON.stringify(`${opts.imageDir ?? 'images'}/${n.attrs.image}`)}, width: ${width}),\n  caption: [${caption(n, opts)}${subsArg}],${placementArg(n)}\n)`) + (label ? ` <${label}>` : ''));
       }
@@ -584,6 +594,8 @@ export function collectCiteKeys(doc: PMNode | undefined | null): Set<string> {
   const out = new Set<string>();
   const walk = (n: PMNode) => {
     if (n.type === 'cite') for (const k of String(n.attrs?.keys ?? '').split(/[,，;；\s]+/).map(safeLabel).filter(Boolean)) out.add(k);
+    for (const a of ['caption', 'captionEn']) if (typeof n.attrs?.[a] === 'string') captionCiteKeys(n.attrs[a]).forEach((k) => out.add(k));
+    if (n.type === 'figure') parseSubs(n.attrs?.subs).forEach((sub) => captionCiteKeys(String(sub.caption ?? '')).forEach((k) => out.add(k)));
     for (const c of n.content ?? []) walk(c);
   };
   if (doc) walk(doc);
