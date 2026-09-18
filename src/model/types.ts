@@ -92,8 +92,14 @@ export interface Settings {
    * 站内把它折成这一章的字距）。
    */
   layout?: LayoutOverrides;
+  localStyles?: LocalStyles;
 }
 export type LayoutDict = Record<string, unknown>;
+/** 局部样式（只在工程 JSON 里）：pages.abstract → #abstract(styles:)，chapters → new-styles / restore-styles */
+export interface LocalStyles {
+  pages?: Record<string, LayoutDict>;
+  chapters?: Record<string, LayoutDict>;
+}
 export interface LayoutOverrides {
   doc?: LayoutDict;
   frontmatter?: LayoutDict;

@@ -78,6 +78,7 @@ export function typstDict(v: unknown): string {
   return entries.length ? `(${entries.map(([k, x]) => `${k}: ${typstDict(x)}`).join(', ')})` : '(:)';
 }
 const layoutArg = (d: LayoutDict | undefined): string => (d && Object.keys(d).length ? `layout: ${typstDict(d)}` : '');
+const localStylesArg = (d: LayoutDict | undefined): string => (d && Object.keys(d).length ? `styles: ${typstDict(d)}` : '');
 
 function settingsArgs(s: Settings): string[] {
   const args: string[] = [];
@@ -307,7 +308,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   if (resolvePage(doc, 'abstract').value && (abstractZh.trim() || abstractEn.trim())) {
     // 关键词上方：模板 keywords-above——none 不空、v(1fr) 挤到页底、auto 空一行（默认，不写）
     const ka = s.abstractKeywordsAbove === 'none' ? ', keywords-above: none' : s.abstractKeywordsAbove === 'bottom' ? ', keywords-above: v(1fr)' : '';
-    parts.push(`#abstract(en: [\n${indent(abstractEn, 2)}\n]${ka}${or('abstract') ? `, ${or('abstract')}` : ''}${pageLayout('abstract') ? `, ${pageLayout('abstract')}` : ''})[\n${indent(abstractZh, 2)}\n]`);
+    parts.push(`#abstract(en: [\n${indent(abstractEn, 2)}\n]${ka}${or('abstract') ? `, ${or('abstract')}` : ''}${pageLayout('abstract') ? `, ${pageLayout('abstract')}` : ''}${localStylesArg(s.localStyles?.pages?.abstract) ? `, ${localStylesArg(s.localStyles?.pages?.abstract)}` : ''})[\n${indent(abstractZh, 2)}\n]`);
   }
 
   const nomen = nomenclature(doc, or('nomenclature'));
@@ -379,11 +380,13 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
  *  #chapter(layout:) 那一档模板说要删，不用它） */
 function bodyByChapters(doc: ThesisDoc, s: Settings, ser: (r: { from: number; to: number }) => string): string {
   const chapters = s.layout?.chapters ?? {};
+  const styles = s.localStyles?.chapters ?? {};
   const ranges = chapterRanges(doc.body);
-  if (!ranges.length || !Object.keys(chapters).length) return ser({ from: 0, to: (doc.body.content ?? []).length });
-  return ranges.map((r, k) => chapterWrap(chapters[String(k + 1)], ser(r))).join('\n\n');
+  if (!ranges.length || (!Object.keys(chapters).length && !Object.keys(styles).length)) return ser({ from: 0, to: (doc.body.content ?? []).length });
+  return ranges.map((r, k) => chapterWrap(chapters[String(k + 1)], styles[String(k + 1)], ser(r))).join('\n\n');
 }
-export function chapterWrap(d: LayoutDict | undefined, body: string): string {
+export function chapterWrap(d: LayoutDict | undefined, st: LayoutDict | undefined, body: string): string {
+  if (st && Object.keys(st).length) body = `#show: new-styles.with(${typstDict(st)})\n${body}\n#show: restore-styles`;
   return d && Object.keys(d).length ? `#show: new-layout.with(${typstDict(d)})\n${body}\n#show: restore-layout` : body;
 }
 
@@ -418,7 +421,7 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   parts.push(mm.length ? `#show: mainmatter.with(${mm.join(', ')})` : '#show: mainmatter');
   // 章号从上一章数起；首页页码钉在上次整编的位置
   parts.push(`#counter(heading).update(${Math.max(0, focus.chapter - 1)})${focus.page && focus.page > 1 ? `\n#counter(page).update(${focus.page})` : ''}`);
-  const body = chapterWrap(s.layout?.chapters?.[String(focus.chapter)], serializeDoc(chapterDoc as any, { headings: true, headingBase: 1, knownLabels, refText, preview: true, map: { key: 'body', posOf: indexPositions(doc.body as any) } }));
+  const body = chapterWrap(s.layout?.chapters?.[String(focus.chapter)], s.localStyles?.chapters?.[String(focus.chapter)], serializeDoc(chapterDoc as any, { headings: true, headingBase: 1, knownLabels, refText, preview: true, map: { key: 'body', posOf: indexPositions(doc.body as any) } }));
   parts.push(body || '= 绪论');
   const cited = collectCiteKeys(chapterDoc as any);
   const refs = generateBibtex((doc.references ?? []).filter((e) => cited.has(e.key.trim())));

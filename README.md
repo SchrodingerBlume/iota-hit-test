@@ -204,6 +204,14 @@ npm run test:compile # 不开浏览器，在 Node 里用同一颗 wasm 编一份
 `chapters` 按正文章号：那一章包成模板的 `#show: new-layout.with((…))` … `#show: restore-layout`（网格、页边距、
 页眉页脚都收），导出的 .typ 一样能编。
 
+样式表同理只在 JSON 里：`settings.localStyles`，字典形状与模板 `styles:` 一样（眼下模板接了 `body` 与 `figure.table`）。
+`pages.abstract` 交给 `#abstract(styles:)`（一个值管中英两页，分开写 `{ "en": {…}, "zh": {…} }`），`chapters` 按章号包成
+`#show: new-styles.with((…))` … `#show: restore-styles`。作者原稿常见的「英文摘要固定值 18 磅」就是：
+
+```json
+"localStyles": { "pages": { "abstract": { "en": { "body": { "line-spacing": { "exactly": "18pt" } } } } } }
+```
+
 ## 导出 Word（.docx）
 
 文件菜单「导出 Word 文档」：不经过 Typst，从编辑器的 JSON 直接用 docx 库生成，样式照学校范例——页面设置、文档网格
