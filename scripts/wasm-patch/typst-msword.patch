@@ -1,4 +1,4 @@
-# typst-with-msword-linebreaks aba0860e6a5a5f9c04ac703dcb6b37d471fd258f 合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1 之上（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
+# typst-with-msword-linebreaks aa999bec3e3ae921e42f69ba31633812e7a05131 合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1 之上（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
 diff --git a/crates/typst-layout/src/inline/line.rs b/crates/typst-layout/src/inline/line.rs
 index 3d7f3a28c..e25d98f05 100644
 --- a/crates/typst-layout/src/inline/line.rs
@@ -160,10 +160,10 @@ index 259be8101..50f73975d 100644
          cjk_latin_spacing: shared.get(TextElem::cjk_latin_spacing).is_auto(),
 diff --git a/crates/typst-layout/src/inline/msword.rs b/crates/typst-layout/src/inline/msword.rs
 new file mode 100644
-index 000000000..87b73df0b
+index 000000000..52774e44a
 --- /dev/null
 +++ b/crates/typst-layout/src/inline/msword.rs
-@@ -0,0 +1,2419 @@
+@@ -0,0 +1,2426 @@
 +// 本文件基于 Typst（typst/typst）与 typst-with-msword-linebreaks 修改（iota4web 合并到 Myriad-Dreamin/typst 之上，见 scripts/wasm-patch/typst-msword.patch）
 +//! Line breaking that emulates Microsoft Word.
 +//!
@@ -2459,11 +2459,18 @@ index 000000000..87b73df0b
 +            slack -= take;
 +        }
 +        if slack > Abs::zero() && !cjkgaps.is_empty() {
-+            let each = slack / cjkgaps.len() as f64;
-+            for &k in &cjkgaps {
++            // The spaces keep growing with the CJK gaps (measured on
++            // `out/brk2-*`: a reference line `…plate［J］. Philosophical`
++            // with six spaces stretches each space by the CJK gap's share
++            // plus the half space above, from 2 pt up to 28 pt); giving the
++            // rest to the CJK gaps alone left 4 pt holes after `［` and `］`
++            // on a Latin line with only those two.
++            let n = cjkgaps.len() + spaces.len();
++            let each = slack / n as f64;
++            for &k in cjkgaps.iter().chain(spaces.iter()) {
 +                after[k - first] += each;
 +            }
-+            slack -= each * cjkgaps.len() as f64;
++            slack -= each * n as f64;
 +        }
 +        if slack > Abs::zero() {
 +            let pool: &[usize] = if !spaces.is_empty() { &spaces } else { &autos };

@@ -5,6 +5,7 @@
 // 没变的 <g>——改一个字只动那一页，十几页的文档主线程也就几毫秒，而不是整张 SVG 换 innerHTML。
 // 页与页之间的白纸、空当、页码画在另一张 SVG（page-chrome）里，不跟补丁算法抢同一棵树。
 import { createTypstRenderer, type TypstRenderer, type RenderSession } from '@myriaddreamin/typst.ts';
+import { FOCUS_TAIL_WIDTH } from '../typst/serialize';
 import * as rendererWrapper from '@myriaddreamin/typst-ts-renderer';
 import { patchRoot } from './svgPatch.mjs';
 
@@ -100,6 +101,8 @@ const COPY_ATTRS = ['data-tid', 'data-page-width', 'data-page-height'];
 type Src = { kind: 'm' | 'f'; i: number };
 /** 只编一章的产物顶进展示层的位置：从整编的第 start 页起、顶掉 baseCount 页 */
 const focusOf = new WeakMap<HTMLElement, { start: number; baseCount: number; count: number }>();
+/** 展示层眼下是不是嵌着只编一章的页：嵌在哪、顶掉了母本几页、嵌了几页 */
+export const focusInfo = (container: HTMLElement) => focusOf.get(container) ?? null;
 
 function pagesOf(svg: SVGSVGElement | null): SVGGElement[] {
   return svg ? [...svg.querySelectorAll<SVGGElement>(':scope > g.typst-page')] : [];
@@ -231,7 +234,10 @@ export async function renderFocus(artifact: Uint8Array, container: HTMLElement, 
   fm.classList.add('typst-focus');
   fm.classList.remove('typst-doc');
   fm.style.display = 'none';
-  const pages = focusSession!.retrievePagesInfo() as PageInfo[];
+  const all = focusSession!.retrievePagesInfo() as PageInfo[];
+  // 尾巴上的文献表那几页纸宽是 FOCUS_TAIL_WIDTH：不是这一章的，不上屏
+  const tail = all.findIndex((p) => Math.abs(p.width - FOCUS_TAIL_WIDTH) < 0.01);
+  const pages = tail < 0 ? all : all.slice(0, tail);
   const total = pagesOf(master).length;
   const s0 = Math.max(0, Math.min(start, total));
   const bc = Math.max(0, Math.min(baseCount, total - s0));

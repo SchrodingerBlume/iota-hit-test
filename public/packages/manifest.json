@@ -1,22 +1,22 @@
 {
   "iotaHit": "0.1.0",
-  "iotaHitCommit": "c82d816-dirty",
+  "iotaHitCommit": "69dcfa8-dirty",
   "packages": [
     {
       "namespace": "local",
       "name": "iota-hit",
       "version": "0.1.0",
       "file": "local-iota-hit-0.1.0.tar.gz",
-      "size": 698515,
-      "sha": "ab9b2606fe29"
+      "size": 698617,
+      "sha": "0fe98496d2fc"
     },
     {
       "namespace": "local",
       "name": "omni-gb7714",
       "version": "0.1.0",
       "file": "local-omni-gb7714-0.1.0.tar.gz",
-      "size": 301490,
-      "sha": "7c784f2bfb18"
+      "size": 301684,
+      "sha": "364b770a600b"
     },
     {
       "namespace": "preview",

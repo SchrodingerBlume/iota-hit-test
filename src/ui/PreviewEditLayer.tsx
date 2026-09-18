@@ -10,6 +10,7 @@ import type { Editor } from '@tiptap/core';
 import { NodeSelection, Selection, TextSelection } from '@tiptap/pm/state';
 import { useCompileState } from '../compiler/client';
 import { useStore, type RichKey, type Section } from '../model/store';
+import { focusInfo } from '../compiler/renderer';
 import { getEditor, onRegistryChange, whenEditorReady } from '../editor/registry';
 import { docVersion, mappingSince, toNewPos, toOldPos } from '../editor/versions';
 import { useOpenRequest } from '../editor/openRequest';
@@ -102,7 +103,9 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     const svg = doc.querySelector<SVGSVGElement>('svg.typst-doc');
     if (!svg) return;
     const vb = svg.viewBox.baseVal;
-    const scale = (svg.clientWidth || parseFloat(svg.getAttribute('width') ?? '0')) / (vb.width || 1);
+    // clientWidth 是整数：几十页往下累积就差出一行，要小数宽；捏合进行中舞台是 transform 缩放的，除回去
+    const gesture = parseFloat(doc.dataset.scale ?? '1') || 1;
+    const scale = (svg.getBoundingClientRect().width / gesture || parseFloat(svg.getAttribute('width') ?? '0')) / (vb.width || 1);
     const out: PageGeom[] = [];
     // 用版面坐标换算到覆盖层坐标。getScreenCTM 会把手势缩放再算一遍，导致缩放时光标漂移。
     svg.querySelectorAll<SVGGElement>(':scope > g.typst-page').forEach((g, i) => {
@@ -112,8 +115,27 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
       const y = parseFloat(g.getAttribute('data-layout-y') ?? '0');
       out[i] = { left: (x - vb.x) * scale, top: (y - vb.y) * scale, scale, w, h };
     });
+    // 只编一章嵌进来的页数与它顶掉的母本页数不等时，字形表（按上次整编的页码）与展示层的页序错开一截
+    const f = doc.querySelector<HTMLElement>(':scope > .preview-doc');
+    setFocusMap(f ? focusInfo(f) : null);
     setGeom(out);
   }, [docRef]);
+  const [focusMap, setFocusMap] = useState<{ start: number; baseCount: number; count: number } | null>(null);
+  /** 字形表的页码 → 展示层的页序；那一章里多出来 / 少掉的页没有对应，-1 */
+  const toDisplay = (p: number): number => {
+    const f = focusMap;
+    if (!f) return p;
+    if (p < f.start) return p;
+    if (p < f.start + f.baseCount) return p - f.start < f.count ? p : -1;
+    return p + f.count - f.baseCount;
+  };
+  const toGlyphPage = (d: number): number => {
+    const f = focusMap;
+    if (!f) return d;
+    if (d < f.start) return d;
+    if (d < f.start + f.count) return Math.min(d, f.start + f.baseCount - 1);
+    return d - (f.count - f.baseCount);
+  };
   useLayoutEffect(() => { measure(); }, [measure, renderTick]);
   useEffect(() => {
     const doc = docRef.current;
@@ -125,7 +147,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
 
   // ── 选区 → 画光标与高亮 ─────────────────────────────────────
   const sel = editor && activeKey ? editor.state.selection : null;
-  const pageTo = (p: number, x: number, y: number) => { const g = geom[p]; return g ? { left: g.left + x * g.scale, top: g.top + y * g.scale, scale: g.scale } : null; };
+  const pageTo = (p: number, x: number, y: number) => { const g = geom[toDisplay(p)]; return g ? { left: g.left + x * g.scale, top: g.top + y * g.scale, scale: g.scale } : null; };
   const stale = index.version !== docVersion();
   const oldPos = (pos: number, assoc: -1 | 1) => (activeKey ? (stale ? toOldPos(activeKey, index.version, pos, assoc) : pos) : null);
   const caret = useMemo((): CaretRect | null => {
@@ -198,11 +220,14 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   // 那一下不跟，等点击把选区放好再说
   const lastCaretKey = useRef('');
   const skipFollow = useRef(false);
+  /** 点击落定前（等编辑器挂上、选区还是旧的）画出的光标不算数，别拿它盖掉点击处的 prefer */
+  const clickPending = useRef(false);
   useEffect(() => {
     if (!caret) return;
     const k = `${caret.page}:${caret.x.toFixed(1)}:${caret.y.toFixed(1)}`;
     if (k === lastCaretKey.current) return;
     lastCaretKey.current = k;
+    if (clickPending.current) return;
     prefer.current = { page: caret.page, y: caret.y };
     if (skipFollow.current) { skipFollow.current = false; return; }
     const sc = scrollRef.current;
@@ -260,7 +285,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     for (let i = 0; i < geom.length; i++) {
       const g = geom[i];
       if (!g) continue;
-      if (ly >= g.top - 6 && ly <= g.top + g.h * g.scale + 6) return { page: i, x: (lx - g.left) / g.scale, y: (ly - g.top) / g.scale };
+      if (ly >= g.top - 6 && ly <= g.top + g.h * g.scale + 6) return { page: toGlyphPage(i), x: (lx - g.left) / g.scale, y: (ly - g.top) / g.scale };
     }
     return null;
   };
@@ -319,6 +344,10 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   };
 
   const onPointerDown = async (e: React.PointerEvent<HTMLDivElement>) => {
+    clickPending.current = true;
+    try { await pointerDown(e); } finally { requestAnimationFrame(() => { clickPending.current = false; }); }
+  };
+  const pointerDown = async (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     const hit = hitAt(e.clientX, e.clientY);
     if (!hit) return;

@@ -366,7 +366,7 @@ SWITCHES.push({
   ],
   group: t("排版引擎"),
   applies: (s) => (s.linebreaker === 'auto' ? 'msword' : s.linebreaker) === 'msword',
-  resolve: () => ({ value: '15', reason: t("拿到的论文原稿都是 2013+ 的 docx（行末贴版心）") }),
+  resolve: () => ({ value: '11', reason: t("学校范例是 Word 2003 的 .doc") }),
 });
 
 export function resolveSwitch<V>(def: SwitchDef<any>, s: Settings): { effective: V; auto: Resolved<V>; isAuto: boolean } {

@@ -24,7 +24,7 @@ function run(label, src, { remapBib = false, newWorld = true } = {}) {
   const t0 = performance.now();
   compiler.addSource('/main.typ', src);
   if (remapBib) compiler.mapShadow('/refs.bib', new Uint8Array(fs.readFileSync(path.join(dir, 'refs.bib'))));
-  if (newWorld) { try { world?.free(); } catch {} world = raw.snapshot(undefined, '/main.typ', [['preview', '1']]); }
+  if (newWorld) { try { world?.free(); } catch {} world = raw.snapshot(undefined, '/main.typ', [['preview', '1'], ...Object.entries(process.env.INPUTS ? JSON.parse(process.env.INPUTS) : {})]); }
   if (!incr) incr = raw.create_incr_server();
   const res = world.incr_compile(incr, 3);
   const ms = Math.round(performance.now() - t0);

@@ -59,7 +59,7 @@ const msword = (s: Settings) => (s.linebreaker === 'auto' ? 'msword' : s.linebre
 /** 断行引擎的字典：预览里由 worker 用 --input linebreaks=… 告诉模板，模板自己按各部件的网格发 set par(linebreaks:)、不再发模拟网格的 tracking */
 export function linebreaksInput(s: Settings): string | null {
   if (!msword(s)) return null;
-  const compat = s.wordCompat === 'auto' ? 15 : Number(s.wordCompat);
+  const compat = s.wordCompat === 'auto' ? 11 : Number(s.wordCompat);
   // 紧缩与右缩进照中文 Word 的默认
   return JSON.stringify({ mode: 'msword', compat, kern: true, 'adjust-right-indent': true });
 }
@@ -385,6 +385,8 @@ function bodyByChapters(doc: ThesisDoc, s: Settings, ser: (r: { from: number; to
   if (!ranges.length || (!Object.keys(chapters).length && !Object.keys(styles).length)) return ser({ from: 0, to: (doc.body.content ?? []).length });
   return ranges.map((r, k) => chapterWrap(chapters[String(k + 1)], styles[String(k + 1)], ser(r))).join('\n\n');
 }
+/** 只编一章时尾巴（文献表）那几页的纸宽，渲染端靠它认出来 */
+export const FOCUS_TAIL_WIDTH = 500;
 export function chapterWrap(d: LayoutDict | undefined, st: LayoutDict | undefined, body: string): string {
   if (st && Object.keys(st).length) body = `#show: new-styles.with(${typstDict(st)})\n${body}\n#show: restore-styles`;
   return d && Object.keys(d).length ? `#show: new-layout.with(${typstDict(d)})\n${body}\n#show: restore-layout` : body;
@@ -426,7 +428,8 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   const cited = collectCiteKeys(chapterDoc as any);
   const refs = generateBibtex((doc.references ?? []).filter((e) => cited.has(e.key.trim())));
   // 旁文件也另起名字（worker 给只编一章的文件加 focus- 前缀）
-  if (refs.trim()) { files['refs.bib'] = refs; parts.push('#bibliography(read("focus-refs.bib"), full: true)'); }
+  // 条目表得在（引文要能解析），但那几页不是这一章的：纸张改成一个认得出的宽度，渲染端按宽度剔掉
+  if (refs.trim()) { files['refs.bib'] = refs; parts.push(`#set page(width: ${FOCUS_TAIL_WIDTH}pt)\n#bibliography(read("focus-refs.bib"), full: true)`); }
   const { text: main, segments } = stripMarks(parts.join('\n\n') + '\n');
   return { main, files, images: [...collectImages(chapterDoc as any)], segments };
 }
