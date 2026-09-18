@@ -73,6 +73,8 @@ export interface CompileInput {
   glyphs?: boolean;
   /** 只编当前一章：id 是章的标识，start / baseCount 是它在整编预览里占的页 */
   focus?: { id: string; start: number; baseCount: number };
+  /** sys.inputs：断行引擎（linebreaks=…） */
+  inputs?: Record<string, string>;
   main: string;
   files: Record<string, string>;
   images: { name: string; data: ArrayBuffer }[];

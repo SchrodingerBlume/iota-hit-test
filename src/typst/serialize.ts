@@ -54,38 +54,18 @@ function tri(v: 'auto' | boolean | string): string {
   return JSON.stringify(v);
 }
 
-/** 字符网格：预览里模板自己的字距网格关掉（引擎来排）；导出时用户改过的折成模板的 char-pitch */
+/** 预览用 Word 式断行（本站 fork 的 par(linebreaks: (mode: "msword"))）；导出的 .typ 不带 */
 const msword = (s: Settings) => (s.linebreaker === 'auto' ? 'msword' : s.linebreaker) === 'msword';
-/** 预览引擎独有（Typst fork 的 par(linebreaks: "msword")），不进导出的 .typ。
- *  网格按部件动态取：模板公开的 current-layout() / layout-of(part) 给出这一层折好的版面，
- *  读出字距增量 tracking（= 跨度 − 字号，Word 的 charSpace/4096），把模板自己发的 text(tracking:) 清零，
- *  交给引擎的 char-excess（各字号自己折成「字号 + 增量」；fork e5701f4 前叫 char-pitch: 1em + tr，那会按段落字号解析，
- *  五号字的格错成 12.45）。这段规则在 iota-hit 与每个部件的 show 之后各发一次 */
-function mswordRule(s: Settings, page?: string): string {
-  if (!msword(s)) return '';
+/** 断行引擎的字典：预览里由 worker 用 --input linebreaks=… 告诉模板，模板自己按各部件的网格发 set par(linebreaks:)、不再发模拟网格的 tracking */
+export function linebreaksInput(s: Settings): string | null {
+  if (!msword(s)) return null;
+  const compat = s.wordCompat === 'auto' ? 11 : Number(s.wordCompat);
   // 紧缩与右缩进照中文 Word 的默认
-  const compat = s.wordCompat === 'auto' ? '11' : s.wordCompat;
-  // 网格从模板公开的口子读：layout-of(部件) 是成果页 / 声明页这类自带一格网格的页，current-layout() 是当前生效的那一层
-  const l = page ? `layout-of(${JSON.stringify(page)})` : 'current-layout()';
-  return `#show: it => context {
-  let tr = ${l}.docgrid.tracking
-  set text(tracking: 0pt)
-  set par(linebreaks: (mode: "msword", compat: ${compat}, char-excess: tr, kern: true, adjust-right-indent: true))
-  it
-}`;
+  return JSON.stringify({ mode: 'msword', compat, kern: true, 'adjust-right-indent': true });
 }
-/** 表单页（封面 / 内封）暂用 Typst 原版断行：fork 的 msword 模式量不准 text(spacing:) 撑开的空格串（报告封面的填空线），
- *  字距按模板本段的网格补回来。fork 修好后可去掉 */
-function stockRule(s: Settings): string {
-  if (!msword(s)) return '';
-  return `#show: it => context {
-  set text(tracking: current-layout().docgrid.tracking)
-  set par(linebreaks: "optimized")
-  it
-}`;
-}
-function mswordPrelude(s: Settings): string {
-  return msword(s) ? mswordRule(s) : `#set par(linebreaks: ${JSON.stringify(s.linebreaker)})`;
+/** 预览里选了 Typst 原版的两种断行：写死在源码里（引擎是 fork 也认） */
+function stockPrelude(s: Settings): string {
+  return msword(s) ? '' : `#set par(linebreaks: ${JSON.stringify(s.linebreaker)})`;
 }
 
 /** 工程 JSON 里的版面字典 → Typst 字典原文：字符串照 Typst 原话（长度、zihao.xxx、"…" 带引号的才是字符串） */
@@ -306,7 +286,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n// LaTeX 公式走 mitex 转成 Typst（包已随站内打包）\n#import "@preview/mitex:0.2.7": mitex, mi`);
   if (preview) parts.push(PREVIEW_PRELUDE);
   parts.push(`#show: iota-hit.with(\n  ${[...settingsArgs(s), ...infoArgs(doc.info, s)].join(',\n  ')},\n)`);
-  if (preview) parts.push(mswordPrelude(s));
+  if (preview && stockPrelude(s)) parts.push(stockPrelude(s));
   // 西文断字：模板在 show 规则里 set text(hyphenate: false)，之后再 set 一句就压回来（模板自己这么说明的）
   if (s.hyphenate === true) parts.push('// 西文断字：模板默认关，这里打开\n#set text(hyphenate: true)');
   else if (s.hyphenate === false) parts.push('#set text(hyphenate: false)');
@@ -317,12 +297,12 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   const withArgs = (fn: string, ...xs: string[]) => { const a = xs.filter(Boolean); return a.length ? `#show: ${fn}.with(${a.join(', ')})` : `#show: ${fn}`; };
   const pageLayout = (k: string) => layoutArg(s.layout?.pages?.[k]);
   parts.push(withArgs('frontmatter', or('frontmatter'), layoutArg(s.layout?.frontmatter)));
-  if (preview && msword(s)) parts.push(mswordRule(s));
   const coverArgs = s.titleEnXiaoer !== 'auto' ? `title-en-xiaoer: ${tri(s.titleEnXiaoer)}` : '';
   const covers = (['cover', 'titlepage'] as const).filter((k) => resolvePage(doc, k).value);
-  if (covers.length && preview && msword(s)) parts.push(stockRule(s));
-  for (const k of covers) parts.push(`#${k}(${[coverArgs, pageLayout(k)].filter(Boolean).join(', ')})`);
-  if (covers.length && preview && msword(s)) parts.push(mswordRule(s));
+  // 封面 / 内封暂用 Typst 原版断行（fork 的 msword 模式量不准 text(spacing:) 撑开的填空线，报告封面的填空线参差顶出页边；
+  // 已报 fork，见 ~/Desktop/msword-report C）：页级 layout: (linebreaks: none)，模板在那一页退回自己的模拟
+  const coverLayout = (k: string) => layoutArg(preview && msword(s) ? { ...(s.layout?.pages?.[k] ?? {}), linebreaks: 'none' } : s.layout?.pages?.[k]);
+  for (const k of covers) parts.push(`#${k}(${[coverArgs, coverLayout(k)].filter(Boolean).join(', ')})`);
 
   const rich = (key: RichKey, opts: { headings: boolean; headingBase?: number }) => serializeDoc(doc[key], { ...opts, knownLabels, preview, map: { key, posOf: indexPositions(doc[key] as any) } });
   const abstractZh = rich('abstractZh', { headings: false });
@@ -347,7 +327,6 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
 
   // ── 主体 ──
   parts.push(withArgs('mainmatter', or('mainmatter'), layoutArg(s.layout?.mainmatter)));
-  if (preview && msword(s)) parts.push(mswordRule(s));
   const body = bodyByChapters(doc, s, preview, (r) => serializeDoc({ type: 'doc', content: (doc.body.content ?? []).slice(r.from, r.to) } as any, { headings: true, headingBase: 1, knownLabels, preview, map: { key: 'body', posOf: indexPositions(doc.body as any) } }));
   parts.push(body || '= 绪论');
 
@@ -370,19 +349,15 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   const ach = generateBibtex(doc.achievementEntries ?? []);
   if (resolvePage(doc, 'achievements').value && ach.trim()) {
     files['achievements.bib'] = ach;
-    if (preview && msword(s)) parts.push(mswordRule(s, 'achievements'));
     parts.push(`#achievements(${orLead('achievements')}${pageLayout('achievements') ? `${pageLayout('achievements')}, ` : ''}read("achievements.bib"))`);
-    if (preview && msword(s)) parts.push(mswordRule(s));
-  }
+    }
 
   const def = defense(doc, knownLabels, or('defense'));
   if (def) parts.push(def);
 
   if (resolvePage(doc, 'declarations').value) {
-    if (preview && msword(s)) parts.push(mswordRule(s, s.degreeLevel === 'bachelor' ? 'declarations' : 'declarations-graduate'));
     parts.push(`#declarations(${[or('declarations'), pageLayout('declarations')].filter(Boolean).join(', ')})`);
-    if (preview && msword(s)) parts.push(mswordRule(s));
-  }
+    }
   if (resolvePage(doc, 'index').value) parts.push(`#index(${[or('index'), pageLayout('index')].filter(Boolean).join(', ')})`);
 
   const ack = rich('acknowledgement', { headings: false });
@@ -420,7 +395,7 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n#import "@preview/mitex:0.2.7": mitex, mi`);
   parts.push(PREVIEW_PRELUDE);
   parts.push(`#show: iota-hit.with(\n  ${[...settingsArgs(s), ...infoArgs(doc.info, s)].join(',\n  ')},\n)`);
-  parts.push(mswordPrelude(s));
+  if (stockPrelude(s)) parts.push(stockPrelude(s));
   if (s.hyphenate === true) parts.push('#set text(hyphenate: true)');
   else if (s.hyphenate === false) parts.push('#set text(hyphenate: false)');
   const or = (k: OpenrightKey): string => { const v = doc.openright?.[k]; return v === true || v === false ? `openright: ${v}` : ''; };
@@ -429,7 +404,6 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   if (abbrs.length) parts.push(`#list-of-abbreviations(${abbrDictOf(abbrs)}, form: none, shown: true)`);
   const mm = [or('mainmatter'), layoutArg(s.layout?.mainmatter)].filter(Boolean);
   parts.push(mm.length ? `#show: mainmatter.with(${mm.join(', ')})` : '#show: mainmatter');
-  if (msword(s)) parts.push(mswordRule(s));
   // 章号从上一章数起；首页页码钉在上次整编的位置
   parts.push(`#counter(heading).update(${Math.max(0, focus.chapter - 1)})${focus.page && focus.page > 1 ? `\n#counter(page).update(${focus.page})` : ''}`);
   const body = chapterWrap(s.layout?.chapters?.[String(focus.chapter)], s, true, serializeDoc(chapterDoc as any, { headings: true, headingBase: 1, knownLabels, refText, preview: true, map: { key: 'body', posOf: indexPositions(doc.body as any) } }));

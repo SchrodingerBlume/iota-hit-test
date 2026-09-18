@@ -85,7 +85,9 @@ async function main() {
   compiler.addSource('/main.typ', src);
 
   const t1 = Date.now();
-  const res = await compiler.compile({ mainFilePath: '/main.typ', format: 1 /* CompileFormatEnum.pdf */, diagnostics: 'unix' });
+  // INPUTS='{"linebreaks":"msword"}'：给 sys.inputs（预览那份 main.typ 要 preview=1 与断行引擎）
+  const inputs = process.env.INPUTS ? JSON.parse(process.env.INPUTS) : {};
+  const res = await compiler.compile({ mainFilePath: '/main.typ', format: 1 /* CompileFormatEnum.pdf */, diagnostics: 'unix', inputs });
   console.log(`编译 ${Date.now() - t1} ms`);
   if (res.diagnostics?.length) for (const d of res.diagnostics) console.log(d);
   if (res.result) {

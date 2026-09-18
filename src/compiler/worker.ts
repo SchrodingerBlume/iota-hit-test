@@ -234,7 +234,7 @@ async function compile(msg: Extract<ToWorker, { type: 'compile' }>) {
     const raw = (compiler as any).compiler;
     try { world?.free(); } catch { /* 已经释放过 */ }
     // sys.inputs.preview：main.typ 里预览专用的东西（空行上的隐形 ¶）只在这儿生效，PDF 不带
-    world = raw.snapshot(undefined, mainPath, [['preview', '1']]);
+    world = raw.snapshot(undefined, mainPath, [['preview', '1'], ...Object.entries(msg.inputs ?? {})]);
     let res: any;
     let diagnostics: Diagnostic[];
     let fresh: boolean;

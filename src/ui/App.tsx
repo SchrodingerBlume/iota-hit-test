@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore, type Section } from '../model/store';
 import type { ThesisDoc } from '../model/types';
 import { startCompiler, requestCompile, resetForProject, exportPdf, useCompileState } from '../compiler/client';
-import { serializeProject } from '../typst/serialize';
+import { serializeProject, linebreaksInput } from '../typst/serialize';
 import { chapterAt, chapterPages } from '../compiler/focus';
 import { getEditor } from '../editor/registry';
 import { BlockMenu } from '../editor/BlockMenu';
@@ -132,6 +132,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
         focus: focus ? { id: focus.id, start: focus.start, baseCount: focus.baseCount } : undefined,
         main: project.main,
         files: project.files,
+        inputs: linebreaksInput(doc.settings) ? { linebreaks: linebreaksInput(doc.settings)! } : {},
         images,
         removeImages,
         segments: project.segments,

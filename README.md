@@ -131,9 +131,11 @@ npm run test:compile # 不开浏览器，在 Node 里用同一颗 wasm 编一份
 
 预览用的编译器 wasm 是 Typst 0.15.1 加上本机 fork `typst-with-msword-linebreaks` 的 `#set par(linebreaks: "msword")`：
 按 Word 2003 兼容模式的规则断行、排字符网格、压缩标点、标点悬挂（兼容模式、紧缩、右缩进按学校范例与中文 Word 的默认写死，不给用户改）。
-设置里只有「断行引擎」（Word 式 / Typst 最优 / Typst 贪心）与「Word 兼容模式」两项，只进预览的 main.typ；**导出的 .typ 不带这些**，原版 Typst 照编。预览里网格按部件动态取：模板把版面记在 state `iota-hit-layout`
-里（封面、声明、正文各不同），预览在 `#show: iota-hit` 与每个部件的 show 之后各发一条 `show: it => context { … }`，读出该部件的
-字距增量 tracking（Word 的 charSpace/4096），把模板自己发的 `text(tracking:)` 清零，换成引擎的 `char-excess: tracking`（各字号自己折成「字号 + 增量」）。
+设置里只有「断行引擎」（Word 式 / Typst 最优 / Typst 贪心）与「Word 兼容模式」两项，只进预览；**导出的 .typ 不带这些**，原版 Typst 照编。
+引擎是环境，不是文档参数：预览编译时 worker 用 `sys.inputs` 传 `linebreaks=<JSON>`（`{"mode":"msword","compat":15,"kern":true,"adjust-right-indent":true}`），
+模板读到它就不再发模拟网格用的 `text(tracking:)` 与西文补偿那几条规则，改在每次换版面（文档级、各段、带自己网格的成果页 / 声明页）
+处自己发 `set par(linebreaks: (mode: "msword", char-excess: 网格增量, …))`——各部件用的就是模板算的那份网格，站内不再注入任何规则。
+封面、内封两页预览里写 `layout: (linebreaks: none)` 退回原版断行（fork 还量不准 `text(spacing:)` 撑开的填空线）。
 
 构建：typst.ts 钉的 typst 带它自己的 `content_hint` 改动，与 fork 在 `line.rs` / `linebreak.rs` 有冲突，所以
 `scripts/wasm-patch/typst-msword.patch` 是 fork 合并到 typst.ts 那份 typst 之上的结果（首行记着 fork 的提交号）；
