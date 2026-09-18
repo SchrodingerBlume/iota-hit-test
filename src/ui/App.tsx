@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore, type Section } from '../model/store';
 import type { ThesisDoc } from '../model/types';
-import { startCompiler, requestCompile, resetForProject, exportPdf, useCompileState } from '../compiler/client';
-import { serializeProject, linebreaksInput } from '../typst/serialize';
+import { startCompiler, requestCompile, requestPara, resetForProject, exportPdf, useCompileState } from '../compiler/client';
+import { serializeProject, serializePara, paraEligible, linebreaksInput } from '../typst/serialize';
 import { chapterAt, chapterPages } from '../compiler/focus';
-import { getEditor } from '../editor/registry';
+import { getEditor, onRegistryChange } from '../editor/registry';
 import { BlockMenu } from '../editor/BlockMenu';
 import { CommentsPane } from './CommentsPane';
 import { Logo } from './Logo';
@@ -68,6 +68,38 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
   const lastFocusId = useRef('');
   const [fullTick, setFullTick] = useState(0);
   const lastFull = useRef(0);
+  const paraTimer = useRef(0);
+  /** 段级即时回显最近一次发出的时刻 + 一小段：这期间章级编译等停手再来 */
+  const paraActiveUntil = useRef(0);
+  const docRef = useRef(doc);
+  docRef.current = doc;
+  // 打字即时回显：直接听正文编辑器的事务（工程 JSON 要停 100 ms 才回灌），光标所在是纯文字段就先只编这一段（85 ms）
+  useEffect(() => {
+    if (!loaded) return;
+    let ed = getEditor('body');
+    const onTr = ({ transaction }: { transaction: { docChanged: boolean } }) => {
+      if (!transaction.docChanged) return;
+      const e = getEditor('body');
+      const cs = useCompileState.getState();
+      if (!e || e.isDestroyed || cs.status !== 'ready' || cs.pageCount < FOCUS_PAGES || !cs.artifact) return;
+      const $from = e.state.selection.$from;
+      if ($from.depth < 1) return;
+      const node = $from.node(1).toJSON();
+      if (!paraEligible(node)) return;
+      const idx = $from.index(0), from = $from.before(1), to = $from.after(1), version = docVersion();
+      paraActiveUntil.current = performance.now() + 600;
+      window.clearTimeout(paraTimer.current);
+      paraTimer.current = window.setTimeout(() => {
+        const d = docRef.current;
+        const p = serializePara(d, idx, { node, pos: from });
+        requestPara({ main: p.main, segments: p.segments, version, key: 'body', from, to, inputs: linebreaksInput(d.settings) ? { linebreaks: linebreaksInput(d.settings)! } : {} });
+      }, 30);
+    };
+    const attach = () => { ed?.off('transaction', onTr); ed = getEditor('body'); ed?.on('transaction', onTr); };
+    attach();
+    const off = onRegistryChange(attach);
+    return () => { off(); ed?.off('transaction', onTr); window.clearTimeout(paraTimer.current); };
+  }, [loaded]);
   useEffect(() => () => window.clearTimeout(fullTimer.current), []);
   useEffect(() => {
     if (!loaded || status !== 'ready' || composing) return;
@@ -91,6 +123,8 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
         focus = { id: `${doc.id}:body:${k}:${cs.focusGen}`, chapter: k, start, baseCount: Math.max(0, next - start), page: start - cp.pages[0] + 1 };
       }
     }
+    // 打字即时回显在跑（见下面那个 effect）：章级编译推后到停手 400 ms
+    const para = focus && performance.now() < paraActiveUntil.current;
     if (focus) {
       // 停手一会儿再整编（校准页码、目录、跨章引用）
       window.clearTimeout(fullTimer.current);
@@ -139,7 +173,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
         version: docVersion(),
       });
     // 防抖按上一次编译的耗时来：编译在 worker 里，主线程不等它，排队的只留最新一份，所以不必等用户停手太久
-    }, force ? 0 : focus ? 150 : Math.min(600, Math.max(180, (useCompileState.getState().lastMs ?? 0) * 0.3)));
+    }, force ? 0 : para ? 400 : focus ? 150 : Math.min(600, Math.max(180, (useCompileState.getState().lastMs ?? 0) * 0.3)));
     return () => { cancelled = true; window.clearTimeout(t); };
   }, [doc, loaded, status, fontsVersion, refresh, restoring, previewFocused, composing, fullTick]);
   return sent;

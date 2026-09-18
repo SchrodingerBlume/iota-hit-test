@@ -10,13 +10,13 @@ import type { Editor } from '@tiptap/core';
 import { NodeSelection, Selection, TextSelection } from '@tiptap/pm/state';
 import { useCompileState } from '../compiler/client';
 import { useStore, type RichKey, type Section } from '../model/store';
-import { focusInfo } from '../compiler/renderer';
+import { focusInfo, renderSnippetSvg } from '../compiler/renderer';
 import { getEditor, onRegistryChange, whenEditorReady } from '../editor/registry';
 import { docVersion, mappingBetween, mappingSince, toNewPos, toOldPos } from '../editor/versions';
 import { useOpenRequest } from '../editor/openRequest';
 import { useBlockMenu } from '../editor/BlockMenu';
 import { useComments } from '../editor/comments';
-import { buildIndex, mergeIndex, caretRect, hitPos, hitTest, lineStep, selectionRects, paragraphMarks, EMPTY_INDEX, type CaretRect, type Glyph, type Hit, type Line } from './previewEdit';
+import { buildIndex, mergeIndex, patchIndex, linesOfRange, caretRect, hitPos, hitTest, lineStep, selectionRects, paragraphMarks, EMPTY_INDEX, type CaretRect, type Glyph, type Hit, type Line } from './previewEdit';
 import { t as tx } from '../i18n';
 import { useInputState } from '../editor/inputState';
 
@@ -64,7 +64,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   const [focusMap, setFocusMap] = useState<{ start: number; baseCount: number; count: number } | null>(null);
   // 那一章有自己的字形表时并成一份，页码就是展示层的页序；没有时（字形表还没回来）按嵌入位置换算页序
   const merged = !!focusIndex && !!focusMap && focusIndex.version >= fullIndex.version;
-  const index = useMemo(() => {
+  const baseIndex = useMemo(() => {
     if (!merged) return fullIndex;
     const maps = new Map<string, ReturnType<typeof mappingBetween>>();
     const mapPos = (key: string, pos: number, assoc: -1 | 1) => {
@@ -74,6 +74,31 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     };
     return mergeIndex(fullIndex, focusIndex!, focusMap!.start, focusMap!.baseCount, focusMap!.count, mapPos);
   }, [merged, fullIndex, focusIndex, focusMap]);
+  // 打字即时回显：只编了这一段的字形表盖进索引，位置对到这一段原来的首行
+  const para = useCompileState((s) => s.para);
+  const paraIndex = useMemo(() => (para ? buildIndex(para.glyphs, para.segments, para.version) : null), [para]);
+  const paraPatch = useMemo(() => {
+    if (!para || !paraIndex || paraIndex.version < baseIndex.version || !paraIndex.count) return null;
+    const m = mappingBetween(para.key as RichKey, baseIndex.version, para.version);
+    if (!m) return null;
+    const old = linesOfRange(baseIndex, para.key, para.from, para.to, (pos, assoc) => m.map(pos, assoc));
+    if (!old.length) return null;
+    const first = old[0];
+    const onPage = old.filter((l) => l.page === first.page);
+    const fresh = (paraIndex.pages[0] ?? []).slice().sort((a, b) => a.y - b.y);
+    if (!fresh.length) return null;
+    const dy = first.y - fresh[0].y;
+    const x0 = Math.min(...onPage.map((l) => l.glyphs[0].x)), x1 = Math.max(...onPage.map((l) => { const g = l.glyphs[l.glyphs.length - 1]; return g.x + g.w; }));
+    const y0 = first.y, y1 = Math.max(...onPage.map((l) => l.y + l.h));
+    const maps = new Map<string, ReturnType<typeof mappingBetween>>();
+    const mapPos = (key: string, pos: number, assoc: -1 | 1) => {
+      let mm = maps.get(key);
+      if (mm === undefined) { mm = mappingBetween(key as RichKey, baseIndex.version, para.version); maps.set(key, mm); }
+      return mm ? mm.map(pos, assoc) : null;
+    };
+    return { page: first.page, dy, cover: { x0, x1, y0, y1 }, index: patchIndex(baseIndex, paraIndex, para.key, para.from, para.to, first.page, dy, mapPos) };
+  }, [para, paraIndex, baseIndex]);
+  const index = paraPatch ? paraPatch.index : baseIndex;
   const marksOn = usePreviewMarks((s) => s.on);
   const mkP = usePreviewMarks((s) => s.paragraph), mkS = usePreviewMarks((s) => s.space), mkG = usePreviewMarks((s) => s.gutter);
   const marks = useMemo(() => (marksOn ? paragraphMarks(index, segments, { paragraph: mkP, space: mkS, gutter: mkG }) : []), [marksOn, index, segments, mkP, mkS, mkG]);
@@ -145,6 +170,38 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     if (p < f.start + f.baseCount) return p - f.start < f.count ? p : -1;
     return p + f.count - f.baseCount;
   };
+  // 打字即时回显的画面：这一段单独排出来的 SVG 贴到它原来的位置上，原来的行用纸色盖住；整编 / 只编一章追上来就撤
+  useEffect(() => {
+    const view = docRef.current?.querySelector<SVGSVGElement>(':scope > .preview-doc > svg.typst-doc');
+    view?.querySelectorAll(':scope .para-live').forEach((e) => e.remove());
+    if (!para || !paraPatch || !view) return;
+    let alive = true;
+    const NS = 'http://www.w3.org/2000/svg';
+    renderSnippetSvg(para.artifact).then((svgStr) => {
+      if (!alive) return;
+      const src = new DOMParser().parseFromString(svgStr, 'image/svg+xml').documentElement;
+      const pageG = view.querySelectorAll<SVGGElement>(':scope > g.typst-page')[toDisplay(paraPatch.page)];
+      const srcPage = src.querySelector('g.typst-page');
+      if (!pageG || !srcPage) return;
+      let defs = view.querySelector(':scope > defs');
+      if (!defs) { defs = document.createElementNS(NS, 'defs'); view.prepend(defs); }
+      for (const d of src.querySelectorAll('defs > *')) { const id = d.getAttribute('id'); if (id && !document.getElementById(id)) defs.appendChild(document.importNode(d, true)); }
+      const g = document.createElementNS(NS, 'g');
+      g.setAttribute('class', 'para-live');
+      const cover = document.createElementNS(NS, 'rect');
+      const { x0, x1, y0, y1 } = paraPatch.cover;
+      cover.setAttribute('x', String(x0 - 2)); cover.setAttribute('y', String(y0 - 1)); cover.setAttribute('width', String(x1 - x0 + 4)); cover.setAttribute('height', String(y1 - y0 + 2));
+      cover.setAttribute('fill', 'var(--paper)');
+      g.appendChild(cover);
+      const inner = document.createElementNS(NS, 'g');
+      inner.setAttribute('transform', `translate(0, ${paraPatch.dy})`);
+      for (const c of srcPage.children) inner.appendChild(document.importNode(c, true));
+      g.appendChild(inner);
+      pageG.appendChild(g);
+    }).catch(() => { /* 片段画不出来就不画 */ });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [para, paraPatch, renderTick]);
   // 开发时给 Playwright 探针看的
 
   const toGlyphPage = (d: number): number => {

@@ -40,6 +40,8 @@ export interface CompileState {
   focusMapVersion: number;
   /** 预览区重挂后旧的一章产物接不上差分：加一代，让下一次只编一章从头来 */
   focusGen: number;
+  /** 只编一段（打字即时回显）：产物、字形表、这一段在编辑器里的区间（按 version）；整编或只编一章追上来就清 */
+  para: { artifact: Uint8Array; glyphs: Float64Array; segments: Segment[]; version: number; key: string; from: number; to: number; ms: number } | null;
 }
 
 export const useCompileState = create<CompileState>(() => ({
@@ -69,7 +71,25 @@ export const useCompileState = create<CompileState>(() => ({
   focusSegments: [],
   focusMapVersion: -1,
   focusGen: 0,
+  para: null,
 }));
+
+export interface ParaInput { main: string; inputs?: Record<string, string>; segments: Segment[]; version: number; key: string; from: number; to: number }
+let paraInFlight: { id: number; input: ParaInput } | null = null;
+let paraPending: ParaInput | null = null;
+/** 只编一段：不排在整编的队里，永远只留最新的一份等着 */
+export function requestPara(input: ParaInput) {
+  paraPending = input;
+  flushPara();
+}
+function flushPara() {
+  if (!worker || paraInFlight || !paraPending || useCompileState.getState().status !== 'ready') return;
+  const input = paraPending;
+  paraPending = null;
+  paraInFlight = { id: nextId++, input };
+  send({ type: 'para', id: paraInFlight.id, main: input.main, inputs: input.inputs });
+}
+export function cancelPara() { paraPending = null; }
 
 export interface CompileInput {
   /** 哪个工程的：换了工程之后路上才回来的结果按它丢掉 */
@@ -102,8 +122,9 @@ export function resetForProject(docId: string) {
   useCompileState.setState({
     artifact: null, artifactFresh: false, glyphs: null, segments: [], mapVersion: -1,
     diagnostics: [], diagMain: '', diagSegments: [], lastMs: null, renderMs: null, pageCount: 0,
-    focusArtifact: null, focusFresh: false, focusAt: null, focusGlyphs: null, focusSegments: [], focusMapVersion: -1,
+    focusArtifact: null, focusFresh: false, focusAt: null, focusGlyphs: null, focusSegments: [], focusMapVersion: -1, para: null,
   });
+  paraPending = null;
 }
 let inFlight: number | null = null;
 let inFlightInput: CompileInput | null = null;
@@ -168,8 +189,21 @@ export function startCompiler() {
               ? { focusGlyphs: new Float64Array(m.glyphs), focusSegments: input?.segments ?? [], focusMapVersion: input?.version ?? -1 }
               : { glyphs: new Float64Array(m.glyphs), segments: input?.segments ?? [], mapVersion: input?.version ?? -1 })
             : {}),
+          ...(m.glyphs && s.para && (input?.version ?? -1) >= s.para.version ? { para: null } : {}),
         });
         flush();
+        break;
+      }
+      case 'para-done': {
+        if (paraInFlight?.id !== m.id) break;
+        const input = paraInFlight.input;
+        paraInFlight = null;
+        // 整编 / 只编一章已经追过这一版就不用了
+        const s = useCompileState.getState();
+        if (m.artifact && m.glyphs && input.version >= Math.max(s.mapVersion, s.focusMapVersion)) {
+          useCompileState.setState({ para: { artifact: new Uint8Array(m.artifact), glyphs: new Float64Array(m.glyphs), segments: input.segments, version: input.version, key: input.key, from: input.from, to: input.to, ms: m.ms } });
+        }
+        flushPara();
         break;
       }
       case 'pdf': {

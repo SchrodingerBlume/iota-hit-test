@@ -68,7 +68,7 @@ export function nodeSize(n: PMNode): number {
 }
 
 /** 每个节点在文档里的位置（文本：第一个字；其余：节点前） */
-export function indexPositions(doc: PMNode): WeakMap<PMNode, number> {
+export function indexPositions(doc: PMNode, start = 0): WeakMap<PMNode, number> {
   const posOf = new WeakMap<PMNode, number>();
   const walk = (n: PMNode, contentStart: number) => {
     let p = contentStart;
@@ -78,7 +78,7 @@ export function indexPositions(doc: PMNode): WeakMap<PMNode, number> {
       p += nodeSize(c);
     }
   };
-  walk(doc, 0);
+  walk(doc, start);
   return posOf;
 }
 

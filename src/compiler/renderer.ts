@@ -89,6 +89,7 @@ export async function renderArtifact(artifact: Uint8Array, container: HTMLElemen
   master.classList.remove('typst-doc');
   master.style.display = 'none';
   const pages = session.retrievePagesInfo() as PageInfo[];
+  stampSizes(master, pages);
   syncView(container, master);
   layoutPages(container, pages, perRow);
   hooks.after?.(container, pages);
@@ -129,6 +130,11 @@ function syncView(container: HTMLElement, master: SVGSVGElement) {
   rebuild(container, view, pagesOf(master).map((_, i): Src => ({ kind: 'm', i })));
 }
 
+/** 纸张的精确尺寸记在页组上（typst.ts 自带的 data-page-* 是取过整的；只编一章那条路排版面时没有 pages 表，靠这个才与整编对齐） */
+function stampSizes(svg: SVGSVGElement, pages: PageInfo[]) {
+  pagesOf(svg).forEach((g, i) => { const p = pages[i]; if (p) { g.setAttribute('data-page-width', String(p.width)); g.setAttribute('data-page-height', String(p.height)); } });
+}
+
 /** 按来源列表重排展示层：能留的克隆留下（同一来源、tid 没变），其余换成空壳或新克隆 */
 function rebuild(container: HTMLElement, view: SVGSVGElement, srcs: Src[]) {
   const cur = pagesOf(view);
@@ -142,7 +148,7 @@ function rebuild(container: HTMLElement, view: SVGSVGElement, srcs: Src[]) {
     const old = keep.get(key);
     keep.delete(key);
     let g: SVGGElement;
-    if (old && old.getAttribute('data-shown') === '1' && old.getAttribute('data-src-tid') === m.getAttribute('data-tid')) g = old;
+    if (old && old.getAttribute('data-shown') === '1' && old.getAttribute('data-src-tid') === m.getAttribute('data-tid')) { g = old; for (const a of COPY_ATTRS) { const v = m.getAttribute(a); if (v != null && g.getAttribute(a) !== v) g.setAttribute(a, v); } }
     else if (old && old.getAttribute('data-shown') === '1') { g = clone(m, src); g.setAttribute('transform', old.getAttribute('transform') ?? ''); }
     else if (old) { g = old; for (const a of COPY_ATTRS) { const v = m.getAttribute(a); if (v == null) g.removeAttribute(a); else if (g.getAttribute(a) !== v) g.setAttribute(a, v); } }
     else g = shell(m, src);
@@ -235,6 +241,7 @@ export async function renderFocus(artifact: Uint8Array, container: HTMLElement, 
   fm.classList.remove('typst-doc');
   fm.style.display = 'none';
   const all = focusSession!.retrievePagesInfo() as PageInfo[];
+  stampSizes(fm, all);
   // 尾巴上的文献表那几页纸宽是 FOCUS_TAIL_WIDTH：不是这一章的，不上屏
   const tail = all.findIndex((p) => Math.abs(p.width - FOCUS_TAIL_WIDTH) < 0.01);
   const pages = tail < 0 ? all : all.slice(0, tail);

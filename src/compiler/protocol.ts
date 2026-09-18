@@ -18,6 +18,8 @@ export type ToWorker =
   /** focus：只编当前一章的那份文档，值是章的标识（换章就换一套增量状态） */
   /** inputs：给 sys.inputs 的（断行引擎 linebreaks=…）；preview=1 worker 自己加 */
   | { type: 'compile'; id: number; force?: boolean; glyphs?: boolean; focus?: string; inputs?: Record<string, string>; main: string; files: Record<string, string>; images: { name: string; data: ArrayBuffer }[]; removeImages: string[] }
+  /** 只编一段（打字时的即时回显）：自己的增量服务，永远要字形表 */
+  | { type: 'para'; id: number; inputs?: Record<string, string>; main: string }
   /** main：正式排版用的 main.typ（不带预览记号），与预览编的那份不同 */
   | { type: 'pdf'; id: number; main: string }
   /** 编一个 Typst 数学片段，给编辑器里的公式预览用 */
@@ -34,6 +36,7 @@ export type FromWorker =
   /** glyphs：字形表，每 GLYPH_STRIDE 个数一个字形——page, x, y, w, h, 源码起, 源码止（main.typ 的 UTF-16 下标）, kind, 首个码点, 占几个字 */
   /** artifact 是与上一版的差（增量）；fresh = 增量服务刚建，这一份是完整的，渲染器要 reset */
   | { type: 'compiled'; id: number; artifact: ArrayBuffer | null; fresh: boolean; diagnostics: Diagnostic[]; ms: number; glyphs: ArrayBuffer | null }
+  | { type: 'para-done'; id: number; artifact: ArrayBuffer | null; ms: number; glyphs: ArrayBuffer | null; error?: string }
   | { type: 'pdf'; id: number; pdf: ArrayBuffer | null; diagnostics: Diagnostic[] }
   | { type: 'fontsSet'; id: number; families: string[]; error?: string }
   | { type: 'snippet'; id: number; artifact: ArrayBuffer | null; error?: string };

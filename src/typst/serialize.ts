@@ -2,7 +2,7 @@
 // 结构照 iota-hit/template/example.typ：前置 → 主体 → 附录 → 后置。
 import type { ThesisDoc, Settings, Info, StyleEntry, OpenrightKey, LayoutDict } from '../model/types';
 import { INFO_FIELDS } from '../model/info';
-import { serializeDoc, escapeText, collectImages, collectRefTargets, collectCiteKeys, indexPositions } from './pmToTypst';
+import { serializeDoc, escapeText, collectImages, collectRefTargets, collectCiteKeys, indexPositions, type PMNode } from './pmToTypst';
 import { computeNumbering } from './numbering';
 import type { RichDoc } from '../model/types';
 import { generateBibtex } from '../bib/bibtex';
@@ -270,6 +270,36 @@ const PREVIEW_PRELUDE = `// 站内预览用：空回车段上各放一个隐形�
 
 /** 只编正文的一章（长文档打字时用）：chapter 是一级标题的序号（1 起），page 是这一章首页在上次整编里的页码（正文计数） */
 export interface Focus { chapter: number; page?: number }
+
+const PARA_MARKS = new Set(['bold', 'italic', 'underline', 'strike', 'subscript', 'superscript']);
+/** 打字即时回显只认纯文字段：正文里的普通段落，里面只有文字与字符级格式（引用、脚注、公式、缩略语都不行——编号在片段里取不到） */
+export function paraEligible(node: PMNode | undefined | null): boolean {
+  if (!node || node.type !== 'paragraph') return false;
+  return (node.content ?? []).every((c) => c.type === 'text' && (c.marks ?? []).every((m) => PARA_MARKS.has(m.type)));
+}
+
+/** 只编正文里的一段：模板前言 + 这一章的版面改写 + 这一段，纸就是模板的纸，段从版心顶上排起。
+ *  live 给的是编辑器里此刻的那一段（工程 JSON 要停 100 ms 才回灌，等不起）与它在文档里的位置 */
+export function serializePara(doc: ThesisDoc, index: number, live?: { node: PMNode; pos: number }): Project {
+  const s = doc.settings;
+  const parts: string[] = [];
+  const nodes = doc.body.content ?? [];
+  const chapter = chapterRanges(doc.body).findIndex((r) => index >= r.from && index < r.to) + 1;
+  parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *`);
+  parts.push(PREVIEW_PRELUDE);
+  parts.push(`#show: iota-hit.with(\n  ${[...settingsArgs(s), ...infoArgs(doc.info, s)].join(',\n  ')},\n)`);
+  if (stockPrelude(s)) parts.push(stockPrelude(s));
+  if (s.hyphenate === true) parts.push('#set text(hyphenate: true)');
+  else if (s.hyphenate === false) parts.push('#set text(hyphenate: false)');
+  const mm = [layoutArg(s.layout?.mainmatter)].filter(Boolean);
+  parts.push(mm.length ? `#show: mainmatter.with(${mm.join(', ')})` : '#show: mainmatter');
+  const one: RichDoc = { type: 'doc', content: [live ? live.node as any : nodes[index]] };
+  const posOf = live ? indexPositions(one as any, live.pos) : indexPositions(doc.body as any);
+  parts.push(chapterWrap(chapter ? s.layout?.chapters?.[String(chapter)] : undefined, chapter ? s.localStyles?.chapters?.[String(chapter)] : undefined,
+    serializeDoc(one as any, { headings: false, headingBase: 1, knownLabels: new Set(), refText: new Map(), preview: true, map: { key: 'body', posOf } })));
+  const { text: main, segments } = stripMarks(parts.join('\n\n') + '\n');
+  return { main, files: {}, images: [], segments };
+}
 
 /** 正文按一级标题切成章：每章的节点下标区间 [from, to) */
 export function chapterRanges(body: RichDoc): { from: number; to: number }[] {

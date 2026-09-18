@@ -162,6 +162,35 @@ export function mergeIndex(full: GlyphIndex, focus: GlyphIndex, start: number, b
   return assemble(glyphs, focus.version);
 }
 
+/** 一段的字形表（打字即时回显）盖进索引：原来那一段的字形去掉，新的按 dy 挪到它原来的位置；其余位置换算到新版本 */
+export function patchIndex(base: GlyphIndex, para: GlyphIndex, key: string, from: number, to: number, page: number, dy: number, mapPos: (key: string, pos: number, assoc: -1 | 1) => number | null): GlyphIndex {
+  const glyphs: Glyph[] = [];
+  for (const lines of base.pages) if (lines) for (const l of lines) for (const g of l.glyphs) {
+    if (g.kind === 'text' || g.kind === 'node') {
+      const f = mapPos(g.key, g.from, 1), t = mapPos(g.key, g.to, -1);
+      if (f === null || t === null) continue;
+      if (g.key === key && f >= from && Math.max(f, t) <= to) continue;
+      glyphs.push({ ...g, from: f, to: Math.max(f, t) });
+    } else glyphs.push(g);
+  }
+  for (const lines of para.pages) if (lines) for (const l of lines) for (const g of l.glyphs) glyphs.push({ ...g, page, y: g.y + dy });
+  return assemble(glyphs, para.version);
+}
+
+/** 索引里 key 这份富文本 [from, to] 区间（按 version）内的字形所在的行，按页与纵坐标排好 */
+export function linesOfRange(index: GlyphIndex, key: string, from: number, to: number, mapPos: (pos: number, assoc: -1 | 1) => number | null): Line[] {
+  const arr = index.byKey.get(key) ?? [];
+  const seen = new Set<Line>();
+  for (const g of arr) {
+    if (g.kind !== 'text') continue;
+    const f = mapPos(g.from, 1), t = mapPos(g.to, -1);
+    if (f === null || t === null || f < from || Math.max(f, t) > to) continue;
+    const l = index.lineOf.get(g);
+    if (l) seen.add(l);
+  }
+  return [...seen].sort((a, b) => a.page - b.page || a.y - b.y);
+}
+
 function assemble(glyphs: Glyph[], version: number): GlyphIndex {
   // 行：同页、基线相近的归一行
   glyphs.sort((a, b) => a.page - b.page || (a.y + a.h) - (b.y + b.h) || a.x - b.x);

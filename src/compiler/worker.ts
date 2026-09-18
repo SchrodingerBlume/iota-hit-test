@@ -288,6 +288,27 @@ async function pdf(msg: Extract<ToWorker, { type: 'pdf' }>) {
 }
 
 /** 公式预览：把一段 Typst 数学编成一页刚好包住它的小文档，主线程再画成 SVG */
+/** 只编一段：一张纸上就这一段，85 ms 一遍；与整编 / 只编一章各占各的文件与增量服务 */
+async function para(msg: Extract<ToWorker, { type: 'para' }>) {
+  if (!compiler) return;
+  const t0 = performance.now();
+  compiler.addSource('/para.typ', msg.main);
+  const raw = (compiler as any).compiler;
+  try {
+    try { world?.free?.(); } catch { /* */ }
+    world = raw.snapshot(undefined, '/para.typ', [['preview', '1'], ...Object.entries(msg.inputs ?? {})]);
+    // 整份向量产物（不是差分）：渲染端拿它单独画成一小张 SVG 贴上去
+    const res: any = world.get_artifact(0, 3);
+    const diagnostics = normalizeDiagnostics(res?.diagnostics);
+    const errors = diagnostics.filter((d) => d.severity === 'error');
+    const artifact = res?.result && !errors.length ? new Uint8Array(res.result as Uint8Array).buffer : null;
+    const glyphs = artifact ? glyphMap(msg.main) : null;
+    post({ type: 'para-done', id: msg.id, artifact, ms: Math.round(performance.now() - t0), glyphs, error: errors[0]?.message }, [artifact, glyphs].filter((x): x is ArrayBuffer => !!x));
+  } catch (e) {
+    post({ type: 'para-done', id: msg.id, artifact: null, ms: Math.round(performance.now() - t0), glyphs: null, error: String((e as Error)?.message ?? e) });
+  }
+}
+
 async function snippet(msg: Extract<ToWorker, { type: 'snippet' }>) {
   if (!compiler) return;
   const body = msg.display ? `$ ${msg.src} $` : `$${msg.src}$`;
@@ -345,6 +366,7 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       case 'pdf': await pdf(msg); break;
       case 'setFonts': await setFonts(msg); break;
       case 'snippet': await snippet(msg); break;
+      case 'para': await para(msg); break;
     }
   };
   run().catch((e) => post({ type: 'fatal', message: String((e as Error)?.stack ?? e) }));
