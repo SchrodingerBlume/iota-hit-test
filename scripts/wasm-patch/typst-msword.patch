@@ -1,4 +1,4 @@
-# typst-with-msword-linebreaks 0b4985788f7af14130a0af56615cc521d1cd6a01 合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1 之上（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
+# typst-with-msword-linebreaks e5701f4a91a1c29ca23f6e951b43b91247d2ee6c 合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1 之上（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
 diff --git a/crates/typst-layout/src/inline/line.rs b/crates/typst-layout/src/inline/line.rs
 index 3d7f3a28c..e25d98f05 100644
 --- a/crates/typst-layout/src/inline/line.rs
@@ -160,10 +160,10 @@ index 259be8101..50f73975d 100644
          cjk_latin_spacing: shared.get(TextElem::cjk_latin_spacing).is_auto(),
 diff --git a/crates/typst-layout/src/inline/msword.rs b/crates/typst-layout/src/inline/msword.rs
 new file mode 100644
-index 000000000..68ed58c05
+index 000000000..43744c640
 --- /dev/null
 +++ b/crates/typst-layout/src/inline/msword.rs
-@@ -0,0 +1,2122 @@
+@@ -0,0 +1,2153 @@
 +// 本文件基于 Typst（typst/typst）与 typst-with-msword-linebreaks 修改（iota4web 合并到 Myriad-Dreamin/typst 之上，见 scripts/wasm-patch/typst-msword.patch）
 +//! Line breaking that emulates Microsoft Word.
 +//!
@@ -477,12 +477,13 @@ index 000000000..68ed58c05
 +
 +    let base = p.config.font_size;
 +    let excess = config
-+        .char_pitch
-+        .map(|pitch| pitch.at(base) - base)
++        .char_excess
++        .map(|excess| excess.at(base))
++        .or_else(|| config.char_pitch.map(|pitch| pitch.at(base) - base))
 +        .unwrap_or(Abs::zero());
 +    let params = Params {
 +        compat: config.compat,
-+        grid: config.char_pitch.is_some(),
++        grid: config.char_pitch.is_some() || config.char_excess.is_some(),
 +        excess,
 +        cell: base + excess,
 +        adjust_right_indent: config.adjust_right_indent,
@@ -552,8 +553,7 @@ index 000000000..68ed58c05
 +        }
 +    }
 +
-+    let decided =
-+        decide(&toks, &params, width, &breaks, &emergency, &mandatory, p.text.len());
++    let decided = decide(&toks, &params, width, &breaks, &emergency, &mandatory, p.text);
 +
 +    let mut lines = Vec::with_capacity(decided.len());
 +    let mut start = 0;
@@ -626,9 +626,17 @@ index 000000000..68ed58c05
 +            breaks.push(i);
 +        }
 +        // An ASCII quote breaks from a CJK character on either side
-+        // (`英文"ab"时`), which UAX #14 glues.
-+        if (matches!(c, '"' | '\'') && before.is_some_and(is_wide))
-+            || (matches!(before, Some('"' | '\'')) && is_wide(c))
++        // (`英文"ab"时`), which UAX #14 glues; the 2003 layout also breaks
++        // between an operator and a CJK character (`龙+|云`), Word 2013+
++        // keeps `Fe2+具` together as UAX #14 does.
++        const QUOTES: &[char] = &['"', '\''];
++        const OPERATORS: &[char] =
++            &['+', '=', '<', '>', '~', '&', '*', '@', '#', '^', '|'];
++        let mark = |c: char| {
++            QUOTES.contains(&c) || (params.compat != 15 && OPERATORS.contains(&c))
++        };
++        if (mark(c) && before.is_some_and(is_wide))
++            || (before.is_some_and(mark) && is_wide(c))
 +        {
 +            breaks.push(i);
 +        }
@@ -656,11 +664,13 @@ index 000000000..68ed58c05
 +            return false;
 +        }
 +        // A connector symbol (dash, ellipsis, `‖`) stays with Latin text
-+        // before it.
++        // before it in Word 2013+; the 2003 layout breaks before an East
++        // Asian dash instead (`优化[73|–75]` in a thesis) and not after it.
 +        if let Some(a) = after
 +            && CONNECTORS.contains(&a)
 +            && is_symbol(offset)
 +            && latin_alnum(before)
++            && params.compat == 15
 +        {
 +            return false;
 +        }
@@ -696,7 +706,7 @@ index 000000000..68ed58c05
 +            || (before == Some('.') && after.is_some_and(|c| c.is_ascii_alphanumeric()));
 +        // ...a dash drawn by the Latin font (a run without the eastAsia
 +        // hint); an East Asian dash follows the connector rule above.
-+        let dash_digit = (matches!(before, Some(b @ ('—' | '–')) if !is_symbol(offset - b.len_utf8()))
++        let dash_digit = (matches!(before, Some(b @ ('—' | '–')) if params.compat != 15 || !is_symbol(offset - b.len_utf8()))
 +            && after.is_some_and(|c| c.is_ascii_digit()))
 +            || (matches!(after, Some('—' | '–'))
 +                && !is_symbol(offset)
@@ -1177,8 +1187,9 @@ index 000000000..68ed58c05
 +    breaks: &[usize],
 +    emergency: &[usize],
 +    mandatory: &[usize],
-+    text_len: usize,
++    text: &str,
 +) -> Vec<Decided> {
++    let text_len = text.len();
 +    let n = toks.len();
 +    let p = params.cell;
 +    let compat = params.compat;
@@ -1507,8 +1518,25 @@ index 000000000..68ed58c05
 +            // mode) the cap is a spacing more: `ECs` after two or three
 +            // commas 13.3, `pdN` 13.8, `SVM` 13.8; with it off (`lb5-11`)
 +            // half the unit exactly.
-+            let cap = u / 2.0
-+                + if gaps > 0 && params.adjust_right_indent { auto } else { Abs::zero() };
++            // With adjustRightInd on (`sweep-*-c11b`, a thesis in 2003
++            // mode) the cap is a spacing more: `ECs` after two or three
++            // commas 13.3, `pdN` 13.8, `SVM` 13.8; with it off (`lb5-11`)
++            // half the unit exactly. A two-glyph unit gets only half a
++            // point over half its width (`ab` 6.5, `12` 6.6 in the
++            // `sweep-*-c11m` matrix), a `>` (which may not start a line)
++            // two half cells like a hanging closer.
++            let extra = if !params.adjust_right_indent || gaps == 0 {
++                Abs::zero()
++            } else if toks[core].glyph_count == 2 && m == core {
++                Abs::pt(0.5)
++            } else {
++                auto
++            };
++            let cap = if m == core && toks[core].glyph_count == 1 && toks[core].c == '>' {
++                half * 2.0
++            } else {
++                u / 2.0 + extra
++            };
 +            (half * k as f64 + auto / 2.0 * gaps as f64).min(cap)
 +        } else if k == 0 {
 +            // Without spots the automatic CJK-Latin spacings still shrink
@@ -1752,10 +1780,13 @@ index 000000000..68ed58c05
 +            loop {
 +                let before = m;
 +                // A symbol closer that may legally start a line (`°` after
-+                // a narrow no-break space) is a unit of its own.
++                // a narrow no-break space) is a unit of its own in Word
++                // 2013+ (`（>700\u{202F}|°C）`, never hung), while the 2003
++                // layout hangs it with the run before it (`达到800\u{202F}°`).
 +                while m + 1 < n
 +                    && toks[m + 1].kind == Kind::Close
-+                    && !(toks[m + 1].symbol
++                    && !(compat == 15
++                        && toks[m + 1].symbol
 +                        && breaks.binary_search(&toks[m + 1].range.start).is_ok())
 +                {
 +                    m += 1;
@@ -2315,7 +2346,7 @@ index 36e66987b..0ccf884f3 100644
  }
  
 diff --git a/crates/typst-library/src/model/par.rs b/crates/typst-library/src/model/par.rs
-index 77ec28c79..0f6f0bc4b 100644
+index 77ec28c79..45678de2f 100644
 --- a/crates/typst-library/src/model/par.rs
 +++ b/crates/typst-library/src/model/par.rs
 @@ -5,8 +5,8 @@ use crate::diag::{HintedStrResult, SourceResult, StrResult, bail};
@@ -2329,7 +2360,7 @@ index 77ec28c79..0f6f0bc4b 100644
  };
  use crate::introspection::{Count, CounterUpdate, Locatable, Tagged, Unqueriable};
  use crate::layout::{Abs, Em, HAlignment, Length, OuterHAlignment, Ratio, Rel};
-@@ -358,6 +358,45 @@ pub struct ParElem {
+@@ -358,6 +358,50 @@ pub struct ParElem {
      /// breaks for ragged paragraphs may also be worthwhile to improve the
      /// appearance of the text.
      ///
@@ -2350,7 +2381,12 @@ index 77ec28c79..0f6f0bc4b 100644
 +    ///   and later, the default). This is the `compatibilityMode` value in
 +    ///   a `.docx` file's `settings.xml`.
 +    /// - `char-pitch`: The character pitch of the document grid as a
-+    ///   length, or `{auto}` (the default) for no character grid.
++    ///   length, or `{auto}` (the default) for no character grid. The pitch
++    ///   is resolved at the paragraph's font size, so for a document whose
++    ///   paragraphs differ in size prefer `char-excess`.
++    /// - `char-excess`: The document grid's excess over the font size
++    ///   (Word's `charSpace` in points: pitch minus the default font size),
++    ///   the same for text of every size. An alternative to `char-pitch`.
 +    /// - `adjust-right-indent`: Word's "automatically adjust right indent
 +    ///   when document grid is defined" paragraph property (`{true}` by
 +    ///   default; only matters for modes 11, 12 and 14 with a grid).
@@ -2375,7 +2411,7 @@ index 77ec28c79..0f6f0bc4b 100644
      /// ```example
      /// #set page(width: 207pt)
      /// #set par(linebreaks: "simple")
-@@ -623,7 +662,7 @@ impl Limit for Rel<Length> {
+@@ -623,7 +667,7 @@ impl Limit for Rel<Length> {
  }
  
  /// How to determine line breaks in a paragraph.
@@ -2384,7 +2420,7 @@ index 77ec28c79..0f6f0bc4b 100644
  pub enum Linebreaks {
      /// Determine the line breaks in a simple first-fit style.
      Simple,
-@@ -632,6 +671,175 @@ pub enum Linebreaks {
+@@ -632,6 +676,195 @@ pub enum Linebreaks {
      /// Typst will try to produce more evenly filled lines of text by
      /// considering the whole paragraph when calculating line breaks.
      Optimized,
@@ -2454,6 +2490,12 @@ index 77ec28c79..0f6f0bc4b 100644
 +        if let Some(pitch) = take::<Smart<Length>>(&mut dict, "char-pitch")? {
 +            config.char_pitch = pitch.custom();
 +        }
++        if let Some(excess) = take::<Smart<Length>>(&mut dict, "char-excess")? {
++            if config.char_pitch.is_some() && excess.is_custom() {
++                return Err("char-pitch and char-excess are mutually exclusive".into());
++            }
++            config.char_excess = excess.custom();
++        }
 +        if let Some(adjust) = take::<bool>(&mut dict, "adjust-right-indent")? {
 +            config.adjust_right_indent = adjust;
 +        }
@@ -2467,6 +2509,7 @@ index 77ec28c79..0f6f0bc4b 100644
 +            "mode",
 +            "compat",
 +            "char-pitch",
++            "char-excess",
 +            "adjust-right-indent",
 +            "kern",
 +            "balance-widths",
@@ -2499,6 +2542,9 @@ index 77ec28c79..0f6f0bc4b 100644
 +///   are widened by the same ratio. The pitch is resolved at the paragraph's
 +///   font size; the excess over the font size is kept constant for text of
 +///   other sizes, as Word does.
++/// - `char-excess`: The grid's excess over the font size directly (Word's
++///   `charSpace / 4096` points), which gives text of every size the right
++///   cell without a per-size pitch. Mutually exclusive with `char-pitch`.
 +/// - `adjust-right-indent`: Word's "automatically adjust right indent when
 +///   document grid is defined" paragraph property (on by default). It only
 +///   matters for compatibility modes 11, 12 and 14 with a character grid.
@@ -2517,6 +2563,8 @@ index 77ec28c79..0f6f0bc4b 100644
 +    pub compat: u8,
 +    /// The character pitch of the document grid, if any.
 +    pub char_pitch: Option<Length>,
++    /// The grid's excess over the font size, if given instead of the pitch.
++    pub char_excess: Option<Length>,
 +    /// Whether the right indent is adjusted to the grid (modes 11-14).
 +    pub adjust_right_indent: bool,
 +    /// Whether Word's font kerning is on, which halves adjacent punctuation.
@@ -2530,6 +2578,7 @@ index 77ec28c79..0f6f0bc4b 100644
 +        Self {
 +            compat: 15,
 +            char_pitch: None,
++            char_excess: None,
 +            adjust_right_indent: true,
 +            kern: true,
 +            balance_widths: true,
@@ -2546,6 +2595,13 @@ index 77ec28c79..0f6f0bc4b 100644
 +            "char-pitch".into(),
 +            match config.char_pitch {
 +                Some(pitch) => pitch.into_value(),
++                None => Value::Auto,
++            },
++        );
++        dict.insert(
++            "char-excess".into(),
++            match config.char_excess {
++                Some(excess) => excess.into_value(),
 +                None => Value::Auto,
 +            },
 +        );

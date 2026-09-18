@@ -133,7 +133,7 @@ npm run test:compile # 不开浏览器，在 Node 里用同一颗 wasm 编一份
 按 Word 2003 兼容模式的规则断行、排字符网格、压缩标点、标点悬挂（兼容模式、紧缩、右缩进按学校范例与中文 Word 的默认写死，不给用户改）。
 设置里只有「断行引擎」（Word 式 / Typst 最优 / Typst 贪心）与「Word 兼容模式」两项，只进预览的 main.typ；**导出的 .typ 不带这些**，原版 Typst 照编。预览里网格按部件动态取：模板把版面记在 state `iota-hit-layout`
 里（封面、声明、正文各不同），预览在 `#show: iota-hit` 与每个部件的 show 之后各发一条 `show: it => context { … }`，读出该部件的
-字距增量 tracking，把模板自己发的 `text(tracking:)` 清零，换成引擎的 `char-pitch: 1em + tracking`。
+字距增量 tracking（Word 的 charSpace/4096），把模板自己发的 `text(tracking:)` 清零，换成引擎的 `char-excess: tracking`（各字号自己折成「字号 + 增量」）。
 
 构建：typst.ts 钉的 typst 带它自己的 `content_hint` 改动，与 fork 在 `line.rs` / `linebreak.rs` 有冲突，所以
 `scripts/wasm-patch/typst-msword.patch` 是 fork 合并到 typst.ts 那份 typst 之上的结果（首行记着 fork 的提交号）；

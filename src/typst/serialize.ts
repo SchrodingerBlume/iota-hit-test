@@ -58,8 +58,9 @@ function tri(v: 'auto' | boolean | string): string {
 const msword = (s: Settings) => (s.linebreaker === 'auto' ? 'msword' : s.linebreaker) === 'msword';
 /** 预览引擎独有（Typst fork 的 par(linebreaks: "msword")），不进导出的 .typ。
  *  网格按部件动态取：模板公开的 current-layout() / layout-of(part) 给出这一层折好的版面，
- *  读出字距增量 tracking（= 跨度 − 字号），把模板自己发的 text(tracking:) 清零，
- *  换成引擎的 char-pitch: 1em + tracking。这段规则在 iota-hit 与每个部件的 show 之后各发一次 */
+ *  读出字距增量 tracking（= 跨度 − 字号，Word 的 charSpace/4096），把模板自己发的 text(tracking:) 清零，
+ *  交给引擎的 char-excess（各字号自己折成「字号 + 增量」；fork e5701f4 前叫 char-pitch: 1em + tr，那会按段落字号解析，
+ *  五号字的格错成 12.45）。这段规则在 iota-hit 与每个部件的 show 之后各发一次 */
 function mswordRule(s: Settings, page?: string): string {
   if (!msword(s)) return '';
   // 紧缩与右缩进照中文 Word 的默认
@@ -69,7 +70,7 @@ function mswordRule(s: Settings, page?: string): string {
   return `#show: it => context {
   let tr = ${l}.docgrid.tracking
   set text(tracking: 0pt)
-  set par(linebreaks: (mode: "msword", compat: ${compat}, char-pitch: if tr == 0pt { auto } else { 1em + tr }, kern: true, adjust-right-indent: true))
+  set par(linebreaks: (mode: "msword", compat: ${compat}, char-excess: tr, kern: true, adjust-right-indent: true))
   it
 }`;
 }
@@ -441,7 +442,7 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   return { main, files, images: [...collectImages(chapterDoc as any)], segments };
 }
 
-/** 正文按章序列化；工程 JSON 里给了某章的 char-pitch，就把那一章包起来改字距（预览是引擎的 char-pitch，导出是 text(tracking:)） */
+/** 正文按章序列化；工程 JSON 里给了某章的 char-pitch，就把那一章包起来改字距（预览是引擎的 char-excess，导出是 text(tracking:)） */
 function bodyByChapters(doc: ThesisDoc, s: Settings, preview: boolean, ser: (r: { from: number; to: number }) => string): string {
   const chapters = s.layout?.chapters ?? {};
   const ranges = chapterRanges(doc.body);
@@ -453,8 +454,9 @@ export function chapterWrap(d: LayoutDict | undefined, s: Settings, preview: boo
   if (!pitch) return body;
   const base = d && typeof d['base-size'] === 'string' ? String(d['base-size']).trim() : 'zihao.xiaosi';
   const compat = s.wordCompat === 'auto' ? '11' : s.wordCompat;
+  // 章级给的是这一章的格宽（正文字号那一格），各字号按「字号 + 增量」：增量 = 格宽 − 基准字号
   const rule = preview && msword(s)
-    ? `#set par(linebreaks: (mode: "msword", compat: ${compat}, char-pitch: ${pitch}, kern: true, adjust-right-indent: true))`
+    ? `#set par(linebreaks: (mode: "msword", compat: ${compat}, char-excess: ${pitch} - ${base}, kern: true, adjust-right-indent: true))`
     : `#set text(tracking: ${pitch} - ${base})`;
   return `#[\n${rule}\n${body}\n]`;
 }
