@@ -59,7 +59,7 @@ const msword = (s: Settings) => (s.linebreaker === 'auto' ? 'msword' : s.linebre
 /** 断行引擎的字典：预览里由 worker 用 --input linebreaks=… 告诉模板，模板自己按各部件的网格发 set par(linebreaks:)、不再发模拟网格的 tracking */
 export function linebreaksInput(s: Settings): string | null {
   if (!msword(s)) return null;
-  const compat = s.wordCompat === 'auto' ? 11 : Number(s.wordCompat);
+  const compat = s.wordCompat === 'auto' ? 15 : Number(s.wordCompat);
   // 紧缩与右缩进照中文 Word 的默认
   return JSON.stringify({ mode: 'msword', compat, kern: true, 'adjust-right-indent': true });
 }

@@ -130,7 +130,7 @@ npm run test:compile # 不开浏览器，在 Node 里用同一颗 wasm 编一份
 ## 预览引擎：Word 式断行
 
 预览用的编译器 wasm 是 Typst 0.15.1 加上本机 fork `typst-with-msword-linebreaks` 的 `#set par(linebreaks: "msword")`：
-按 Word 2003 兼容模式的规则断行、排字符网格、压缩标点、标点悬挂（兼容模式、紧缩、右缩进按学校范例与中文 Word 的默认写死，不给用户改）。
+按 Word 的规则断行、排字符网格、压缩标点、标点悬挂。兼容模式可选：auto ＝ 15（2013+，行末贴版心——拿到的论文原稿都是这一档；学校 .doc 范例是老模式，行末落在整格上、12.4543 步进短 1.8pt，Word macOS 导出的范例 PDF 实测 508.0），选 11 / 12 / 14 时行末不贴边是 Word 老模式的真实行为，不是错；紧缩、右缩进按中文 Word 的默认写死。
 设置里只有「断行引擎」（Word 式 / Typst 最优 / Typst 贪心）与「Word 兼容模式」两项，只进预览；**导出的 .typ 不带这些**，原版 Typst 照编。
 引擎是环境，不是文档参数：预览编译时 worker 用 `sys.inputs` 传 `linebreaks=<JSON>`（`{"mode":"msword","compat":15,"kern":true,"adjust-right-indent":true}`），
 模板读到它就不再发模拟网格用的 `text(tracking:)` 与西文补偿那几条规则，改在每次换版面（文档级、各段、带自己网格的成果页 / 声明页）

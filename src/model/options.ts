@@ -346,7 +346,7 @@ export const SWITCHES: SwitchDef<any>[] = [
 SWITCHES.push({
   key: 'linebreaker',
   label: t("断行引擎"),
-  hint: t("预览用哪套规则断行：Word 式（本站 fork 引擎，按 Word 2003 的规则排字符网格、压标点、悬挂标点，网格跟模板各部件走）或 Typst 原版的两种（optimized 整段最优、simple 逐行贪心）。只影响预览，导出的 .typ 不带"),
+  hint: t("预览用哪套规则断行：Word 式（本站 fork 引擎，按 Word 的规则排字符网格、压标点、悬挂标点，网格跟模板各部件走）或 Typst 原版的两种（optimized 整段最优、simple 逐行贪心）。只影响预览，导出的 .typ 不带"),
   choices: [
     { value: 'msword', label: t("Word 式") },
     { value: 'optimized', label: t("Typst 最优") },
@@ -357,7 +357,7 @@ SWITCHES.push({
 }, {
   key: 'wordCompat',
   label: t("Word 兼容模式"),
-  hint: t("Word 式断行按哪一版 Word 的规则排。学校发的 .doc 模板用新版 Word 另存后是 2003 那一档"),
+  hint: t("Word 式断行按哪一版 Word 的规则排。2013+ 行末贴版心；2003～2010 行末落在整格上，会比版心短一点。学校的 .doc 模板不转换直接另存，仍是老模式那一档"),
   choices: [
     { value: '11', label: t("2003") },
     { value: '12', label: t("2007") },
@@ -366,7 +366,7 @@ SWITCHES.push({
   ],
   group: t("排版引擎"),
   applies: (s) => (s.linebreaker === 'auto' ? 'msword' : s.linebreaker) === 'msword',
-  resolve: () => ({ value: '11', reason: t("学校范例是 Word 2003 的 .doc") }),
+  resolve: () => ({ value: '15', reason: t("拿到的论文原稿都是 2013+ 的 docx（行末贴版心）") }),
 });
 
 export function resolveSwitch<V>(def: SwitchDef<any>, s: Settings): { effective: V; auto: Resolved<V>; isAuto: boolean } {
