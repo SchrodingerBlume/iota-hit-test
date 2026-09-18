@@ -338,7 +338,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
             <div className="rb-scroll-shell">
               {scrollEdges.left && <button type="button" className="rb-scroll-arrow is-left" aria-label={tx("向左滚动功能区")} onClick={() => scrollerRef.current?.scrollBy({ left: -320, behavior: 'smooth' })}><ChevronLeft20Regular /></button>}
               <div ref={scrollerRef} className="rb-scroller" onWheel={(event) => { const el = scrollerRef.current; if (!el || el.scrollWidth <= el.clientWidth || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return; event.preventDefault(); el.scrollLeft += event.deltaY; }}>
-                <div className="rb-body">
+                <div className="rb-body" key={tab}>
           {tab === 'home' && (
             <>
               <Group label={tx("剪贴板")}>

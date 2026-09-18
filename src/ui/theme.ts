@@ -22,9 +22,18 @@ export function currentTheme(pref: ThemePref = themePref()): Theme {
   return pref === 'system' ? systemTheme() : pref;
 }
 
+let animTimer = 0;
 export function applyTheme(t: Theme) {
-  document.documentElement.setAttribute('data-theme', t);
-  document.documentElement.style.colorScheme = t;
+  const root = document.documentElement;
+  const prev = root.getAttribute('data-theme');
+  root.setAttribute('data-theme', t);
+  root.style.colorScheme = t;
+  // 换主题时各面板的底色、字色渐变过去（预览的 SVG 除外，几万个字形不值得）
+  if (prev && prev !== t) {
+    root.classList.add('theme-anim');
+    clearTimeout(animTimer);
+    animTimer = window.setTimeout(() => root.classList.remove('theme-anim'), 400);
+  }
 }
 
 export function useTheme(): [Theme, ThemePref, (p: ThemePref) => void] {

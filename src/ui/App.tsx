@@ -316,7 +316,7 @@ export function App() {
           </span>
         ); const trailing = (
           <span className="rb-trailing">
-            {view === 'editor' && <span className="status"><i className={`dot ${dot}`} />{statusText}</span>}
+            {view === 'editor' && <span className="status"><i className={`dot ${dot}`} /><span key={statusText} className="status-text">{statusText}</span></span>}
 
             <Menu positioning="below-end" checkedValues={{ theme: [themePref] }} onCheckedValueChange={(_, d) => setThemePref((d.checkedItems[0] ?? 'system') as ThemePref)}>
               <MenuTrigger disableButtonEnhancement>
@@ -348,7 +348,8 @@ export function App() {
         {view === 'projects' ? <ProjectsView /> : (<>
         <div className={`main mode-${mode} ${navOpen ? '' : 'nav-closed'} ${compact ? 'is-compact' : ''} ${stacked ? 'is-stacked' : ''}`} ref={mainRef} style={{ gridTemplateColumns: gridColumns, gridTemplateRows: gridRows }}>
           {compact && navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} />}
-          <nav className={`nav ${compact ? 'is-overlay' : ''}`} hidden={!navOpen} onClick={(e) => { if (compact && (e.target as HTMLElement).closest('button:not(.outline-item)')) setNavOpen(false); }}>
+          <nav className={`nav ${compact ? 'is-overlay' : ''}`} hidden={compact && !navOpen} inert={!navOpen} onClick={(e) => { if (compact && (e.target as HTMLElement).closest('button:not(.outline-item)')) setNavOpen(false); }}>
+            <div className="nav-inner">
             <button type="button" className="nav-collapse" title={tx("收起左侧导航")} aria-label={tx("收起左侧导航")} onClick={() => setNavOpen(false)}><ChevronLeft20Regular /></button>
             {[tx("设置"), tx("前置"), tx("主体"), tx("后置")].map((g) => (
               <div key={g}>
@@ -362,12 +363,13 @@ export function App() {
                   return (
                     <div key={n.key} className="nav-with-outline">
                       <div className="nav-row">{btn}<button type="button" className={`outline-fold ${folded ? 'is-folded' : ''}`} title={folded ? tx("展开大纲") : tx("收起大纲")} onClick={() => useOutline.getState().toggle(n.key)}>{folded ? '▸' : '▾'}</button></div>
-                      {!folded && <OutlinePane richKey={n.key as 'body' | 'appendix'} onJump={() => { if (section !== n.key) setSection(n.key); if (mode === 'preview') setMode('split'); }} />}
+                      <div className={`outline-wrap ${folded ? 'is-folded' : ''}`} inert={folded}><div className="outline-wrap-inner"><OutlinePane richKey={n.key as 'body' | 'appendix'} onJump={() => { if (section !== n.key) setSection(n.key); if (mode === 'preview') setMode('split'); }} /></div></div>
                     </div>
                   );
                 })}
               </div>
             ))}
+            </div>
           </nav>
           {!navOpen && !compact && <button type="button" className="nav-reopen" title={tx("展开左侧导航")} aria-label={tx("展开左侧导航")} onClick={() => setNavOpen(true)}><ChevronRight20Regular /></button>}
           <section className={`work ${commentsOpen ? 'has-comments' : ''}`} hidden={mode === 'preview'}>

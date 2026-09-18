@@ -43,7 +43,7 @@ export function useLayoutPrefs() {
         el.style.gridTemplateColumns = 'minmax(0, 1fr)';
         el.style.gridTemplateRows = `minmax(0, ${nextRatio}fr) ${SPLIT_W}px minmax(0, ${1 - nextRatio}fr)`;
       } else {
-        const nav = prefs.navOpen && !compact ? `${NAV_W}px ` : '';
+        const nav = compact ? '' : `${prefs.navOpen ? NAV_W : 0}px `;
         el.style.gridTemplateColumns = `${nav}minmax(${compact ? 0 : 360}px, ${nextRatio}fr) ${SPLIT_W}px minmax(${compact ? 0 : 320}px, ${1 - nextRatio}fr)`;
       }
     };
@@ -64,8 +64,8 @@ export function useLayoutPrefs() {
     window.addEventListener('pointercancel', up);
   }, [prefs.navOpen, prefs.ratio, compact, stacked]);
 
-  // 左栏收起时它是 display:none，网格里没有这个孩子，列表里也不能给它留位
-  const nav = prefs.navOpen && !compact ? `${NAV_W}px ` : '';
+  // 宽屏上左栏收起是列宽归零（列还在，收放才能有过渡）；窄屏它是盖在上面的抽屉，不占列
+  const nav = compact ? '' : `${prefs.navOpen ? NAV_W : 0}px `;
   const gridColumns = stacked
     ? 'minmax(0, 1fr)'
     : prefs.mode === 'split'
