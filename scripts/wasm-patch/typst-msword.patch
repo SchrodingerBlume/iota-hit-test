@@ -1,4 +1,39 @@
-# typst-with-msword-linebreaks aa999bec3e3ae921e42f69ba31633812e7a05131 合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1 之上（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
+# typst-with-msword-linebreaks b74a09f6d 的 msword 提交 + typst 上游 #792 两个提交（485841043 拆 Space 语法种类、701f12ed5 中日文旁的换行空格丢掉）cherry-pick 到 aa999bec3（typst 0.15.1 基线）之上，再合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1（fork 主线已并入 typst main，typst.ts 0.8.1 的导出 / world 层编不过 main 的 Format API，站内先走这条 0.15.1 线）
+diff --git a/crates/typst-eval/src/markup.rs b/crates/typst-eval/src/markup.rs
+index 6e79da8d2..e5a5abdd3 100644
+--- a/crates/typst-eval/src/markup.rs
++++ b/crates/typst-eval/src/markup.rs
+@@ -98,7 +98,11 @@ impl Eval for ast::Space<'_> {
+     type Output = Content;
+ 
+     fn eval(self, _: &mut Vm) -> SourceResult<Self::Output> {
+-        Ok(SpaceElem::shared().clone())
++        if self.had_newline() {
++            Ok(SpaceElem::shared_with_newline().clone())
++        } else {
++            Ok(SpaceElem::shared().clone())
++        }
+     }
+ }
+ 
+diff --git a/crates/typst-ide/src/docs.rs b/crates/typst-ide/src/docs.rs
+index 5e82127c1..b2dc22fe1 100644
+--- a/crates/typst-ide/src/docs.rs
++++ b/crates/typst-ide/src/docs.rs
+@@ -76,7 +76,12 @@ impl Docs {
+                 lines.push(text.strip_prefix('/').unwrap_or(text));
+             } else if let Some(comment) = prev.get().cast::<ast::BlockComment>() {
+                 lines.push(comment.text());
+-            } else if !matches!(prev.kind(), SyntaxKind::Space | SyntaxKind::Hash) {
++            } else if !matches!(
++                prev.kind(),
++                SyntaxKind::SpaceNoNewline
++                    | SyntaxKind::SpaceWithNewline
++                    | SyntaxKind::Hash
++            ) {
+                 break;
+             }
+             current = prev;
 diff --git a/crates/typst-layout/src/inline/line.rs b/crates/typst-layout/src/inline/line.rs
 index 3d7f3a28c..e25d98f05 100644
 --- a/crates/typst-layout/src/inline/line.rs
@@ -160,10 +195,10 @@ index 259be8101..50f73975d 100644
          cjk_latin_spacing: shared.get(TextElem::cjk_latin_spacing).is_auto(),
 diff --git a/crates/typst-layout/src/inline/msword.rs b/crates/typst-layout/src/inline/msword.rs
 new file mode 100644
-index 000000000..52774e44a
+index 000000000..40947b07b
 --- /dev/null
 +++ b/crates/typst-layout/src/inline/msword.rs
-@@ -0,0 +1,2426 @@
+@@ -0,0 +1,2434 @@
 +// 本文件基于 Typst（typst/typst）与 typst-with-msword-linebreaks 修改（iota4web 合并到 Myriad-Dreamin/typst 之上，见 scripts/wasm-patch/typst-msword.patch）
 +//! Line breaking that emulates Microsoft Word.
 +//!
@@ -732,8 +767,9 @@ index 000000000..52774e44a
 +        // by a letter (`www.example`). A CJK character after the slash or
 +        // period is a break opportunity (`.cn/云`).
 +        let slash = (before == Some('/')
-+            && after.is_some_and(|c| c.is_ascii_alphanumeric()))
-+            || (after == Some('/') && before.is_some_and(|c| c.is_ascii_alphabetic()))
++            && after.is_some_and(|c| c.is_ascii_alphanumeric() || c == '/'))
++            || (after == Some('/')
++                && before.is_some_and(|c| c.is_ascii_alphabetic() || c == ':' || c == '/'))
 +            || (before == Some('.') && after.is_some_and(|c| c.is_ascii_alphanumeric()));
 +        // ...a dash drawn by the Latin font (a run without the eastAsia
 +        // hint); an East Asian dash follows the connector rule above.
@@ -1993,15 +2029,22 @@ index 000000000..52774e44a
 +        // comes off afterwards (measured: a line after a 34-cell first line
 +        // fits the same under any hanging indent as the first line does
 +        // under that first-line indent).
++        // Word counts the cells on the page's text width and takes the
++        // paragraph's indents off afterwards (`sweep-*-c11nw`: with a right
++        // indent a line may use 34 cells minus the indent, not the whole
++        // cells of what is left); typst only hands us the width after a
++        // `pad(right:)`, so this is exact for paragraphs without a right
++        // indent.
 +        let cellcap = if params.grid {
 +            let cells = ((measure + params.hanging + EPS) / p).floor();
 +            p * cells - params.hanging
 +        } else {
 +            measure
 +        };
-+        // Word 2003-2010 with `adjustRightInd` fill a line with a whole
-+        // number of cells, but only CJK text snaps: a line ending in Latin
-+        // text, a frame or spacing may use the full measure.
++        // Word 2003-2010 with `adjustRightInd`: every line, CJK- or
++        // Latin-ending, is measured against the whole cells (a 10.5 pt
++        // `…律abcd` line is squeezed to 38 cells; at 12 pt the 1.75 pt
++        // difference never decides a line).
 +        let snaps = params.grid && compat != 15 && params.adjust_right_indent;
 +        let cap_for = |k: usize| -> Abs {
 +            if snaps && matches!(toks[k].kind, Kind::Cjk | Kind::Close | Kind::Open) {
@@ -2962,3 +3005,698 @@ index 7246b2c7a..839b73c25 100644
      regex: Regex => {
          let ast = regex_syntax::ast::parse::Parser::new().parse(regex.as_str());
          match ast {
+diff --git a/crates/typst-library/src/text/space.rs b/crates/typst-library/src/text/space.rs
+index 143046fac..8a673ffdb 100644
+--- a/crates/typst-library/src/text/space.rs
++++ b/crates/typst-library/src/text/space.rs
+@@ -6,13 +6,30 @@ use crate::foundations::{
+ };
+ 
+ /// A text space.
+-#[elem(Unlabellable, PlainText, Repr)]
+-pub struct SpaceElem {}
++#[elem(Unlabellable, PlainText, Repr, PartialEq)]
++pub struct SpaceElem {
++    #[required]
++    #[internal]
++    #[parse(false)]
++    pub had_newline: bool,
++}
++
++impl PartialEq for SpaceElem {
++    fn eq(&self, _other: &Self) -> bool {
++        // Note: This is fine for comemo because it only compares based on hash.
++        true
++    }
++}
+ 
+ impl SpaceElem {
+     /// Get the globally shared space element.
+     pub fn shared() -> &'static Content {
+-        singleton!(Content, SpaceElem::new().pack())
++        singleton!(Content, SpaceElem::new(false).pack())
++    }
++
++    /// A globally shared space element with `had_newline` set to true.
++    pub fn shared_with_newline() -> &'static Content {
++        singleton!(Content, SpaceElem::new(true).pack())
+     }
+ }
+ 
+diff --git a/crates/typst-realize/Cargo.toml b/crates/typst-realize/Cargo.toml
+index 684d3e3da..619097683 100644
+--- a/crates/typst-realize/Cargo.toml
++++ b/crates/typst-realize/Cargo.toml
+@@ -21,6 +21,7 @@ typst-timing = { workspace = true }
+ typst-utils = { workspace = true }
+ arrayvec = { workspace = true }
+ bumpalo = { workspace = true }
++codex = { workspace = true }
+ comemo = { workspace = true }
+ ecow = { workspace = true }
+ regex = { workspace = true }
+diff --git a/crates/typst-realize/src/lib.rs b/crates/typst-realize/src/lib.rs
+index 4fde9478f..8aa244075 100644
+--- a/crates/typst-realize/src/lib.rs
++++ b/crates/typst-realize/src/lib.rs
+@@ -38,7 +38,7 @@ use typst_syntax::Span;
+ use typst_utils::{ListSet, SliceExt, SmallBitSet};
+ 
+ mod spaces;
+-use spaces::{SpaceState, collapse_spaces, collapse_state_textual};
++use spaces::{SpaceAction, SpaceState, collapse_spaces, collapse_transition_textual};
+ 
+ /// Realize content into a flat list of well-known, styled items.
+ #[typst_macros::time(name = "realize")]
+@@ -1278,23 +1278,16 @@ fn find_regex_match_in_elems<'a>(
+     let mut state = SpaceState::Destructive;
+ 
+     for &(content, styles) in elems {
+-        let (new_state, text) = collapse_state_textual(content, styles);
+-        state = match new_state {
+-            SpaceState::Invisible => continue,
+-            SpaceState::Destructive => {
+-                if state == SpaceState::Space {
+-                    buf.pop();
+-                }
+-                SpaceState::Destructive
+-            }
+-            SpaceState::Supportive => SpaceState::Supportive,
+-            SpaceState::Space => {
+-                if state != SpaceState::Supportive {
+-                    continue;
+-                }
+-                SpaceState::Space
++        let (action, text);
++        (action, state, text) = collapse_transition_textual(state, content, styles);
++        match action {
++            SpaceAction::Invisible => continue,
++            SpaceAction::Skip => continue,
++            SpaceAction::Discard => {
++                buf.pop();
+             }
+-        };
++            SpaceAction::Keep => {}
++        }
+ 
+         // If styles differ, we search _before_ adding the new element's text.
+         if styles != current && !buf.is_empty() {
+diff --git a/crates/typst-realize/src/spaces.rs b/crates/typst-realize/src/spaces.rs
+index 153c22e66..eb7ca5257 100644
+--- a/crates/typst-realize/src/spaces.rs
++++ b/crates/typst-realize/src/spaces.rs
+@@ -1,5 +1,6 @@
+-//! The space collapsing infrastructure for realization.
++//! The space collapsing and discarding infrastructure for realization.
+ 
++use codex::space_discarding::discard_space_between;
+ use typst_html::HtmlElem;
+ use typst_library::foundations::{Content, StyleChain};
+ use typst_library::introspection::TagElem;
+@@ -7,17 +8,50 @@ use typst_library::layout::HElem;
+ use typst_library::routines::Pair;
+ use typst_library::text::{LinebreakElem, SmartQuoteElem, SpaceElem, TextElem};
+ 
+-/// State kept for space collapsing.
++/// State kept for space collapsing/discarding.
+ #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+-pub(crate) enum SpaceState {
+-    /// Invisible elements do not impact space collapsing.
+-    Invisible,
+-    /// Destructive elements discard spaces that come before or after.
++pub(crate) enum SpaceState<'a> {
++    /// When destructive, we skip any future spaces.
+     Destructive,
+-    /// Normal elements. Spaces are only kept if supported on both sides.
+-    Supportive,
+-    /// Adjacent spaces collapse as one with the styles of the first space.
+-    Space,
++    /// When supportive, we usually keep future spaces, but we will discard
++    /// newline spaces if the text surrounding a newline space returns true for
++    /// [`discard_space_between`].
++    ///
++    /// Text can be empty if this is not a textual element. This is easier than
++    /// using an `Option`.
++    Supportive { text: &'a str },
++    /// A current space. Spaces collapse into one with the styles of the first
++    /// space by skipping following spaces, and they set `had_newline` to true
++    /// if any space in a group had a newline.
++    ///
++    /// Since `had_newline` may update based on a future space, all spaces need
++    /// to remember the previous text of a supportive element to do the
++    /// [`discard_space_between`] check.
++    ///
++    /// The `had_newline` grouping is done so that spaces before line comments
++    /// don't add new space. E.g. `x //\n`
++    Space { prev_text: &'a str, had_newline: bool },
++}
++
++/// What action to take for space collapsing/discarding.
++///
++/// This is in addition to updating the [`SpaceState`] itself, which is
++/// necessary even when the action is `Skip`.
++#[derive(Debug, Copy, Clone)]
++pub(crate) enum SpaceAction {
++    /// Invisible elements are themselves kept, but neither contain text nor
++    /// affect the space collapsing state.
++    Invisible,
++    /// Avoid adding the current space element.
++    Skip,
++    /// Discard the preceding space, but keep the current element.
++    ///
++    /// This is not returned unless there was a preceding space.
++    Discard,
++    /// Keep the current element and don't change any preceding spaces (if any).
++    ///
++    /// This is given for destructive elements that weren't preceded by a space.
++    Keep,
+ }
+ 
+ /// Run the space collapsing algorithm on `buf[start..]`. This discards space
+@@ -39,24 +73,19 @@ pub(crate) fn collapse_spaces(buf: &mut Vec<Pair>, start: usize) {
+     for i in start..buf.len() {
+         let (content, styles) = buf[i];
+ 
+-        state = match collapse_state(content, styles) {
+-            SpaceState::Invisible => state,
+-            SpaceState::Destructive => {
+-                if state == SpaceState::Space {
+-                    buf.copy_within(prev_space + 1..cursor, prev_space);
+-                    cursor -= 1;
+-                }
+-                SpaceState::Destructive
++        let action;
++        (action, state) = collapse_transition(state, content, styles);
++        match action {
++            SpaceAction::Invisible => {}
++            SpaceAction::Skip => continue,
++            SpaceAction::Discard => {
++                buf.copy_within(prev_space + 1..cursor, prev_space);
++                cursor -= 1;
+             }
+-            SpaceState::Supportive => SpaceState::Supportive,
+-            SpaceState::Space => {
+-                if state != SpaceState::Supportive {
+-                    continue;
+-                }
++            SpaceAction::Keep => {
+                 prev_space = cursor;
+-                SpaceState::Space
+             }
+-        };
++        }
+ 
+         // Copy over normal elements (in place).
+         if cursor < i {
+@@ -65,7 +94,7 @@ pub(crate) fn collapse_spaces(buf: &mut Vec<Pair>, start: usize) {
+         cursor += 1;
+     }
+ 
+-    if state == SpaceState::Space {
++    if matches!(state, SpaceState::Space { .. }) {
+         buf.copy_within(prev_space + 1..cursor, prev_space);
+         cursor -= 1;
+     }
+@@ -74,15 +103,19 @@ pub(crate) fn collapse_spaces(buf: &mut Vec<Pair>, start: usize) {
+     buf.truncate(cursor);
+ }
+ 
+-/// Space collapsing state for general elements.
+-pub(crate) fn collapse_state(content: &Content, styles: StyleChain) -> SpaceState {
++/// How to transition state for the space collapsing algorithm.
++fn collapse_transition<'a>(
++    state: SpaceState<'a>,
++    content: &'a Content,
++    styles: StyleChain<'_>,
++) -> (SpaceAction, SpaceState<'a>) {
+     if content.is::<TagElem>() {
+-        SpaceState::Invisible
++        (SpaceAction::Invisible, state)
+     } else if let Some(elem) = content.to_packed::<HElem>() {
+         if elem.amount.is_fractional() || elem.weak.get(styles) {
+-            SpaceState::Destructive
++            for_destructive(state)
+         } else {
+-            SpaceState::Invisible
++            (SpaceAction::Invisible, state)
+         }
+     } else if content.is::<LinebreakElem>()
+         // We want to collapse spaces that would otherwise be protected and show
+@@ -91,32 +124,84 @@ pub(crate) fn collapse_state(content: &Content, styles: StyleChain) -> SpaceStat
+             typst_html::tag::is_whitespace_collapsing(elem.tag)
+         })
+     {
+-        SpaceState::Destructive
+-    } else if content.is::<SpaceElem>() {
+-        SpaceState::Space
++        for_destructive(state)
++    } else if let Some(elem) = content.to_packed::<SpaceElem>() {
++        for_space(state, elem.had_newline)
++    } else if let Some(elem) = content.to_packed::<TextElem>() {
++        for_supportive(state, &elem.text)
+     } else {
+-        SpaceState::Supportive
++        for_supportive(state, "")
+     }
+ }
+ 
+-/// Space collapsing state for textual elements used during regex matching.
+-pub(crate) fn collapse_state_textual<'a>(
++/// How to transition state for space collapsing during regex matching.
++pub(crate) fn collapse_transition_textual<'a>(
++    state: SpaceState<'a>,
+     content: &'a Content,
+     styles: StyleChain<'_>,
+-) -> (SpaceState, &'a str) {
+-    if content.is::<TagElem>() {
+-        (SpaceState::Invisible, "")
++) -> (SpaceAction, SpaceState<'a>, &'a str) {
++    let text;
++    // Roughly ordered from most to least common.
++    let (action, state) = if content.is::<TagElem>() {
++        text = "";
++        (SpaceAction::Invisible, state)
+     } else if content.is::<LinebreakElem>() {
+-        (SpaceState::Destructive, "\n")
+-    } else if content.is::<SpaceElem>() {
+-        (SpaceState::Space, " ")
++        text = "\n";
++        for_destructive(state)
++    } else if let Some(elem) = content.to_packed::<SpaceElem>() {
++        text = " ";
++        for_space(state, elem.had_newline)
+     } else if let Some(elem) = content.to_packed::<TextElem>() {
+-        (SpaceState::Supportive, &elem.text)
++        text = &elem.text;
++        for_supportive(state, text)
+     } else if let Some(elem) = content.to_packed::<SmartQuoteElem>() {
+-        let text = if elem.double.get(styles) { "\"" } else { "'" };
+-        (SpaceState::Supportive, text)
++        text = if elem.double.get(styles) { "\"" } else { "'" };
++        for_supportive(state, text)
+     } else {
+         let name = content.elem().name();
+         panic!("tried to find regex match in a non-textual element: {name}");
++    };
++    (action, state, text)
++}
++
++/// The state transition for a destructive element.
++fn for_destructive(state: SpaceState) -> (SpaceAction, SpaceState) {
++    if matches!(state, SpaceState::Space { .. }) {
++        (SpaceAction::Discard, SpaceState::Destructive)
++    } else {
++        (SpaceAction::Keep, SpaceState::Destructive)
++    }
++}
++
++/// The state transition for a space element.
++///
++/// If any space in a group of spaces had a newline, we treat all spaces in that
++/// group as having a newline.
++fn for_space(state: SpaceState, had_newline: bool) -> (SpaceAction, SpaceState) {
++    match state {
++        SpaceState::Destructive => (SpaceAction::Skip, SpaceState::Destructive),
++        SpaceState::Supportive { text: prev_text } => {
++            (SpaceAction::Keep, SpaceState::Space { prev_text, had_newline })
++        }
++        SpaceState::Space { prev_text, had_newline: prev_nl } => (
++            SpaceAction::Skip,
++            SpaceState::Space { prev_text, had_newline: prev_nl || had_newline },
++        ),
++    }
++}
++
++/// The state transition for a supportive element. `text` should be empty if
++/// this is not a textual element.
++fn for_supportive<'a>(
++    state: SpaceState<'_>,
++    text: &'a str,
++) -> (SpaceAction, SpaceState<'a>) {
++    if let SpaceState::Space { prev_text, had_newline } = state
++        && had_newline
++        && discard_space_between(prev_text, text)
++    {
++        (SpaceAction::Discard, SpaceState::Supportive { text })
++    } else {
++        (SpaceAction::Keep, SpaceState::Supportive { text })
+     }
+ }
+diff --git a/crates/typst-syntax/src/ast.rs b/crates/typst-syntax/src/ast.rs
+index d2092c95a..001c1f187 100644
+--- a/crates/typst-syntax/src/ast.rs
++++ b/crates/typst-syntax/src/ast.rs
+@@ -237,7 +237,11 @@ impl<'a> Markup<'a> {
+             .filter(move |node| {
+                 // Ignore newline directly after statements without semicolons.
+                 let kind = node.kind();
+-                let keep = !was_stmt || node.kind() != SyntaxKind::Space;
++                let is_space = matches!(
++                    node.kind(),
++                    SyntaxKind::SpaceNoNewline | SyntaxKind::SpaceWithNewline
++                );
++                let keep = !was_stmt || !is_space;
+                 was_stmt = kind.is_stmt();
+                 keep
+             })
+@@ -255,7 +259,8 @@ pub enum Expr<'a> {
+     Space(Space<'a>),
+     /// A forced line break: `\`.
+     Linebreak(Linebreak<'a>),
+-    /// A paragraph break, indicated by one or multiple blank lines.
++    /// A paragraph break, indicated by contiguous whitespace containing at
++    /// least two newlines. Only produced in Markup.
+     Parbreak(Parbreak<'a>),
+     /// An escape sequence: `\#`, `\u{1F5FA}`.
+     Escape(Escape<'a>),
+@@ -377,7 +382,9 @@ pub enum Expr<'a> {
+ impl<'a> Expr<'a> {
+     fn cast_with_space(node: &'a SyntaxNode) -> Option<Self> {
+         match node.kind() {
+-            SyntaxKind::Space => Some(Self::Space(Space(node))),
++            SyntaxKind::SpaceNoNewline | SyntaxKind::SpaceWithNewline => {
++                Some(Self::Space(Space(node)))
++            }
+             _ => Self::from_untyped(node),
+         }
+     }
+@@ -386,7 +393,7 @@ impl<'a> Expr<'a> {
+ impl<'a> AstNode<'a> for Expr<'a> {
+     fn from_untyped(node: &'a SyntaxNode) -> Option<Self> {
+         match node.kind() {
+-            SyntaxKind::Space => Option::None, // Skipped unless using `cast_with_space`.
++            // Spaces are skipped unless using `cast_with_space`.
+             SyntaxKind::Linebreak => Some(Self::Linebreak(Linebreak(node))),
+             SyntaxKind::Parbreak => Some(Self::Parbreak(Parbreak(node))),
+             SyntaxKind::Text => Some(Self::Text(Text(node))),
+@@ -590,10 +597,35 @@ impl<'a> Text<'a> {
+     }
+ }
+ 
+-node! {
+-    /// Whitespace in markup or math. Has at most one newline in markup, as more
+-    /// indicate a paragraph break.
+-    struct Space
++/// Whitespace in markup or math. Has at most one newline in markup, as more
++/// indicate a paragraph break.
++#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
++pub struct Space<'a>(&'a SyntaxNode);
++
++impl Space<'_> {
++    /// Whether the Space contains a newline.
++    pub fn had_newline(self) -> bool {
++        self.0.kind() == SyntaxKind::SpaceWithNewline
++    }
++}
++
++impl<'a> AstNode<'a> for Space<'a> {
++    fn from_untyped(node: &'a SyntaxNode) -> Option<Self> {
++        match node.kind() {
++            SyntaxKind::SpaceNoNewline | SyntaxKind::SpaceWithNewline => Some(Self(node)),
++            _ => Option::None,
++        }
++    }
++
++    fn to_untyped(self) -> &'a SyntaxNode {
++        self.0
++    }
++
++    fn placeholder() -> Self {
++        static PLACEHOLDER: SyntaxNode =
++            SyntaxNode::placeholder(SyntaxKind::SpaceNoNewline);
++        Self(&PLACEHOLDER)
++    }
+ }
+ 
+ node! {
+@@ -602,7 +634,8 @@ node! {
+ }
+ 
+ node! {
+-    /// A paragraph break, indicated by one or multiple blank lines.
++    /// A paragraph break, indicated by contiguous whitespace containing at
++    /// least two newlines. Only produced in Markup.
+     struct Parbreak
+ }
+ 
+@@ -873,7 +906,10 @@ impl<'a> Equation<'a> {
+     /// Whether the equation should be displayed as a separate block.
+     pub fn block(self) -> bool {
+         let is_space = |node: Option<&SyntaxNode>| {
+-            node.map(SyntaxNode::kind) == Some(SyntaxKind::Space)
++            matches!(
++                node.map(SyntaxNode::kind),
++                Some(SyntaxKind::SpaceNoNewline | SyntaxKind::SpaceWithNewline)
++            )
+         };
+         is_space(self.0.children().nth(1)) && is_space(self.0.children().nth_back(1))
+     }
+@@ -1152,7 +1188,9 @@ impl<'a> MathArgs<'a> {
+                 let semicolon_ends_code = prev_hash;
+                 prev_hash = false;
+                 let item = match node.kind() {
+-                    SyntaxKind::Space => MathArgItem::Space(Space(node)),
++                    SyntaxKind::SpaceNoNewline | SyntaxKind::SpaceWithNewline => {
++                        MathArgItem::Space(Space(node))
++                    }
+                     SyntaxKind::Comma => MathArgItem::Comma(',', node),
+                     SyntaxKind::LeftParen => MathArgItem::LeftParen('(', node),
+                     SyntaxKind::RightParen => MathArgItem::RightParen(')', node),
+diff --git a/crates/typst-syntax/src/highlight.rs b/crates/typst-syntax/src/highlight.rs
+index 880775826..37d67a39d 100644
+--- a/crates/typst-syntax/src/highlight.rs
++++ b/crates/typst-syntax/src/highlight.rs
+@@ -149,7 +149,8 @@ pub fn highlight(node: &LinkedNode) -> Option<Tag> {
+         }
+         SyntaxKind::Markup => None,
+         SyntaxKind::Text => None,
+-        SyntaxKind::Space => None,
++        SyntaxKind::SpaceNoNewline => None,
++        SyntaxKind::SpaceWithNewline => None,
+         SyntaxKind::Linebreak => Some(Tag::Escape),
+         SyntaxKind::Parbreak => None,
+         SyntaxKind::Escape => Some(Tag::Escape),
+diff --git a/crates/typst-syntax/src/kind.rs b/crates/typst-syntax/src/kind.rs
+index 93fe0c700..73b41a891 100644
+--- a/crates/typst-syntax/src/kind.rs
++++ b/crates/typst-syntax/src/kind.rs
+@@ -22,12 +22,15 @@ pub enum SyntaxKind {
+     Markup,
+     /// Plain text without markup.
+     Text,
+-    /// Whitespace. Contains at most one newline in markup, as more indicate a
+-    /// paragraph break.
+-    Space,
++    /// Whitespace with no newlines.
++    SpaceNoNewline,
++    /// Whitespace with _exactly one_ newline in Markup (more would be a
++    /// `ParBreak`) and _at least one_ newline in Code/Math.
++    SpaceWithNewline,
+     /// A forced line break: `\`.
+     Linebreak,
+-    /// A paragraph break, indicated by one or multiple blank lines.
++    /// A paragraph break, indicated by contiguous whitespace containing at
++    /// least two newlines. Only produced in Markup.
+     Parbreak,
+     /// An escape sequence: `\#`, `\u{1F5FA}`.
+     Escape,
+@@ -372,7 +375,8 @@ impl SyntaxKind {
+             Self::Shebang
+                 | Self::LineComment
+                 | Self::BlockComment
+-                | Self::Space
++                | Self::SpaceNoNewline
++                | Self::SpaceWithNewline
+                 | Self::Parbreak
+         )
+     }
+@@ -392,7 +396,8 @@ impl SyntaxKind {
+             Self::BlockComment => "block comment",
+             Self::Markup => "markup",
+             Self::Text => "text",
+-            Self::Space => "space",
++            Self::SpaceNoNewline => "space",
++            Self::SpaceWithNewline => "space",
+             Self::Linebreak => "line break",
+             Self::Parbreak => "paragraph break",
+             Self::Escape => "escape sequence",
+@@ -586,9 +591,10 @@ impl SyntaxKind {
+             Self::BlockComment => None, // none
+ 
+             Self::Markup => Known(Markup),
+-            Self::Text => Text,        // none: Raw | markup: expr
+-            Self::Space => Space,      // code/math: part | markup: expr/part
+-            Self::Linebreak => Parent, // math/markup: expr
++            Self::Text => Text,              // none: Raw | markup: expr
++            Self::SpaceNoNewline => Space,   // code: part | markup/math: expr/part
++            Self::SpaceWithNewline => Space, // code: part | markup/math: expr/part
++            Self::Linebreak => Parent,       // math/markup: expr
+             Self::Parbreak => Known(Markup),
+             Self::Escape => Parent, // math/markup: expr
+             Self::Shorthand => Known(Markup),
+@@ -849,5 +855,11 @@ mod test {
+         test_mode("$ #$x$; $", [2, 5], Some(Code));
+         test_mode("#[$x$]", [2, 3], Some(Math));
+         test_mode("#[$x$]", [1, 4], Some(Markup));
++
++        // Single newlines at the edges of modes
++        // (since the other tests mostly use normal spaces instead of newlines)
++        test_mode("#[\n$\n#{\nx\n}\n$\n]", [2, 13], Some(Markup));
++        test_mode("#[\n$\n#{\nx\n}\n$\n]", [4, 11], Some(Math));
++        test_mode("#[\n$\n#{\nx\n}\n$\n]", [7, 9], Some(Code));
+     }
+ }
+diff --git a/crates/typst-syntax/src/lexer.rs b/crates/typst-syntax/src/lexer.rs
+index 3ca3d4b05..c1da4a0ab 100644
+--- a/crates/typst-syntax/src/lexer.rs
++++ b/crates/typst-syntax/src/lexer.rs
+@@ -18,23 +18,15 @@ pub(super) struct Lexer<'s> {
+     /// The mode the lexer is in. This determines which kinds of tokens it
+     /// produces.
+     mode: SyntaxMode,
+-    /// Whether the last token contained a newline.
+-    newline: bool,
+     /// An error plus hints for the current token being produced. This is always
+     /// `None` between calls to [`Lexer::next`].
+     error: Option<(EcoString, EcoVec<EcoString>)>,
+ }
+ 
+ impl<'s> Lexer<'s> {
+-    /// Create a new lexer with the given mode and a prefix to offset column
+-    /// calculations.
++    /// Create a new lexer with the given mode.
+     pub fn new(text: &'s str, mode: SyntaxMode) -> Self {
+-        Self {
+-            s: Scanner::new(text),
+-            mode,
+-            newline: false,
+-            error: None,
+-        }
++        Self { s: Scanner::new(text), mode, error: None }
+     }
+ 
+     /// Get the current lexing mode.
+@@ -58,11 +50,6 @@ impl<'s> Lexer<'s> {
+         self.s.jump(index);
+     }
+ 
+-    /// Whether the last token contained a newline.
+-    pub fn newline(&self) -> bool {
+-        self.newline
+-    }
+-
+     /// The number of characters until the most recent newline from an index.
+     pub fn column(&self, index: usize) -> usize {
+         let mut s = self.s; // Make a new temporary scanner (cheap).
+@@ -95,7 +82,6 @@ impl Lexer<'_> {
+         debug_assert!(self.error.is_none());
+         let start = self.s.cursor();
+ 
+-        self.newline = false;
+         let kind = match self.s.eat() {
+             Some(c) if is_space(c, self.mode) => self.whitespace(start, c),
+             Some('#') if start == 0 && self.s.eat_if('!') => self.shebang(),
+@@ -139,11 +125,12 @@ impl Lexer<'_> {
+             _ => count_newlines(self.s.from(start)),
+         };
+ 
+-        self.newline = newlines > 0;
+         if self.mode == SyntaxMode::Markup && newlines >= 2 {
+             SyntaxKind::Parbreak
++        } else if newlines > 0 {
++            SyntaxKind::SpaceWithNewline
+         } else {
+-            SyntaxKind::Space
++            SyntaxKind::SpaceNoNewline
+         }
+     }
+ 
+@@ -1130,7 +1117,8 @@ impl ScannerExt for Scanner<'_> {
+     }
+ }
+ 
+-/// Whether a character will become a [`SyntaxKind::Space`] token.
++/// Whether a character will become a space token, either
++/// [`SyntaxKind::SpaceNoNewline`] or [`SyntaxKind::SpaceWithNewline`].
+ #[inline]
+ fn is_space(character: char, mode: SyntaxMode) -> bool {
+     match mode {
+diff --git a/crates/typst-syntax/src/node.rs b/crates/typst-syntax/src/node.rs
+index 208c59b6a..546119cf6 100644
+--- a/crates/typst-syntax/src/node.rs
++++ b/crates/typst-syntax/src/node.rs
+@@ -1471,12 +1471,12 @@ mod tests {
+ Markup: 14 [
+     Heading: 6 [
+         HeadingMarker: \"=\",
+-        Space: \" \",
++        SpaceNoNewline: \" \",
+         Markup: 4 [
+             Text: \"Head\",
+         ],
+     ],
+-    Space: \" \",
++    SpaceNoNewline: \" \",
+     Label: \"<label>\",
+ ]"
+         );
+@@ -1537,7 +1537,7 @@ Markup: 7 [
+         hint: \"try equal equal space?\",
+         Heading: 7 [
+             HeadingMarker: \"=\",
+-            Space: \" \",
++            SpaceNoNewline: \" \",
+             Markup: 5 [
+                 Text: \"=head\",
+             ],
+diff --git a/crates/typst-syntax/src/parser.rs b/crates/typst-syntax/src/parser.rs
+index fd99e81ce..54a254511 100644
+--- a/crates/typst-syntax/src/parser.rs
++++ b/crates/typst-syntax/src/parser.rs
+@@ -1856,11 +1856,11 @@ impl<'s> Parser<'s> {
+         let mut start = prev_end;
+         let (mut kind, mut node) = lexer.next();
+         let mut n_trivia = 0;
+-        let mut had_newline = false;
++        let mut space_with_newline = false;
+         let mut parbreak = false;
+ 
+         while kind.is_trivia() {
+-            had_newline |= lexer.newline(); // Newlines are always trivia.
++            space_with_newline |= kind == SyntaxKind::SpaceWithNewline;
+             parbreak |= kind == SyntaxKind::Parbreak;
+             n_trivia += 1;
+             nodes.push(node);
+@@ -1868,7 +1868,7 @@ impl<'s> Parser<'s> {
+             (kind, node) = lexer.next();
+         }
+ 
+-        let newline = if had_newline {
++        let newline = if space_with_newline || parbreak {
+             let column =
+                 (lexer.mode() == SyntaxMode::Markup).then(|| lexer.column(start));
+             let newline = Newline { column, parbreak };
+diff --git a/crates/typst-syntax/src/reparser.rs b/crates/typst-syntax/src/reparser.rs
+index 0f6024f3f..fde3dbd1c 100644
+--- a/crates/typst-syntax/src/reparser.rs
++++ b/crates/typst-syntax/src/reparser.rs
+@@ -1,8 +1,6 @@
+ use std::ops::Range;
+ 
+-use crate::{
+-    Span, SyntaxKind, SyntaxNode, is_newline, parse, reparse_block, reparse_markup,
+-};
++use crate::{Span, SyntaxKind, SyntaxNode, parse, reparse_block, reparse_markup};
+ 
+ /// Refresh the given syntax node with as little parsing as possible.
+ ///
+@@ -274,8 +272,7 @@ fn expand(node: &SyntaxNode) -> bool {
+ fn next_at_start(node: &SyntaxNode, at_start: &mut bool) {
+     let kind = node.kind();
+     if kind.is_trivia() {
+-        *at_start |= kind == SyntaxKind::Parbreak
+-            || (kind == SyntaxKind::Space && node.leaf_text().chars().any(is_newline));
++        *at_start |= matches!(kind, SyntaxKind::Parbreak | SyntaxKind::SpaceWithNewline);
+     } else {
+         *at_start = false;
+     }

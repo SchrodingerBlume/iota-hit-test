@@ -4,7 +4,7 @@
 纯静态网页：Typst 编译器以 wasm 跑在浏览器里，没有服务器，工程与图片只存在本机浏览器的 IndexedDB。
 
 - 左侧富文本编辑（TipTap / ProseMirror），用户不接触 Typst 源码；底层把每一种节点翻成模板认得的写法
-- 右侧实时预览（typst.ts 渲染成 SVG）：停手 0.13 秒就重排；编译走增量服务，渲染只补丁变了的页（按 data-tid 复用没变的 `<g>`），十几页的文档主线程每次只花几毫秒；重排落地时挪了位置的文字块从旧位置滑过去、新块淡入；导出 PDF 一键
+- 右侧实时预览（typst.ts 渲染成 SVG）：停手 0.13 秒就重排；编译走增量服务，渲染只补丁变了的页（按 data-tid 复用没变的 `<g>`），十几页的文档主线程每次只花几毫秒；四十页以上打字时只编光标所在的那一章（另开一份 `focus.typ` 与增量服务，章前后的页照旧，文献表那几页纸宽标成 500pt 由渲染端剔掉），停手 2.5 s 再整编一次校准页码与目录——177 页的论文每个字 0.2～0.3 s，左侧编辑与预览里直接编辑都走这条，那一章自己的字形表并进整编那份（章外的位置换算到新版本）；重排落地时挪了位置的文字块从旧位置滑过去、新块淡入；导出 PDF 一键
 - 论文设置搬进了功能区（照 Word 的设计 / 布局选项卡）：「论文」页是校区、学位级别、交什么、阶段、学科门类、文档语言六根轴的下拉框与字体方案（本机字体读取开对话框），「版式」页是模板的三态选项，「页面」页是前置 / 后置每一页排不排；三态项是菜单按钮，按钮上直接写着 Auto→开 这种当前值。左栏只剩内容与数据录入（元信息、摘要、正文、文献……）
 - 模板里那些默认为 `auto` 的布尔选项走三态开关：`关 · A · 开`，自动档时滑块居中印 A、向映射到的那一端延伸一段影子，下面一行写明「自动 → 开 · 为什么」
 - 字体默认用模板的 `presets.webapp + (kaishu: "FandolKai")`，全部开源、随站分发；首次进站下载约 120 MB（wasm 30 MB + 字体 90 MB），之后存进 Cache API 离线可用
@@ -136,6 +136,10 @@ npm run test:compile # 不开浏览器，在 Node 里用同一颗 wasm 编一份
 模板读到它就不再发模拟网格用的 `text(tracking:)` 与西文补偿那几条规则，改在每次换版面（文档级、各段、带自己网格的成果页 / 声明页）
 处自己发 `set par(linebreaks: (mode: "msword", char-excess: 网格增量, …))`——各部件用的就是模板算的那份网格，站内不再注入任何规则。
 要让某一页退回原版断行，工程 JSON 里给那页 `layout: { "linebreaks": "none" }` 即可（见下面「版面的局部改写」）。
+
+fork 主线已并入 typst 上游 main（带 #792：中日文旁的换行空格丢掉），而 typst.ts 0.8.1 的导出 / world 层编不过 main 的 Format API，
+站内这颗 wasm 走 0.15.1 线：fork 的 msword 提交 + #792 那两个提交 cherry-pick 到 0.15.1 基线（`vendor/typst-ts-web-compiler/FORK_COMMIT`
+记着来历），typst.ts 侧补一个 `SyntaxKind::Space` 拆分的小补丁（`scripts/wasm-patch/reflexo-space-kind.patch`）。typst.ts 跟上 0.16 后再换主线。
 
 构建：typst.ts 钉的 typst 带它自己的 `content_hint` 改动，与 fork 在 `line.rs` / `linebreak.rs` 有冲突，所以
 `scripts/wasm-patch/typst-msword.patch` 是 fork 合并到 typst.ts 那份 typst 之上的结果（首行记着 fork 的提交号）；

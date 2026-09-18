@@ -34,6 +34,10 @@ export interface CompileState {
   focusArtifact: Uint8Array | null;
   focusFresh: boolean;
   focusAt: { start: number; baseCount: number; id: string } | null;
+  /** 只编一章那份的字形表（页码是那份产物自己的，0 起）与源码映射；整编一回来就清掉 */
+  focusGlyphs: Float64Array | null;
+  focusSegments: Segment[];
+  focusMapVersion: number;
   /** 预览区重挂后旧的一章产物接不上差分：加一代，让下一次只编一章从头来 */
   focusGen: number;
 }
@@ -61,6 +65,9 @@ export const useCompileState = create<CompileState>(() => ({
   focusArtifact: null,
   focusFresh: false,
   focusAt: null,
+  focusGlyphs: null,
+  focusSegments: [],
+  focusMapVersion: -1,
   focusGen: 0,
 }));
 
@@ -95,7 +102,7 @@ export function resetForProject(docId: string) {
   useCompileState.setState({
     artifact: null, artifactFresh: false, glyphs: null, segments: [], mapVersion: -1,
     diagnostics: [], diagMain: '', diagSegments: [], lastMs: null, renderMs: null, pageCount: 0,
-    focusArtifact: null, focusFresh: false, focusAt: null,
+    focusArtifact: null, focusFresh: false, focusAt: null, focusGlyphs: null, focusSegments: [], focusMapVersion: -1,
   });
 }
 let inFlight: number | null = null;
@@ -150,13 +157,17 @@ export function startCompiler() {
           compiling: false,
           ...(focus
             ? (m.artifact ? { focusArtifact: new Uint8Array(m.artifact), focusFresh: m.fresh, focusAt: focus } : {})
-            : { artifact: m.artifact ? new Uint8Array(m.artifact) : s.artifact, artifactFresh: m.artifact ? m.fresh : s.artifactFresh, ...(m.artifact ? { focusArtifact: null, focusAt: null } : {}) }),
+            : { artifact: m.artifact ? new Uint8Array(m.artifact) : s.artifact, artifactFresh: m.artifact ? m.fresh : s.artifactFresh, ...(m.artifact ? { focusArtifact: null, focusAt: null, focusGlyphs: null } : {}) }),
           diagnostics: m.diagnostics,
           diagMain: input?.main ?? s.diagMain,
           diagSegments: input?.segments ?? s.diagSegments,
           lastMs: m.ms,
           compileCount: s.compileCount + 1,
-          ...(m.glyphs ? { glyphs: new Float64Array(m.glyphs), segments: input?.segments ?? [], mapVersion: input?.version ?? -1 } : {}),
+          ...(m.glyphs
+            ? (focus
+              ? { focusGlyphs: new Float64Array(m.glyphs), focusSegments: input?.segments ?? [], focusMapVersion: input?.version ?? -1 }
+              : { glyphs: new Float64Array(m.glyphs), segments: input?.segments ?? [], mapVersion: input?.version ?? -1 })
+            : {}),
         });
         flush();
         break;

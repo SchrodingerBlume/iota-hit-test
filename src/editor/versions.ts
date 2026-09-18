@@ -43,6 +43,14 @@ export function mappingSince(key: RichKey, fromVersion: number): Mapping | null 
   return m;
 }
 
+/** 从 fromVersion 到 toVersion 的位置变换；null = 起点那一版已经作废 */
+export function mappingBetween(key: RichKey, fromVersion: number, toVersion: number): Mapping | null {
+  if (fromVersion < resetAt) return null;
+  const m = new Mapping();
+  for (const e of log) if (e.v > fromVersion && e.v <= toVersion && e.key === key) m.appendMapping(e.mapping);
+  return m;
+}
+
 /** 现在的位置 → 编译那一版的位置 */
 export function toOldPos(key: RichKey, fromVersion: number, pos: number, assoc: -1 | 1 = 1): number | null {
   const m = mappingSince(key, fromVersion);

@@ -10,8 +10,10 @@ if [ ! -d "$work" ]; then git clone https://github.com/Myriad-Dreamin/typst.ts.g
 git -C "$work" fetch --depth 1 origin "$commit" || true
 git -C "$work" checkout "$commit" || true
 # 预览区直接编辑要的字形表接口（glyph_map）不在上游，打个小补丁；见 scripts/wasm-patch/
-git -C "$work" checkout -- packages/compiler/src/lib.rs Cargo.toml
+git -C "$work" checkout -- packages/compiler/src/lib.rs Cargo.toml crates/reflexo-typst/src/exporter/ast.rs
 git -C "$work" apply "$here/scripts/wasm-patch/compiler-glyph-map.patch"
+# typst 上游 #792 把 SyntaxKind::Space 拆成了两种（fork 已带上），typst.ts 的 AST 导出还认旧名
+git -C "$work" apply "$here/scripts/wasm-patch/reflexo-space-kind.patch"
 # 预览引擎：Typst 0.15.1 + 「msword 断行」（本机 fork typst-with-msword-linebreaks，
 # par(linebreaks: "msword")）。typst.ts 钉的 typst 带自己的 content_hint 改动，所以是
 # 克隆它钉的那份、再打上 fork 的合并补丁 scripts/wasm-patch/typst-msword.patch（fork 更新后

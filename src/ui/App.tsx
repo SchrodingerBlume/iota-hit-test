@@ -78,11 +78,11 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
     if (lastProject.current !== doc.id) { resetForProject(doc.id); useComments.getState().setActive(null); usePreviewSurface.getState().set({ activeKey: null, focused: false }); }
     const cs = useCompileState.getState();
     const pageCount = cs.pageCount;
-    // 只编一章的条件：整编过、页数多、光标在正文的某一章里、不在预览里直接编辑
+    // 只编一章的条件：整编过、页数多、光标在正文的某一章里（预览里直接编辑也走这条：那份字形表是这一章自己的，并进整编那份用）
     const wantFull = fullTick !== lastFull.current;
     lastFull.current = fullTick;
     let focus: { id: string; chapter: number; start: number; baseCount: number; page: number } | null = null;
-    if (!force && !wantFull && !previewFocused && pageCount >= FOCUS_PAGES && cs.artifact) {
+    if (!force && !wantFull && pageCount >= FOCUS_PAGES && cs.artifact) {
       const k = chapterAt(doc.body, getEditor('body'));
       const cp = k ? chapterPages(doc.body, cs.glyphs, cs.segments, cs.mapVersion, pageCount) : null;
       if (k && cp && cp.pages[k - 1] !== undefined) {
@@ -127,8 +127,8 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
         force,
         // 首次排版、小文档与预览直接编辑需要精确字形表。长文档在左侧连续输入时沿用旧表，
         // 避免每次击键都扫描约 200 页；位置映射会把旧表换算到当前文档。
-        // 停手后的整编顺便把字形表刷新，预览里的光标才对得上（只编一章那几轮没刷）
-        glyphs: !focus && (force || previewFocused || wantFull || pageCount < 80),
+        // 只编一章时那份字形表只有一章，便宜，每次都要
+        glyphs: !!focus || force || previewFocused || wantFull || pageCount < 80,
         focus: focus ? { id: focus.id, start: focus.start, baseCount: focus.baseCount } : undefined,
         main: project.main,
         files: project.files,

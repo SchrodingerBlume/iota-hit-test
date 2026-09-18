@@ -1,0 +1,13 @@
+diff --git a/crates/reflexo-typst/src/exporter/ast.rs b/crates/reflexo-typst/src/exporter/ast.rs
+index e1385a4..54bfde8 100644
+--- a/crates/reflexo-typst/src/exporter/ast.rs
++++ b/crates/reflexo-typst/src/exporter/ast.rs
+@@ -170,7 +170,7 @@ impl<W: io::Write> AstWriter<'_, W> {
+         self.w.write_all("  c:".as_bytes()).unwrap();
+         self.ident += 2;
+         for ch in ast.children() {
+-            if ch.kind() == SyntaxKind::Space {
++            if matches!(ch.kind(), SyntaxKind::SpaceWithNewline | SyntaxKind::SpaceNoNewline) {
+                 continue;
+             }
+             self.write_ident();

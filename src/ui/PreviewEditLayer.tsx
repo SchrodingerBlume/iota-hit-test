@@ -12,11 +12,11 @@ import { useCompileState } from '../compiler/client';
 import { useStore, type RichKey, type Section } from '../model/store';
 import { focusInfo } from '../compiler/renderer';
 import { getEditor, onRegistryChange, whenEditorReady } from '../editor/registry';
-import { docVersion, mappingSince, toNewPos, toOldPos } from '../editor/versions';
+import { docVersion, mappingBetween, mappingSince, toNewPos, toOldPos } from '../editor/versions';
 import { useOpenRequest } from '../editor/openRequest';
 import { useBlockMenu } from '../editor/BlockMenu';
 import { useComments } from '../editor/comments';
-import { buildIndex, caretRect, hitPos, hitTest, lineStep, selectionRects, paragraphMarks, EMPTY_INDEX, type CaretRect, type Glyph, type Hit, type Line } from './previewEdit';
+import { buildIndex, mergeIndex, caretRect, hitPos, hitTest, lineStep, selectionRects, paragraphMarks, EMPTY_INDEX, type CaretRect, type Glyph, type Hit, type Line } from './previewEdit';
 import { t as tx } from '../i18n';
 import { useInputState } from '../editor/inputState';
 
@@ -55,7 +55,25 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   const glyphs = useCompileState((s) => s.glyphs);
   const segments = useCompileState((s) => s.segments);
   const mapVersion = useCompileState((s) => s.mapVersion);
-  const index = useMemo(() => (glyphs ? buildIndex(glyphs, segments, mapVersion) : EMPTY_INDEX), [glyphs, segments, mapVersion]);
+  const fullIndex = useMemo(() => (glyphs ? buildIndex(glyphs, segments, mapVersion) : EMPTY_INDEX), [glyphs, segments, mapVersion]);
+  const focusGlyphs = useCompileState((s) => s.focusGlyphs);
+  const focusSegments = useCompileState((s) => s.focusSegments);
+  const focusMapVersion = useCompileState((s) => s.focusMapVersion);
+  const focusIndex = useMemo(() => (focusGlyphs ? buildIndex(focusGlyphs, focusSegments, focusMapVersion) : null), [focusGlyphs, focusSegments, focusMapVersion]);
+  // 只编一章嵌进来的页数与它顶掉的母本页数不等时，字形表（按上次整编的页码）与展示层的页序错开一截
+  const [focusMap, setFocusMap] = useState<{ start: number; baseCount: number; count: number } | null>(null);
+  // 那一章有自己的字形表时并成一份，页码就是展示层的页序；没有时（字形表还没回来）按嵌入位置换算页序
+  const merged = !!focusIndex && !!focusMap && focusIndex.version >= fullIndex.version;
+  const index = useMemo(() => {
+    if (!merged) return fullIndex;
+    const maps = new Map<string, ReturnType<typeof mappingBetween>>();
+    const mapPos = (key: string, pos: number, assoc: -1 | 1) => {
+      let m = maps.get(key);
+      if (m === undefined) { m = mappingBetween(key as RichKey, fullIndex.version, focusIndex!.version); maps.set(key, m); }
+      return m ? m.map(pos, assoc) : null;
+    };
+    return mergeIndex(fullIndex, focusIndex!, focusMap!.start, focusMap!.baseCount, focusMap!.count, mapPos);
+  }, [merged, fullIndex, focusIndex, focusMap]);
   const marksOn = usePreviewMarks((s) => s.on);
   const mkP = usePreviewMarks((s) => s.paragraph), mkS = usePreviewMarks((s) => s.space), mkG = usePreviewMarks((s) => s.gutter);
   const marks = useMemo(() => (marksOn ? paragraphMarks(index, segments, { paragraph: mkP, space: mkS, gutter: mkG }) : []), [marksOn, index, segments, mkP, mkS, mkG]);
@@ -115,23 +133,23 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
       const y = parseFloat(g.getAttribute('data-layout-y') ?? '0');
       out[i] = { left: (x - vb.x) * scale, top: (y - vb.y) * scale, scale, w, h };
     });
-    // 只编一章嵌进来的页数与它顶掉的母本页数不等时，字形表（按上次整编的页码）与展示层的页序错开一截
     const f = doc.querySelector<HTMLElement>(':scope > .preview-doc');
     setFocusMap(f ? focusInfo(f) : null);
     setGeom(out);
   }, [docRef]);
-  const [focusMap, setFocusMap] = useState<{ start: number; baseCount: number; count: number } | null>(null);
   /** 字形表的页码 → 展示层的页序；那一章里多出来 / 少掉的页没有对应，-1 */
   const toDisplay = (p: number): number => {
     const f = focusMap;
-    if (!f) return p;
+    if (!f || merged) return p;
     if (p < f.start) return p;
     if (p < f.start + f.baseCount) return p - f.start < f.count ? p : -1;
     return p + f.count - f.baseCount;
   };
+  // 开发时给 Playwright 探针看的
+
   const toGlyphPage = (d: number): number => {
     const f = focusMap;
-    if (!f) return d;
+    if (!f || merged) return d;
     if (d < f.start) return d;
     if (d < f.start + f.count) return Math.min(d, f.start + f.baseCount - 1);
     return d - (f.count - f.baseCount);
@@ -219,23 +237,40 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   // 光标跑出视野就滚过去（Word：视野跟着光标走）。刚切到某份富文本时它的选区还是旧的，
   // 那一下不跟，等点击把选区放好再说
   const lastCaretKey = useRef('');
+  const lastSelKey = useRef('');
   const skipFollow = useRef(false);
   /** 点击落定前（等编辑器挂上、选区还是旧的）画出的光标不算数，别拿它盖掉点击处的 prefer */
   const clickPending = useRef(false);
+  /** 选区动过、光标还没跟着重画（打字时光标停在原处等编译）：等它重画那一下要跟；用户自己一滚就作罢 */
+  const followDue = useRef(false);
+  const selfScroll = useRef(0);
   useEffect(() => {
+    const sc = scrollRef.current;
+    if (!sc) return;
+    const onScroll = () => { if (performance.now() > selfScroll.current) followDue.current = false; };
+    sc.addEventListener('scroll', onScroll, { passive: true });
+    return () => sc.removeEventListener('scroll', onScroll);
+  }, [scrollRef]);
+  useEffect(() => {
+    // 只在选区真动了才跟：编译回来字形表换了一份、光标只是重画到新位置，不算——用户可能已经滚去看别处了
+    const sk = `${activeKey}:${sel?.from}:${sel?.to}:${docVersion()}`;
+    if (sk !== lastSelKey.current) { lastSelKey.current = sk; followDue.current = true; }
     if (!caret) return;
     const k = `${caret.page}:${caret.x.toFixed(1)}:${caret.y.toFixed(1)}`;
     if (k === lastCaretKey.current) return;
     lastCaretKey.current = k;
     if (clickPending.current) return;
     prefer.current = { page: caret.page, y: caret.y };
-    if (skipFollow.current) { skipFollow.current = false; return; }
+    if (skipFollow.current) { skipFollow.current = false; followDue.current = false; return; }
+    if (!followDue.current) return;
+    followDue.current = false;
     const sc = scrollRef.current;
     const pt = pageTo(caret.page, caret.x, caret.y);
     if (!sc || !pt || !docRef.current) return;
     const top = docRef.current.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop + pt.top;
     const bottom = top + caret.h * pt.scale;
     if (top < sc.scrollTop + 20 || bottom > sc.scrollTop + sc.clientHeight - 20) {
+      selfScroll.current = performance.now() + 800;
       sc.scrollTo({ top: top - sc.clientHeight * 0.4, behavior: 'smooth' });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -614,12 +649,25 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   };
 
   // ── 画 ──────────────────────────────────────────────────────
+  useEffect(() => { if (import.meta.env.DEV) (window as unknown as { __pv?: unknown }).__pv = { index, geom, focusMap, merged, caret, sel: sel && { from: sel.from, to: sel.to }, ver: docVersion(), hitAt, activeKey, editor: !!editor }; }, [index, geom, focusMap, merged, caret, sel]);
   const caretPx = caret ? pageTo(caret.page, caret.x, caret.y) : null;
   const caretH = caret && caretPx ? caret.h * caretPx.scale : 0;
   const pendingText = pending && pending.key === activeKey ? pending.text : '';
   const overlayText = composing !== null ? composing : pendingText;
   const overlayW = useMemo(() => (overlayText && caretH && !(composing === null && pending?.fading) ? measureText(overlayText, caretH * 0.92) : 0), [overlayText, caretH, composing, pending?.fading]);
   const caretLeft = caretPx ? caretPx.left + overlayW : 0;
+  // 隐形输入框跟着光标走，但别跑出纸的右边、也别在光标算不出来时跳回 (0,0)——浏览器会把滚动容器
+  // 卷过去追焦点里的输入框，整个预览就横着 / 竖着飞走了
+  const inputPos = useRef({ left: 0, top: 0 });
+  if (caretPx) {
+    const g = geom[toDisplay(caret!.page)];
+    const right = g ? g.left + g.w * g.scale - 4 : caretLeft;
+    inputPos.current = { left: Math.min(caretLeft, right), top: caretPx.top };
+  } else if (scrollRef.current && docRef.current) {
+    const sc = scrollRef.current;
+    const dtop = docRef.current.getBoundingClientRect().top - sc.getBoundingClientRect().top;
+    inputPos.current = { left: sc.scrollLeft, top: Math.max(0, sc.scrollTop - dtop) };
+  }
 
   return (
     <div ref={layerRef} data-active={activeKey ?? ''} data-focused={focused ? 1 : 0} className={`pv-layer ${cursor} ${focused ? 'is-focused' : ''}`} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerLeave={() => setCursor('')} onContextMenu={(e) => { void onContextMenu(e); }}>
@@ -637,7 +685,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
         key="preview-input"
         ref={inputRef}
         className="pv-input"
-        style={caretPx ? { left: caretLeft, top: caretPx.top, height: Math.max(1, caretH) } : { left: 0, top: 0 }}
+        style={{ left: inputPos.current.left, top: inputPos.current.top, height: Math.max(1, caretH) }}
         aria-label={tx("在预览里直接编辑")}
         autoCapitalize="off" autoCorrect="off" spellCheck={false} autoComplete="off"
         onFocus={() => setSurface({ focused: true })}

@@ -137,6 +137,32 @@ export function buildIndex(raw: Float64Array | null, segments: Segment[], versio
     }
     glyphs.push({ page: raw[i], x: raw[i + 1], y: raw[i + 2], w: raw[i + 3], h: raw[i + 4], key: seg.key, kind: seg.kind, seg, from, to, cp });
   }
+  return assemble(glyphs, version);
+}
+
+/**
+ * 只编一章那份字形表并进整编那份：展示层里那一章的页换成了新产物（嵌在 start 起、count 页、顶掉 baseCount 页），
+ * 其余页照旧但页序错开了一截；位置一律换算到新那份的版本。结果的页码就是展示层的页序
+ */
+export function mergeIndex(full: GlyphIndex, focus: GlyphIndex, start: number, baseCount: number, count: number, mapPos: (key: string, pos: number, assoc: -1 | 1) => number | null): GlyphIndex {
+  const glyphs: Glyph[] = [];
+  for (const lines of full.pages) if (lines) for (const l of lines) for (const g of l.glyphs) {
+    if (g.page >= start && g.page < start + baseCount) continue;
+    const page = g.page < start ? g.page : g.page + count - baseCount;
+    if (g.kind === 'text' || g.kind === 'node') {
+      const from = mapPos(g.key, g.from, 1), to = mapPos(g.key, g.to, -1);
+      if (from === null || to === null) continue;
+      glyphs.push({ ...g, page, from, to: Math.max(from, to) });
+    } else glyphs.push({ ...g, page });
+  }
+  for (const lines of focus.pages) if (lines) for (const l of lines) for (const g of l.glyphs) {
+    if (g.page >= count) continue;
+    glyphs.push({ ...g, page: g.page + start });
+  }
+  return assemble(glyphs, focus.version);
+}
+
+function assemble(glyphs: Glyph[], version: number): GlyphIndex {
   // 行：同页、基线相近的归一行
   glyphs.sort((a, b) => a.page - b.page || (a.y + a.h) - (b.y + b.h) || a.x - b.x);
   const pages: Line[][] = [];
