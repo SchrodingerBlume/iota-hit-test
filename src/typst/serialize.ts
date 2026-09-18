@@ -313,14 +313,17 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   const nomen = nomenclature(doc, or('nomenclature'));
   if (nomen) parts.push(nomen);
 
+  // 目录与清单这几页预览里退回原版断行：条目的悬挂宽是模板 measure 编号量出来的，在 msword 段落里量会随
+  // 引擎的量法漂（章名左缘 133.05 → 135.73 → 140.64）；这几页条目短、不折行，用模板自己的网格模拟与原版一字不差
+  const listLayout = (k: string) => layoutArg(preview && msword(s) ? { ...(s.layout?.pages?.[k] ?? {}), linebreaks: 'none' } : s.layout?.pages?.[k]);
   // 目录出哪几份：模板 lang: auto 按学位（博士两份）；lang 只收一种语言，要两份就各出一次（模板按语言计次，不算重复）
   if (resolvePage(doc, 'tableOfContents').value) {
     const langs = s.tocLang === 'auto' ? [''] : s.tocLang === 'both' ? ['lang: "zh"', 'lang: "en"'] : [`lang: "${s.tocLang}"`];
-    for (const l of langs) parts.push(`#table-of-contents(${[or('tableOfContents'), l, pageLayout('toc')].filter(Boolean).join(', ')})`);
+    for (const l of langs) parts.push(`#table-of-contents(${[or('tableOfContents'), l, listLayout('toc')].filter(Boolean).join(', ')})`);
   }
-  if (resolvePage(doc, 'listOfFigures').value) parts.push(`#list-of-figures(${[or('listOfFigures'), pageLayout('listOfFigures')].filter(Boolean).join(', ')})`);
-  if (resolvePage(doc, 'listOfTables').value) parts.push(`#list-of-tables(${[or('listOfTables'), pageLayout('listOfTables')].filter(Boolean).join(', ')})`);
-  if (resolvePage(doc, 'listOfEquations').value) parts.push(`#list-of-equations(${[or('listOfEquations'), pageLayout('listOfEquations')].filter(Boolean).join(', ')})`);
+  if (resolvePage(doc, 'listOfFigures').value) parts.push(`#list-of-figures(${[or('listOfFigures'), listLayout('listOfFigures')].filter(Boolean).join(', ')})`);
+  if (resolvePage(doc, 'listOfTables').value) parts.push(`#list-of-tables(${[or('listOfTables'), listLayout('listOfTables')].filter(Boolean).join(', ')})`);
+  if (resolvePage(doc, 'listOfEquations').value) parts.push(`#list-of-equations(${[or('listOfEquations'), listLayout('listOfEquations')].filter(Boolean).join(', ')})`);
 
   // ── 主体 ──
   parts.push(withArgs('mainmatter', or('mainmatter'), layoutArg(s.layout?.mainmatter)));
