@@ -65,6 +65,8 @@ export const useCompileState = create<CompileState>(() => ({
 }));
 
 export interface CompileInput {
+  /** 哪个工程的：换了工程之后路上才回来的结果按它丢掉 */
+  docId?: string;
   /** 手动刷新时重建完整预览。 */
   force?: boolean;
   /** 是否生成整篇字形映射。长文档仅在预览编辑时需要。 */
@@ -82,6 +84,18 @@ export interface CompileInput {
 
 let worker: Worker | null = null;
 let nextId = 1;
+let activeDoc = '';
+
+/** 换工程：上一份的产物、字形表、诊断、页数、只编一章的状态一律清掉；排着队的也不发了 */
+export function resetForProject(docId: string) {
+  activeDoc = docId;
+  pending = null;
+  useCompileState.setState({
+    artifact: null, artifactFresh: false, glyphs: null, segments: [], mapVersion: -1,
+    diagnostics: [], diagMain: '', diagSegments: [], lastMs: null, renderMs: null, pageCount: 0,
+    focusArtifact: null, focusFresh: false, focusAt: null,
+  });
+}
 let inFlight: number | null = null;
 let inFlightInput: CompileInput | null = null;
 let pending: CompileInput | null = null;
@@ -126,6 +140,8 @@ export function startCompiler() {
         const s = useCompileState.getState();
         const input = inFlightInput;
         inFlightInput = null;
+        // 换了工程之后才回来的：丢掉，接着发新工程排着的那份
+        if (input?.docId && activeDoc && input.docId !== activeDoc) { flush(); break; }
         // 编不过的版本不覆盖上一份能看的预览，但诊断照给（预览区里人话化、可跳转）
         const focus = input?.focus;
         useCompileState.setState({

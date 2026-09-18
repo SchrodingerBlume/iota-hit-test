@@ -56,7 +56,7 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
   const zoomRef = useRef(1);
   const zoomLabelRef = useRef<HTMLSpanElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [pages, setPages] = useState(0);
+  const pages = useCompileState((s) => s.pageCount);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [renderTick, setRenderTick] = useState(0);
   const virtualizeRef = useRef(NO_VIRTUALIZE);
@@ -243,7 +243,7 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
       before: (c) => { virtualizeRef.current.snapshot(); if (animate) { const [a, b] = view(); flipBefore(c, a, b); } },
       after: (c) => { virtualizeRef.current.apply(); if (animate) { const [a, b] = view(); flipAfter(c, a, b); } },
     }, usePreviewZoom.getState().perRow)
-      .then((info) => { if (alive) { useCompileState.setState({ renderMs: Math.round(performance.now() - t0), pageCount: info.length }); setPages(info.length); setRenderError(null); setRenderTick((t) => t + 1); } })
+      .then((info) => { if (alive) { useCompileState.setState({ renderMs: Math.round(performance.now() - t0), pageCount: info.length }); setRenderError(null); setRenderTick((t) => t + 1); } })
       .catch((e) => { if (alive) setRenderError(String(e?.message ?? e)); });
     return () => { alive = false; };
   }, [artifact]);

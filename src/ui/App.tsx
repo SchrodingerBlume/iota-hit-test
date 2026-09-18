@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore, type Section } from '../model/store';
 import type { ThesisDoc } from '../model/types';
-import { startCompiler, requestCompile, exportPdf, useCompileState } from '../compiler/client';
+import { startCompiler, requestCompile, resetForProject, exportPdf, useCompileState } from '../compiler/client';
 import { serializeProject } from '../typst/serialize';
 import { chapterAt, chapterPages } from '../compiler/focus';
 import { getEditor } from '../editor/registry';
@@ -75,6 +75,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
     let cancelled = false;
     // 换了工程：预览区已被项目管理页卸掉，渲染器没有上一版可以打差，增量产物会让它崩（reflexo 的 module unwrap），整个重编
     const force = refresh !== lastRefresh.current || engineKey !== lastEngine.current || lastProject.current !== doc.id;
+    if (lastProject.current !== doc.id) { resetForProject(doc.id); useComments.getState().setActive(null); usePreviewSurface.getState().set({ activeKey: null, focused: false }); }
     const cs = useCompileState.getState();
     const pageCount = cs.pageCount;
     // 只编一章的条件：整编过、页数多、光标在正文的某一章里、不在预览里直接编辑
@@ -122,6 +123,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
       lastEngine.current = engineKey;
       lastFocusId.current = focus?.id ?? '';
       requestCompile({
+        docId: doc.id,
         force,
         // 首次排版、小文档与预览直接编辑需要精确字形表。长文档在左侧连续输入时沿用旧表，
         // 避免每次击键都扫描约 200 页；位置映射会把旧表换算到当前文档。
