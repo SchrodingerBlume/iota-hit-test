@@ -1,4 +1,4 @@
-# typst-with-msword-linebreaks b74a09f6d 的 msword 提交 + typst 上游 #792 两个提交（485841043 拆 Space 语法种类、701f12ed5 中日文旁的换行空格丢掉）cherry-pick 到 aa999bec3（typst 0.15.1 基线）之上，再合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1（fork 主线已并入 typst main，typst.ts 0.8.1 的导出 / world 层编不过 main 的 Format API，站内先走这条 0.15.1 线）
+# typst-with-msword-linebreaks 68dd6ade1 的 msword 提交（b74a09f6d、0c234e59a、68dd6ade1）+ typst 上游 #792 两个提交（485841043、701f12ed5）cherry-pick 到 aa999bec3（typst 0.15.1 基线）之上，再合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1（fork 主线已并入 typst main，typst.ts 0.8.1 编不过 main 的 Format API，站内先走 0.15.1 线）
 diff --git a/crates/typst-eval/src/markup.rs b/crates/typst-eval/src/markup.rs
 index 6e79da8d2..e5a5abdd3 100644
 --- a/crates/typst-eval/src/markup.rs
@@ -195,10 +195,10 @@ index 259be8101..50f73975d 100644
          cjk_latin_spacing: shared.get(TextElem::cjk_latin_spacing).is_auto(),
 diff --git a/crates/typst-layout/src/inline/msword.rs b/crates/typst-layout/src/inline/msword.rs
 new file mode 100644
-index 000000000..40947b07b
+index 000000000..c3105911b
 --- /dev/null
 +++ b/crates/typst-layout/src/inline/msword.rs
-@@ -0,0 +1,2434 @@
+@@ -0,0 +1,2481 @@
 +// 本文件基于 Typst（typst/typst）与 typst-with-msword-linebreaks 修改（iota4web 合并到 Myriad-Dreamin/typst 之上，见 scripts/wasm-patch/typst-msword.patch）
 +//! Line breaking that emulates Microsoft Word.
 +//!
@@ -396,6 +396,10 @@ index 000000000..40947b07b
 +    autospace: bool,
 +    /// The paragraph's hanging indent (already taken off the measure).
 +    hanging: Abs,
++    /// The paragraph sits in a table cell (`cell: true`): closers compress
++    /// to half a cell but never hang past the cell edge, and the old modes
++    /// do not round the measure to whole cells (`out/tb-c15`, `out/tb-c11`).
++    table_cell: bool,
 +}
 +
 +impl Params {
@@ -553,6 +557,7 @@ index 000000000..40947b07b
 +        justify: p.config.justify,
 +        autospace: p.config.cjk_latin_spacing,
 +        hanging: p.config.hanging_indent,
++        table_cell: config.cell,
 +    };
 +
 +    let (symbols, ea_letters) = symbol_ranges(p);
@@ -1489,7 +1494,24 @@ index 000000000..40947b07b
 +                gaps -= 1.0 / k as f64;
 +            }
 +        }
-+        let mut pen = penalty(k, gaps);
++        let mut pen = if latin && k >= 2 {
++            // A Latin unit loses about 0.85 pt per automatic spacing elsewhere on
++            // the line, linearly (`sweep-*-gml`, 2/4/6 spacings after two
++            // commas: 1.3/2.8/3.5, after three: 1.7/3.0/3.9; runs with a
++            // half-cell space count their one spacing).
++            // ...but never more than a quarter of the shared width: a
++            // narrow unit (`3-`, `10%`) on a line with six spacings still
++            // fits in a thesis.
++            (Abs::pt(0.85) * gaps.max(0.0) * if closers > 0 { 2.0 } else { 1.0 })
++                .min(unit_width(first, j0, m) * k as f64 / (k as f64 + 1.0) * 0.25)
++        } else if latin && k == 1 {
++            // ...and after one comma the full logarithmic penalty (a CJK
++            // character gets half of it there): 2/4/6 spacings 11.1/10.65/
++            // 10.4 against the rule's 12.3.
++            penalty(k, gaps) * 2.0
++        } else {
++            penalty(k, gaps)
++        };
 +        if closers > 0 && k == 1 {
 +            // Measured (`龙，` after one spot): about a point per automatic
 +            // spacing, a little less each with many (1/2/4/6 spacings:
@@ -1502,11 +1524,18 @@ index 000000000..40947b07b
 +                // fitted with four spacings on the line): half of that.
 +                Abs::pt(0.5 * g)
 +            };
-+        } else if closers > 0 {
++        } else if closers > 0 && !(latin && k >= 2) {
++            // (A Latin core with closers doubles inside the capped linear
++            // penalty above: `10%，` after one spacing is refused, `3-3。`
++            // after six still fits.)
 +            pen *= 2.0;
 +        }
 +        let ex2 = params.latin_add();
-+        let hang_cap = if closers > 0 {
++        let hang_cap = if params.table_cell {
++            // In a table cell nothing hangs past the edge; a closer only
++            // compresses to half a cell (`天地玄黄，` needs 4.5 cells).
++            if closers > 0 { toks[m].full / 2.0 } else { Abs::zero() }
++        } else if closers > 0 {
 +            toks[m].full
 +        } else if ascii_tail > Abs::zero() {
 +            ascii_tail + ex2
@@ -1644,7 +1673,10 @@ index 000000000..40947b07b
 +            let phys = half * (k + 1) as f64 + auto / 2.0 * gaps as f64;
 +            phys.min(u_core + half + Abs::pt(0.3))
 +        } else if opener {
-+            half + half * (k.min(2) as f64)
++            // Up to three spots' worth (`sweep-*-c11k`: `（SSA）` after
++            // four commas fits half a cell more than after three, capped
++            // by the closer chain).
++            half + half * (k.min(3) as f64)
 +        } else if latin {
 +            // Measured in Word 2003 mode (`sweep-*-c11`): a Latin unit gets
 +            // half a cell per spot plus half a spacing per automatic
@@ -1821,7 +1853,11 @@ index 000000000..40947b07b
 +            // 2007/2010 modes hang it (`（生物质:` in a thesis).
 +            return half * spots(first, m) as f64 + auto / 2.0 * gaps as f64;
 +        }
-+        let hang = if NEVER_COMPRESSED.contains(&toks[m].c) {
++        let hang = if params.table_cell {
++            // In a table cell every closer compresses to half and none
++            // hangs (`玄黄宇宙洪荒。` fits 6.55 cells in 2003 mode).
++            half
++        } else if NEVER_COMPRESSED.contains(&toks[m].c) {
 +            if compat == 11 { Abs::zero() } else { p }
 +        } else if toks[m].symbol {
 +            // A symbol that may not start a line (`℃`, `°`) does not hang
@@ -2045,14 +2081,11 @@ index 000000000..40947b07b
 +        // Latin-ending, is measured against the whole cells (a 10.5 pt
 +        // `…律abcd` line is squeezed to 38 cells; at 12 pt the 1.75 pt
 +        // difference never decides a line).
-+        let snaps = params.grid && compat != 15 && params.adjust_right_indent;
-+        let cap_for = |k: usize| -> Abs {
-+            if snaps && matches!(toks[k].kind, Kind::Cjk | Kind::Close | Kind::Open) {
-+                cellcap
-+            } else {
-+                measure
-+            }
-+        };
++        let snaps = params.grid
++            && compat != 15
++            && params.adjust_right_indent
++            && !params.table_cell;
++        let cap_for = |_k: usize| -> Abs { if snaps { cellcap } else { measure } };
 +
 +        let first = i;
 +        let mut last = i;
@@ -2464,24 +2497,33 @@ index 000000000..40947b07b
 +        let mut autos = Vec::new();
 +        let mut spaces = Vec::new();
 +        let mut cjkgaps = Vec::new();
++        // Spaces snapped to half a cell next to CJK text: they do not take
++        // part in the first pass but grow with everything else after it.
++        let mut halves = Vec::new();
 +        for (k, it) in toks.iter().enumerate().take(last + 1).skip(first) {
 +            if k > first && it.gap > Abs::zero() {
 +                autos.push(k - 1);
 +            }
-+            if it.kind == Kind::Space && !it.rigid && !it.user && k > first && k < last {
-+                spaces.push(k);
++            if it.kind == Kind::Space && !it.user && k > first && k < last {
++                if it.rigid {
++                    halves.push(k);
++                } else {
++                    spaces.push(k);
++                }
 +            }
 +            if matches!(it.kind, Kind::Cjk | Kind::Close | Kind::Open) && k < last {
 +                cjkgaps.push(k);
 +            }
 +        }
-+        // Measured (`sweep-*-st`, Word 2013): the slack goes to the Latin
-+        // spaces first, up to half a space each, then to the automatic
-+        // CJK-Latin spacings, up to a whole spacing each, and only then
-+        // between the CJK characters; on a line without CJK gaps the
++        // Measured (`sweep-*-js`, Word 2013 and 2003 alike): the slack goes
++        // to the Latin spaces first, up to about 2.5 pt each (5/6 of a
++        // space), and to the automatic CJK-Latin spacings, up to a whole
++        // spacing each; after that every slot on the line grows together —
++        // the CJK gaps, full-width punctuation, the spaces and spacings
++        // again, and half-cell spaces. On a line without CJK gaps the
 +        // spaces take everything.
 +        if !spaces.is_empty() {
-+            let cap: Abs = spaces.iter().map(|&k| toks[k].w / 2.0).sum();
++            let cap: Abs = spaces.iter().map(|&k| toks[k].w * 5.0 / 6.0).sum();
 +            let take = if autos.is_empty() && cjkgaps.is_empty() {
 +                slack
 +            } else {
@@ -2508,9 +2550,14 @@ index 000000000..40947b07b
 +            // plus the half space above, from 2 pt up to 28 pt); giving the
 +            // rest to the CJK gaps alone left 4 pt holes after `［` and `］`
 +            // on a Latin line with only those two.
-+            let n = cjkgaps.len() + spaces.len();
++            let n = cjkgaps.len() + spaces.len() + autos.len() + halves.len();
 +            let each = slack / n as f64;
-+            for &k in cjkgaps.iter().chain(spaces.iter()) {
++            for &k in cjkgaps
++                .iter()
++                .chain(spaces.iter())
++                .chain(autos.iter())
++                .chain(halves.iter())
++            {
 +                after[k - first] += each;
 +            }
 +            slack -= each * n as f64;
@@ -2662,7 +2709,7 @@ index 36e66987b..0ccf884f3 100644
  }
  
 diff --git a/crates/typst-library/src/model/par.rs b/crates/typst-library/src/model/par.rs
-index 77ec28c79..45678de2f 100644
+index 77ec28c79..4b3091fa7 100644
 --- a/crates/typst-library/src/model/par.rs
 +++ b/crates/typst-library/src/model/par.rs
 @@ -5,8 +5,8 @@ use crate::diag::{HintedStrResult, SourceResult, StrResult, bail};
@@ -2676,7 +2723,7 @@ index 77ec28c79..45678de2f 100644
  };
  use crate::introspection::{Count, CounterUpdate, Locatable, Tagged, Unqueriable};
  use crate::layout::{Abs, Em, HAlignment, Length, OuterHAlignment, Ratio, Rel};
-@@ -358,6 +358,50 @@ pub struct ParElem {
+@@ -358,6 +358,54 @@ pub struct ParElem {
      /// breaks for ragged paragraphs may also be worthwhile to improve the
      /// appearance of the text.
      ///
@@ -2712,6 +2759,10 @@ index 77ec28c79..45678de2f 100644
 +    /// - `balance-widths`: Word's "balance SBCS and DBCS characters"
 +    ///   compatibility option (`{true}` by default), which decides how much
 +    ///   of the grid excess a Latin glyph receives.
++    /// - `cell`: Whether the paragraph sits in a table cell (`{false}` by
++    ///   default). Word then compresses closing punctuation to half a cell
++    ///   but never hangs it past the cell edge, and modes 11-14 do not
++    ///   round the cell's width to whole grid cells.
 +    ///
 +    /// ```example
 +    /// #set text(lang: "zh", size: 10pt)
@@ -2727,7 +2778,7 @@ index 77ec28c79..45678de2f 100644
      /// ```example
      /// #set page(width: 207pt)
      /// #set par(linebreaks: "simple")
-@@ -623,7 +667,7 @@ impl Limit for Rel<Length> {
+@@ -623,7 +671,7 @@ impl Limit for Rel<Length> {
  }
  
  /// How to determine line breaks in a paragraph.
@@ -2736,7 +2787,7 @@ index 77ec28c79..45678de2f 100644
  pub enum Linebreaks {
      /// Determine the line breaks in a simple first-fit style.
      Simple,
-@@ -632,6 +676,195 @@ pub enum Linebreaks {
+@@ -632,6 +680,205 @@ pub enum Linebreaks {
      /// Typst will try to produce more evenly filled lines of text by
      /// considering the whole paragraph when calculating line breaks.
      Optimized,
@@ -2821,6 +2872,9 @@ index 77ec28c79..45678de2f 100644
 +        if let Some(balance) = take::<bool>(&mut dict, "balance-widths")? {
 +            config.balance_widths = balance;
 +        }
++        if let Some(cell) = take::<bool>(&mut dict, "cell")? {
++            config.cell = cell;
++        }
 +        dict.finish(&[
 +            "mode",
 +            "compat",
@@ -2829,6 +2883,7 @@ index 77ec28c79..45678de2f 100644
 +            "adjust-right-indent",
 +            "kern",
 +            "balance-widths",
++            "cell",
 +        ])?;
 +        Self::Msword(config)
 +    },
@@ -2887,6 +2942,10 @@ index 77ec28c79..45678de2f 100644
 +    pub kern: bool,
 +    /// Whether Latin glyphs get half the grid excess (on) or all of it.
 +    pub balance_widths: bool,
++    /// Whether the paragraph sits in a table cell: Word then neither hangs
++    /// closing punctuation past the cell edge nor (modes 11-14) rounds the
++    /// measure to whole cells.
++    pub cell: bool,
 +}
 +
 +impl Default for MswordLinebreaks {
@@ -2898,6 +2957,7 @@ index 77ec28c79..45678de2f 100644
 +            adjust_right_indent: true,
 +            kern: true,
 +            balance_widths: true,
++            cell: false,
 +        }
 +    }
 +}
@@ -2927,6 +2987,7 @@ index 77ec28c79..45678de2f 100644
 +        );
 +        dict.insert("kern".into(), config.kern.into_value());
 +        dict.insert("balance-widths".into(), config.balance_widths.into_value());
++        dict.insert("cell".into(), config.cell.into_value());
 +        dict
 +    }
  }
