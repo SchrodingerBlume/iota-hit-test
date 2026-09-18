@@ -299,10 +299,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   parts.push(withArgs('frontmatter', or('frontmatter'), layoutArg(s.layout?.frontmatter)));
   const coverArgs = s.titleEnXiaoer !== 'auto' ? `title-en-xiaoer: ${tri(s.titleEnXiaoer)}` : '';
   const covers = (['cover', 'titlepage'] as const).filter((k) => resolvePage(doc, k).value);
-  // 封面 / 内封暂用 Typst 原版断行（fork 的 msword 模式量不准 text(spacing:) 撑开的填空线，报告封面的填空线参差顶出页边；
-  // 已报 fork，见 ~/Desktop/msword-report C）：页级 layout: (linebreaks: none)，模板在那一页退回自己的模拟
-  const coverLayout = (k: string) => layoutArg(preview && msword(s) ? { ...(s.layout?.pages?.[k] ?? {}), linebreaks: 'none' } : s.layout?.pages?.[k]);
-  for (const k of covers) parts.push(`#${k}(${[coverArgs, coverLayout(k)].filter(Boolean).join(', ')})`);
+  for (const k of covers) parts.push(`#${k}(${[coverArgs, pageLayout(k)].filter(Boolean).join(', ')})`);
 
   const rich = (key: RichKey, opts: { headings: boolean; headingBase?: number }) => serializeDoc(doc[key], { ...opts, knownLabels, preview, map: { key, posOf: indexPositions(doc[key] as any) } });
   const abstractZh = rich('abstractZh', { headings: false });

@@ -135,7 +135,7 @@ npm run test:compile # 不开浏览器，在 Node 里用同一颗 wasm 编一份
 引擎是环境，不是文档参数：预览编译时 worker 用 `sys.inputs` 传 `linebreaks=<JSON>`（`{"mode":"msword","compat":15,"kern":true,"adjust-right-indent":true}`），
 模板读到它就不再发模拟网格用的 `text(tracking:)` 与西文补偿那几条规则，改在每次换版面（文档级、各段、带自己网格的成果页 / 声明页）
 处自己发 `set par(linebreaks: (mode: "msword", char-excess: 网格增量, …))`——各部件用的就是模板算的那份网格，站内不再注入任何规则。
-封面、内封两页预览里写 `layout: (linebreaks: none)` 退回原版断行（fork 还量不准 `text(spacing:)` 撑开的填空线）。
+要让某一页退回原版断行，工程 JSON 里给那页 `layout: { "linebreaks": "none" }` 即可（见下面「版面的局部改写」）。
 
 构建：typst.ts 钉的 typst 带它自己的 `content_hint` 改动，与 fork 在 `line.rs` / `linebreak.rs` 有冲突，所以
 `scripts/wasm-patch/typst-msword.patch` 是 fork 合并到 typst.ts 那份 typst 之上的结果（首行记着 fork 的提交号）；
