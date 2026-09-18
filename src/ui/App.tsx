@@ -125,7 +125,8 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
         force,
         // 首次排版、小文档与预览直接编辑需要精确字形表。长文档在左侧连续输入时沿用旧表，
         // 避免每次击键都扫描约 200 页；位置映射会把旧表换算到当前文档。
-        glyphs: !focus && (force || previewFocused || pageCount < 80),
+        // 停手后的整编顺便把字形表刷新，预览里的光标才对得上（只编一章那几轮没刷）
+        glyphs: !focus && (force || previewFocused || wantFull || pageCount < 80),
         focus: focus ? { id: focus.id, start: focus.start, baseCount: focus.baseCount } : undefined,
         main: project.main,
         files: project.files,
