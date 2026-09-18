@@ -172,9 +172,30 @@ npm run test:compile # 不开浏览器，在 Node 里用同一颗 wasm 编一份
 
 ## auto 映射规则从哪来
 
-`src/model/options.ts` 里每个三态开关都带一个 `resolve(settings)`，抄自模板 `src/config/settings.typ`
-的默认表与 `lib.typ` 的注释——它只用于在界面上告诉用户「自动档现在等于什么」，
+`src/model/options.ts` 里每个三态开关都带一个 `resolve(settings)`，抄自模板
+的默认表与 `lib.typ` 的注释（现在在 `src/settings/defaults.typ` 与 `src/api.typ`）——它只用于在界面上告诉用户「自动档现在等于什么」，
 **真正传给 Typst 的仍是 `auto`**，生效的是模板自己算的值。模板改了规则这里要跟着改。
+
+## 版面的局部改写：只在工程 JSON 里
+
+页边距、文档网格、页眉页脚这一级的设置（模板的 `layout:` 字典）界面上不开——到这种粒度用户不该改，
+但原稿确实会有「第 1 章那一节的字符网格是另一格」这种事。下载副本的 .iota.json 里 `settings.layout`
+写了就生效：
+
+```json
+"layout": {
+  "doc": { "margin": { "top": "3cm", "rest": "2.5cm" } },
+  "mainmatter": { "line-pitch": "20pt" },
+  "pages": { "toc": { "char-pitch": "13pt" }, "abstract": { "header": { "shown": false } } },
+  "chapters": { "1": { "char-pitch": "12.65pt" } }
+}
+```
+
+键与模板 `layout:` 字典同名，值照 Typst 原话写（`"12.65pt"`、`"zihao.xiaosi"`；要字符串就写 `"\"…\""`）。
+`doc` / `frontmatter` / `mainmatter` / `backmatter` 对应模板的文档级与段级，`pages` 按页函数
+（cover、titlepage、abstract、toc、listOfFigures、listOfTables、listOfEquations、achievements、declarations、index），
+`chapters` 按正文章号——模板没有章级版面，站内把 `char-pitch`（可带 `base-size`）折成那一章的字距：
+预览是引擎的 `char-pitch`，导出的 .typ 是 `#set text(tracking: char-pitch − base-size)`。
 
 ## 导出 Word（.docx）
 

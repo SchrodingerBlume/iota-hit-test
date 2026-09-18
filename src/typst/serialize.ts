@@ -1,6 +1,6 @@
 // 整份工程 → main.typ（以及要一起交给编译器的旁文件）。
 // 结构照 iota-hit/template/example.typ：前置 → 主体 → 附录 → 后置。
-import type { ThesisDoc, Settings, Info, StyleEntry, OpenrightKey } from '../model/types';
+import type { ThesisDoc, Settings, Info, StyleEntry, OpenrightKey, LayoutDict } from '../model/types';
 import { INFO_FIELDS } from '../model/info';
 import { serializeDoc, escapeText, collectImages, collectRefTargets, collectCiteKeys, indexPositions } from './pmToTypst';
 import { computeNumbering } from './numbering';
@@ -87,8 +87,20 @@ function mswordPrelude(s: Settings): string {
   return msword(s) ? mswordRule(s) : `#set par(linebreaks: ${JSON.stringify(s.linebreaker)})`;
 }
 
+/** 工程 JSON 里的版面字典 → Typst 字典原文：字符串照 Typst 原话（长度、zihao.xxx、"…" 带引号的才是字符串） */
+export function typstDict(v: unknown): string {
+  if (v === null || v === undefined) return 'none';
+  if (typeof v === 'boolean' || typeof v === 'number') return String(v);
+  if (typeof v === 'string') return v.trim() === '' ? 'none' : v.trim();
+  if (Array.isArray(v)) return `(${v.map(typstDict).join(', ')}${v.length === 1 ? ',' : ''})`;
+  const entries = Object.entries(v as Record<string, unknown>);
+  return entries.length ? `(${entries.map(([k, x]) => `${k}: ${typstDict(x)}`).join(', ')})` : '(:)';
+}
+const layoutArg = (d: LayoutDict | undefined): string => (d && Object.keys(d).length ? `layout: ${typstDict(d)}` : '');
+
 function settingsArgs(s: Settings): string[] {
   const args: string[] = [];
+  if (layoutArg(s.layout?.doc)) args.push(layoutArg(s.layout?.doc));
   args.push(`campus: ${JSON.stringify(s.campus)}`);
   args.push(`degree-level: ${JSON.stringify(s.degreeLevel)}`);
   args.push(`form: ${JSON.stringify(s.form)}`);
@@ -300,14 +312,15 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
 
   // ── 前置 ──
   const or = (k: OpenrightKey): string => { const v = doc.openright?.[k]; return v === true || v === false ? `openright: ${v}` : ''; };
-  const orArgs = (k: OpenrightKey): string => (or(k) ? `(${or(k)})` : '()');
   const orLead = (k: OpenrightKey): string => (or(k) ? `${or(k)}, ` : '');
-  parts.push(or('frontmatter') ? `#show: frontmatter.with(${or('frontmatter')})` : '#show: frontmatter');
+  const withArgs = (fn: string, ...xs: string[]) => { const a = xs.filter(Boolean); return a.length ? `#show: ${fn}.with(${a.join(', ')})` : `#show: ${fn}`; };
+  const pageLayout = (k: string) => layoutArg(s.layout?.pages?.[k]);
+  parts.push(withArgs('frontmatter', or('frontmatter'), layoutArg(s.layout?.frontmatter)));
   if (preview && msword(s)) parts.push(mswordRule(s));
   const coverArgs = s.titleEnXiaoer !== 'auto' ? `title-en-xiaoer: ${tri(s.titleEnXiaoer)}` : '';
   const covers = (['cover', 'titlepage'] as const).filter((k) => resolvePage(doc, k).value);
   if (covers.length && preview && msword(s)) parts.push(stockRule(s));
-  for (const k of covers) parts.push(`#${k}(${coverArgs})`);
+  for (const k of covers) parts.push(`#${k}(${[coverArgs, pageLayout(k)].filter(Boolean).join(', ')})`);
   if (covers.length && preview && msword(s)) parts.push(mswordRule(s));
 
   const rich = (key: RichKey, opts: { headings: boolean; headingBase?: number }) => serializeDoc(doc[key], { ...opts, knownLabels, preview, map: { key, posOf: indexPositions(doc[key] as any) } });
@@ -316,7 +329,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   if (resolvePage(doc, 'abstract').value && (abstractZh.trim() || abstractEn.trim())) {
     // 关键词上方：模板 keywords-above——none 不空、v(1fr) 挤到页底、auto 空一行（默认，不写）
     const ka = s.abstractKeywordsAbove === 'none' ? ', keywords-above: none' : s.abstractKeywordsAbove === 'bottom' ? ', keywords-above: v(1fr)' : '';
-    parts.push(`#abstract(en: [\n${indent(abstractEn, 2)}\n]${ka}${or('abstract') ? `, ${or('abstract')}` : ''})[\n${indent(abstractZh, 2)}\n]`);
+    parts.push(`#abstract(en: [\n${indent(abstractEn, 2)}\n]${ka}${or('abstract') ? `, ${or('abstract')}` : ''}${pageLayout('abstract') ? `, ${pageLayout('abstract')}` : ''})[\n${indent(abstractZh, 2)}\n]`);
   }
 
   const nomen = nomenclature(doc, or('nomenclature'));
@@ -325,16 +338,16 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   // 目录出哪几份：模板 lang: auto 按学位（博士两份）；lang 只收一种语言，要两份就各出一次（模板按语言计次，不算重复）
   if (resolvePage(doc, 'tableOfContents').value) {
     const langs = s.tocLang === 'auto' ? [''] : s.tocLang === 'both' ? ['lang: "zh"', 'lang: "en"'] : [`lang: "${s.tocLang}"`];
-    for (const l of langs) parts.push(`#table-of-contents(${[or('tableOfContents'), l].filter(Boolean).join(', ')})`);
+    for (const l of langs) parts.push(`#table-of-contents(${[or('tableOfContents'), l, pageLayout('toc')].filter(Boolean).join(', ')})`);
   }
-  if (resolvePage(doc, 'listOfFigures').value) parts.push(`#list-of-figures${orArgs('listOfFigures')}`);
-  if (resolvePage(doc, 'listOfTables').value) parts.push(`#list-of-tables${orArgs('listOfTables')}`);
-  if (resolvePage(doc, 'listOfEquations').value) parts.push(`#list-of-equations${orArgs('listOfEquations')}`);
+  if (resolvePage(doc, 'listOfFigures').value) parts.push(`#list-of-figures(${[or('listOfFigures'), pageLayout('listOfFigures')].filter(Boolean).join(', ')})`);
+  if (resolvePage(doc, 'listOfTables').value) parts.push(`#list-of-tables(${[or('listOfTables'), pageLayout('listOfTables')].filter(Boolean).join(', ')})`);
+  if (resolvePage(doc, 'listOfEquations').value) parts.push(`#list-of-equations(${[or('listOfEquations'), pageLayout('listOfEquations')].filter(Boolean).join(', ')})`);
 
   // ── 主体 ──
-  parts.push(or('mainmatter') ? `#show: mainmatter.with(${or('mainmatter')})` : '#show: mainmatter');
+  parts.push(withArgs('mainmatter', or('mainmatter'), layoutArg(s.layout?.mainmatter)));
   if (preview && msword(s)) parts.push(mswordRule(s));
-  const body = rich('body', { headings: true, headingBase: 1 });
+  const body = bodyByChapters(doc, s, preview, (r) => serializeDoc({ type: 'doc', content: (doc.body.content ?? []).slice(r.from, r.to) } as any, { headings: true, headingBase: 1, knownLabels, preview, map: { key: 'body', posOf: indexPositions(doc.body as any) } }));
   parts.push(body || '= 绪论');
 
   const conclusion = rich('conclusion', { headings: false });
@@ -351,12 +364,13 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   if (resolvePage(doc, 'appendix').value && appendix.trim()) {
     parts.push(`#appendix[\n${indent(appendix, 2)}\n]`);
   }
+  if (layoutArg(s.layout?.backmatter)) parts.push(`#show: backmatter.with(${layoutArg(s.layout?.backmatter)})`);
 
   const ach = generateBibtex(doc.achievementEntries ?? []);
   if (resolvePage(doc, 'achievements').value && ach.trim()) {
     files['achievements.bib'] = ach;
     if (preview && msword(s)) parts.push(mswordRule(s, 'achievements'));
-    parts.push(`#achievements(${orLead('achievements')}read("achievements.bib"))`);
+    parts.push(`#achievements(${orLead('achievements')}${pageLayout('achievements') ? `${pageLayout('achievements')}, ` : ''}read("achievements.bib"))`);
     if (preview && msword(s)) parts.push(mswordRule(s));
   }
 
@@ -365,10 +379,10 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
 
   if (resolvePage(doc, 'declarations').value) {
     if (preview && msword(s)) parts.push(mswordRule(s, s.degreeLevel === 'bachelor' ? 'declarations' : 'declarations-graduate'));
-    parts.push(`#declarations${orArgs('declarations')}`);
+    parts.push(`#declarations(${[or('declarations'), pageLayout('declarations')].filter(Boolean).join(', ')})`);
     if (preview && msword(s)) parts.push(mswordRule(s));
   }
-  if (resolvePage(doc, 'index').value) parts.push(`#index${orArgs('index')}`);
+  if (resolvePage(doc, 'index').value) parts.push(`#index(${[or('index'), pageLayout('index')].filter(Boolean).join(', ')})`);
 
   const ack = rich('acknowledgement', { headings: false });
   if (ack.trim()) parts.push(`#acknowledgement${or('acknowledgement') ? `(${or('acknowledgement')})` : ''}[\n${indent(ack, 2)}\n]`);
@@ -412,11 +426,12 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   // 缩略语的定义在前置页那一函数里；不印页，只登记
   const abbrs = doc.abbreviations.filter((a) => a.key.trim());
   if (abbrs.length) parts.push(`#list-of-abbreviations(${abbrDictOf(abbrs)}, form: none, shown: true)`);
-  parts.push(or('mainmatter') ? `#show: mainmatter.with(${or('mainmatter')})` : '#show: mainmatter');
+  const mm = [or('mainmatter'), layoutArg(s.layout?.mainmatter)].filter(Boolean);
+  parts.push(mm.length ? `#show: mainmatter.with(${mm.join(', ')})` : '#show: mainmatter');
   if (msword(s)) parts.push(mswordRule(s));
   // 章号从上一章数起；首页页码钉在上次整编的位置
   parts.push(`#counter(heading).update(${Math.max(0, focus.chapter - 1)})${focus.page && focus.page > 1 ? `\n#counter(page).update(${focus.page})` : ''}`);
-  const body = serializeDoc(chapterDoc as any, { headings: true, headingBase: 1, knownLabels, refText, preview: true, map: { key: 'body', posOf: indexPositions(doc.body as any) } });
+  const body = chapterWrap(s.layout?.chapters?.[String(focus.chapter)], s, true, serializeDoc(chapterDoc as any, { headings: true, headingBase: 1, knownLabels, refText, preview: true, map: { key: 'body', posOf: indexPositions(doc.body as any) } }));
   parts.push(body || '= 绪论');
   const cited = collectCiteKeys(chapterDoc as any);
   const refs = generateBibtex((doc.references ?? []).filter((e) => cited.has(e.key.trim())));
@@ -424,4 +439,22 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   if (refs.trim()) { files['refs.bib'] = refs; parts.push('#bibliography(read("focus-refs.bib"), full: true)'); }
   const { text: main, segments } = stripMarks(parts.join('\n\n') + '\n');
   return { main, files, images: [...collectImages(chapterDoc as any)], segments };
+}
+
+/** 正文按章序列化；工程 JSON 里给了某章的 char-pitch，就把那一章包起来改字距（预览是引擎的 char-pitch，导出是 text(tracking:)） */
+function bodyByChapters(doc: ThesisDoc, s: Settings, preview: boolean, ser: (r: { from: number; to: number }) => string): string {
+  const chapters = s.layout?.chapters ?? {};
+  const ranges = chapterRanges(doc.body);
+  if (!ranges.length || !Object.keys(chapters).length) return ser({ from: 0, to: (doc.body.content ?? []).length });
+  return ranges.map((r, k) => chapterWrap(chapters[String(k + 1)], s, preview, ser(r))).join('\n\n');
+}
+export function chapterWrap(d: LayoutDict | undefined, s: Settings, preview: boolean, body: string): string {
+  const pitch = d && typeof d['char-pitch'] === 'string' ? String(d['char-pitch']).trim() : '';
+  if (!pitch) return body;
+  const base = d && typeof d['base-size'] === 'string' ? String(d['base-size']).trim() : 'zihao.xiaosi';
+  const compat = s.wordCompat === 'auto' ? '11' : s.wordCompat;
+  const rule = preview && msword(s)
+    ? `#set par(linebreaks: (mode: "msword", compat: ${compat}, char-pitch: ${pitch}, kern: true, adjust-right-indent: true))`
+    : `#set text(tracking: ${pitch} - ${base})`;
+  return `#[\n${rule}\n${body}\n]`;
 }

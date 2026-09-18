@@ -947,6 +947,8 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .subfig-grid { display: grid; gap: 10px 14px; align-items: end; }
 .subfig { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
 .subfig img { display: block; }
+.subcaps { display: flex; flex-wrap: wrap; gap: 4px 14px; justify-content: center; margin-top: 2px; }
+.subcaps .subfig-cap { display: inline-flex; align-items: center; gap: 4px; }
 .subfig-cap { display: flex; align-items: baseline; gap: 4px; font-family: var(--serif); font-size: 14px; }
 .subfig-tools { display: none; align-items: center; gap: 4px; }
 .subfig:hover .subfig-tools, .subfig:focus-within .subfig-tools { display: inline-flex; }

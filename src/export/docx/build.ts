@@ -193,10 +193,15 @@ function figure(ctx: Ctx, n: PMNode): Block[] {
   const num = numOf(ctx, n, 'fig');
   let subs: { image: string; caption?: string; width?: unknown }[] = [];
   try { subs = JSON.parse(String(n.attrs?.subs || '[]')); } catch { /* */ }
+  const letter = (i: number) => 'abcdefghijklmnopqrstuvwxyz'[i] ?? String(i + 1);
+  // 合成图配连排分图题：图照单图排，分图题在图题下一行「(a) … (b) …」
+  if (subs.length && n.attrs?.image && !subs.some((s) => s.image)) {
+    const img = image(ctx, String(n.attrs.image), cmOf(n.attrs?.width, 8));
+    return [centered(img ? [img] : [], { keepNext: true, spacing: { before: ctx.L.line } }), ...captionPara(ctx, num, String(n.attrs?.caption ?? ''), String(n.attrs?.captionEn ?? '')), new Paragraph({ style: 'Caption', children: [new TextRun({ text: subs.map((s, i) => `(${letter(i)}) ${s.caption ?? ''}`).join('  ') })] })];
+  }
   if (subs.length) {
     const cols = Math.max(1, Math.min(4, Number(n.attrs?.columns) || 2));
     const rows: TableRow[] = [];
-    const letter = (i: number) => 'abcdefghijklmnopqrstuvwxyz'[i] ?? String(i + 1);
     for (let r = 0; r < subs.length; r += cols) {
       const cells = subs.slice(r, r + cols).map((s, k) => new TableCell({ borders: NO_BORDERS, verticalAlign: VerticalAlign.BOTTOM, children: [centered([image(ctx, s.image, cmOf(s.width, 6))].filter((x): x is ParagraphChild => !!x)), new Paragraph({ style: 'Caption', children: [new TextRun({ text: `(${letter(r + k)}) ${s.caption ?? ''}` })] })] }));
       while (cells.length < cols) cells.push(new TableCell({ borders: NO_BORDERS, children: [new Paragraph('')] }));

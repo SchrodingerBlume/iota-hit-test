@@ -104,10 +104,12 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
     if (r.width && r.height) patch.width = Math.min(14, Math.max(4, Math.round((r.width / 96) * 2.54 * 10) / 10));
     updateAttributes(patch);
   };
+  // 合成图配连排分图题：分图条目都没有图、母图有图——图照常显示，分图题在图题下一行一条
+  const captionOnly = subs.length > 0 && !!name && !subs.some((s) => s.image);
   return (
-    <NodeViewWrapper className={`blk fig ${selected ? 'is-selected' : ''} ${subs.length ? 'has-subs' : ''}`} data-drag-handle ref={wrap}>
+    <NodeViewWrapper className={`blk fig ${selected ? 'is-selected' : ''} ${subs.length && !captionOnly ? 'has-subs' : ''}`} data-drag-handle ref={wrap}>
       <div className="fig-body" contentEditable={false}>
-        {subs.length ? (
+        {subs.length && !captionOnly ? (
           <div className="subfig-grid" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
             {subs.map((s, i) => <SubFigureCell key={i} sub={s} index={i} letter={letters[i] ?? String(i + 1)} labelBase={labelOf(node.attrs as any, 'fig')} editable={editable} onChange={(p) => setSubs(subs.map((x, k) => (k === i ? { ...x, ...p } : x)))} onRemove={() => setSubs(subs.filter((_, k) => k !== i))} />)}
           </div>
@@ -120,6 +122,13 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
         )}
       </div>
       <Caption node={node} updateAttributes={updateAttributes} kindName={t("图")} editable={editable} prefix={num} />
+      {captionOnly && (
+        <div className="subcaps" contentEditable={false}>
+          {subs.map((s, i) => (
+            <span key={i} className="subfig-cap"><span className="cap-num">({letters[i] ?? i + 1})</span><AutoInput className="cap-input" disabled={!editable} value={s.caption} placeholder={t("分图题")} minWidth={40} onChange={(e) => setSubs(subs.map((x, k) => (k === i ? { ...x, caption: e.target.value } : x)))} /><button type="button" className="blk-tool is-btn is-danger" title={t("删掉这条分图题")} disabled={!editable} onClick={() => setSubs(subs.filter((_, k) => k !== i))}><Trash2 /></button></span>
+          ))}
+        </div>
+      )}
       <Tools>
         <label className="blk-tool" title={t("图的宽度：cm / mm / pt / em / %（相对版心宽）")}>
           <MoveHorizontal />
@@ -127,6 +136,7 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
         </label>
         <LabelField node={node} updateAttributes={updateAttributes} prefix="fig" editable={editable} />
         <button type="button" className="blk-tool is-btn" title={t("加一张分图（多张分图排成一张母图，分图题 (a)(b)…）")} disabled={!editable} onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.onchange = async () => { const files = [...(input.files ?? [])]; const add: SubFig[] = []; for (const f of files) { const r = await env.addImage(f); add.push({ image: r.name, width: r.width && r.height ? `${Math.min(7, Math.max(3, Math.round((r.width / 96) * 2.54 * 10) / 10))}cm` : '6cm', caption: '' }); } const base = subs.length ? subs : (name ? [{ image: name, width: node.attrs.width ?? '6cm', caption: '' }] : []); setSubs([...base, ...add]); }; input.click(); }}><PencilLine />{t("分图")}</button>
+        {!!name && (!subs.length || captionOnly) && <button type="button" className="blk-tool is-btn" title={t("这张图里已经画着 (a)(b)：分图题连排在图题之下（模板的 #subs）")} disabled={!editable} onClick={() => setSubs([...subs, { image: '', width: '', caption: '' }])}><PencilLine />{t("分图题")}</button>}
         {!subs.length && <label className="blk-tool is-btn" title={t("换一张图")}><ImageUp /><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>}
         <button type="button" className="blk-tool is-btn is-danger" title={t("删除插图")} disabled={!editable} onClick={deleteNode}><Trash2 /></button>
       </Tools>

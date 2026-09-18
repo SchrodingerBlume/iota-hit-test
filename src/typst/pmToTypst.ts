@@ -370,6 +370,13 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
     case 'figure': {
       const subs = parseSubs(n.attrs?.subs);
       const label = labelOf(n.attrs, 'fig');
+      // 一张合成图（(a)(b) 画在图里）配连排分图题：分图条目都没有图、母图有图 → 单图 + 图题里的 #subs
+      if (subs.length && n.attrs?.image && !subs.some((s) => s.image)) {
+        const letter = (i: number) => 'abcdefghijklmnopqrstuvwxyz'[i] ?? String(i + 1);
+        const subsArg = `#subs(${subs.map((s, i) => `[${(s.caption ?? '').trim() ? escapeText(s.caption ?? '') : '#box[]'}${label ? ` <${label}-${letter(i)}>` : ''}]`).join(', ')},)`;
+        const width = lengthTypst(n.attrs?.width ?? 8, 'cm', '8cm');
+        return floatWrap(n, 'image', tag(opts, n, 'node', `#figure(\n  image(${JSON.stringify(`${opts.imageDir ?? 'images'}/${n.attrs.image}`)}, width: ${width}),\n  caption: [${caption(n, opts)}${subsArg}],${placementArg(n)}\n)`) + (label ? ` <${label}>` : ''));
+      }
       if (subs.length) {
         // 分图：grid 里一张张排，分图题两档（模板：#subfigure 排在分图之下，#subs 连排在图题之下）
         const cols = Math.max(1, Math.min(4, Number(n.attrs?.columns) || 2));
@@ -565,7 +572,7 @@ export function collectRefTargets(doc: PMNode | undefined | null): RefTarget[] {
 export function collectImages(doc: PMNode | undefined | null): string[] {
   const out = new Set<string>();
   const walk = (n: PMNode) => {
-    if (n.type === 'figure') { const subs = parseSubs(n.attrs?.subs); if (subs.length) subs.forEach((s) => { if (s.image) out.add(String(s.image)); }); else if (n.attrs?.image) out.add(String(n.attrs.image)); }
+    if (n.type === 'figure') { const subs = parseSubs(n.attrs?.subs); subs.forEach((s) => { if (s.image) out.add(String(s.image)); }); if (n.attrs?.image && (!subs.length || !subs.some((s) => s.image))) out.add(String(n.attrs.image)); }
     for (const c of n.content ?? []) walk(c);
   };
   if (doc) walk(doc);
