@@ -201,9 +201,8 @@ npm run test:compile # 不开浏览器，在 Node 里用同一颗 wasm 编一份
 键与模板 `layout:` 字典同名，值照 Typst 原话写（`"12.65pt"`、`"zihao.xiaosi"`；要字符串就写 `"\"…\""`）。
 `doc` / `frontmatter` / `mainmatter` / `backmatter` 对应模板的文档级与段级，`pages` 按页函数
 （cover、titlepage、abstract、toc、listOfFigures、listOfTables、listOfEquations、achievements、declarations、index），
-`chapters` 按正文章号：文档网格那几个键（`char-pitch` / `chars-per-line`、`line-pitch` / `lines-per-page`、`base-size`、
-`latin-line-height`）写成模板的 `#chapter(layout: (…))`，其余（页边距、页眉页脚）包成 `#show: new-layout.with((…))` …
-`#show: restore-layout`——两样都是模板的原生写法，导出的 .typ 一样能编。
+`chapters` 按正文章号：那一章包成模板的 `#show: new-layout.with((…))` … `#show: restore-layout`（网格、页边距、
+页眉页脚都收），导出的 .typ 一样能编。
 
 ## 导出 Word（.docx）
 
