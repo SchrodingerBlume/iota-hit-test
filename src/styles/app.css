@@ -393,7 +393,7 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 /* 标题：编号 + 中文名一行，英文名下面一行小字 */
 .hd { margin: 1.4em 0 0.5em !important; }
 .hd-row { display: flex; align-items: baseline; gap: 0.5em; }
-.hd-num { flex: none; font-family: var(--sans); font-weight: 700; color: var(--orange-ink); white-space: nowrap; user-select: none; }
+.hd-num { flex: none; font-family: var(--sans); font-weight: 700; color: var(--orange); white-space: nowrap; user-select: none; }
 .hd-num:empty { display: none; }
 .hd .hd-zh { flex: 1; margin: 0; font-family: var(--sans); font-weight: 700; line-height: 1.35; min-width: 2em; }
 .hd-1 .hd-row { font-size: 24px; }
