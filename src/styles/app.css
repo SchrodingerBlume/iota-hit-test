@@ -437,11 +437,18 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 /* 气泡菜单 */
 .bubble { display: inline-flex; align-items: center; gap: 2px; padding: 4px 6px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow-2); animation: pop var(--fast) var(--ease) both; z-index: 30; }
 .bubble .tb { height: 26px; min-width: 26px; }
+.bubble .tb-sep { height: 16px; margin: 0 3px; }
 
 /* 块：平时无框，悬停淡框，选中主色框；工具条浮在右上角 */
 .blk { position: relative; margin: 0.9em 0 !important; padding: 8px 10px; border-radius: var(--r-s); border: 1px solid transparent; transition: border-color var(--base) var(--ease), background-color var(--base) var(--ease); font-family: var(--sans); font-size: 13px; }
 .blk:hover { border-color: var(--line); }
 .blk.is-selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft-2); background: transparent; }
+/* 块左侧的拖动把手：悬停 / 选中时出现，按住拖动整块，点一下选中整块 */
+.blk-handle { position: absolute; left: -24px; top: 8px; width: 18px; height: 22px; display: grid; place-items: center; border-radius: var(--r-s); color: var(--muted); cursor: grab; opacity: 0; transition: opacity var(--fast) var(--ease), background-color var(--fast) var(--ease); user-select: none; -webkit-user-select: none; }
+.blk-handle svg { fill: currentColor; }
+.blk-handle:hover { background: var(--panel-2); color: var(--ink); }
+.blk-handle:active { cursor: grabbing; }
+.blk:hover .blk-handle, .blk.is-selected .blk-handle { opacity: 1; }
 /* 工具条浮在块的上沿外面，不压住图片与题注 */
 .blk-tools { position: absolute; bottom: calc(100% - 4px); right: 8px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow-2); opacity: 0; transform: translateY(4px); pointer-events: none; transition: opacity var(--fast) var(--ease), transform var(--fast) var(--ease); z-index: 6; font-size: 12px; color: var(--muted); }
 .blk:hover .blk-tools, .blk.is-selected .blk-tools, .blk-tools:focus-within { opacity: 1; transform: none; pointer-events: auto; }

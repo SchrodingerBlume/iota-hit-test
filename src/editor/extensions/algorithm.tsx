@@ -4,6 +4,7 @@
 // 行里的内容是 Typst 标记：$公式$、*粗体* 照写；关键字（for / if / return…）模板自己认。
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
+import { Handle } from './blocks';
 import { useRef } from 'react';
 import { Trash2, Plus, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Tag } from 'lucide-react';
 import { useNumbering } from '../env';
@@ -25,7 +26,7 @@ export function parseIo(v: unknown): string[] {
 
 const attr = (k: string, def: any) => ({ default: def, parseHTML: (el: HTMLElement) => el.getAttribute(`data-${k}`) ?? def, renderHTML: (a: any) => ({ [`data-${k}`]: a[k] }) });
 
-function AlgorithmView({ node, updateAttributes, selected, deleteNode, editor }: NodeViewProps) {
+function AlgorithmView({ node, updateAttributes, selected, deleteNode, editor, getPos }: NodeViewProps) {
   const editable = editor.isEditable;
   const lines = parseLines(node.attrs.lines);
   const io = parseIo(node.attrs.io);
@@ -43,7 +44,8 @@ function AlgorithmView({ node, updateAttributes, selected, deleteNode, editor }:
   };
   const move = (i: number, d: -1 | 1) => { const j = i + d; if (j < 0 || j >= lines.length) return; const l = [...lines]; [l[i], l[j]] = [l[j], l[i]]; setLines(l); focusLine(j); };
   return (
-    <NodeViewWrapper className={`blk alg ${selected ? 'is-selected' : ''}`} ref={wrap} data-drag-handle>
+    <NodeViewWrapper className={`blk alg ${selected ? 'is-selected' : ''}`} ref={wrap}>
+      <Handle editor={editor} getPos={getPos} />
       <div className="alg-head" contentEditable={false}>
         {num && <span className="cap-num" title={tx("编号按模板规则算，预览为准")}>{num}</span>}
         <AutoInput className="cap-input" data-attr="caption" disabled={!editable} value={node.attrs.caption ?? ''} placeholder={tx("算法题")} minWidth={80} onChange={(e) => updateAttributes({ caption: e.target.value })} />

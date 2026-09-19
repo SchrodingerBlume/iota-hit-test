@@ -41,6 +41,20 @@ function Caption({ node, updateAttributes, kindName, editable, prefix }: { node:
 }
 
 /** 悬停 / 选中时浮出的工具条 */
+/** 块左侧的把手（BlockNote 的 ⋮⋮）：悬停出现，按住拖动整块，点一下选中整块 */
+export function Handle({ editor, getPos, title }: { editor: NodeViewProps['editor']; getPos: NodeViewProps['getPos']; title?: string }) {
+  return (
+    <span className="blk-handle" contentEditable={false} data-drag-handle draggable title={title ?? t("拖动移动，点击选中")}
+      onMouseDown={(e) => { if (e.button !== 0) return; const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }}>
+      <svg viewBox="0 0 10 16" width="10" height="16" aria-hidden><circle cx="3" cy="3" r="1.4" /><circle cx="7" cy="3" r="1.4" /><circle cx="3" cy="8" r="1.4" /><circle cx="7" cy="8" r="1.4" /><circle cx="3" cy="13" r="1.4" /><circle cx="7" cy="13" r="1.4" /></svg>
+    </span>
+  );
+}
+/** 点在块的留白上（不是题注、不是内容）就选中整块 */
+export function selectOnPadding(editor: NodeViewProps['editor'], getPos: NodeViewProps['getPos']) {
+  return (e: React.MouseEvent<HTMLElement>) => { if (e.target !== e.currentTarget) return; e.preventDefault(); const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); };
+}
+
 function Tools({ children }: { children: React.ReactNode }) {
   return <div className="blk-tools" contentEditable={false} onMouseDown={(e) => e.stopPropagation()}>{children}</div>;
 }
@@ -107,7 +121,8 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
   // 合成图配连排分图题：分图条目都没有图、母图有图——图照常显示，分图题在图题下一行一条
   const captionOnly = subs.length > 0 && !!name && !subs.some((s) => s.image);
   return (
-    <NodeViewWrapper className={`blk fig ${selected ? 'is-selected' : ''} ${subs.length && !captionOnly ? 'has-subs' : ''}`} data-drag-handle ref={wrap}>
+    <NodeViewWrapper className={`blk fig ${selected ? 'is-selected' : ''} ${subs.length && !captionOnly ? 'has-subs' : ''}`} ref={wrap} onMouseDown={selectOnPadding(editor, getPos)}>
+      <Handle editor={editor} getPos={getPos} />
       <div className="fig-body" contentEditable={false}>
         {subs.length && !captionOnly ? (
           <div className="subfig-grid" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
@@ -169,7 +184,8 @@ function TableFigureView({ node, updateAttributes, selected, deleteNode, editor,
   useEffect(() => { if (open.nonce) requestAnimationFrame(() => focusAttrInput(wrap.current, open.attr ?? 'caption', open.offset)); }, [open]);
   const num = useNumbering().get(labelOf(node.attrs as any, 'tab'))?.number;
   return (
-    <NodeViewWrapper className={`blk tab ${selected ? 'is-selected' : ''}`} ref={wrap}>
+    <NodeViewWrapper className={`blk tab ${selected ? 'is-selected' : ''}`} ref={wrap} onMouseDown={selectOnPadding(editor, getPos)}>
+      <Handle editor={editor} getPos={getPos} />
       <Caption node={node} updateAttributes={updateAttributes} kindName={t("表")} editable={editable} prefix={num} />
       <NodeViewContent className="tab-body" />
       <Tools>
@@ -182,11 +198,12 @@ function TableFigureView({ node, updateAttributes, selected, deleteNode, editor,
 }
 
 // ── 代码清单（figure 壳 + 代码块）：模板按 raw-style 排（框、行号），这里只给题注与标签 ──
-function CodeFigureView({ node, updateAttributes, selected, deleteNode, editor }: NodeViewProps) {
+function CodeFigureView({ node, updateAttributes, selected, deleteNode, editor, getPos }: NodeViewProps) {
   const editable = editor.isEditable;
   const num = useNumbering().get(labelOf(node.attrs as any, 'lst'))?.number;
   return (
-    <NodeViewWrapper className={`blk lst ${selected ? 'is-selected' : ''}`}>
+    <NodeViewWrapper className={`blk lst ${selected ? 'is-selected' : ''}`} onMouseDown={selectOnPadding(editor, getPos)}>
+      <Handle editor={editor} getPos={getPos} />
       <Caption node={node} updateAttributes={updateAttributes} kindName={t("代码")} editable={editable} prefix={num} />
       <NodeViewContent className="lst-body" />
       <Tools>
@@ -218,7 +235,8 @@ export const TableFigure = Node.create({
   content: 'table',
   isolating: true,
   defining: true,
-  draggable: false,
+  // 只能抓左侧把手拖（表格里要能拖选单元格）
+  draggable: true,
   addAttributes() {
     // fit：Word 的「自动调整」——content 根据内容、window 根据窗口（撑满版心）、fixed 固定列宽（colWidth 厘米）；拖过列线的列另算
     return { caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null), placement: attr('placement', 'none'), breakable: attr('breakable', 'auto'), fit: attr('fit', 'content'), colWidth: attr('colWidth', 2.5), cols: attr('cols', null) };
@@ -244,7 +262,8 @@ function EquationView({ node, updateAttributes, selected, deleteNode, editor, ge
   // 编完（完成 / Enter / Esc）：收起，焦点回编辑器、公式块保持选中，方向键接着能走
   const finish = () => { setEditing(false); const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); };
   return (
-    <NodeViewWrapper className={`blk eq ${selected ? 'is-selected' : ''} ${editing ? 'is-editing' : ''}`} data-drag-handle>
+    <NodeViewWrapper className={`blk eq ${selected ? 'is-selected' : ''} ${editing ? 'is-editing' : ''}`}>
+      <Handle editor={editor} getPos={getPos} />
       {!editing && (
         <div className="eq-line" contentEditable={false} onClick={() => editable && setEditing(true)} title={t("点击编辑公式")}>
           <span className="eq-spacer" />

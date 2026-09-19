@@ -3,6 +3,7 @@
 // 一行一个符号；一条挂多个符号写「x、y」。符号用 LaTeX 或 Typst 数学，点一下弹出公式编辑框。
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
+import { Handle } from './blocks';
 import { useEffect, useRef, useState } from 'react';
 import { MathEditor, forPreview } from '../math/MathEditor';
 import { MathPreview } from '../math/MathPreview';
@@ -58,7 +59,8 @@ function EqDenoteView({ node, updateAttributes, selected, deleteNode, editor, ge
   const remove = (i: number) => setRows(rows.filter((_, k) => k !== i));
   const leadText = lead === 'auto' ? t("式中") : lead === 'none' ? '' : lead;
   return (
-    <NodeViewWrapper className={`blk denote ${selected ? 'is-selected' : ''}`} ref={wrap} data-drag-handle>
+    <NodeViewWrapper className={`blk denote ${selected ? 'is-selected' : ''}`} ref={wrap}>
+      <Handle editor={editor} getPos={getPos} />
       <div className="denote-grid" contentEditable={false}>
         {rows.map((r, i) => (
           <div key={i} style={{ display: 'contents' }}>
