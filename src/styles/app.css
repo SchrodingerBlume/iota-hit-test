@@ -137,7 +137,7 @@ code { font-family: var(--mono); font-size: 0.92em; }
 .main { display: grid; grid-template-columns: 200px minmax(420px, 1fr) minmax(360px, 46%); min-height: 0; }
 
 /* 导航：左侧一根主色竖条随选中项滑动 */
-.nav { position: relative; min-width: 0; border-right: 1px solid var(--line); background: var(--panel); overflow: auto; overflow-x: hidden; padding: 8px; transition: border-color var(--base) var(--ease); }
+.nav { position: relative; min-width: 0; border-right: 1px solid var(--line); background: var(--panel); overflow: auto; overflow-x: hidden; padding: 8px; contain: layout; }
 /* 收起时列宽归零，内容按原宽度不回流，跟着列边滑出去 */
 .nav-inner { width: 183px; }
 .nav.is-overlay .nav-inner { width: auto; }
@@ -781,9 +781,8 @@ html.theme-anim :not(svg, svg *) { transition: background-color 320ms var(--ease
 .align-glyph[data-h="center"] i { align-self: center; }
 .align-glyph[data-h="right"] i { align-self: flex-end; }
 /* 三栏布局：可收左栏、可拖分隔条、三种模式 */
-.main { position: relative; transition: grid-template-columns var(--base) var(--ease); }
-.main.is-compact, body.is-resizing .main, body.is-resizing-row .main { transition: none; }
-.main.nav-closed .nav:not(.is-overlay) { visibility: hidden; border-right-color: transparent; transition: visibility 0s var(--base), border-color var(--base) var(--ease); }
+.main { position: relative; }
+.main.nav-closed .nav:not(.is-overlay) { visibility: hidden; }
 /* 收起 / 展开全站一个样（Fold / FoldIcon）：朝右的 chevron，开着就转 90° */
 .fold-btn { display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; background: none; border-radius: var(--r-s); color: var(--muted); cursor: pointer; transition: background-color var(--fast) var(--ease), color var(--fast) var(--ease); }
 .fold-btn:hover { background: var(--panel-2); color: var(--ink); }
@@ -794,12 +793,11 @@ html.theme-anim :not(svg, svg *) { transition: background-color 320ms var(--ease
 .fold-btn.is-vert svg { transform: rotate(90deg); }
 .fold-btn.is-vert.is-open svg { transform: rotate(-90deg); }
 /* 收放左栏的钮骑在左栏右边线上（VS Code 的做法），收起后滑到窗口左边，和列宽一起动；开着朝左、收起朝右 */
-.nav-toggle { position: absolute; z-index: 8; top: 14px; left: 6px; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 50%; background: var(--panel); box-shadow: var(--shadow-1); transition: left var(--base) var(--ease), color var(--fast) var(--ease), border-color var(--fast) var(--ease), background-color var(--fast) var(--ease); }
+.nav-toggle { position: absolute; z-index: 8; top: 10px; left: 1px; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 50%; background: var(--panel); box-shadow: var(--shadow-1); }
 .nav-toggle.is-open { left: calc(200px - 11px); }
 .nav-toggle:hover { border-color: var(--line-2); }
 .nav-toggle svg { width: 14px; height: 14px; }
 .nav-toggle.is-open svg { transform: rotate(180deg); }
-body.is-resizing .nav-toggle { transition: none; }
 .splitter { cursor: col-resize; background: transparent; position: relative; }
 .splitter::before { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: var(--line); transform: translateX(-50%); transition: background-color var(--fast) var(--ease), width var(--fast) var(--ease); }
 .splitter::after { content: ''; position: absolute; top: 50%; left: 50%; width: 3px; height: 32px; border-radius: var(--r-pill); background: var(--line-2); opacity: 0.65; transform: translate(-50%, -50%); transition: background-color var(--fast) var(--ease), opacity var(--fast) var(--ease); }
