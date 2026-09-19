@@ -178,17 +178,20 @@ export function patchIndex(base: GlyphIndex, para: GlyphIndex, key: string, from
 }
 
 /** 索引里 key 这份富文本 [from, to] 区间（按 version）内的字形所在的行，按页与纵坐标排好 */
-export function linesOfRange(index: GlyphIndex, key: string, from: number, to: number, mapPos: (pos: number, assoc: -1 | 1) => number | null): Line[] {
+export function linesOfRange(index: GlyphIndex, key: string, from: number, to: number, mapPos: (pos: number, assoc: -1 | 1) => number | null): { line: Line; x0: number; x1: number }[] {
   const arr = index.byKey.get(key) ?? [];
-  const seen = new Set<Line>();
+  const seen = new Map<Line, { line: Line; x0: number; x1: number }>();
   for (const g of arr) {
     if (g.kind !== 'text') continue;
     const f = mapPos(g.from, 1), t = mapPos(g.to, -1);
     if (f === null || t === null || f < from || Math.max(f, t) > to) continue;
     const l = index.lineOf.get(g);
-    if (l) seen.add(l);
+    if (!l) continue;
+    // 只记这一段自己的字占到哪：同一行里前面还有上一段的字（刚回车拆开的那种）别盖住
+    const e = seen.get(l);
+    if (e) { e.x0 = Math.min(e.x0, g.x); e.x1 = Math.max(e.x1, g.x + g.w); } else seen.set(l, { line: l, x0: g.x, x1: g.x + g.w });
   }
-  return [...seen].sort((a, b) => a.page - b.page || a.y - b.y);
+  return [...seen.values()].sort((a, b) => a.line.page - b.line.page || a.line.y - b.line.y);
 }
 
 function assemble(glyphs: Glyph[], version: number): GlyphIndex {

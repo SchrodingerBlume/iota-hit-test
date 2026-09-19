@@ -83,20 +83,20 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     if (!m) return null;
     const old = linesOfRange(baseIndex, para.key, para.from, para.to, (pos, assoc) => m.map(pos, assoc));
     if (!old.length) return null;
-    const first = old[0];
-    const onPage = old.filter((l) => l.page === first.page);
+    const first = old[0].line;
+    const onPage = old.filter((l) => l.line.page === first.page);
     const fresh = (paraIndex.pages[0] ?? []).slice().sort((a, b) => a.y - b.y);
     if (!fresh.length) return null;
     const dy = first.y - fresh[0].y;
-    const x0 = Math.min(...onPage.map((l) => l.glyphs[0].x)), x1 = Math.max(...onPage.map((l) => { const g = l.glyphs[l.glyphs.length - 1]; return g.x + g.w; }));
-    const y0 = first.y, y1 = Math.max(...onPage.map((l) => l.y + l.h));
+    // 逐行盖：每行只盖这一段自己的字占到的那一截（首行前面可能是上一段的尾巴，末行后面可能是下一段的头）
+    const cover = onPage.map((l) => ({ x0: l.x0, x1: l.x1, y0: l.line.y, y1: l.line.y + l.line.h }));
     const maps = new Map<string, ReturnType<typeof mappingBetween>>();
     const mapPos = (key: string, pos: number, assoc: -1 | 1) => {
       let mm = maps.get(key);
       if (mm === undefined) { mm = mappingBetween(key as RichKey, baseIndex.version, para.version); maps.set(key, mm); }
       return mm ? mm.map(pos, assoc) : null;
     };
-    return { page: first.page, dy, cover: { x0, x1, y0, y1 }, index: patchIndex(baseIndex, paraIndex, para.key, para.from, para.to, first.page, dy, mapPos) };
+    return { page: first.page, dy, cover, index: patchIndex(baseIndex, paraIndex, para.key, para.from, para.to, first.page, dy, mapPos) };
   }, [para, paraIndex, baseIndex]);
   const index = paraPatch ? paraPatch.index : baseIndex;
   const marksOn = usePreviewMarks((s) => s.on);
@@ -146,17 +146,21 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     const svg = doc.querySelector<SVGSVGElement>('svg.typst-doc');
     if (!svg) return;
     const vb = svg.viewBox.baseVal;
-    // clientWidth 是整数：几十页往下累积就差出一行，要小数宽；捏合进行中舞台是 transform 缩放的，除回去
+    // 比例按 SVG 真正画出来的算：宽是小数，高（height: auto）却被浏览器取整到整像素——十几万单位高的
+    // 卷子上差出万分之一，preserveAspectRatio 取两轴里小的那个，一百多页往下就漂十几 pt；
+    // 捏合进行中舞台是 transform 缩放的，除回去（getScreenCTM 会把手势再算一遍）
     const gesture = parseFloat(doc.dataset.scale ?? '1') || 1;
-    const scale = (svg.getBoundingClientRect().width / gesture || parseFloat(svg.getAttribute('width') ?? '0')) / (vb.width || 1);
+    const rect = svg.getBoundingClientRect();
+    const sx = rect.width / gesture / (vb.width || 1), sy = rect.height / gesture / (vb.height || 1);
+    const scale = (Math.min(sx, sy) || parseFloat(svg.getAttribute('width') ?? '0') / (vb.width || 1));
+    const ox = Math.max(0, (rect.width / gesture - vb.width * scale) / 2), oy = Math.max(0, (rect.height / gesture - vb.height * scale) / 2);
     const out: PageGeom[] = [];
-    // 用版面坐标换算到覆盖层坐标。getScreenCTM 会把手势缩放再算一遍，导致缩放时光标漂移。
     svg.querySelectorAll<SVGGElement>(':scope > g.typst-page').forEach((g, i) => {
       const w = parseFloat(g.getAttribute('data-page-width') ?? '0') || 1;
       const h = parseFloat(g.getAttribute('data-page-height') ?? '0') || 1;
       const x = parseFloat(g.getAttribute('data-layout-x') ?? '0');
       const y = parseFloat(g.getAttribute('data-layout-y') ?? '0');
-      out[i] = { left: (x - vb.x) * scale, top: (y - vb.y) * scale, scale, w, h };
+      out[i] = { left: ox + (x - vb.x) * scale, top: oy + (y - vb.y) * scale, scale, w, h };
     });
     const f = doc.querySelector<HTMLElement>(':scope > .preview-doc');
     setFocusMap(f ? focusInfo(f) : null);
@@ -188,11 +192,12 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
       for (const d of src.querySelectorAll('defs > *')) { const id = d.getAttribute('id'); if (id && !document.getElementById(id)) defs.appendChild(document.importNode(d, true)); }
       const g = document.createElementNS(NS, 'g');
       g.setAttribute('class', 'para-live');
-      const cover = document.createElementNS(NS, 'rect');
-      const { x0, x1, y0, y1 } = paraPatch.cover;
-      cover.setAttribute('x', String(x0 - 2)); cover.setAttribute('y', String(y0 - 1)); cover.setAttribute('width', String(x1 - x0 + 4)); cover.setAttribute('height', String(y1 - y0 + 2));
-      cover.setAttribute('fill', 'var(--paper)');
-      g.appendChild(cover);
+      for (const { x0, x1, y0, y1 } of paraPatch.cover) {
+        const cover = document.createElementNS(NS, 'rect');
+        cover.setAttribute('x', String(x0 - 1)); cover.setAttribute('y', String(y0 - 1)); cover.setAttribute('width', String(x1 - x0 + 2)); cover.setAttribute('height', String(y1 - y0 + 2));
+        cover.setAttribute('fill', 'var(--paper)');
+        g.appendChild(cover);
+      }
       const inner = document.createElementNS(NS, 'g');
       inner.setAttribute('transform', `translate(0, ${paraPatch.dy})`);
       for (const c of srcPage.children) inner.appendChild(document.importNode(c, true));
@@ -225,13 +230,17 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   const pageTo = (p: number, x: number, y: number) => { const g = geom[toDisplay(p)]; return g ? { left: g.left + x * g.scale, top: g.top + y * g.scale, scale: g.scale } : null; };
   const stale = index.version !== docVersion();
   const oldPos = (pos: number, assoc: -1 | 1) => (activeKey ? (stale ? toOldPos(activeKey, index.version, pos, assoc) : pos) : null);
+  /** 还没排进去的那几个字：光标锚在它们前面那一点（选中一段再打字时那一点是删掉那段的左端，不是右端），
+   *  盖住的文字宽度由 overlay 补 */
+  const pendingLen = pending && pending.key === activeKey && !pending.fading && composing === null && index.version < pending.version ? pending.text.length : 0;
   const caret = useMemo((): CaretRect | null => {
     if (!sel || !activeKey) return null;
-    const p = oldPos(sel.head, sel.head === sel.to ? -1 : 1);
+    const head = sel.empty && pendingLen ? Math.max(0, sel.head - pendingLen) : sel.head;
+    const p = oldPos(head, sel.head === sel.to ? -1 : 1);
     if (p === null) return null;
     return caretRect(index, activeKey, p, prefer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sel, activeKey, index, stale]);
+  }, [sel, activeKey, index, stale, pendingLen]);
   const rects = useMemo(() => {
     if (!sel || !activeKey || sel.empty) return [];
     const a = oldPos(sel.from, 1), b = oldPos(sel.to, -1);
