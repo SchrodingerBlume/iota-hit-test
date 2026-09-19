@@ -14,12 +14,13 @@ export function FontRecovery() {
   const status = useCompileState((s) => s.status);
   const engineGen = useCompileState((s) => s.engineGen);
   const families = useCompileState((s) => s.families);
-  const { busy, error, canQuery, readLocal, addFiles } = useFontState();
+  const { busy, error, canQuery, readLocal, addFiles, restoring } = useFontState();
   const [restored, setRestored] = useState('');
   const [dismissed, setDismissed] = useState('');
   const stored = useRef<Promise<void> | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  const key = `${docId}:${preset}:${mathFont}`;
+  // 带上引擎代数：重启后 status 一变 ready 那一帧字体表还是空的，老的 restored 不能算数，不然对话框闪一下
+  const key = `${docId}:${preset}:${mathFont}:${engineGen}`;
   // 引擎重启过：新 worker 里没有字体，本机 / 文件字体都重发一遍
   const lastGen = useRef(engineGen);
   useEffect(() => {
@@ -40,7 +41,7 @@ export function FontRecovery() {
   const missing = preset === 'webapp' ? [] : roleAvailability(preset, mathFont).filter((font) => !font.optional && !font.ok);
   const signature = missing.length ? `${key}:${missing.map((font) => font.family).join(',')}` : '';
   useEffect(() => { if (!signature) setDismissed(''); }, [signature, families]);
-  const open = editing && status === 'ready' && restored === key && !!signature && signature !== dismissed;
+  const open = editing && status === 'ready' && !restoring && restored === key && !!signature && signature !== dismissed;
   return <Dialog open={open} onOpenChange={(_, data) => { if (!data.open && !busy) setDismissed(signature); }}>
     <DialogSurface>
       <DialogBody>

@@ -83,7 +83,7 @@ export const useCompileState = create<CompileState>(() => ({
 
 const TRAPPED = /unreachable|RuntimeError|recursive use of an object|memory access out of bounds/i;
 /** wasm 内存过了这条线就预防性重启（一次整编再涨几百 MB，4 GB 是死线） */
-const MEM_RESTART = 3300 * 1048576;
+const MEM_RESTART = 3600 * 1048576;
 /** wasm 陷了（Rust panic → unreachable）：换一个 worker 从头来，字体由 FontRecovery 看着 engineGen 重发 */
 export function restartCompiler(reason: string) {
   if (!worker) return;

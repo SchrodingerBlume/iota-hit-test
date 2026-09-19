@@ -265,7 +265,8 @@ async function compile(msg: Extract<ToWorker, { type: 'compile' }>) {
     }
     // comemo 的记忆没人清：177 页的论文每改一次设置涨一两百 MB，顶到 wasm32 的 4 GB 就 unreachable。
     // 整编一次算一岁，三次没用到的丢掉（wasm 的线性内存只涨不缩，留的代数越多高水位越高）；只编一章 / 一段那几轮不算岁数
-    if (!msg.focus) { try { raw.evict?.(3); } catch { /* 老 wasm 没这个口 */ } }
+    // 只留上一轮命中过的缓存：论文选项一改整篇的缓存键全换，留三代就是三份布局堆着，一百多页的稿几次就顶到 4 GB 重启
+    if (!msg.focus) { try { raw.evict?.(1); } catch { /* 老 wasm 没这个口 */ } }
     // 拷贝一份：结果是 wasm 内存上的视图，直接拿 .buffer 会把整块内存搬走
     const artifact = res?.result ? new Uint8Array(res.result as Uint8Array).buffer : null;
     // 字形映射覆盖整篇文档，近 200 页时比增量排版本身还贵。左侧输入期间沿用旧映射；

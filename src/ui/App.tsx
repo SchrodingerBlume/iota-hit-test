@@ -107,7 +107,9 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
   useEffect(() => () => window.clearTimeout(fullTimer.current), []);
   useEffect(() => {
     if (!loaded || status !== 'ready' || composing) return;
-    if (restoring && doc.settings.fontset !== 'webapp') return;
+    // 读 store 里的现值：引擎刚重启时 FontRecovery 的 effect 先跑、把 restoring 拨成 true，闭包里的还是旧的 false，
+    // 按旧值就会先用替代字体编一遍、字体到了再编一遍——预览闪一下「字体丢了」
+    if ((restoring || useFontState.getState().restoring) && doc.settings.fontset !== 'webapp') return;
     let cancelled = false;
     // 换了工程：预览区已被项目管理页卸掉，渲染器没有上一版可以打差，增量产物会让它崩（reflexo 的 module unwrap），整个重编
     // 字体表换了也整个重来：增量差分里的字形还指着旧字体，渲染器接不上
