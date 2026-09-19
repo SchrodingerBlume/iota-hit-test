@@ -87,6 +87,13 @@ export const BlockCaptionKeys = Extension.create({
     };
   },
 });
+/** 光标在块里面（表格的格、代码块的行）——工具条也该出来，整块没被选中时 selected 不知道这事 */
+function useInside(editor: NodeViewProps['editor'], getPos: NodeViewProps['getPos'], size: number) {
+  const calc = () => { const p = getPos(); const { from, to } = editor.state.selection; return p !== undefined && from > p && to < p + size; };
+  const [inside, setInside] = useState(calc);
+  useEffect(() => { const on = () => setInside(calc()); on(); editor.on('selectionUpdate', on); editor.on('blur', on); editor.on('focus', on); return () => { editor.off('selectionUpdate', on); editor.off('blur', on); editor.off('focus', on); }; }, [editor, size]);
+  return inside && editor.isFocused;
+}
 /** 点在块的留白上（不是题注、不是内容）就选中整块 */
 export function selectOnPadding(editor: NodeViewProps['editor'], getPos: NodeViewProps['getPos']) {
   return (e: React.MouseEvent<HTMLElement>) => { if (e.target !== e.currentTarget) return; e.preventDefault(); const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); };
@@ -264,8 +271,9 @@ function TableFigureView({ node, updateAttributes, selected, deleteNode, editor,
   useEffect(() => { if (open.nonce) requestAnimationFrame(() => focusAttrInput(wrap.current, open.attr ?? 'caption', open.offset)); }, [open]);
   const num = useNumbering().get(labelOf(node.attrs as any, 'tab'))?.number;
   const [hover, setHover] = useState(false);
+  const inside = useInside(editor, getPos, node.nodeSize);
   return (
-    <NodeViewWrapper className={`blk tab ${selected ? 'is-selected' : ''}`} ref={wrap} onMouseDown={selectOnPadding(editor, getPos)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+    <NodeViewWrapper className={`blk tab ${selected ? 'is-selected' : ''} ${inside ? 'is-inside' : ''}`} ref={wrap} onMouseDown={selectOnPadding(editor, getPos)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       <Handle editor={editor} getPos={getPos} />
       {editable && <RowColHandles wrap={wrap} editor={editor} getPos={getPos} node={node} hover={hover || selected} />}
       <Caption node={node} updateAttributes={updateAttributes} kindName={t("表")} editable={editable} prefix={num} />
@@ -283,8 +291,9 @@ function TableFigureView({ node, updateAttributes, selected, deleteNode, editor,
 function CodeFigureView({ node, updateAttributes, selected, deleteNode, editor, getPos }: NodeViewProps) {
   const editable = editor.isEditable;
   const num = useNumbering().get(labelOf(node.attrs as any, 'lst'))?.number;
+  const inside = useInside(editor, getPos, node.nodeSize);
   return (
-    <NodeViewWrapper className={`blk lst ${selected ? 'is-selected' : ''}`} onMouseDown={selectOnPadding(editor, getPos)} onKeyDown={captionKeys(editor, getPos)}>
+    <NodeViewWrapper className={`blk lst ${selected ? 'is-selected' : ''} ${inside ? 'is-inside' : ''}`} onMouseDown={selectOnPadding(editor, getPos)} onKeyDown={captionKeys(editor, getPos)}>
       <Handle editor={editor} getPos={getPos} />
       <Caption node={node} updateAttributes={updateAttributes} kindName={t("代码")} editable={editable} prefix={num} />
       <NodeViewContent className="lst-body" />

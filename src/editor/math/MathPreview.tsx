@@ -23,7 +23,8 @@ export function renderTypstMath(src: string, display: boolean): Promise<{ svg?: 
     else {
       try {
         const svg = await renderSnippetSvg(new Uint8Array(r.artifact));
-        out = { svg: svg.replace(/<script[\s\S]*?<\/script>/g, '') };
+        // 片段按 11pt 排，尺寸换成 em：正文多大字，公式就多大字（原来按 px 原样放，比正文小一圈）
+        out = { svg: svg.replace(/<script[\s\S]*?<\/script>/g, '').replace(/ width="([\d.]+)" height="([\d.]+)"/, (_, w, h) => ` width="${(+w / 11).toFixed(3)}em" height="${(+h / 11).toFixed(3)}em"`) };
       } catch (e) { out = { error: String((e as Error)?.message ?? e) }; }
     }
     typstCache.set(key, out);

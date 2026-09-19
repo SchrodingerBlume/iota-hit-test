@@ -392,7 +392,7 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 /* 标题：编号 + 中文名一行，英文名下面一行小字 */
 .hd { margin: 1.4em 0 0.5em !important; }
 .hd-row { display: flex; align-items: baseline; gap: 0.5em; }
-.hd-num { flex: none; font-family: var(--sans); font-weight: 700; color: var(--accent-ink); white-space: nowrap; user-select: none; }
+.hd-num { flex: none; font-family: var(--sans); font-weight: 600; color: var(--muted); white-space: nowrap; user-select: none; }
 .hd-num:empty { display: none; }
 .hd .hd-zh { flex: 1; margin: 0; font-family: var(--sans); font-weight: 700; line-height: 1.35; min-width: 2em; }
 .hd-1 .hd-row { font-size: 24px; }
@@ -413,14 +413,17 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .chip.is-selected { outline: 2px solid var(--accent); outline-offset: 1px; }
 .chip code { font-size: 0.85em; background: none; padding: 0; font-family: var(--mono); }
 .chip-math { color: var(--ink); padding: 0; margin: 0 0.08em; }
-.chip-math .math-preview.typst-host svg { height: 1.15em; width: auto; vertical-align: -0.2em; }
 .chip-math:hover { background: var(--chip-math-bg); }
-.chip-cite { font-family: var(--sans); font-size: 0.72em; vertical-align: super; line-height: 1; color: var(--chip-cite-fg); background: var(--chip-cite-bg); padding: 1px 4px; border-radius: var(--r-xs); }
-.chip-ref { color: var(--accent-ink); border-bottom: 1px dotted var(--accent); border-radius: 0; padding: 0; }
-.chip-abbr { color: var(--chip-abbr-fg); border-bottom: 1px dotted var(--chip-abbr-fg); border-radius: 0; padding: 0; font-family: var(--sans); font-size: 0.92em; }
+/* 行内那些「不是字」的东西平时只靠颜色 / 细点线示意，底色只在悬停时出现——版面看起来才像一页文档而不是一堆标签 */
+.chip-cite { font-family: var(--sans); font-size: 0.72em; vertical-align: super; line-height: 1; color: var(--chip-cite-fg); padding: 1px 3px; border-radius: var(--r-xs); }
+.chip-cite:hover { background: var(--chip-cite-bg); }
+.chip-ref { color: var(--chip-ref-fg); border-bottom: 1px dotted color-mix(in srgb, var(--chip-ref-fg) 55%, transparent); border-radius: 0; padding: 0; }
+.chip-ref:hover { background: var(--chip-ref-bg); }
+.chip-abbr { color: var(--chip-abbr-fg); border-bottom: 1px dotted color-mix(in srgb, var(--chip-abbr-fg) 55%, transparent); border-radius: 0; padding: 0; font-family: var(--sans); font-size: 0.92em; }
+.chip-abbr:hover { background: var(--chip-abbr-bg); }
 .chip-footnote { font-family: var(--sans); font-size: 0.75em; vertical-align: super; line-height: 1; color: var(--chip-foot-fg); }
 .chip-ccwd { display: inline-block; width: 1em; height: 1em; vertical-align: -0.15em; background: repeating-linear-gradient(90deg, var(--line-2) 0 2px, transparent 2px 4px) bottom / 100% 1px no-repeat; color: transparent; }
-.chip-idx { color: var(--ink); border-bottom: 1px dotted var(--orange); border-radius: 0; padding: 0 1px; }
+.chip-idx { color: var(--ink); border-bottom: 1px dotted color-mix(in srgb, var(--orange) 60%, transparent); border-radius: 0; padding: 0 1px; }
 .chip em { font-family: var(--sans); font-size: 0.85em; color: var(--muted); font-style: normal; }
 .chip-pop { position: absolute; z-index: 20; top: 100%; left: 0; min-width: 300px; max-width: 420px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow-2); padding: 10px 12px; font-family: var(--sans); font-size: 13px; line-height: 1.4; text-indent: 0; margin-top: 6px; animation: pop 200ms var(--ease) both; transform-origin: top left; font-weight: 400; }
 .chip-pop .field { margin-bottom: 6px; }
@@ -451,7 +454,8 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .blk:hover .blk-handle, .blk.is-selected .blk-handle { opacity: 1; }
 /* 工具条浮在块的上沿外面，不压住图片与题注 */
 .blk-tools { position: absolute; bottom: calc(100% - 4px); right: 8px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow-2); opacity: 0; transform: translateY(4px); pointer-events: none; transition: opacity var(--fast) var(--ease), transform var(--fast) var(--ease); z-index: 6; font-size: 12px; color: var(--muted); }
-.blk:hover .blk-tools, .blk.is-selected .blk-tools, .blk-tools:focus-within { opacity: 1; transform: none; pointer-events: auto; }
+/* 悬停只露 ⋮⋮ 拖柄；工具条等选中 / 焦点在块里才出——它浮在上一段文字上面，光是鼠标划过就盖字太吵（BlockNote 也是点了才有） */
+.blk.is-selected .blk-tools, .blk.is-inside .blk-tools, .blk:focus-within .blk-tools, .blk-tools:focus-within { opacity: 1; transform: none; pointer-events: auto; }
 .blk-tool { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: var(--r-s); color: var(--ink-2); border: 0; background: none; font-size: 12px; white-space: nowrap; }
 .blk-tool svg { width: 14px; height: 14px; color: var(--muted); }
 .blk-tool input { border: 1px solid var(--line-2); border-radius: var(--r-s); padding: 1px 5px; font-size: 12px; background: var(--panel); color: var(--ink); font-family: var(--mono); }
@@ -498,7 +502,8 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 /* 公式：一行居中带编号；点开才有编辑器 */
 .eq { padding: 6px 10px; }
 .eq-line { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 40px; cursor: pointer; }
-.eq-render { justify-self: center; padding: 4px 12px; }
+.eq-render { justify-self: center; padding: 4px 12px; font-size: var(--rich-size, 16.5px); }
+.eq-render .math-preview.katex-host .katex { font-size: 1em; }
 .eq-number { justify-self: end; font-family: var(--serif); font-size: 15px; color: var(--ink); }
 .eq-line:hover .eq-render { background: var(--panel-2); border-radius: var(--r-s); }
 .eq-editor { animation: pop var(--fast) var(--ease) both; }
@@ -681,9 +686,8 @@ html.theme-anim :not(svg, svg *) { transition: background-color 320ms var(--ease
 .math-preview.typst-host svg { display: inline-block; vertical-align: middle; height: auto; max-width: 100%; }
 .math-preview.katex-host .katex { font-size: 1.15em; }
 .math-preview.katex-host .katex-display { margin: 0; }
-.chip-math .math-preview.typst-host svg { height: 1.25em; width: auto; }
 .chip-math .math-preview.katex-host .katex { font-size: 1em; }
-.chip-math { padding: 0 4px; vertical-align: middle; }
+.chip-math { padding: 0 2px; vertical-align: middle; }
 .math-src-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .math-editor .eq-src { font-family: var(--mono); resize: none; width: 100%; line-height: 1.5; color: var(--ink); text-align: left; border: 1px solid var(--line-2); border-radius: var(--r-s); padding: 6px 8px; background: var(--panel); font-size: 13px; }
 .math-editor .eq-src:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
