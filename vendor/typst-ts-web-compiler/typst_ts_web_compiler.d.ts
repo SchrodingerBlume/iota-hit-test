@@ -68,6 +68,12 @@ export class TypstCompiler {
     add_source(path: string, content: string): boolean;
     compile(main_file_path: string | null | undefined, inputs: (Array<any>)[] | null | undefined, fmt: string, diagnostics_format: number): any;
     create_incr_server(): IncrServer;
+    /**
+     * Drop memoized results not used in the last `max_age` compilations
+     * (iota4web patch): nothing else evicts comemo's cache in the web
+     * compiler, so a long document grows the wasm memory to 4 GB and traps.
+     */
+    evict(max_age: number): void;
     get_artifact(fmt: string, diagnostics_format: number): any;
     get_ast(main_file_path: string): string;
     get_loaded_fonts(): string[];
@@ -135,6 +141,7 @@ export interface InitOutput {
     readonly typstcompiler_add_source: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly typstcompiler_compile: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
     readonly typstcompiler_create_incr_server: (a: number, b: number) => void;
+    readonly typstcompiler_evict: (a: number, b: number) => void;
     readonly typstcompiler_get_artifact: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly typstcompiler_get_ast: (a: number, b: number, c: number, d: number) => void;
     readonly typstcompiler_get_loaded_fonts: (a: number, b: number) => void;
@@ -180,8 +187,8 @@ export interface InitOutput {
     readonly proxycontext_context: (a: number) => number;
     readonly proxycontext_untar: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly proxycontext_new: (a: number) => number;
-    readonly __wasm_bindgen_func_elem_39903: (a: number, b: number, c: number, d: number) => void;
-    readonly __wasm_bindgen_func_elem_39897: (a: number, b: number, c: number, d: number) => void;
+    readonly __wasm_bindgen_func_elem_39906: (a: number, b: number, c: number, d: number) => void;
+    readonly __wasm_bindgen_func_elem_39900: (a: number, b: number, c: number, d: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number) => void;

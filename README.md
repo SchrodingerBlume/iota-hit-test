@@ -141,6 +141,10 @@ fork 主线已并入 typst 上游 main（带 #792：中日文旁的换行空格�
 站内这颗 wasm 走 0.15.1 线：fork 的 msword 提交 + #792 那两个提交 cherry-pick 到 0.15.1 基线（`vendor/typst-ts-web-compiler/FORK_COMMIT`
 记着来历），typst.ts 侧补一个 `SyntaxKind::Space` 拆分的小补丁（`scripts/wasm-patch/reflexo-space-kind.patch`）。typst.ts 跟上 0.16 后再换主线。
 
+内存：comemo 的记忆在 typst.ts 的 web 编译器里没人清，177 页的论文每改一次设置涨一两百 MB，顶到 wasm32 的 4 GB 就 `unreachable`、
+整个实例作废——`compiler-glyph-map.patch` 顺手给 `TypstCompiler` 加了 `evict(max_age)`，worker 每次整编后 `evict(3)`；
+线性内存只涨不缩，过 3.3 GB 趁空闲预防性换一个 worker（字体、图片重发，整编一次），真陷进去（unreachable / recursive use）也自动换。
+
 构建：typst.ts 钉的 typst 带它自己的 `content_hint` 改动，与 fork 在 `line.rs` / `linebreak.rs` 有冲突，所以
 `scripts/wasm-patch/typst-msword.patch` 是 fork 合并到 typst.ts 那份 typst 之上的结果（首行记着 fork 的提交号）；
 `build-wasm.sh` 克隆 typst.ts 钉的 typst、打这个补丁、把 `[patch.crates-io]` 里的 typst* 指过去。fork 更新后跑 `scripts/merge-msword.sh [fork 目录] [工作目录]`：克隆 fork、合并、解那两处已知冲突、导出补丁、编 wasm 一条龙；

@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import type { ToWorker, FromWorker, Diagnostic, Progress } from './protocol';
 import type { Segment } from '../typst/sourcemap';
+import { t } from '../i18n';
 
 export interface CompileState {
   status: 'booting' | 'ready' | 'error';
@@ -40,6 +41,10 @@ export interface CompileState {
   focusMapVersion: number;
   /** 预览区重挂后旧的一章产物接不上差分：加一代，让下一次只编一章从头来 */
   focusGen: number;
+  /** 排版引擎重启了几次：wasm 里 panic 一次（unreachable）整个实例就废了，只能换一个；字体要重发、下一次整编要 force */
+  engineGen: number;
+  /** 编译器 wasm 的线性内存（字节），看它离 4 GB 还有多远 */
+  wasmMem: number;
   /** 只编一段（打字即时回显）：产物、字形表、这一段在编辑器里的区间（按 version）；整编或只编一章追上来就清 */
   para: { artifact: Uint8Array; glyphs: Float64Array; segments: Segment[]; version: number; key: string; from: number; to: number; ms: number } | null;
 }
@@ -72,7 +77,29 @@ export const useCompileState = create<CompileState>(() => ({
   focusMapVersion: -1,
   focusGen: 0,
   para: null,
+  engineGen: 0,
+  wasmMem: 0,
 }));
+
+const TRAPPED = /unreachable|RuntimeError|recursive use of an object|memory access out of bounds/i;
+/** wasm 内存过了这条线就预防性重启（一次整编再涨几百 MB，4 GB 是死线） */
+const MEM_RESTART = 3300 * 1048576;
+/** wasm 陷了（Rust panic → unreachable）：换一个 worker 从头来，字体由 FontRecovery 看着 engineGen 重发 */
+export function restartCompiler(reason: string) {
+  if (!worker) return;
+  console.warn('[iota4web] 排版引擎重启：', reason);
+  worker.terminate();
+  worker = null;
+  inFlight = null; inFlightInput = null; paraInFlight = null; paraPending = null;
+  for (const w of pdfWaiters.values()) w({ pdf: null, diagnostics: [{ severity: 'error', message: reason, where: '' }] });
+  pdfWaiters.clear();
+  for (const w of fontWaiters.values()) w({ families: [], error: reason });
+  fontWaiters.clear();
+  for (const w of snippetWaiters.values()) w({ artifact: null, error: reason });
+  snippetWaiters.clear();
+  useCompileState.setState((s) => ({ status: 'booting', progress: null, compiling: false, engineGen: s.engineGen + 1, families: [], focusArtifact: null, focusAt: null, focusGlyphs: null, para: null }));
+  startCompiler();
+}
 
 export interface ParaInput { main: string; inputs?: Record<string, string>; segments: Segment[]; version: number; key: string; from: number; to: number }
 let paraInFlight: { id: number; input: ParaInput } | null = null;
@@ -162,6 +189,7 @@ export function startCompiler() {
         flush();
         break;
       case 'fatal':
+        if (TRAPPED.test(m.message)) { restartCompiler(m.message); break; }
         useCompileState.setState({ status: 'error', fatal: m.message });
         break;
       case 'compiled': {
@@ -172,6 +200,7 @@ export function startCompiler() {
         inFlightInput = null;
         // 换了工程之后才回来的：丢掉，接着发新工程排着的那份
         if (input?.docId && activeDoc && input.docId !== activeDoc) { flush(); break; }
+        if (!m.artifact && m.diagnostics.some((d) => TRAPPED.test(d.message))) { restartCompiler(m.diagnostics.find((d) => TRAPPED.test(d.message))!.message); break; }
         // 编不过的版本不覆盖上一份能看的预览，但诊断照给（预览区里人话化、可跳转）
         const focus = input?.focus;
         useCompileState.setState({
@@ -183,6 +212,7 @@ export function startCompiler() {
           diagMain: input?.main ?? s.diagMain,
           diagSegments: input?.segments ?? s.diagSegments,
           lastMs: m.ms,
+          wasmMem: m.mem ?? s.wasmMem,
           compileCount: s.compileCount + 1,
           ...(m.glyphs
             ? (focus
@@ -191,13 +221,16 @@ export function startCompiler() {
             : {}),
           ...(m.glyphs && s.para && (input?.version ?? -1) >= s.para.version ? { para: null } : {}),
         });
-        flush();
+        // 线性内存只涨不缩，快顶到 4 GB 时趁没在打字先换个 worker，别等它陷进去
+        if ((m.mem ?? 0) > MEM_RESTART && !pending) restartCompiler(t("wasm 内存 {{v0}} MB，预防性重启", { v0: Math.round((m.mem ?? 0) / 1048576) }));
+        else flush();
         break;
       }
       case 'para-done': {
         if (paraInFlight?.id !== m.id) break;
         const input = paraInFlight.input;
         paraInFlight = null;
+        if (m.error && TRAPPED.test(m.error)) { restartCompiler(m.error); break; }
         // 整编 / 只编一章已经追过这一版就不用了
         const s = useCompileState.getState();
         if (m.artifact && m.glyphs && input.version >= Math.max(s.mapVersion, s.focusMapVersion)) {
@@ -225,7 +258,7 @@ export function startCompiler() {
       }
     }
   };
-  worker.onerror = (e) => useCompileState.setState({ status: 'error', fatal: e.message });
+  worker.onerror = (e) => { if (TRAPPED.test(e.message ?? '')) restartCompiler(e.message); else useCompileState.setState({ status: 'error', fatal: e.message }); };
   // base：index.html 所在目录，static 部署到子路径也对
   const base = new URL('./', document.baseURI).href;
   send({ type: 'init', baseUrl: base });

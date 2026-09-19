@@ -35,7 +35,7 @@ export type FromWorker =
   | { type: 'fatal'; message: string }
   /** glyphs：字形表，每 GLYPH_STRIDE 个数一个字形——page, x, y, w, h, 源码起, 源码止（main.typ 的 UTF-16 下标）, kind, 首个码点, 占几个字 */
   /** artifact 是与上一版的差（增量）；fresh = 增量服务刚建，这一份是完整的，渲染器要 reset */
-  | { type: 'compiled'; id: number; artifact: ArrayBuffer | null; fresh: boolean; diagnostics: Diagnostic[]; ms: number; glyphs: ArrayBuffer | null }
+  | { type: 'compiled'; id: number; artifact: ArrayBuffer | null; fresh: boolean; diagnostics: Diagnostic[]; ms: number; glyphs: ArrayBuffer | null; mem?: number }
   | { type: 'para-done'; id: number; artifact: ArrayBuffer | null; ms: number; glyphs: ArrayBuffer | null; error?: string }
   | { type: 'pdf'; id: number; pdf: ArrayBuffer | null; diagnostics: Diagnostic[] }
   | { type: 'fontsSet'; id: number; families: string[]; error?: string }

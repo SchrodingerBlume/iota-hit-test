@@ -11,6 +11,7 @@ export function FontRecovery() {
   const docId = useStore((s) => s.doc.id);
   const editing = useStore((s) => s.loaded && s.view === 'editor');
   const status = useCompileState((s) => s.status);
+  const engineGen = useCompileState((s) => s.engineGen);
   const families = useCompileState((s) => s.families);
   const { busy, error, canQuery, readLocal, addFiles } = useFontState();
   const [restored, setRestored] = useState('');
@@ -18,12 +19,15 @@ export function FontRecovery() {
   const stored = useRef<Promise<void> | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const key = `${docId}:${preset}`;
+  // 引擎重启过：新 worker 里没有字体，本机 / 文件字体都重发一遍
+  const lastGen = useRef(engineGen);
   useEffect(() => {
     if (!editing || status !== 'ready') return;
     let alive = true;
     void (async () => {
       useFontState.setState({ restoring: true });
       try {
+        if (lastGen.current !== engineGen) { lastGen.current = engineGen; stored.current = null; useFontState.setState({ fonts: [] }); }
         stored.current ??= useFontState.getState().loadStored();
         await stored.current;
         if (preset !== 'webapp') await useFontState.getState().autoReadLocal();
@@ -31,7 +35,7 @@ export function FontRecovery() {
       if (alive) setRestored(key);
     })();
     return () => { alive = false; };
-  }, [editing, status, key, preset]);
+  }, [editing, status, key, preset, engineGen]);
   const missing = preset === 'webapp' ? [] : roleAvailability(preset).filter((font) => !font.optional && !font.ok);
   const signature = missing.length ? `${key}:${missing.map((font) => font.family).join(',')}` : '';
   useEffect(() => { if (!signature) setDismissed(''); }, [signature, families]);

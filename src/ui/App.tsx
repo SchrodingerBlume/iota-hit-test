@@ -60,6 +60,8 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
   const lastProject = useRef<string | null>(null);
   const lastRefresh = useRef(refresh);
   const lastFonts = useRef(fontsVersion);
+  const engineGen = useCompileState((s) => s.engineGen);
+  const lastGen = useRef(engineGen);
   // 换断行引擎 / 网格这类全篇生效的设置，增量编译会留下旧版面的碎片，整个重来
   const engineKey = `${doc.settings.linebreaker}|${doc.settings.wordCompat}`;
   const lastEngine = useRef(engineKey);
@@ -108,7 +110,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
     let cancelled = false;
     // 换了工程：预览区已被项目管理页卸掉，渲染器没有上一版可以打差，增量产物会让它崩（reflexo 的 module unwrap），整个重编
     // 字体表换了也整个重来：增量差分里的字形还指着旧字体，渲染器接不上
-    const force = refresh !== lastRefresh.current || engineKey !== lastEngine.current || lastProject.current !== doc.id || fontsVersion !== lastFonts.current;
+    const force = refresh !== lastRefresh.current || engineKey !== lastEngine.current || lastProject.current !== doc.id || fontsVersion !== lastFonts.current || engineGen !== lastGen.current;
     if (lastProject.current !== doc.id) { resetForProject(doc.id); useComments.getState().setActive(null); usePreviewSurface.getState().set({ activeKey: null, focused: false }); }
     const cs = useCompileState.getState();
     const pageCount = cs.pageCount;
@@ -137,7 +139,8 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
       // 换了项目：图片名字空间变了，worker 里映射的旧图全撤掉，重新发
       let stale: string[] = [];
       const nextSent = new Map(sent.current);
-      if (lastProject.current !== doc.id) {
+      if (lastProject.current !== doc.id || engineGen !== lastGen.current) {
+        // 换了工程、或引擎重启过（新 worker 里什么图都没有）：全部重发
         stale = [...sent.current.keys()];
         nextSent.clear();
       }
@@ -157,6 +160,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
       lastProject.current = doc.id;
       lastRefresh.current = refresh;
       lastFonts.current = fontsVersion;
+      lastGen.current = engineGen;
       lastEngine.current = engineKey;
       lastFocusId.current = focus?.id ?? '';
       requestCompile({
@@ -178,7 +182,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
     // 防抖按上一次编译的耗时来：编译在 worker 里，主线程不等它，排队的只留最新一份，所以不必等用户停手太久
     }, force ? 0 : para ? 400 : focus ? 150 : Math.min(600, Math.max(180, (useCompileState.getState().lastMs ?? 0) * 0.3)));
     return () => { cancelled = true; window.clearTimeout(t); };
-  }, [doc, loaded, status, fontsVersion, refresh, restoring, previewFocused, composing, fullTick]);
+  }, [doc, loaded, status, fontsVersion, engineGen, refresh, restoring, previewFocused, composing, fullTick]);
   return sent;
 }
 /** 页数到了这个数才只编一章；停手这么久之后整编 */

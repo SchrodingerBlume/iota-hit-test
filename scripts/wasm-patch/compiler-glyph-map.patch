@@ -1,5 +1,5 @@
 diff --git a/packages/compiler/src/lib.rs b/packages/compiler/src/lib.rs
-index b9de839..65bfd20 100644
+index b9de839..eb47e3b 100644
 --- a/packages/compiler/src/lib.rs
 +++ b/packages/compiler/src/lib.rs
 @@ -1,3 +1,4 @@
@@ -7,7 +7,21 @@ index b9de839..65bfd20 100644
  pub mod builder;
  
  #[cfg(feature = "incr")]
-@@ -475,6 +476,303 @@ impl TypstCompileWorld {
+@@ -147,6 +148,13 @@ impl TypstCompiler {
+         Ok(())
+     }
+ 
++    /// Drop memoized results not used in the last `max_age` compilations
++    /// (iota4web patch): nothing else evicts comemo's cache in the web
++    /// compiler, so a long document grows the wasm memory to 4 GB and traps.
++    pub fn evict(&mut self, max_age: usize) {
++        comemo::evict(max_age);
++    }
++
+     pub fn set_fonts(&mut self, fonts: &TypstFontResolver) -> Result<(), JsValue> {
+         self.verse
+             .increment_revision(|verse| verse.set_fonts(fonts.fonts.clone()));
+@@ -475,6 +483,303 @@ impl TypstCompileWorld {
          })
      }
  

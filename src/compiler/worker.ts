@@ -263,12 +263,15 @@ async function compile(msg: Extract<ToWorker, { type: 'compile' }>) {
       fresh = incrFresh;
       if (res?.result) incrFresh = false;
     }
+    // comemo 的记忆没人清：177 页的论文每改一次设置涨一两百 MB，顶到 wasm32 的 4 GB 就 unreachable。
+    // 整编一次算一岁，三次没用到的丢掉（wasm 的线性内存只涨不缩，留的代数越多高水位越高）；只编一章 / 一段那几轮不算岁数
+    if (!msg.focus) { try { raw.evict?.(3); } catch { /* 老 wasm 没这个口 */ } }
     // 拷贝一份：结果是 wasm 内存上的视图，直接拿 .buffer 会把整块内存搬走
     const artifact = res?.result ? new Uint8Array(res.result as Uint8Array).buffer : null;
     // 字形映射覆盖整篇文档，近 200 页时比增量排版本身还贵。左侧输入期间沿用旧映射；
     // 用户进入预览编辑或手动刷新时再生成最新映射。
     const glyphs = msg.glyphs !== false && !diagnostics.some((d) => d.severity === 'error') ? glyphMap(msg.main) : null;
-    post({ type: 'compiled', id: msg.id, artifact, fresh, diagnostics, ms: Math.round(performance.now() - t0), glyphs }, [artifact, glyphs].filter((x): x is ArrayBuffer => !!x));
+    post({ type: 'compiled', id: msg.id, artifact, fresh, diagnostics, ms: Math.round(performance.now() - t0), glyphs, mem: await wasmMemory() }, [artifact, glyphs].filter((x): x is ArrayBuffer => !!x));
   } catch (e) {
     post({ type: 'compiled', id: msg.id, artifact: null, fresh: false, diagnostics: [{ severity: 'error', message: String((e as Error)?.message ?? e), where: '' }], ms: Math.round(performance.now() - t0), glyphs: null });
   }
@@ -307,6 +310,11 @@ async function para(msg: Extract<ToWorker, { type: 'para' }>) {
   } catch (e) {
     post({ type: 'para-done', id: msg.id, artifact: null, ms: Math.round(performance.now() - t0), glyphs: null, error: String((e as Error)?.message ?? e) });
   }
+}
+
+/** wasm 线性内存眼下多大（字节）：wasm32 顶到 4 GB 就分配失败 → unreachable */
+async function wasmMemory(): Promise<number> {
+  try { const w = await (compilerWrapper as unknown as { default: () => Promise<{ memory: WebAssembly.Memory }> }).default(); return w.memory.buffer.byteLength; } catch { return 0; }
 }
 
 async function snippet(msg: Extract<ToWorker, { type: 'snippet' }>) {

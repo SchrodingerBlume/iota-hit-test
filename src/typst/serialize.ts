@@ -111,7 +111,7 @@ function settingsArgs(s: Settings): string[] {
     ['listHanging', 'list-hanging'],
     ['abbreviationLinks', 'abbreviation-links'],
     ['abbreviationIndexed', 'abbreviation-indexed'],
-    ['titleSpread', 'title-spread'],
+    ['titleSpread', 'two-hanzi'],
     ['fakeBold', 'fake-bold'],
     ['fakeItalic', 'fake-italic'],
   ];
