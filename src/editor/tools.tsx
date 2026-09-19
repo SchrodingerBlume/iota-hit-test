@@ -14,13 +14,27 @@ import { useEditorEnv } from './env';
 import { usePreviewSurface } from '../ui/PreviewEditLayer';
 import { t as tx } from '../i18n';
 
-/** 编辑器每一笔事务都重画（按钮的亮暗跟着选区走），一帧合成一次 */
+/** 功能区按钮的亮暗只取决于这几样：光标处的标记、所在段的类型与属性、祖先块、选区空不空、能不能撤销重做 */
+function editorSignature(editor: Editor): string {
+  const { state } = editor;
+  const { selection } = state;
+  const $from = selection.$from;
+  const marks = (selection.empty ? state.storedMarks ?? $from.marks() : $from.marksAcross(selection.$to) ?? $from.marks()).map((m) => m.type.name).sort().join(',');
+  const parent = $from.parent;
+  const chain: string[] = [];
+  for (let d = $from.depth; d > 0; d--) chain.push($from.node(d).type.name);
+  const node = 'node' in selection ? (selection as { node?: { type: { name: string } } }).node?.type.name ?? '' : '';
+  return [marks, parent.type.name, JSON.stringify(parent.attrs), chain.join('>'), node, selection.empty ? 1 : 0, editor.can().undo() ? 1 : 0, editor.can().redo() ? 1 : 0].join('|');
+}
+
+/** 编辑器的事务里只有按钮亮暗要用的那几样变了才重画（连续打字时基本不重画），一帧合成一次 */
 export function useEditorTick(editor: Editor | null) {
   const [, setTick] = useState(0);
   useEffect(() => {
     if (!editor) return;
     let raf = 0;
-    const bump = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; setTick((t) => t + 1); }); };
+    let last = '';
+    const bump = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; if (editor.isDestroyed) return; const sig = editorSignature(editor); if (sig === last) return; last = sig; setTick((t) => t + 1); }); };
     editor.on('transaction', bump);
     editor.on('selectionUpdate', bump);
     return () => { editor.off('transaction', bump); editor.off('selectionUpdate', bump); cancelAnimationFrame(raf); };
