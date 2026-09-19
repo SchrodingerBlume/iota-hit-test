@@ -5,7 +5,8 @@ import { useMemo, useRef, useState } from 'react';
 import type { BibEntry } from '../bib/bibtex';
 import { parseBibtex, generateBibtex, newEntryId, splitNames, joinNames, suggestKey } from '../bib/bibtex';
 import { TYPES, ACHIEVEMENT_TYPES, ACHIEVEMENT_TYPE_KEYS, ANNOTE_FIELD, typeDef, type FieldDef, type TypeDef } from '../bib/schema';
-import { Plus, Trash2, Copy, Search, Upload, Download, Code2, Wand2, ChevronDown, ChevronUp, Check, FolderPlus, Folder, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Copy, Search, Upload, Download, Code2, Wand2, Check, FolderPlus, Folder } from 'lucide-react';
+import { FoldIcon } from './Fold';
 import { t as tx } from '../i18n';
 
 interface Props {
@@ -176,7 +177,7 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
             <li key={g || '__none'} className="bib-group-block">
               {groupFilter === null && groups.length > 0 && (
                 <button type="button" className="bib-group-head" onClick={() => toggleCollapse(g)}>
-                  <ChevronRight className={collapsed.has(g) ? '' : 'is-open'} />{g || tx("未分组")} <span className="muted">{items.length}</span>
+                  <FoldIcon open={!collapsed.has(g)} />{g || tx("未分组")} <span className="muted">{items.length}</span>
                 </button>
               )}
               {!collapsed.has(g) && (
@@ -251,7 +252,7 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
               {def.fields.map((f) => <FieldInput key={f.key} f={f} value={current.fields[f.key] ?? ''} onChange={(v) => setField(f.key, v)} />)}
               {mode === 'achievements' && <FieldInput f={ANNOTE_FIELD} value={current.fields.annote ?? ''} onChange={(v) => setField('annote', v)} />}
             </div>
-            <button type="button" className="btn btn-ghost btn-xs" onClick={() => setShowExtra((s) => !s)}>{showExtra ? <ChevronUp /> : <ChevronDown />}{tx("其他字段")}{extraFields.length ? `（${extraFields.length}）` : ''}</button>
+            <button type="button" className="btn btn-ghost btn-xs" onClick={() => setShowExtra((s) => !s)}><FoldIcon open={showExtra} />{tx("其他字段")}{extraFields.length ? `（${extraFields.length}）` : ''}</button>
             {showExtra && (
               <div className="bib-extra">
                 {extraFields.map((k) => (

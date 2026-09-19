@@ -30,7 +30,8 @@ import { useTheme, type ThemePref } from './theme';
 import { useLayoutPrefs } from './layout';
 import { Ribbon } from './Ribbon';
 import { FluentProvider, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuItemRadio, MenuDivider, Button, Tooltip, Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions } from '@fluentui/react-components';
-import { Apps20Regular, DocumentAdd20Regular, Save20Regular, FolderOpen20Regular, DocumentPdf20Regular, Document20Regular, Info20Regular, WeatherSunny20Regular, WeatherMoon20Regular, Navigation20Regular, ChevronLeft20Regular, ChevronRight20Regular } from '@fluentui/react-icons';
+import { Fold } from './Fold';
+import { Apps20Regular, DocumentAdd20Regular, Save20Regular, FolderOpen20Regular, DocumentPdf20Regular, Document20Regular, Info20Regular, WeatherSunny20Regular, WeatherMoon20Regular, Navigation20Regular, ChevronLeft20Regular } from '@fluentui/react-icons';
 import { fluentLight, fluentDark } from './fluent';
 import { SlidersHorizontal, BookText, PenLine, Library } from 'lucide-react';
 import { t as tx } from '../i18n';
@@ -391,7 +392,7 @@ export function App() {
           {compact && navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} />}
           <nav className={`nav ${compact ? 'is-overlay' : ''}`} hidden={compact && !navOpen} inert={!navOpen} onClick={(e) => { if (compact && (e.target as HTMLElement).closest('button:not(.outline-item)')) setNavOpen(false); }}>
             <div className="nav-inner">
-            <button type="button" className="nav-collapse" title={tx("收起左侧导航")} aria-label={tx("收起左侧导航")} onClick={() => setNavOpen(false)}><ChevronLeft20Regular /></button>
+            {compact && <button type="button" className="nav-collapse" title={tx("收起左侧导航")} aria-label={tx("收起左侧导航")} onClick={() => setNavOpen(false)}><ChevronLeft20Regular /></button>}
             {[tx("设置"), tx("前置"), tx("主体"), tx("后置")].map((g) => (
               <div key={g}>
                 <h4>{GROUP_ICON[g]}{g}</h4>
@@ -403,7 +404,7 @@ export function App() {
                   const folded = !!outlineFolded[n.key];
                   return (
                     <div key={n.key} className="nav-with-outline">
-                      <div className="nav-row">{btn}<button type="button" className={`outline-fold ${folded ? 'is-folded' : ''}`} title={folded ? tx("展开大纲") : tx("收起大纲")} onClick={() => useOutline.getState().toggle(n.key)}>{folded ? '▸' : '▾'}</button></div>
+                      <div className="nav-row">{btn}<Fold className="outline-fold" open={!folded} title={folded ? tx("展开大纲") : tx("收起大纲")} onClick={() => useOutline.getState().toggle(n.key)} /></div>
                       <div className={`outline-wrap ${folded ? 'is-folded' : ''}`} inert={folded}><div className="outline-wrap-inner"><OutlinePane richKey={n.key as 'body' | 'appendix'} onJump={() => { if (section !== n.key) setSection(n.key); if (mode === 'preview') setMode('split'); }} /></div></div>
                     </div>
                   );
@@ -412,7 +413,7 @@ export function App() {
             ))}
             </div>
           </nav>
-          {!navOpen && !compact && <button type="button" className="nav-reopen" title={tx("展开左侧导航")} aria-label={tx("展开左侧导航")} onClick={() => setNavOpen(true)}><ChevronRight20Regular /></button>}
+          {!compact && <Fold className="nav-toggle" open={navOpen} title={navOpen ? tx("收起左侧导航") : tx("展开左侧导航")} onClick={() => setNavOpen(!navOpen)} />}
           <section className={`work ${commentsOpen ? 'has-comments' : ''}`} hidden={mode === 'preview'}>
             {loaded ? <div className="work-inner" key={`${doc.id}:${section}`}>{panel}</div> : <div className="muted">{tx("正在打开文档…")}</div>}
             {commentsOpen && loaded && <CommentsPane />}
