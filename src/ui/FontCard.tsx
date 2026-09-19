@@ -14,13 +14,20 @@ const CHOICES: { value: Fontset; label: string; hint: string }[] = [
 
 const fmtMB = (n: number) => (n / 1024 / 1024).toFixed(1);
 
+/** 各档默认的数学字体（抄 presets） */
+const PRESET_MATH: Record<Fontset, string> = { webapp: 'TeX Gyre Termes Math', windows: 'Cambria Math', macos: 'STIX Two Math' };
+
 export function FontCard() {
   const fontset = useStore((s) => s.doc.settings.fontset ?? 'webapp');
+  const mathFont = useStore((s) => s.doc.settings.mathFont ?? '');
   const setSettings = useStore((s) => s.setSettings);
-  const { fonts, busy, error, canQuery, readLocal, addFiles, removeFile } = useFontState();
+  const { fonts, busy, error, canQuery, readLocal, addFiles, removeFile, mathFonts, scanMathFonts, loadFamily } = useFontState();
   const families = useCompileState((s) => s.families);
   const status = useCompileState((s) => s.status);
-  const roles = fontset === 'webapp' ? [] : roleAvailability(fontset);
+  const roles = fontset === 'webapp' ? [] : roleAvailability(fontset, mathFont);
+  // 可选的数学字体：扫出来的本机字体 + 编译器里已有的带 Math 的家族 + 当前选的
+  const mathChoices = [...new Set([...mathFonts, ...families.filter((f) => /math/i.test(f)), ...(mathFont ? [mathFont] : [])])].sort();
+  const mathLoaded = !mathFont || families.some((f) => f.toLowerCase() === mathFont.toLowerCase());
   const missing = roles.filter((r) => !r.ok && !r.optional);
   void families; // 订阅它：字体表变了这张卡要重画
 
@@ -34,6 +41,21 @@ export function FontCard() {
             <span><b>{c.label}</b><small>{c.hint}</small></span>
           </label>
         ))}
+      </div>
+
+      <div className="field" style={{ marginTop: 12 }}>
+        <span className="field-label">{t("数学字体")}</span>
+        <div className="row">
+          <select className="input" style={{ width: 'auto', minWidth: 220 }} value={mathFont} disabled={!!busy} onChange={(e) => { const v = e.target.value; setSettings({ mathFont: v || undefined }); if (v && !families.some((f) => f.toLowerCase() === v.toLowerCase())) void loadFamily(v); }}>
+            <option value="">{t("跟随字体方案（{{v0}}）", { v0: PRESET_MATH[fontset] })}</option>
+            {mathChoices.map((f) => <option key={f} value={f}>{f}</option>)}
+          </select>
+          {canQuery && <button type="button" className="btn" disabled={!!busy || status !== 'ready'} onClick={() => void scanMathFonts()}>{t("读取本机数学字体")}</button>}
+          {mathFont && !mathLoaded && !busy && <span className="muted" style={{ fontSize: 12 }}>{t("尚未装入，当前用替代字体")}</span>}
+          {fontset === 'webapp' && busy && <span className="muted" style={{ fontSize: 12 }}>{busy}</span>}
+        </div>
+        {fontset === 'webapp' && error && <div className="diag err" style={{ marginTop: 6, padding: '6px 10px', borderRadius: 'var(--r-s)', border: '1px solid' }}>{error}</div>}
+        <span className="field-hint">{t("扫描本机所有带 MATH 表的 OpenType 字体（Cambria Math、STIX Two Math、Latin Modern Math、XITS Math……）；选中的字体每次进站自动再读一遍。")}</span>
       </div>
 
       {fontset !== 'webapp' && (

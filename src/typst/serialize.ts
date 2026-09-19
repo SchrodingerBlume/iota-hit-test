@@ -98,7 +98,7 @@ function settingsArgs(s: Settings): string[] {
   }
   // 字体：站内那一档是 webapp + FandolKai（教育部楷体只有繁体字形）；读了本机字体
   // 就切模板自己的 windows / macos 档，缺的字由模板的回落链接住
-  args.push(FONTSET_ARG[s.fontset ?? 'webapp']);
+  args.push(s.mathFont ? `${FONTSET_ARG[s.fontset ?? 'webapp']} + (math: ${JSON.stringify(s.mathFont)})` : FONTSET_ARG[s.fontset ?? 'webapp']);
   const bools: [keyof Settings, string][] = [
     ['captionBilingual', 'caption-bilingual'],
     ['captionNumberingByChapter', 'caption-numbering-by-chapter'],

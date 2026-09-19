@@ -46,6 +46,8 @@ export interface Settings {
   styles: Partial<Record<StyleKey, StyleEntry>>;
   /** 字体方案：站内开源字体（webapp 档 + FandolKai），或本机字体走模板的 windows / macos 档 */
   fontset: Fontset;
+  /** 数学字体：家族名；空 = 跟字体方案（各档 presets 里的 math） */
+  mathFont?: string;
   campus: Campus;
   degreeLevel: DegreeLevel;
   /** 学术／专业学位。auto 按 form 定；本科不印这一行 */

@@ -53,6 +53,10 @@ src/
 
 ## 本机字体
 
+数学字体可以单独选（论文设置 → 字体方案 → 数学字体）：「读取本机数学字体」扫一遍本机字体，只挑带 OpenType `MATH` 表的
+（读文件头就够，TTC 逐副看），选中的家族名记进工程 `settings.mathFont`，发成 `fontset: presets.xxx + (math: "…")`；
+每次进站随本机字体一起自动再读，缺了走模板的回落链。
+
 「论文设置 → 字体方案」三档：站内开源字体（默认）、本机字体 Windows 档、本机字体 macOS 档。
 后两档按模板 `presets.windows` / `presets.macos` 的家族名找字（SimSun / SimHei / KaiTi / FangSong /
 Times New Roman / Arial / Consolas / Cambria Math；Songti SC / Heiti SC / Kaiti SC / STFangsong / Menlo /

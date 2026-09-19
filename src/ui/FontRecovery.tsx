@@ -8,6 +8,7 @@ import { t } from '../i18n';
 /** Restore granted fonts before warning, and warn again if a recovered family disappears. */
 export function FontRecovery() {
   const preset = useStore((s) => s.doc.settings.fontset);
+  const mathFont = useStore((s) => s.doc.settings.mathFont ?? '');
   const docId = useStore((s) => s.doc.id);
   const editing = useStore((s) => s.loaded && s.view === 'editor');
   const status = useCompileState((s) => s.status);
@@ -18,7 +19,7 @@ export function FontRecovery() {
   const [dismissed, setDismissed] = useState('');
   const stored = useRef<Promise<void> | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  const key = `${docId}:${preset}`;
+  const key = `${docId}:${preset}:${mathFont}`;
   // 引擎重启过：新 worker 里没有字体，本机 / 文件字体都重发一遍
   const lastGen = useRef(engineGen);
   useEffect(() => {
@@ -30,13 +31,13 @@ export function FontRecovery() {
         if (lastGen.current !== engineGen) { lastGen.current = engineGen; stored.current = null; useFontState.setState({ fonts: [] }); }
         stored.current ??= useFontState.getState().loadStored();
         await stored.current;
-        if (preset !== 'webapp') await useFontState.getState().autoReadLocal();
+        if (preset !== 'webapp' || mathFont) await useFontState.getState().autoReadLocal(mathFont ? [mathFont] : []);
       } finally { useFontState.setState({ restoring: false }); }
       if (alive) setRestored(key);
     })();
     return () => { alive = false; };
-  }, [editing, status, key, preset, engineGen]);
-  const missing = preset === 'webapp' ? [] : roleAvailability(preset).filter((font) => !font.optional && !font.ok);
+  }, [editing, status, key, preset, mathFont, engineGen]);
+  const missing = preset === 'webapp' ? [] : roleAvailability(preset, mathFont).filter((font) => !font.optional && !font.ok);
   const signature = missing.length ? `${key}:${missing.map((font) => font.family).join(',')}` : '';
   useEffect(() => { if (!signature) setDismissed(''); }, [signature, families]);
   const open = editing && status === 'ready' && restored === key && !!signature && signature !== dismissed;

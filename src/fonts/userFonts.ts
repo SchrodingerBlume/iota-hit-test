@@ -44,6 +44,32 @@ const WANTED = new Set<string>(
   [...PRESET_ROLES.windows, ...PRESET_ROLES.macos].map((r) => r.family.toLowerCase()),
 );
 
+/** OpenType 有没有 MATH 表：只读文件头（表目录在最前面，TTC 读每一副的目录） */
+export function hasMathTable(head: ArrayBuffer): boolean {
+  const v = new DataView(head);
+  const dir = (off: number): boolean => {
+    if (off + 12 > v.byteLength) return false;
+    const n = v.getUint16(off + 4);
+    for (let i = 0; i < n; i++) {
+      const p = off + 12 + i * 16;
+      if (p + 4 > v.byteLength) return false;
+      if (v.getUint32(p) === 0x4d415448) return true; // 'MATH'
+    }
+    return false;
+  };
+  if (v.byteLength < 12) return false;
+  const tag = v.getUint32(0);
+  if (tag === 0x74746366) { // 'ttcf'
+    const n = v.getUint32(8);
+    for (let i = 0; i < Math.min(n, 64); i++) { const p = 12 + i * 4; if (p + 4 > v.byteLength) break; if (dir(v.getUint32(p))) return true; }
+    return false;
+  }
+  return dir(0);
+}
+
+const MATH_KEY = 'iota4web-math-fonts';
+const readMathList = (): string[] => { try { return JSON.parse(localStorage.getItem(MATH_KEY) || '[]'); } catch { return []; } };
+
 export interface UserFont {
   /** 去重键：大小 + 前 64 KB 的散列 */
   id: string;
@@ -60,12 +86,18 @@ interface FontState {
   error: string | null;
   /** Local Font Access API 可不可用 */
   canQuery: boolean;
-  readLocal: () => Promise<void>;
+  readLocal: (extra?: string[], onlyExtra?: boolean) => Promise<void>;
   addFiles: (files: FileList | File[]) => Promise<void>;
   removeFile: (name: string) => Promise<void>;
   loadStored: () => Promise<void>;
   /** 上次授权过、且工程用的是本机档：进站自动再读一遍，不用再点 */
-  autoReadLocal: () => Promise<void>;
+  autoReadLocal: (extra?: string[]) => Promise<void>;
+  /** 本机扫出来的数学字体（有 MATH 表的）家族名，记在本机 */
+  mathFonts: string[];
+  /** 扫一遍本机字体，挑出带 MATH 表的（要用户点一下） */
+  scanMathFonts: () => Promise<void>;
+  /** 把这一家族的字读进编译器 */
+  loadFamily: (family: string) => Promise<void>;
 }
 
 async function fingerprint(buf: ArrayBuffer): Promise<string> {
@@ -87,14 +119,49 @@ export const useFontState = create<FontState>((set, get) => ({
   error: null,
   canQuery: typeof window !== 'undefined' && 'queryLocalFonts' in window,
 
-  readLocal: async () => {
+  mathFonts: readMathList(),
+  scanMathFonts: async () => {
+    if (get().busy) return;
+    const query = (window as unknown as { queryLocalFonts?: () => Promise<FontData[]> }).queryLocalFonts;
+    if (!query) { set({ error: t("当前浏览器不支持读取本机字体，请选择字体文件。") }); return; }
+    set({ busy: t("正在扫描本机数学字体…"), error: null });
+    try {
+      const all = await query.call(window);
+      const found = new Set<string>();
+      const seenFamily = new Set<string>();
+      let n = 0;
+      for (const f of all) {
+        // 一个家族只看一副：MATH 表在常规那一副上
+        if (seenFamily.has(f.family)) continue;
+        seenFamily.add(f.family);
+        if (++n % 50 === 0) set({ busy: t("正在扫描本机数学字体…（{{n}}/{{total}}）", { n, total: seenFamily.size + 0 }) });
+        try {
+          const head = await (await f.blob()).slice(0, 16384).arrayBuffer();
+          if (hasMathTable(head)) found.add(f.family);
+        } catch { /* 读不了的跳过 */ }
+      }
+      const mathFonts = [...found].sort();
+      try { localStorage.setItem(MATH_KEY, JSON.stringify(mathFonts)); } catch { /* */ }
+      set({ mathFonts, busy: null, error: mathFonts.length ? null : t("本机没有找到带 MATH 表的字体。") });
+    } catch (e) {
+      const msg = String((e as Error)?.message ?? e);
+      set({ busy: null, error: /denied|NotAllowed|permission/i.test(msg) ? t("未获得字体访问权限。请再次读取字体，并在浏览器提示中选择“允许”。") : msg });
+    }
+  },
+  loadFamily: async (family) => { await get().readLocal([family], true); },
+
+  readLocal: async (extra: string[] = [], onlyExtra = false) => {
     if (get().busy) return;
     const query = (window as unknown as { queryLocalFonts?: () => Promise<FontData[]> }).queryLocalFonts;
     if (!query) { set({ error: t("当前浏览器不支持读取本机字体，请选择字体文件。") }); return; }
     set({ busy: t("正在读取本机字体…"), error: null });
     try {
       const all = await query.call(window);
-      const hits = all.filter((f) => WANTED.has(f.family.toLowerCase()));
+      const wanted = new Set([...(onlyExtra ? [] : WANTED), ...extra.map((x) => x.toLowerCase())]);
+      // 编译器里已经有的家族不再读一遍（本机那一套一百多 MB，只补缺的）
+      const have = new Set(useCompileState.getState().families.map((x) => x.toLowerCase()));
+      const hits = all.filter((f) => wanted.has(f.family.toLowerCase()) && !have.has(f.family.toLowerCase()));
+      if (!hits.length && all.some((f) => wanted.has(f.family.toLowerCase()))) { set({ busy: null }); return; }
       if (!hits.length) { set({ busy: null, error: t("未找到所需字体，请选择字体文件或使用内置字体。") }); return; }
       const fonts = [...get().fonts];
       const seen = new Set<string>();
@@ -158,11 +225,11 @@ export const useFontState = create<FontState>((set, get) => ({
     finally { set({ busy: null }); }
   },
 
-  autoReadLocal: async () => {
+  autoReadLocal: async (extra = []) => {
     if (!get().canQuery) return;
     try {
       const p = await navigator.permissions.query({ name: 'local-fonts' as PermissionName });
-      if (p.state === 'granted') await get().readLocal();
+      if (p.state === 'granted') await get().readLocal(extra);
     } catch { /* 浏览器不认这个权限名就算了 */ }
   },
 
@@ -193,7 +260,7 @@ export const useFontState = create<FontState>((set, get) => ({
 }));
 
 /** 某一档的每个角色现在有没有字：按编译器报回来的家族名判 */
-export function roleAvailability(fontset: Exclude<Fontset, 'webapp'>): { role: string; label: string; family: string; optional: boolean; ok: boolean }[] {
+export function roleAvailability(fontset: Exclude<Fontset, 'webapp'>, mathFont?: string): { role: string; label: string; family: string; optional: boolean; ok: boolean }[] {
   const have = new Set(useCompileState.getState().families.map((f) => f.toLowerCase()));
-  return PRESET_ROLES[fontset].map((r) => ({ ...r, optional: !!r.optional, ok: have.has(r.family.toLowerCase()) }));
+  return PRESET_ROLES[fontset].map((r) => { const family = r.role === 'math' && mathFont ? mathFont : r.family; return { ...r, family, optional: !!r.optional, ok: have.has(family.toLowerCase()) }; });
 }
