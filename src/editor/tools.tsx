@@ -96,7 +96,7 @@ export function useInsertActions(editor: Editor | null) {
       if (node.type.name === 'tableFigure') { node.descendants((n, p) => { if (first < 0 && n.isTextblock) first = pos + 1 + p + 1; return first < 0; }); return false; }
       return true;
     });
-    if (first >= 0) ed().commands.setTextSelection(first);
+    if (first >= 0) ed().chain().setTextSelection(first).scrollIntoView().run();
   };
   /** 从 Markdown / 制表符 / CSV 文本插表 */
   const insertTableFromText = (text: string, header?: boolean) => {
@@ -116,7 +116,7 @@ export function useInsertActions(editor: Editor | null) {
       if (node.type.name === 'tableFigure') { node.descendants((n, p) => { if (first < 0 && n.isTextblock) first = pos + 1 + p + 1; return first < 0; }); return false; }
       return true;
     });
-    if (first >= 0) ed().commands.setTextSelection(first);
+    if (first >= 0) ed().chain().setTextSelection(first).scrollIntoView().run();
   };
   const insertFigure = () => {
     const input = document.createElement('input');
@@ -153,7 +153,7 @@ export function useInsertActions(editor: Editor | null) {
     // 光标放进代码块
     let inside = -1;
     e.state.doc.nodesBetween(at, e.state.doc.content.size, (node, pos) => { if (inside >= 0) return false; if (node.type.name === 'codeFigure') { inside = pos + 2; return false; } return true; });
-    if (inside >= 0) e.commands.setTextSelection(inside);
+    if (inside >= 0) e.chain().setTextSelection(inside).scrollIntoView().run();
   };
   return { insertInline, insertTable, insertTableFromText, insertFigure, insertEquation, insertDenote, insertPageBreak, insertAlgorithm, insertCodeFigure };
 }

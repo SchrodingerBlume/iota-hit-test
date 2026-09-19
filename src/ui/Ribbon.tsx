@@ -149,7 +149,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
     const i = list.findIndex((c) => c.id === activeCommentId);
     const next = list[i < 0 ? (dir === 1 ? 0 : list.length - 1) : (i + dir + list.length) % list.length];
     const r = commentRange(next.key, next.id);
-    if (r && ed) { ed.chain().focus().setTextSelection(r).run(); useComments.getState().setActive(next.id); }
+    if (r && ed) { ed.chain().focus().setTextSelection(r).scrollIntoView().run(); useComments.getState().setActive(next.id); }
   };
   const stepNode = (type: string, dir: 1 | -1) => {
     if (!ed || !activeKey) return;

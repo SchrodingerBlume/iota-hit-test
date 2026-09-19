@@ -47,7 +47,7 @@ export function CommentsPane() {
   const jump = (c: Comment) => {
     const r = commentRange(c.key, c.id);
     const ed = getEditor(c.key);
-    if (r && ed) { ed.chain().focus().setTextSelection(r).run(); setActive(c.id); }
+    if (r && ed) { ed.chain().focus().setTextSelection(r).scrollIntoView().run(); setActive(c.id); }
   };
   const resolvedCount = comments.filter((c) => sectionOf(c.key) === section && c.resolved).length;
   return (

@@ -25,6 +25,7 @@ import { UniqueId } from './extensions/UniqueId';
 import { MathInline, Cite, Ref, Abbr, Footnote, Ccwd, Idx } from './extensions/inline';
 import { Figure, TableFigure, CodeFigure, Equation, PageBreak, BlockCaptionKeys } from './extensions/blocks';
 import { MathInputRules } from './extensions/mathRules';
+import { EditKeys } from './extensions/EditKeys';
 import { Algorithm } from './extensions/algorithm';
 import { EqDenote } from './extensions/eqdenote';
 import { useEditorEnv, NumberingContext, RichKeyContext } from './env';
@@ -118,7 +119,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
       AlignedTableCell, AlignedTableHeader, SizedTableRow, TableExtras,
       Figure, TableFigure, CodeFigure, Algorithm, Equation, PageBreak, EqDenote, BlockCaptionKeys, MathInputRules,
       MathInline, Cite, Ref, Abbr, Footnote, Ccwd, Idx,
-      UniqueId, MirrorCaret, Search, SpaceMarks,
+      UniqueId, MirrorCaret, Search, SpaceMarks, EditKeys,
     ],
     content: value,
     onUpdate: ({ editor }) => {
@@ -133,6 +134,9 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     onTransaction: ({ transaction }) => { if (richKey) recordTransaction(richKey, transaction); },
     editorProps: {
       attributes: { class: 'rich', spellcheck: 'false' },
+      // 光标离视口上下沿不到 40px 就滚，滚到留 72px：Word 那种贴着边打字看不见下一行的感觉要不得
+      scrollThreshold: 40,
+      scrollMargin: 72,
       // 粘贴：Word / 网页来的段落常带「　　」或几个半角空格当首行缩进——模板自己缩进，去掉；裸的 <table> 套进表格块，不然进不了排版
       transformPasted: (slice, view) => {
         const { schema } = view.state;
@@ -361,7 +365,17 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
           </>}
           <div hidden={sourceMode}>
             {editor && !sourceMode && <Bubble editor={editor} />}
-            <EditorContent editor={editor} className="editor-body" />
+            <EditorContent editor={editor} className="editor-body" onMouseDown={(e) => {
+              // 点在正文两侧 / 下方的留白：光标落到最近处（Typora / Word 都是），不然编辑器直接失焦
+              if (e.target !== e.currentTarget || !editor || e.button !== 0) return;
+              e.preventDefault();
+              const r = editor.view.dom.getBoundingClientRect();
+              const left = Math.min(Math.max(e.clientX, r.left + 1), r.right - 1), top = Math.min(Math.max(e.clientY, r.top + 1), r.bottom - 1);
+              const at = editor.view.posAtCoords({ left, top });
+              const pos = at ? at.pos : e.clientY >= r.bottom ? editor.state.doc.content.size : 0;
+              editor.view.dispatch(editor.state.tr.setSelection(TextSelection.near(editor.state.doc.resolve(pos), e.clientY >= r.bottom ? -1 : 1)));
+              editor.view.focus();
+            }} />
           </div>
         </div>
       </RichKeyContext.Provider>
