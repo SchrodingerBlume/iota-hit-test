@@ -2,6 +2,7 @@
 // 工具栏一行：常用的摆在外面，插入类的收进「插入」菜单；选中文字时浮出气泡菜单。
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { TextSelection } from '@tiptap/pm/state';
+import { Slice, Fragment, type Node as PMNode } from '@tiptap/pm/model';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { useBlockMenu } from './BlockMenu';
@@ -131,6 +132,25 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     onTransaction: ({ transaction }) => { if (richKey) recordTransaction(richKey, transaction); },
     editorProps: {
       attributes: { class: 'rich', spellcheck: 'false' },
+      // 粘贴：Word / 网页来的段落常带「　　」或几个半角空格当首行缩进——模板自己缩进，去掉；裸的 <table> 套进表格块，不然进不了排版
+      transformPasted: (slice, view) => {
+        const { schema } = view.state;
+        const strip = (n: PMNode): PMNode => {
+          if (n.type.name !== 'paragraph' || !n.firstChild?.isText) return n;
+          const text = n.firstChild.text ?? '';
+          const cut = text.replace(/^[\s\u3000]+/, '');
+          if (cut === text) return n;
+          const rest = n.content.cut(n.firstChild.nodeSize);
+          const first = cut ? [schema.text(cut, n.firstChild.marks)] : [];
+          return n.type.create(n.attrs, Fragment.from([...first, ...(rest.content as PMNode[])]), n.marks);
+        };
+        const out: PMNode[] = [];
+        slice.content.forEach((n, _o, i) => {
+          if (n.type.name === 'table' && schema.nodes.tableFigure && !(i === 0 && slice.openStart > 0) && !(i === slice.content.childCount - 1 && slice.openEnd > 0)) { out.push(schema.nodes.tableFigure.create(null, n)); return; }
+          out.push(strip(n));
+        });
+        return new Slice(Fragment.from(out), slice.openStart, slice.openEnd);
+      },
       // ⌘F / ⌘H 开查找替换栏（Word 的习惯）
       handleKeyDown: (_view, event) => {
         if ((event.metaKey || event.ctrlKey) && (event.key === 'f' || event.key === 'h')) { event.preventDefault(); useFindBar.getState().set(true); return true; }

@@ -269,9 +269,13 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   useEffect(() => {
     if (!pending || pending.fading || index.version < pending.version) return;
     setPending({ ...pending, fading: true });
+  }, [index.version, pending]);
+  // 淡完就撤（定时器单独一个 effect：上面那个一 setPending 就重跑，会把自己的定时器清掉）
+  useEffect(() => {
+    if (!pending?.fading) return;
     const t = window.setTimeout(() => setPending((p) => (p && p.fading ? null : p)), 220);
     return () => window.clearTimeout(t);
-  }, [index.version, pending]);
+  }, [pending]);
   // 删掉的字在重排前就该消失（Word 是当场没的）：编译那一版里的字形，映射到现在的位置若已塌成空，
   // 就盖一块纸色把它遮掉
   const gone = useMemo(() => {
