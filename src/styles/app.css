@@ -395,7 +395,8 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .hd-row { display: flex; align-items: baseline; gap: 0.5em; }
 .hd-num { flex: none; font-family: var(--sans); font-weight: 700; color: var(--orange); white-space: nowrap; user-select: none; }
 .hd-num:empty { display: none; }
-.hd .hd-zh { flex: 1; margin: 0; font-family: var(--sans); font-weight: 700; line-height: 1.35; min-width: 2em; }
+.hd .hd-zh { flex: 1; margin: 0; font-family: var(--sans); font-weight: 700; line-height: 1.35; min-width: 2em; color: var(--hit); }
+:root[data-theme="dark"] .hd .hd-zh { color: var(--accent-ink); }
 .hd-1 .hd-row { font-size: 24px; }
 .hd-2 .hd-row { font-size: 19px; }
 .hd-3 .hd-row { font-size: 17px; }

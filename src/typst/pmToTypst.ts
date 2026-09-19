@@ -177,7 +177,8 @@ const INLINE_ATOM = new Set(['ref', 'cite', 'mathInline', 'footnote', 'abbr', 'c
 const GROUPABLE = ['link', 'underline', 'strike', 'bold', 'italic', 'superscript', 'subscript'];
 type Mark = NonNullable<PMNode['marks']>[number];
 const sameMark = (a: Mark, b: Mark) => a.type === b.type && JSON.stringify(a.attrs ?? {}) === JSON.stringify(b.attrs ?? {});
-const hasMark = (n: PMNode, m: Mark) => n.type === 'text' && (n.marks ?? []).some((x) => sameMark(x, m));
+// 引用、公式这些行内原子也带标记（选中一句加下划线，里面的「表 1-2」一样带着），一段里连着的一起包
+const hasMark = (n: PMNode, m: Mark) => (n.marks ?? []).some((x) => sameMark(x, m));
 // 节点对象不能复制（源码映射按对象身份查位置），外层已包掉的标记用 skip 传下去
 const marksOf = (n: PMNode, skip: Mark[]) => (n.marks ?? []).filter((x) => !skip.some((s) => sameMark(s, x)));
 
@@ -188,7 +189,9 @@ export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {
   const emit = (s: string, isCode: boolean) => { out += s; code = isCode; };
   for (let i = 0; i < nodes.length; i++) {
     const n = nodes[i];
-    if (n.type === 'text' && i + 1 < nodes.length && nodes[i + 1].type === 'text') {
+    // 原子自己身上还没包掉的标记（没和邻居成组时）就地包上，不然原子处的下划线 / 加粗断掉
+    const atom = (s: string) => { const ms = marksOf(n, skip).filter((m) => GROUPABLE.includes(m.type)); emit(ms.length ? wrapMarks(s, ms) : s, true); };
+    if (i + 1 < nodes.length) {
       let best: { mark: Mark; end: number } | null = null;
       for (const m of marksOf(n, skip).filter((x) => GROUPABLE.includes(x.type))) {
         let j = i + 1;
@@ -223,29 +226,29 @@ export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {
         break;
       }
       case 'hardBreak': emit(' \\\n', false); break;
-      case 'mathInline': emit(tag(opts, n, 'node', mathInline(n.attrs)), n.attrs?.mode === 'latex'); break;
+      case 'mathInline': { const ms = marksOf(n, skip).filter((m) => GROUPABLE.includes(m.type)); const s = tag(opts, n, 'node', mathInline(n.attrs)); emit(ms.length ? wrapMarks(s, ms) : s, ms.length > 0 || n.attrs?.mode === 'latex'); } break;
       case 'cite': {
         const keys = String(n.attrs?.keys ?? '').split(/[,，;；\s]+/).map(safeLabel).filter(Boolean);
         // 写成函数调用而不是 @key：Typst 0.15 的 @ 引用会把紧跟的汉字也吞进 label
-        emit(tag(opts, n, 'node', keys.map((k) => `#cite(<${k}>)`).join('')), true);
+        atom(tag(opts, n, 'node', keys.map((k) => `#cite(<${k}>)`).join('')));
         break;
       }
       case 'ref': {
         const t = safeLabel(n.attrs?.target);
         if (!t) break;
         const outside = opts.knownLabels && !opts.knownLabels.has(t) ? opts.refText?.get(t) : undefined;
-        if (outside !== undefined) { emit(tag(opts, n, 'node', `#[${escapeText(outside)}]`), true); break; }
-        emit(tag(opts, n, 'node', opts.knownLabels && !opts.knownLabels.has(t) ? '#text(red)[??]' : `#ref(<${t}>)`), true);
+        if (outside !== undefined) { atom(tag(opts, n, 'node', `#[${escapeText(outside)}]`)); break; }
+        atom(tag(opts, n, 'node', opts.knownLabels && !opts.knownLabels.has(t) ? '#text(red)[??]' : `#ref(<${t}>)`));
         break;
       }
-      case 'abbr': { const key = safeLabel(n.attrs?.key); if (key) emit(tag(opts, n, 'node', `#ref(<${key}>)`), true); break; }
+      case 'abbr': { const key = safeLabel(n.attrs?.key); if (key) atom(tag(opts, n, 'node', `#ref(<${key}>)`)); break; }
       case 'footnote': {
         const text = String(n.attrs?.text ?? '');
-        emit(tag(opts, n, 'node', `#footnote[${tag(opts, n, 'attr', escapeText(text), { attr: 'text', raw: text })}]`), true);
+        atom(tag(opts, n, 'node', `#footnote[${tag(opts, n, 'attr', escapeText(text), { attr: 'text', raw: text })}]`));
         break;
       }
-      case 'ccwd': { const count = Math.max(-20, Math.min(20, Number(n.attrs?.n) || 1)); emit(tag(opts, n, 'node', `#ccwd(${count})`), true); break; }
-      case 'idx': if (n.attrs?.text) emit(tag(opts, n, 'node', `#idx[${escapeText(String(n.attrs.text))}]`), true); break;
+      case 'ccwd': { const count = Math.max(-20, Math.min(20, Number(n.attrs?.n) || 1)); atom(tag(opts, n, 'node', `#ccwd(${count})`)); break; }
+      case 'idx': if (n.attrs?.text) atom(tag(opts, n, 'node', `#idx[${escapeText(String(n.attrs.text))}]`)); break;
       default:
         if (n.content) emit(serializeInline(n.content, opts), false);
     }

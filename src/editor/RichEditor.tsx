@@ -330,11 +330,11 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     <NumberingContext.Provider value={numbering}>
       <RichKeyContext.Provider value={richKey}>
         <div className={`editor ${className ?? ''}`} style={{ '--rich-size': `${richSize}px` } as React.CSSProperties}>
-          <div className="editor-mode" role="group" aria-label={t("编辑模式")}>
+          {sourceMode && <div className="editor-mode" role="group" aria-label={t("编辑模式")}>
             <button type="button" className={`btn btn-xs ${!sourceMode ? 'btn-primary' : ''}`} aria-pressed={!sourceMode} onClick={() => switchMode(false)}>{t("富文本")}</button>
             <button type="button" className={`btn btn-xs ${sourceMode ? 'btn-primary' : ''}`} aria-pressed={sourceMode} onClick={() => switchMode(true)}>Markdown</button>
-            {sourceMode && <span className="muted">GFM</span>}
-          </div>
+            <span className="muted">GFM</span>
+          </div>}
           {sourceMode && <>
             <textarea className="markdown-source" aria-label={t("Markdown 源代码")} value={source} spellCheck={false}
               onChange={(event) => changeSource(event.target.value, (event.nativeEvent as InputEvent).isComposing)}
