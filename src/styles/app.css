@@ -32,7 +32,7 @@
   --paper: #ffffff;
   --shadow-1: 0 1px 2px rgba(20, 30, 40, 0.06), 0 1px 1px rgba(20, 30, 40, 0.04);
   --shadow-2: 0 8px 28px rgba(20, 30, 40, 0.14), 0 2px 6px rgba(20, 30, 40, 0.06);
-  --shadow-page: 0 1px 3px rgba(0, 0, 0, 0.14), 0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-page: 0 1px 2px rgba(0, 0, 0, 0.18), 0 6px 16px rgba(0, 0, 0, 0.10);
   --chip-math-bg: #fff1df; --chip-math-fg: #9a5600;
   --chip-cite-bg: #e8f4ee; --chip-cite-fg: #1f6a43;
   --chip-ref-bg: #e7eff3; --chip-ref-fg: #114d68;
@@ -82,7 +82,7 @@
   --preview-bg: #171717;
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-2: 0 12px 32px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.35);
-  --shadow-page: 0 2px 6px rgba(0, 0, 0, 0.5), 0 12px 32px rgba(0, 0, 0, 0.45);
+  --shadow-page: 0 2px 4px rgba(0, 0, 0, 0.6), 0 10px 24px rgba(0, 0, 0, 0.5);
   --chip-math-bg: rgba(252, 144, 0, 0.16); --chip-math-fg: #ffb95c;
   --chip-cite-bg: rgba(78, 201, 176, 0.16); --chip-cite-fg: #7fd6bf;
   --chip-ref-bg: rgba(86, 156, 214, 0.18); --chip-ref-fg: #8cc8e6;
@@ -155,7 +155,7 @@ code { font-family: var(--mono); font-size: 0.92em; }
 .nav .nav-collapse:hover { border-color: var(--line-2); background: var(--panel-2); }
 .nav .nav-collapse svg { width: 16px; height: 16px; }
 
-.work { overflow: auto; min-width: 0; padding: 20px 24px 80px; background: var(--bg); container-type: inline-size; }
+.work { overflow: auto; overflow-x: hidden; min-width: 0; padding: 20px 24px 80px; background: var(--preview-bg); container-type: inline-size; }
 .work-inner { animation: rise var(--base) var(--ease) both; }
 /* 编辑 / 分栏 / 预览切换：刚露面的那一栏淡入 */
 .work, .preview { animation: fade var(--base) var(--ease); }
@@ -306,7 +306,8 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 /* ── 编辑器 ─────────────────────────────────────────
    目标：看着像一页文档。白纸、宽松的行距、标题是标题、图是图；
    工具只在需要时出现（悬停 / 选中浮出小工具条，选中文字弹气泡菜单）。 */
-.editor { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow-1); }
+/* 和预览区的纸一个样：直角、同一套投影、同一个底色 */
+.editor { background: var(--panel); box-shadow: var(--shadow-page); }
 .toolbar { position: sticky; top: -20px; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); border-radius: var(--r-m) var(--r-m) 0 0; }
 .toolbar-row { display: flex; align-items: center; gap: 2px; padding: 6px 10px; flex-wrap: wrap; }
 .toolbar-row.tb-table { border-top: 1px dashed var(--line); background: var(--panel-2); animation: pop var(--fast) var(--ease) both; }
@@ -476,12 +477,11 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .cap-zh { display: flex; justify-content: center; align-items: baseline; gap: 0.6em; font-size: 14.5px; }
 .cap-num { font-weight: 600; color: var(--ink); white-space: nowrap; }
 .cap-en { font-size: 12.5px; font-family: "Times New Roman", serif; color: var(--muted); margin-top: 2px; }
-.auto-input { position: relative; display: inline-block; vertical-align: baseline; }
-.auto-input input { border: 0; border-bottom: 1px dashed transparent; background: none; padding: 0 2px; font: inherit; color: inherit; text-align: center; transition: border-color var(--fast) var(--ease); }
+.auto-input { position: relative; display: inline-block; vertical-align: baseline; max-width: 100%; }
+.auto-input input { max-width: 100%; border: 0; border-bottom: 1px dashed transparent; background: none; padding: 0 2px; font: inherit; color: inherit; text-align: center; transition: border-color var(--fast) var(--ease); }
 .auto-input input:hover { border-bottom-color: var(--line-2); }
 .auto-input input:focus { outline: none; border-bottom-color: var(--accent); }
 .auto-input input::placeholder { color: var(--muted); opacity: 0.6; }
-.auto-input-mirror { position: absolute; left: 0; top: 0; visibility: hidden; white-space: pre; font: inherit; padding: 0 2px; pointer-events: none; }
 .cap-input-en input { font-family: "Times New Roman", serif; }
 
 /* 插图 */
@@ -493,6 +493,7 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 
 /* 表 */
 .tab .cap { margin: 0 0 6px; }
+.tab-body { overflow-x: auto; }
 .tab-body table { border-collapse: collapse; margin: 0 auto; font-family: var(--serif); font-size: 14px; }
 .tab-body td, .tab-body th { border: 1px solid var(--ink-2); padding: 3px 10px; min-width: 44px; position: relative; text-align: center; }
 .tab-body th { font-weight: 700; }

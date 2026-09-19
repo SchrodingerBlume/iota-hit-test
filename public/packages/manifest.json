@@ -1,22 +1,22 @@
 {
   "iotaHit": "0.1.0",
-  "iotaHitCommit": "f3b0829",
+  "iotaHitCommit": "374063a-dirty",
   "packages": [
     {
       "namespace": "local",
       "name": "iota-hit",
       "version": "0.1.0",
       "file": "local-iota-hit-0.1.0.tar.gz",
-      "size": 559916,
-      "sha": "f9d7e5072c54"
+      "size": 563766,
+      "sha": "56448544729d"
     },
     {
       "namespace": "local",
       "name": "banshi",
       "version": "0.1.0",
       "file": "local-banshi-0.1.0.tar.gz",
-      "size": 50239,
-      "sha": "14e33fb051f0"
+      "size": 46955,
+      "sha": "7da41f1ea5cf"
     },
     {
       "namespace": "local",

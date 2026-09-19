@@ -320,7 +320,6 @@ function layoutPages(container: HTMLElement, pages: PageInfo[], perRow = 1) {
       sheet.setAttribute('class', 'page-sheet');
       sheet.setAttribute('x', String(x)); sheet.setAttribute('y', String(py));
       sheet.setAttribute('width', String(w)); sheet.setAttribute('height', String(h));
-      sheet.setAttribute('rx', '1.5');
       pageChrome.appendChild(sheet);
       if (i < groups.length - 1 || cols > 1) {
         const label = document.createElementNS(NS, 'text');
