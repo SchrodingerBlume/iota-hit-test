@@ -155,7 +155,8 @@ code { font-family: var(--mono); font-size: 0.92em; }
 .nav .nav-collapse:hover { border-color: var(--line-2); background: var(--panel-2); }
 .nav .nav-collapse svg { width: 16px; height: 16px; }
 
-.work { overflow: auto; overflow-x: hidden; min-width: 0; padding: 20px 24px 80px; background: var(--preview-bg); container-type: inline-size; }
+/* overflow-anchor 关掉：设置页折行时浏览器会滚一下把锚点按住，和重排滑动动画打架 */
+.work { overflow: auto; overflow-x: hidden; overflow-anchor: none; min-width: 0; padding: 20px 24px 80px; background: var(--preview-bg); container-type: inline-size; }
 .work-inner { animation: rise var(--base) var(--ease) both; }
 /* 编辑 / 分栏 / 预览切换：刚露面的那一栏淡入 */
 .work, .preview { animation: fade var(--base) var(--ease); }
@@ -236,7 +237,8 @@ code { font-family: var(--mono); font-size: 0.92em; }
 .field textarea { resize: vertical; min-height: 58px; font-family: inherit; }
 textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; line-height: 1.45; }
 
-.axis { display: grid; grid-template-columns: 96px 1fr; gap: 10px; align-items: start; padding: 9px 0; border-bottom: 1px dashed var(--line); }
+.axis { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: start; padding: 9px 0; border-bottom: 1px dashed var(--line); }
+@container (max-width: 400px) { .axis { grid-template-columns: minmax(0, 1fr); gap: 4px; } .axis .lab { padding-top: 0; } }
 .axis:last-child { border-bottom: 0; }
 .axis .lab { font-weight: 600; padding-top: 5px; }
 .axis select { padding: 6px 30px 6px 9px; border: 1px solid var(--line-2); border-radius: var(--r-s); background: var(--panel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7378' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 9px center; appearance: none; max-width: 260px; color: var(--ink); transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease); }
@@ -272,14 +274,14 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 
 /* ── 统一的分段控件（auto / 值） ─────────────────────
    Auto 段橙，布尔的开绿关红，多档的选中蓝；没选中的段灰字。 */
-.triseg { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; align-items: center; padding: 9px 0; border-bottom: 1px dashed var(--line); }
+/* 一行：名字 + 档位组，放不下时档位组自己折到下一行（每行按自己的宽度折，不是整页一刀切）；档位组太宽时里面的钮再折行 */
+.triseg { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px; padding: 9px 0; border-bottom: 1px dashed var(--line); }
 .triseg:last-child { border-bottom: 0; }
-.triseg-lab { font-weight: 600; }
-.triseg-note { grid-column: 1 / -1; height: 18px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
+.triseg-lab { flex: 1 1 8em; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.triseg-note { flex-basis: 100%; height: 18px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
 .triseg-note b { font-weight: 600; }
-.triseg-seg { border-radius: var(--r-pill); overflow: hidden; width: max-content; }
-.triseg-seg button { width: auto; min-width: 0; padding: 4px 11px; font-size: 12.5px; color: var(--muted); background: var(--panel); border: 0; transition: background-color var(--base) var(--ease), color var(--base) var(--ease); }
-.triseg-seg button + button { border-left: 1px solid var(--line); }
+.triseg-seg { flex: 0 1 auto; max-width: 100%; display: flex; flex-wrap: wrap; gap: 1px; border-radius: var(--r-m); overflow: hidden; background: var(--line); border: 1px solid var(--line); }
+.triseg-seg button { flex: 1 0 auto; width: auto; min-width: 0; padding: 4px 11px; font-size: 12.5px; color: var(--muted); background: var(--panel); border: 0; transition: background-color var(--base) var(--ease), color var(--base) var(--ease); }
 .triseg-seg button:hover { background: var(--panel-2); color: var(--ink); }
 .triseg-seg button.auto { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.02em; }
 .triseg-seg button.auto b { font-family: var(--sans); font-size: 12.5px; font-weight: 700; }

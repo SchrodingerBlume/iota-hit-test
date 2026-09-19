@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore, type Section } from '../model/store';
 import type { ThesisDoc } from '../model/types';
 import { startCompiler, requestCompile, requestPara, resetForProject, exportPdf, useCompileState } from '../compiler/client';
@@ -31,6 +31,7 @@ import { useLayoutPrefs } from './layout';
 import { Ribbon } from './Ribbon';
 import { FluentProvider, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuItemRadio, MenuDivider, Button, Tooltip, Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions } from '@fluentui/react-components';
 import { Fold } from './Fold';
+import { watchReflow } from './reflow';
 import { Apps20Regular, DocumentAdd20Regular, Save20Regular, FolderOpen20Regular, DocumentPdf20Regular, Document20Regular, Info20Regular, WeatherSunny20Regular, WeatherMoon20Regular, Navigation20Regular, ChevronLeft20Regular } from '@fluentui/react-icons';
 import { fluentLight, fluentDark } from './fluent';
 import { SlidersHorizontal, BookText, PenLine, Library } from 'lucide-react';
@@ -210,6 +211,9 @@ export function App() {
   const [busy, setBusy] = useState<string | null>(null);
   const [theme, themePref, setThemePref] = useTheme();
   const { navOpen, setNavOpen, mode, setMode, ratio, startDrag, mainRef, gridColumns, gridRows, compact, stacked } = useLayoutPrefs();
+  // 设置类页面的表单：容器变窄、行折行、行增减时各元素滑到新位置
+  const reflowStop = useRef<(() => void) | null>(null);
+  const reflowRef = useCallback((el: HTMLDivElement | null) => { reflowStop.current?.(); reflowStop.current = el && !el.querySelector('.editor') ? watchReflow(el, '.card, .card > *, .triseg > *, .axis > *') : null; }, []);
   const lastSection = useRef(section);
   useEffect(() => {
     if (lastSection.current !== section && mode === 'preview' && ['info', 'settings', 'pages', 'bibliography', 'achievements', 'nomenclature', 'defense', 'index'].includes(section)) setMode('split');
@@ -417,7 +421,7 @@ export function App() {
           </nav>
           {!compact && <Fold className="nav-toggle" open={navOpen} title={navOpen ? tx("收起左侧导航") : tx("展开左侧导航")} onClick={() => setNavOpen(!navOpen)} />}
           <section className={`work ${commentsOpen ? 'has-comments' : ''}`} hidden={mode === 'preview'}>
-            {loaded ? <div className="work-inner" key={`${doc.id}:${section}`}>{panel}</div> : <div className="muted">{tx("正在打开文档…")}</div>}
+            {loaded ? <div className="work-inner" key={`${doc.id}:${section}`} ref={reflowRef}>{panel}</div> : <div className="muted">{tx("正在打开文档…")}</div>}
             {commentsOpen && loaded && <CommentsPane />}
           </section>
           <LinkDialogHost />
