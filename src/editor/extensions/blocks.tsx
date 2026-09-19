@@ -1,6 +1,7 @@
 // 块级节点：插图、带题注的表、公式、分页。
 // 默认长得像文档里的样子（图居中、题注一行、公式居中带编号）；选中或悬停时才浮出一条小工具条。
-import { Node, mergeAttributes } from '@tiptap/core';
+import { Node, Extension, mergeAttributes } from '@tiptap/core';
+import { NodeSelection } from '@tiptap/pm/state';
 import { ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent, type NodeViewProps } from '@tiptap/react';
 import { CellSelection, TableMap } from '@tiptap/pm/tables';
 import { useEffect, useRef, useState } from 'react';
@@ -51,6 +52,41 @@ export function Handle({ editor, getPos, title }: { editor: NodeViewProps['edito
     </span>
   );
 }
+/** 题注输入框里的键盘路径：Esc 回到整块选中；Enter 跳到下一个输入框，最后一个再 Enter 回到整块 */
+export function captionKeys(editor: NodeViewProps['editor'], getPos: NodeViewProps['getPos']) {
+  return (e: React.KeyboardEvent<HTMLElement>) => {
+    const el = e.target as HTMLElement;
+    if (!(el instanceof HTMLInputElement) || !el.dataset.attr) return;
+    if (e.nativeEvent.isComposing) return;
+    if (e.key === 'Escape' || e.key === 'Enter') {
+      e.preventDefault();
+      if (e.key === 'Enter') {
+        const inputs = [...(el.closest('.blk')?.querySelectorAll<HTMLInputElement>('input[data-attr]') ?? [])].filter((i) => !i.disabled);
+        const next = inputs[inputs.indexOf(el) + 1];
+        if (next) { next.focus(); next.select(); return; }
+      }
+      el.blur();
+      const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run();
+    }
+  };
+}
+/** 整块选中时按 Tab：进第一个题注输入框（Word 里没有，BlockNote 也没有，但键盘用户需要一条进去的路） */
+export const BlockCaptionKeys = Extension.create({
+  name: 'blockCaptionKeys',
+  addKeyboardShortcuts() {
+    return {
+      Tab: () => {
+        const { selection } = this.editor.state;
+        if (!(selection instanceof NodeSelection)) return false;
+        const dom = this.editor.view.nodeDOM(selection.from) as HTMLElement | null;
+        const input = dom?.querySelector<HTMLInputElement>('input[data-attr]:not(:disabled)');
+        if (!input) return false;
+        input.focus(); input.select();
+        return true;
+      },
+    };
+  },
+});
 /** 点在块的留白上（不是题注、不是内容）就选中整块 */
 export function selectOnPadding(editor: NodeViewProps['editor'], getPos: NodeViewProps['getPos']) {
   return (e: React.MouseEvent<HTMLElement>) => { if (e.target !== e.currentTarget) return; e.preventDefault(); const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); };
@@ -122,7 +158,7 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
   // 合成图配连排分图题：分图条目都没有图、母图有图——图照常显示，分图题在图题下一行一条
   const captionOnly = subs.length > 0 && !!name && !subs.some((s) => s.image);
   return (
-    <NodeViewWrapper className={`blk fig ${selected ? 'is-selected' : ''} ${subs.length && !captionOnly ? 'has-subs' : ''}`} ref={wrap} onMouseDown={selectOnPadding(editor, getPos)}>
+    <NodeViewWrapper className={`blk fig ${selected ? 'is-selected' : ''} ${subs.length && !captionOnly ? 'has-subs' : ''}`} ref={wrap} onMouseDown={selectOnPadding(editor, getPos)} onKeyDown={captionKeys(editor, getPos)}>
       <Handle editor={editor} getPos={getPos} />
       <div className="fig-body" contentEditable={false}>
         {subs.length && !captionOnly ? (
@@ -248,7 +284,7 @@ function CodeFigureView({ node, updateAttributes, selected, deleteNode, editor, 
   const editable = editor.isEditable;
   const num = useNumbering().get(labelOf(node.attrs as any, 'lst'))?.number;
   return (
-    <NodeViewWrapper className={`blk lst ${selected ? 'is-selected' : ''}`} onMouseDown={selectOnPadding(editor, getPos)}>
+    <NodeViewWrapper className={`blk lst ${selected ? 'is-selected' : ''}`} onMouseDown={selectOnPadding(editor, getPos)} onKeyDown={captionKeys(editor, getPos)}>
       <Handle editor={editor} getPos={getPos} />
       <Caption node={node} updateAttributes={updateAttributes} kindName={t("代码")} editable={editable} prefix={num} />
       <NodeViewContent className="lst-body" />
