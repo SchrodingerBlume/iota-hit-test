@@ -349,6 +349,9 @@ async function setFonts(msg: Extract<ToWorker, { type: 'setFonts' }>) {
     for (const f of bundledFonts) await fb.addFontData(f);
     for (const f of userFonts.values()) await fb.addFontData(f);
     await fb.build(async (resolver) => { compiler!.setFonts(resolver); });
+    // 字体表换了：增量服务里的上一版按旧字体排的，差分会指着不存在的字形，全部从头来
+    for (const k of ['incr', 'incrFocus'] as const) { try { (k === 'incr' ? incr : incrFocus)?.free?.(); } catch { /* */ } }
+    incr = null; incrFresh = true; incrFocus = null; incrFocusFresh = true; focusId = '';
     const families = new Set(bundledFamilies);
     for (const fams of userFamilies.values()) for (const f of fams) families.add(f);
     post({ type: 'fontsSet', id: msg.id, families: [...families] });

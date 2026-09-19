@@ -58,6 +58,7 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
   const scrollRef = useRef<HTMLDivElement>(null);
   const pages = useCompileState((s) => s.pageCount);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const recovered = useRef<Uint8Array | null>(null);
   const [renderTick, setRenderTick] = useState(0);
   const virtualizeRef = useRef(NO_VIRTUALIZE);
 
@@ -244,7 +245,12 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
       after: (c) => { virtualizeRef.current.apply(); if (animate) { const [a, b] = view(); flipAfter(c, a, b); } },
     }, usePreviewZoom.getState().perRow)
       .then((info) => { if (alive) { useCompileState.setState({ renderMs: Math.round(performance.now() - t0), pageCount: info.length }); setRenderError(null); setRenderTick((t) => t + 1); } })
-      .catch((e) => { if (alive) setRenderError(String(e?.message ?? e)); });
+      .catch((e) => {
+        if (!alive) return;
+        setRenderError(String(e?.message ?? e));
+        // 差分接不上（渲染器里的上一版和编译器的上一版对不上）：整个重编一次自愈，别停在错误上等用户刷新
+        if (!artifactFresh && recovered.current !== artifact) { recovered.current = artifact; onRefresh(); }
+      });
     return () => { alive = false; };
   }, [artifact]);
 

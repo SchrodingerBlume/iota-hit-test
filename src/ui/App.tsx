@@ -59,6 +59,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
   const sent = useRef(new Map<string, number>());
   const lastProject = useRef<string | null>(null);
   const lastRefresh = useRef(refresh);
+  const lastFonts = useRef(fontsVersion);
   // 换断行引擎 / 网格这类全篇生效的设置，增量编译会留下旧版面的碎片，整个重来
   const engineKey = `${doc.settings.linebreaker}|${doc.settings.wordCompat}`;
   const lastEngine = useRef(engineKey);
@@ -81,7 +82,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
       if (!transaction.docChanged) return;
       const e = getEditor('body');
       const cs = useCompileState.getState();
-      if (!e || e.isDestroyed || cs.status !== 'ready' || cs.pageCount < FOCUS_PAGES || !cs.artifact) return;
+      if (!e || e.isDestroyed || cs.status !== 'ready' || cs.pageCount < FOCUS_PAGES || !cs.artifact || useFontState.getState().restoring) return;
       const $from = e.state.selection.$from;
       if ($from.depth < 1) return;
       const node = $from.node(1).toJSON();
@@ -106,7 +107,8 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
     if (restoring && doc.settings.fontset !== 'webapp') return;
     let cancelled = false;
     // 换了工程：预览区已被项目管理页卸掉，渲染器没有上一版可以打差，增量产物会让它崩（reflexo 的 module unwrap），整个重编
-    const force = refresh !== lastRefresh.current || engineKey !== lastEngine.current || lastProject.current !== doc.id;
+    // 字体表换了也整个重来：增量差分里的字形还指着旧字体，渲染器接不上
+    const force = refresh !== lastRefresh.current || engineKey !== lastEngine.current || lastProject.current !== doc.id || fontsVersion !== lastFonts.current;
     if (lastProject.current !== doc.id) { resetForProject(doc.id); useComments.getState().setActive(null); usePreviewSurface.getState().set({ activeKey: null, focused: false }); }
     const cs = useCompileState.getState();
     const pageCount = cs.pageCount;
@@ -154,6 +156,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
       sent.current = nextSent;
       lastProject.current = doc.id;
       lastRefresh.current = refresh;
+      lastFonts.current = fontsVersion;
       lastEngine.current = engineKey;
       lastFocusId.current = focus?.id ?? '';
       requestCompile({
