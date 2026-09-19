@@ -1,6 +1,7 @@
 // 富文本编辑器：TipTap + 我们的节点。value 是 ProseMirror JSON，onChange 回同样的 JSON。
 // 工具栏一行：常用的摆在外面，插入类的收进「插入」菜单；选中文字时浮出气泡菜单。
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { TextSelection } from '@tiptap/pm/state';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { useBlockMenu } from './BlockMenu';
@@ -158,6 +159,9 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
           const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
           if (!at) return false;
           const $p = view.state.doc.resolve(at.pos);
+          // 右键点在选区外：光标先过去（Word 的习惯），表格那几条命令才知道是哪一格
+          const cur = view.state.selection;
+          if (at.pos < cur.from || at.pos > cur.to) view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(at.pos))));
           // 找最近的段落 / 标题块
           for (let d = $p.depth; d >= 0; d--) {
             const n = $p.node(d);
@@ -350,7 +354,8 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
 const bubbleOptions = { placement: 'top' as const, offset: 8 };
 const bubbleShouldShow = ({ editor, state }: { editor: Editor; state: Editor['state'] }) => {
   const { from, to } = state.selection;
-  if (from === to || state.selection instanceof NodeSelection) return false;
+  // 表格里拖出来的单元格选区：气泡里那几样（变公式、引文献、索引词）对整格没意义，不冒出来压着题注
+  if (from === to || state.selection instanceof NodeSelection || state.selection.constructor.name === 'CellSelection') return false;
   // 预览区里选的字，选区是镜像过来的，气泡不该在左边冒出来——功能区就在头顶
   if (!editor.isFocused) return false;
   return editor.isEditable && !editor.isActive('codeBlock');

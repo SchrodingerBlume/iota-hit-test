@@ -11,7 +11,7 @@ import {
   Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuItemRadio, MenuItemCheckbox, MenuDivider, MenuGroup, MenuGroupHeader,
   Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions, DialogTrigger, Button, Dropdown, Option, Input, Label,
 } from '@fluentui/react-components';
-import { TextHeader120Regular, TextAlignLeft20Regular, TextParagraph20Regular, TextEditStyle20Regular, Translate20Regular, DocumentPageBreak20Regular, Dismiss20Regular } from '@fluentui/react-icons';
+import { TextHeader120Regular, TextAlignLeft20Regular, TextParagraph20Regular, TextEditStyle20Regular, Translate20Regular, DocumentPageBreak20Regular, Dismiss20Regular, TableStackAbove20Regular, TableStackBelow20Regular, TableStackLeft20Regular, TableStackRight20Regular, TableDeleteRow20Regular, TableDeleteColumn20Regular, TableCellsMerge20Regular, TableCellsSplit20Regular, TableDismiss20Regular } from '@fluentui/react-icons';
 import { getEditor } from './registry';
 import { useStore, type RichKey } from '../model/store';
 import type { Settings, StyleEntry, StyleKey } from '../model/types';
@@ -86,7 +86,11 @@ export function BlockMenu() {
     const node = ed?.state.doc.nodeAt(req.pos);
     if (!ed || !node || (node.type.name !== 'heading' && node.type.name !== 'paragraph')) return null;
     const headingsAllowed = !!ed.schema.nodes.heading;
-    return { ed, node, headingsAllowed };
+    // 点在表格里：多一组行列命令
+    const $s = ed.state.selection.$from;
+    let inTable = false;
+    for (let d = $s.depth; d > 0; d--) if ($s.node(d).type.name === 'table') { inTable = true; break; }
+    return { ed, node, headingsAllowed, inTable };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [req?.nonce]);
   const part = req?.key === 'appendix' ? 'appendix' : 'body';
@@ -160,6 +164,23 @@ export function BlockMenu() {
                 </>
               ) : (
                 <MenuItemCheckbox name="opts" value="noIndent" icon={<TextAlignLeft20Regular />} onClick={() => patchAttrs({ noIndent: !info.node.attrs.noIndent })}>{t("这一段不首行缩进")}</MenuItemCheckbox>
+              )}
+              {info.inTable && (
+                <>
+                  <MenuDivider />
+                  <MenuGroup>
+                    <MenuGroupHeader>{t("表格")}</MenuGroupHeader>
+                    <MenuItem icon={<TableStackAbove20Regular />} onClick={() => info.ed.chain().focus().addRowBefore().run()}>{t("在上方插入行")}</MenuItem>
+                    <MenuItem icon={<TableStackBelow20Regular />} onClick={() => info.ed.chain().focus().addRowAfter().run()}>{t("在下方插入行")}</MenuItem>
+                    <MenuItem icon={<TableStackLeft20Regular />} onClick={() => info.ed.chain().focus().addColumnBefore().run()}>{t("在左侧插入列")}</MenuItem>
+                    <MenuItem icon={<TableStackRight20Regular />} onClick={() => info.ed.chain().focus().addColumnAfter().run()}>{t("在右侧插入列")}</MenuItem>
+                    <MenuItem icon={<TableDeleteRow20Regular />} onClick={() => info.ed.chain().focus().deleteRow().run()}>{t("删除行")}</MenuItem>
+                    <MenuItem icon={<TableDeleteColumn20Regular />} onClick={() => info.ed.chain().focus().deleteColumn().run()}>{t("删除列")}</MenuItem>
+                    <MenuItem icon={<TableCellsMerge20Regular />} disabled={!info.ed.can().mergeCells()} onClick={() => info.ed.chain().focus().mergeCells().run()}>{t("合并单元格")}</MenuItem>
+                    <MenuItem icon={<TableCellsSplit20Regular />} disabled={!info.ed.can().splitCell()} onClick={() => info.ed.chain().focus().splitCell().run()}>{t("拆分单元格")}</MenuItem>
+                    <MenuItem icon={<TableDismiss20Regular />} onClick={() => info.ed.chain().focus().deleteTable().run()}>{t("删除表格")}</MenuItem>
+                  </MenuGroup>
+                </>
               )}
               <MenuDivider />
               <MenuItem icon={<TextEditStyle20Regular />} onClick={() => openStyle(level)}>{t("修改「")}{levelName(settings, level, part)}{t("」样式…")}<span className="muted"> {' '}{t("全篇同级")}</span></MenuItem>

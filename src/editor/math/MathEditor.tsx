@@ -71,6 +71,7 @@ export function MathEditor({ value, mode, display, onChange, onMode, autoFocus, 
     const onInput = () => { const v = fromField(el.value); if (v !== valueRef.current) onChange(v); };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Enter' && !e.shiftKey && (compact || e.metaKey || e.ctrlKey)) { e.preventDefault(); onEnter?.(); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onEnter?.(); }
     };
     const onBlur = () => { if (!kbd) return; window.mathVirtualKeyboard?.hide(); setKbd(false); };
     el.addEventListener('input', onInput);
@@ -124,6 +125,7 @@ export function MathEditor({ value, mode, display, onChange, onMode, autoFocus, 
   }, [mode, showSource, value, onChange]);
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onEnter?.(); return; }
     if (e.key === 'Tab') {
       const el = e.currentTarget;
       const hole = nextHole(value, el.selectionEnd);

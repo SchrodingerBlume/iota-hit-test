@@ -241,6 +241,8 @@ function EquationView({ node, updateAttributes, selected, deleteNode, editor, ge
   const [editing, setEditing] = useState(!src.trim());
   // 失去选中就收起（点了别处）
   useEffect(() => { if (!selected && src.trim()) setEditing(false); }, [selected]);
+  // 编完（完成 / Enter / Esc）：收起，焦点回编辑器、公式块保持选中，方向键接着能走
+  const finish = () => { setEditing(false); const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); };
   return (
     <NodeViewWrapper className={`blk eq ${selected ? 'is-selected' : ''} ${editing ? 'is-editing' : ''}`} data-drag-handle>
       {!editing && (
@@ -252,13 +254,13 @@ function EquationView({ node, updateAttributes, selected, deleteNode, editor, ge
       )}
       {editing && (
         <div className="eq-editor" contentEditable={false}>
-          <MathEditor value={src} mode={mode} display onChange={(v) => updateAttributes({ src: v })} onMode={(m) => updateAttributes({ mode: m })} autoFocus onEnter={() => setEditing(false)} />
+          <MathEditor value={src} mode={mode} display onChange={(v) => updateAttributes({ src: v })} onMode={(m) => updateAttributes({ mode: m })} autoFocus onEnter={finish} />
           <div className="eq-editor-foot">
             <label className="blk-tool"><input type="checkbox" checked={numbered} disabled={!editable} onChange={(e) => updateAttributes({ numbered: e.target.checked })} /> {' '}{t("编号")}{' '}{numbered && num && <b>{num}</b>}</label>
             <LabelField node={node} updateAttributes={updateAttributes} prefix="eq" editable={editable} />
             <span className="spacer" />
             <button type="button" className="blk-tool is-btn is-danger" title={t("删除公式")} onClick={deleteNode}><Trash2 /></button>
-            <button type="button" className="btn btn-xs btn-primary" onClick={() => setEditing(false)}><Check />{t("完成")}</button>
+            <button type="button" className="btn btn-xs btn-primary" onClick={finish}><Check />{t("完成")}</button>
           </div>
         </div>
       )}

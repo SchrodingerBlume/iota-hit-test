@@ -441,8 +441,9 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 /* 块：平时无框，悬停淡框，选中主色框；工具条浮在右上角 */
 .blk { position: relative; margin: 0.9em 0 !important; padding: 8px 10px; border-radius: var(--r-s); border: 1px solid transparent; transition: border-color var(--base) var(--ease), background-color var(--base) var(--ease); font-family: var(--sans); font-size: 13px; }
 .blk:hover { border-color: var(--line); }
-.blk.is-selected { border-color: var(--accent); background: var(--accent-soft); }
-.blk-tools { position: absolute; top: -14px; right: 8px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow-2); opacity: 0; transform: translateY(4px); pointer-events: none; transition: opacity var(--fast) var(--ease), transform var(--fast) var(--ease); z-index: 6; font-size: 12px; color: var(--muted); }
+.blk.is-selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft-2); background: transparent; }
+/* 工具条浮在块的上沿外面，不压住图片与题注 */
+.blk-tools { position: absolute; bottom: calc(100% - 4px); right: 8px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow-2); opacity: 0; transform: translateY(4px); pointer-events: none; transition: opacity var(--fast) var(--ease), transform var(--fast) var(--ease); z-index: 6; font-size: 12px; color: var(--muted); }
 .blk:hover .blk-tools, .blk.is-selected .blk-tools, .blk-tools:focus-within { opacity: 1; transform: none; pointer-events: auto; }
 .blk-tool { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: var(--r-s); color: var(--ink-2); border: 0; background: none; font-size: 12px; white-space: nowrap; }
 .blk-tool svg { width: 14px; height: 14px; color: var(--muted); }
@@ -497,7 +498,7 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .eq-editor-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
 .eq-editor-foot .spacer { flex: 1; }
 .eq-editor-foot b { color: var(--accent-ink); }
-.eq.is-editing { border-color: var(--accent); background: var(--panel); }
+.eq.is-editing { border-color: var(--accent); background: var(--panel); box-shadow: none; }
 
 /* 分页 */
 .pb { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 11px; letter-spacing: 0.1em; padding: 4px 10px; }

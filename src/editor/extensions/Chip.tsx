@@ -30,7 +30,8 @@ export function InlineChip({ kind, text, title, selected, editable = true, child
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    // Esc 收起并把焦点还给编辑器（药丸保持选中，方向键接着能走）
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); onSelect?.(); } };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
@@ -50,7 +51,7 @@ export function InlineChip({ kind, text, title, selected, editable = true, child
       </button>
       {open && (
         <span className={`chip-pop ${wide ? 'chip-pop-wide' : ''}`} contentEditable={false} onMouseDown={(e) => e.stopPropagation()}>
-          {children(() => setOpen(false))}
+          {children(() => { setOpen(false); onSelect?.(); })}
           {onDelete && (
             <button type="button" className="btn btn-danger btn-xs chip-pop-del" onClick={onDelete}>{t("删除")}</button>
           )}
