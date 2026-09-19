@@ -740,6 +740,12 @@ html.theme-anim :not(svg, svg *) { transition: background-color 320ms var(--ease
 /* 表格工具栏里的数值框 */
 .tb-field { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); margin: 0 4px; }
 .tb-field input { width: 56px; border: 1px solid var(--line-2); border-radius: var(--r-s); padding: 2px 5px; font-size: 12px; background: var(--panel); color: var(--ink); }
+/* 行 / 列把手：表头上方一排、表左一列，悬停显形，点一下整列 / 整行选中 */
+.tab-handles { position: absolute; inset: 0; pointer-events: none; }
+.tab-handle { position: absolute; padding: 0; border: 0; background: var(--line-2); border-radius: var(--r-xs); opacity: 0.55; cursor: pointer; pointer-events: auto; transition: background-color var(--fast) var(--ease), opacity var(--fast) var(--ease); }
+.tab-handle.is-col { height: 6px; }
+.tab-handle.is-row { width: 6px; }
+.tab-handle:hover { background: var(--accent); opacity: 1; }
 /* 拖列线 */
 .tab-body .column-resize-handle { position: absolute; right: -2px; top: 0; bottom: 0; width: 4px; background: var(--accent); pointer-events: none; opacity: 0.6; }
 .tab-body .tableWrapper { overflow-x: auto; }

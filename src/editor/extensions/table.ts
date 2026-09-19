@@ -74,6 +74,18 @@ function cellContext(state: any): { rowPos: number; row: any; cellIndex: number;
 
 export const TableExtras = Extension.create({
   name: 'tableExtras',
+  // Word：选中整行 / 整列按 Backspace 是删掉行列（Delete 只清内容，原生就是）
+  addKeyboardShortcuts() {
+    return {
+      Backspace: () => {
+        const sel = this.editor.state.selection;
+        if (!(sel instanceof CellSelection)) return false;
+        if (sel.isRowSelection()) return this.editor.commands.deleteRow();
+        if (sel.isColSelection()) return this.editor.commands.deleteColumn();
+        return false;
+      },
+    };
+  },
   addCommands() {
     return {
       setRowCellsAttribute: (name, value) => ({ state, tr, dispatch }) => {

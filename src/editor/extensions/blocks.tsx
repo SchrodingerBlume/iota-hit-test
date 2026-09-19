@@ -2,6 +2,7 @@
 // 默认长得像文档里的样子（图居中、题注一行、公式居中带编号）；选中或悬停时才浮出一条小工具条。
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent, type NodeViewProps } from '@tiptap/react';
+import { CellSelection, TableMap } from '@tiptap/pm/tables';
 import { useEffect, useRef, useState } from 'react';
 import { imageUrl } from '../imageCache';
 import { useEditorEnv, useNumbering, useOpenNonce, focusAttrInput } from '../env';
@@ -177,15 +178,60 @@ export const Figure = Node.create({
 });
 
 // ── 表（figure 壳 + 真表格） ─────────────────────────────────────
+/** 行 / 列把手（SuperDoc 那种）：表头上方每列一条、表左每行一条，点一下整列 / 整行选中 */
+function RowColHandles({ wrap, editor, getPos, node, hover }: { wrap: React.RefObject<HTMLDivElement | null>; editor: NodeViewProps['editor']; getPos: NodeViewProps['getPos']; node: NodeViewProps['node']; hover: boolean }) {
+  const [geo, setGeo] = useState<{ cols: { x: number; w: number }[]; rows: { y: number; h: number }[]; top: number; left: number } | null>(null);
+  useEffect(() => {
+    if (!hover) return;
+    const measure = () => {
+      const w = wrap.current; const table = w?.querySelector('table');
+      if (!w || !table) { setGeo(null); return; }
+      const base = w.getBoundingClientRect();
+      const tr = table.querySelector('tr');
+      const cols = [...(tr?.children ?? [])].map((c) => { const r = c.getBoundingClientRect(); return { x: r.left - base.left, w: r.width }; });
+      const rows = [...table.querySelectorAll('tr')].map((r) => { const b = r.getBoundingClientRect(); return { y: b.top - base.top, h: b.height }; });
+      const tb = table.getBoundingClientRect();
+      setGeo({ cols, rows, top: tb.top - base.top, left: tb.left - base.left });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (wrap.current) ro.observe(wrap.current);
+    return () => ro.disconnect();
+  }, [hover, node, wrap]);
+  if (!hover || !geo) return null;
+  const select = (kind: 'row' | 'col', i: number) => {
+    const p = getPos(); if (p === undefined) return;
+    const { state, view } = editor;
+    const tablePos = p + 1;
+    const table = state.doc.nodeAt(tablePos);
+    if (!table || table.type.name !== 'table') return;
+    const map = TableMap.get(table);
+    if (kind === 'col' ? i >= map.width : i >= map.height) return;
+    const a = kind === 'col' ? map.map[i] : map.map[i * map.width];
+    const b = kind === 'col' ? map.map[(map.height - 1) * map.width + i] : map.map[i * map.width + map.width - 1];
+    const $a = state.doc.resolve(tablePos + 1 + a), $b = state.doc.resolve(tablePos + 1 + b);
+    view.dispatch(state.tr.setSelection(kind === 'col' ? CellSelection.colSelection($a, $b) : CellSelection.rowSelection($a, $b)));
+    view.focus();
+  };
+  return (
+    <div className="tab-handles" contentEditable={false}>
+      {geo.cols.map((c, i) => <button key={`c${i}`} type="button" className="tab-handle is-col" style={{ left: c.x, width: c.w, top: geo.top - 9 }} title={t("选中整列")} onMouseDown={(e) => { e.preventDefault(); select('col', i); }} />)}
+      {geo.rows.map((r, i) => <button key={`r${i}`} type="button" className="tab-handle is-row" style={{ top: r.y, height: r.h, left: geo.left - 9 }} title={t("选中整行")} onMouseDown={(e) => { e.preventDefault(); select('row', i); }} />)}
+    </div>
+  );
+}
+
 function TableFigureView({ node, updateAttributes, selected, deleteNode, editor, getPos }: NodeViewProps) {
   const editable = editor.isEditable;
   const wrap = useRef<HTMLDivElement>(null);
   const open = useOpenNonce(getPos);
   useEffect(() => { if (open.nonce) requestAnimationFrame(() => focusAttrInput(wrap.current, open.attr ?? 'caption', open.offset)); }, [open]);
   const num = useNumbering().get(labelOf(node.attrs as any, 'tab'))?.number;
+  const [hover, setHover] = useState(false);
   return (
-    <NodeViewWrapper className={`blk tab ${selected ? 'is-selected' : ''}`} ref={wrap} onMouseDown={selectOnPadding(editor, getPos)}>
+    <NodeViewWrapper className={`blk tab ${selected ? 'is-selected' : ''}`} ref={wrap} onMouseDown={selectOnPadding(editor, getPos)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       <Handle editor={editor} getPos={getPos} />
+      {editable && <RowColHandles wrap={wrap} editor={editor} getPos={getPos} node={node} hover={hover || selected} />}
       <Caption node={node} updateAttributes={updateAttributes} kindName={t("表")} editable={editable} prefix={num} />
       <NodeViewContent className="tab-body" />
       <Tools>
