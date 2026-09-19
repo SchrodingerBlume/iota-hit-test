@@ -24,6 +24,7 @@ import { HeadingEn } from './extensions/HeadingEn';
 import { UniqueId } from './extensions/UniqueId';
 import { MathInline, Cite, Ref, Abbr, Footnote, Ccwd, Idx } from './extensions/inline';
 import { Figure, TableFigure, CodeFigure, Equation, PageBreak, BlockCaptionKeys } from './extensions/blocks';
+import { MathInputRules } from './extensions/mathRules';
 import { Algorithm } from './extensions/algorithm';
 import { EqDenote } from './extensions/eqdenote';
 import { useEditorEnv, NumberingContext, RichKeyContext } from './env';
@@ -115,7 +116,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
       Placeholder.configure({ placeholder: placeholder ?? t("输入文本…") }),
       TableKit.configure({ table: { resizable: true, cellMinWidth: 40 }, tableCell: false, tableHeader: false, tableRow: false }),
       AlignedTableCell, AlignedTableHeader, SizedTableRow, TableExtras,
-      Figure, TableFigure, CodeFigure, Algorithm, Equation, PageBreak, EqDenote, BlockCaptionKeys,
+      Figure, TableFigure, CodeFigure, Algorithm, Equation, PageBreak, EqDenote, BlockCaptionKeys, MathInputRules,
       MathInline, Cite, Ref, Abbr, Footnote, Ccwd, Idx,
       UniqueId, MirrorCaret, Search, SpaceMarks,
     ],
