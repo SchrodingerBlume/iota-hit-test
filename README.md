@@ -242,8 +242,11 @@ layout/presets.typ 与 styles/presets.typ 量下来的数；编号用 numbering.
 画成图；脚注、批注（Word 批注）、三线表、分图、算法、代码都有。打开时 Word 会问「是否更新域」，答「是」目录才有页码。
 表单页（封面、中英文内封、答辩决议表、原创性声明与使用权限）在 `src/export/docx/pages.ts`，每一行落在哪是照模板排出来的
 PDF 逐行量的；页序、页码样式（前置「- I -」、主体「- 1 -」）、符号与缩略语合页、目录不列自己、两字章名撑开、题注双语开关、
-参考文献全列且中文档用全角标点，都照模板的样子。对拍法：站内导出 docx，AppleScript 让本机 Word 存成 PDF，与站内导出的
-Typst PDF 逐页并排看（pypdfium2 栅格化）。
+参考文献全列且中文档用全角标点，都照模板的样子。工程 JSON 里的局部版面（`settings.layout` 的 doc / frontmatter /
+mainmatter / backmatter / pages.*：margin、line-pitch、char-pitch、char-excess、base-size、header / footer 的 shown 与 from-edge）
+折成 Word 的节属性，页级改写单独成节接着编页码。另起一页的标题前面是一个定高空段带分页而不是段前距——Word 2013+ 模式会把
+新页第一段的段前距吃掉（2003 模式不吃），章前间距在两种兼容模式下都得在。对拍法：站内导出 docx，AppleScript 让本机 Word
+存成 PDF，与站内导出的 Typst PDF 逐页并排看（pypdfium2 栅格化，逐行比基线位置、字号、字体）。
 
 ## 许可
 

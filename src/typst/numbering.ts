@@ -68,7 +68,8 @@ export function levelLabels(s: Settings, part: 'body' | 'appendix' = 'body'): { 
   return [{ level: 1, name: '章', sample: '第 1 章' }, { level: 2, name: '节', sample: '1.1' }, { level: 3, name: '条', sample: '1.1.1' }, { level: 4, name: '款', sample: '1.1.1.1' }];
 }
 
-export function computeNumbering(doc: PMNode | null | undefined, settings: Settings, part: Part): Map<string, NumberInfo> {
+/** byNode：不管有没有标签，按节点对象也记一份（导出 Word 编号靠它——没 uid 的老标题在预览里是 Typst 自己编的号，Word 里不能没有） */
+export function computeNumbering(doc: PMNode | null | undefined, settings: Settings, part: Part, byNode?: Map<PMNode, NumberInfo>): Map<string, NumberInfo> {
   const out = new Map<string, NumberInfo>();
   if (!doc) return out;
   const s = settings;
@@ -147,7 +148,7 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
       if (n.attrs?.numbered === false) {
         // 不编号：不走计数器，也不重置图表计数（Typst 里 numbering: none 的标题不动 counter）
         const label = labelOf(n.attrs, 'sec');
-        if (label) out.set(label, { kind: 'sec', label, number: '', ref: text(n), title: text(n), level });
+        { const info: NumberInfo = { kind: 'sec', label, number: '', ref: text(n), title: text(n), level }; byNode?.set(n, info); if (label) out.set(label, info); }
         return;
       }
       counters[level - 1]++;
@@ -155,35 +156,35 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
       if (level === 1) { fig = 0; tab = 0; eq = 0; alg = 0; lst = 0; }
       const label = labelOf(n.attrs, 'sec');
       const num = headingNumber(level);
-      if (label) out.set(label, { kind: 'sec', label, number: num, ref: level === 1 || /^(第|Chapter|Appendix|附录)/.test(num) ? num : en ? `Section ${num}` : `${num} 节`, title: text(n), level });
+      { const info: NumberInfo = { kind: 'sec', label, number: num, ref: level === 1 || /^(第|Chapter|Appendix|附录)/.test(num) ? num : en ? `Section ${num}` : `${num} 节`, title: text(n), level }; byNode?.set(n, info); if (label) out.set(label, info); }
       return;
     }
     if (n.type === 'figure') {
       fig++;
       const label = labelOf(n.attrs, 'fig');
       const num = figLike('图 ', 'Fig. ', figByChapter, fig);
-      if (label) out.set(label, { kind: 'fig', label, number: num, ref: num, title: n.attrs?.caption ?? '' });
+      { const info: NumberInfo = { kind: 'fig', label, number: num, ref: num, title: n.attrs?.caption ?? '' }; byNode?.set(n, info); if (label) out.set(label, info); }
       return;
     }
     if (n.type === 'tableFigure') {
       tab++;
       const label = labelOf(n.attrs, 'tab');
       const num = figLike('表 ', 'Table ', figByChapter, tab);
-      if (label) out.set(label, { kind: 'tab', label, number: num, ref: num, title: n.attrs?.caption ?? '' });
+      { const info: NumberInfo = { kind: 'tab', label, number: num, ref: num, title: n.attrs?.caption ?? '' }; byNode?.set(n, info); if (label) out.set(label, info); }
       return;
     }
     if (n.type === 'algorithm') {
       alg++;
       const label = labelOf(n.attrs, 'alg');
       const num = figLike('算法 ', 'Algo. ', figByChapter, alg);
-      if (label) out.set(label, { kind: 'alg', label, number: num, ref: num, title: n.attrs?.caption ?? '' });
+      { const info: NumberInfo = { kind: 'alg', label, number: num, ref: num, title: n.attrs?.caption ?? '' }; byNode?.set(n, info); if (label) out.set(label, info); }
       return;
     }
     if (n.type === 'codeFigure') {
       lst++;
       const label = labelOf(n.attrs, 'lst');
       const num = figLike('代码 ', 'Listing ', figByChapter, lst);
-      if (label) out.set(label, { kind: 'lst', label, number: num, ref: num, title: n.attrs?.caption ?? '' });
+      { const info: NumberInfo = { kind: 'lst', label, number: num, ref: num, title: n.attrs?.caption ?? '' }; byNode?.set(n, info); if (label) out.set(label, info); }
       return;
     }
     if (n.type === 'equation' && n.attrs?.numbered !== false) {
@@ -191,7 +192,7 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
       const label = labelOf(n.attrs, 'eq');
       const fullwidth = sw<boolean>('equationNumberingFullwidth', s);
       const num = eqNum(eqByChapter, eq, fullwidth);
-      if (label) out.set(label, { kind: 'eq', label, number: num, ref: `${en ? 'Eq. ' : '式 '}${num}`, title: n.attrs?.src ?? '' });
+      { const info: NumberInfo = { kind: 'eq', label, number: num, ref: `${en ? 'Eq. ' : '式 '}${num}`, title: n.attrs?.src ?? '' }; byNode?.set(n, info); if (label) out.set(label, info); }
       return;
     }
     for (const c of n.content ?? []) walk(c);

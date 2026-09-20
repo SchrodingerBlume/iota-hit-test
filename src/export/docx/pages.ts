@@ -133,12 +133,12 @@ export function titlepageEn(doc: ThesisDoc, top: number): Paragraph[] {
     ['Degree-Conferring-Institution', 'Harbin Institute of Technology'],
   ];
   y = Math.max(540, y + 130);
-  for (const [l, v] of rows) { out.push(f.at(y, ZIHAO.xiaosi, [run(`${l}: `, ZIHAO.xiaosi, { bold: true }), new TextRun({ text: '\t' }), run(v, ZIHAO.xiaosi)], { alignment: AlignmentType.LEFT, tabStops: [{ type: 'left' as any, position: 3400 }] })); y += 22; }
+  for (const [l, v] of rows) { out.push(f.at(y, ZIHAO.sihao, [run(`${l}: `, ZIHAO.sihao, { bold: true }), new TextRun({ text: '\t' }), run(v, ZIHAO.sihao)], { alignment: AlignmentType.LEFT, tabStops: [{ type: 'left' as any, position: 3400 }] })); y += 22; }
   return out;
 }
 
 /** 答辩决议：一张六列表——评阅人块、竖排「答辩委员会成员」的委员会块、决议一格；列宽照模板 */
-export function defensePage(doc: ThesisDoc, title: Paragraph): (Paragraph | Table)[] {
+export function defensePage(doc: ThesisDoc, title: (Paragraph | Table)[]): (Paragraph | Table)[] {
   const d = doc.defense;
   const cols = [33.75, 42.55, 56.70, 106.30, 92.15, 104.55].map((w) => Math.round(w * PT));
   const border = { style: BorderStyle.SINGLE, size: 4 };
@@ -152,7 +152,7 @@ export function defensePage(doc: ThesisDoc, title: Paragraph): (Paragraph | Tabl
   const row = (cells: TableCell[], h = rowH) => new TableRow({ height: { value: h, rule: 'atLeast' as any }, children: cells });
   const rows: TableRow[] = [];
   const reviewers = pad(d.reviewers.filter((p) => p.name || p.title || p.affiliation), 2);
-  rows.push(row([cell('评阅人\n（根据实际人数填写）', { span: 2, rows: reviewers.length + 1, bold: true, children: [cellP('评阅人', true), cellP('（根据实际人数填写）')] }), cell('姓名', { bold: true }), cell('职称（是否博导）', { bold: true }), cell('工作单位', { bold: true }), cell('所在学科', { bold: true })]));
+  rows.push(row([cell('评阅人\n（根据实际人数填写）', { span: 2, rows: reviewers.length + 1, bold: true, children: [cellP('评阅人', true), cellP('（根据实际人数填写）', true)] }), cell('姓名', { bold: true }), cell('职称（是否博导）', { bold: true }), cell('工作单位', { bold: true }), cell('所在学科', { bold: true })]));
   for (const p of reviewers) rows.push(row(person(p)));
   const chair = pad(d.chair.filter((p) => p.name), 1), members = pad(d.members.filter((p) => p.name), 6), secretary = pad(d.secretary.filter((p) => p.name), 1);
   const total = chair.length + members.length + secretary.length;
@@ -166,16 +166,16 @@ export function defensePage(doc: ThesisDoc, title: Paragraph): (Paragraph | Tabl
   for (const line of text(d.resolution).split('\n').filter((l) => l.trim())) resolution.push(new Paragraph({ alignment: AlignmentType.JUSTIFIED, indent: { firstLine: 24 * PT }, children: [run(line, ZIHAO.xiaosi)] }));
   rows.push(row([cell('', { span: 6, children: resolution, top: true })], Math.round(293.76 * PT)));
   const table = new Table({ rows, width: { size: cols.reduce((a, b) => a + b, 0), type: WidthType.DXA }, columnWidths: cols, alignment: AlignmentType.CENTER, layout: 'fixed' as any });
-  return [title, table];
+  return [...title, table];
 }
 
 /** 原创性声明与使用权限：正文固定，题目从论文信息取 */
-export function declarationsPage(doc: ThesisDoc, title: Paragraph, subTitle: (t: string) => Paragraph): Paragraph[] {
+export function declarationsPage(doc: ThesisDoc, title: (Paragraph | Table)[], subTitle: (t: string) => Paragraph): (Paragraph | Table)[] {
   const body = (t: string) => new Paragraph({ style: 'Normal', children: [new TextRun({ text: t })] });
   const sig = (who: string, before = 1) => new Paragraph({ alignment: AlignmentType.LEFT, indent: { left: 96 * PT, firstLine: 0 }, spacing: { before: before * 19.5 * PT }, children: [new TextRun({ text: `${who}签名：` }), new TextRun({ text: '\t日期：\t年\t月\t日' })], tabStops: [{ type: 'left' as any, position: 5200 }, { type: 'left' as any, position: 6600 }, { type: 'left' as any, position: 7400 }, { type: 'left' as any, position: 8000 }] });
   const t = doc.info.title.split('\n').join('');
   return [
-    title,
+    ...title,
     subTitle('学位论文原创性声明'),
     body(`本人郑重声明：此处所提交的学位论文《${t}》，是本人在导师指导下，在哈尔滨工业大学攻读学位期间独立进行学术研究工作或专业实践工作所取得的成果，且学位论文中除已标注引用文献、资料的部分外不包含他人完成或已发表的成果。对本学位论文的学术研究工作或专业实践工作做出重要贡献的个人和集体，均已在文中以明确方式注明；对使用 AI 工具的情况均已在文中以明确方式标注。`),
     sig('作者'),
