@@ -2,7 +2,7 @@
 // 这里用「上一行落在哪、这一行要落在哪」算段前距，行距钉死；字号字体照模板 src/pages/*.typ 的规定
 import { Paragraph, TextRun, AlignmentType, LineRuleType, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign, PageBreak, type ParagraphChild } from 'docx';
 import type { ThesisDoc, Info, DefensePerson } from '../../model/types';
-import { PT, HALF, ZIHAO, FONT, fonts, hasCJK } from './units';
+import { PT, HALF, ZIHAO, FONT, fontsFor, hasCJK } from './units';
 
 const DOC_TYPE = { bachelor: "本科毕业论文（设计）", master: "硕士学位论文", doctor: "博士学位论文" } as const;
 const DOC_TYPE_EN = { bachelor: 'Graduation Thesis', master: "Dissertation for the Master's Degree", doctor: "Dissertation for the Doctoral Degree" } as const;
@@ -27,7 +27,7 @@ class Flow {
     return new Paragraph({ spacing: { before: 0, after: 0, line: Math.round(h * PT), lineRule: LineRuleType.EXACT }, children: [] });
   }
 }
-const run = (text: string, size: number, o: { bold?: boolean; zh?: string; en?: string; italics?: boolean } = {}) => new TextRun({ text, size: size * HALF, bold: o.bold, italics: o.italics, font: fonts(o.zh ?? FONT.zh, o.en ?? FONT.en) });
+const run = (text: string, size: number, o: { bold?: boolean; zh?: string; en?: string; italics?: boolean } = {}) => new TextRun({ text, size: size * HALF, bold: o.bold, italics: o.italics, font: fontsFor(text, o.zh ?? FONT.zh, o.en ?? FONT.en) });
 const month = (iso: string | undefined, lang: 'zh' | 'en') => {
   const m = /^(\d{4})-(\d{2})/.exec(iso || '') ?? (() => { const d = new Date(); return ['', String(d.getFullYear()), String(d.getMonth() + 1).padStart(2, '0')]; })();
   const y = m[1], mo = Number(m[2]);
@@ -138,7 +138,8 @@ export function titlepageEn(doc: ThesisDoc, top: number): Paragraph[] {
 }
 
 /** 答辩决议：一张六列表——评阅人块、竖排「答辩委员会成员」的委员会块、决议一格；列宽照模板 */
-export function defensePage(doc: ThesisDoc, title: (Paragraph | Table)[]): (Paragraph | Table)[] {
+type BlockLike = Paragraph | Table | { readonly newPage: true };
+export function defensePage(doc: ThesisDoc, title: BlockLike[]): BlockLike[] {
   const d = doc.defense;
   const cols = [33.75, 42.55, 56.70, 106.30, 92.15, 104.55].map((w) => Math.round(w * PT));
   const border = { style: BorderStyle.SINGLE, size: 4 };
@@ -170,7 +171,7 @@ export function defensePage(doc: ThesisDoc, title: (Paragraph | Table)[]): (Para
 }
 
 /** 原创性声明与使用权限：正文固定，题目从论文信息取 */
-export function declarationsPage(doc: ThesisDoc, title: (Paragraph | Table)[], subTitle: (t: string) => Paragraph): (Paragraph | Table)[] {
+export function declarationsPage(doc: ThesisDoc, title: BlockLike[], subTitle: (t: string) => Paragraph): BlockLike[] {
   const body = (t: string) => new Paragraph({ style: 'Normal', children: [new TextRun({ text: t })] });
   const sig = (who: string, before = 1) => new Paragraph({ alignment: AlignmentType.LEFT, indent: { left: 96 * PT, firstLine: 0 }, spacing: { before: before * 19.5 * PT }, children: [new TextRun({ text: `${who}签名：` }), new TextRun({ text: '\t日期：\t年\t月\t日' })], tabStops: [{ type: 'left' as any, position: 5200 }, { type: 'left' as any, position: 6600 }, { type: 'left' as any, position: 7400 }, { type: 'left' as any, position: 8000 }] });
   const t = doc.info.title.split('\n').join('');

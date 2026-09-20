@@ -3,7 +3,7 @@
 // 不经过 Typst；编号用 numbering.ts 算，参考文献用 GB/T 7714 的 CSL 排。封面、内封、答辩决议、声明这些表单页在 pages.ts，
 // 位置照模板排出来的 PDF 逐行量的。页序照模板：封面、内封（中、英）、摘要、Abstract、符号及缩略语、目录、正文、结论、参考文献、附录、成果、答辩决议、声明、致谢、简历
 import {
-  Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, TabStopType, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle,
+  Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, TabStopType, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle, SectionType,
   FootnoteReferenceRun, TableOfContents, PageBreak, PageNumber, Header, Footer, NumberFormat, CommentRangeStart, CommentRangeEnd, CommentReference,
   ImportedXmlComponent, LineRuleType, DocumentGridType, ExternalHyperlink, VerticalAlign, SimpleField, type ParagraphChild, type ISectionOptions,
 } from 'docx';
@@ -22,7 +22,7 @@ import { formatBibliography } from './bib';
 import { renderTypstMath, type MathImage } from './typstMath';
 import type { BibEntry } from '../../bib/bibtex';
 
-import { PT, HALF, cm, ZIHAO, FONT, fonts, A4, NO_BORDERS, hasCJK } from './units';
+import { PT, HALF, cm, ZIHAO, FONT, fonts, fontsFor, A4, NO_BORDERS, hasCJK } from './units';
 import { coverPage, titlepageZh, titlepageEn, defensePage, declarationsPage, pageBreak } from './pages';
 import { resolveSwitch, SWITCHES } from '../../model/options';
 
@@ -97,7 +97,8 @@ function styles(s: Settings, L: Layout) {
   const h2 = sub(isReport ? ZIHAO.sihao : ZIHAO.xiaosan, true), h3 = sub(isReport ? ZIHAO.xiaosi : ZIHAO.sihao, true), h4 = sub(ZIHAO.xiaosi, false);
   return {
     default: {
-      document: { run: { size: ZIHAO.xiaosi * HALF, font: fonts() }, paragraph: { spacing: { line: 300, lineRule: LineRuleType.AUTO }, alignment: AlignmentType.JUSTIFIED } },
+      // 中文档整篇 hint="eastAsia"：省略号、破折号、间隔号这些两可字符跟中文字体走（中文 Word 文档的 run 都这样）
+      document: { run: { size: ZIHAO.xiaosi * HALF, font: s.lang === 'en' ? fonts() : { ...fonts(), hint: 'eastAsia' } }, paragraph: { spacing: { line: 300, lineRule: LineRuleType.AUTO }, alignment: AlignmentType.JUSTIFIED } },
       heading1: { run: h1.run, paragraph: { ...h1.paragraph, indent: { firstLine: 0 }, outlineLevel: 0, keepNext: true, keepLines: true } },
       heading2: { run: h2.run, paragraph: { ...h2.paragraph, indent: { firstLine: 0 }, outlineLevel: 1, keepNext: true, keepLines: true, alignment: AlignmentType.LEFT } },
       heading3: { run: h3.run, paragraph: { ...h3.paragraph, indent: { firstLine: 0 }, outlineLevel: 2, keepNext: true, keepLines: true, alignment: AlignmentType.LEFT } },
@@ -105,7 +106,7 @@ function styles(s: Settings, L: Layout) {
       footnoteText: { run: { size: ZIHAO.xiaowu * HALF }, paragraph: { indent: { firstLine: 0 }, spacing: { line: 240, lineRule: LineRuleType.AUTO } } },
     },
     paragraphStyles: [
-      { id: 'Normal', name: 'Normal', run: { size: ZIHAO.xiaosi * HALF, font: fonts(), kern: wordLinebreakOptions(s).kern ? 2 : undefined }, paragraph: { indent: { firstLine: L.firstLine }, spacing: { line: 300, lineRule: LineRuleType.AUTO }, alignment: AlignmentType.JUSTIFIED } },
+      { id: 'Normal', name: 'Normal', run: { size: ZIHAO.xiaosi * HALF, font: s.lang === 'en' ? fonts() : { ...fonts(), hint: 'eastAsia' }, kern: wordLinebreakOptions(s).kern ? 2 : undefined }, paragraph: { indent: { firstLine: L.firstLine }, spacing: { line: 300, lineRule: LineRuleType.AUTO }, alignment: AlignmentType.JUSTIFIED } },
       { id: 'Caption', name: 'caption', basedOn: 'Normal', next: 'Normal', run: { size: ZIHAO.wuhao * HALF }, paragraph: { alignment: AlignmentType.CENTER, indent: { firstLine: 0 }, spacing: { line: 300, lineRule: LineRuleType.AUTO }, keepNext: true } },
       { id: 'TableText', name: 'Table Text', basedOn: 'Normal', run: { size: ZIHAO.wuhao * HALF }, paragraph: { alignment: AlignmentType.CENTER, indent: { firstLine: 0 }, spacing: { line: 300, lineRule: LineRuleType.AUTO } } },
       { id: 'Code', name: 'Code', basedOn: 'Normal', run: { size: ZIHAO.wuhao * HALF, font: fonts(FONT.mono, FONT.mono) }, paragraph: { indent: { firstLine: 0 }, spacing: { line: 240, lineRule: LineRuleType.AUTO }, alignment: AlignmentType.LEFT } },
@@ -193,7 +194,7 @@ function inline(ctx: Ctx, nodes: PMNode[] = [], base: { size?: number; font?: st
         const run = new TextRun({
           text: n.text ?? '', bold: has('bold') || undefined, italics: (has('italic') && !hasCJK(n.text ?? '')) || undefined, underline: has('underline') ? {} : undefined, strike: has('strike') || undefined,
           superScript: has('superscript') || undefined, subScript: has('subscript') || undefined,
-          font: has('code') ? fonts(FONT.mono, FONT.mono) : has('italic') ? fonts(FONT.kai) : base.font ? fonts(base.font) : undefined, size: base.size,
+          font: has('code') ? fonts(FONT.mono, FONT.mono) : has('italic') ? fontsFor(n.text ?? '', FONT.kai) : fontsFor(n.text ?? '', base.font ?? FONT.zh), size: base.size,
         });
         push(link ? new ExternalHyperlink({ link: String(link.attrs?.href ?? ''), children: [run] }) : run);
         break;
@@ -229,7 +230,11 @@ function inline(ctx: Ctx, nodes: PMNode[] = [], base: { size?: number; font?: st
 }
 
 // ── 块 ───────────────────────────────────────────────────────────
-type Block = Paragraph | Table;
+/** 另起一页的标记：组节时换成「分页符 + 连续分节符」，标题作为新一节的第一段，段前距在哪个兼容模式下都不会被吃掉 */
+const NEW_PAGE = { newPage: true } as const;
+type NewPage = typeof NEW_PAGE;
+type Block = Paragraph | Table | NewPage;
+const isNewPage = (b: Block): b is NewPage => b === NEW_PAGE;
 const centered = (children: ParagraphChild[], extra: object = {}) => new Paragraph({ alignment: AlignmentType.CENTER, indent: { firstLine: 0 }, children, ...extra });
 /** 题注串：[@key] 排成上标的文献号 */
 const captionRuns = (ctx: Ctx, s: string): TextRun[] => s.split(CAPTION_CITE).flatMap((piece, i) => (i % 2 ? [new TextRun({ text: citeText(ctx, piece.split(/[,，;；\s]+/).filter(Boolean)), superScript: true })] : piece ? [new TextRun({ text: piece })] : []));
@@ -351,7 +356,7 @@ function heading(ctx: Ctx, n: PMNode, part: 'body' | 'appendix', forceBreak = fa
   const spread = level === 1 && !en && sw<boolean>('titleSpread', ctx.s) && /^[\u4e00-\u9fff]{2}$/.test(plain);
   const kids = en ? [new TextRun({ text: en })] : spread ? [new TextRun({ text: `${plain[0]}\u3000${plain[1]}` })] : inline(ctx, n.content);
   const pageBreak = forceBreak || (level === 1 && !(ctx.s.stage !== 'final' && !(ctx.s.campus === 'shenzhen' && ctx.s.degreeLevel === 'bachelor')) && sw<boolean>('heading1Pagebreak', ctx.s));
-  const para = new Paragraph({ heading: [HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3, HeadingLevel.HEADING_4][level - 1], spacing: pageBreak ? { before: 0 } : undefined, children: [...(num ? [new TextRun({ text: `${num}  ` })] : []), ...kids] });
+  const para = new Paragraph({ heading: [HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3, HeadingLevel.HEADING_4][level - 1], children: [...(num ? [new TextRun({ text: `${num}  ` })] : []), ...kids] });
   return pageBreak ? [pageTop(), para] : [para];
 }
 
@@ -388,11 +393,10 @@ function blocks(ctx: Ctx, nodes: PMNode[] = [], part: 'body' | 'appendix' | 'oth
 }
 
 // ── 页 ───────────────────────────────────────────────────────────
-// 另起一页的标题：Word 2013+ 模式把新页第一段的段前距吃掉（2003 模式不吃），靠段前距不稳——
-// 改成一个「定高的空段」带着分页起新页，标题本身段前距 0；两种兼容模式下章前间距都在，与模板一致
-const PAGE_TOP_GAP = 391; // 章标题的段前距：一行（缇）
-const pageTop = () => new Paragraph({ pageBreakBefore: true, spacing: { before: 0, after: 0, line: PAGE_TOP_GAP, lineRule: LineRuleType.EXACT }, children: [] });
-const titlePara = (t: string, newPage = true): Block[] => [...(newPage ? [pageTop()] : []), new Paragraph({ style: 'Abstract', spacing: newPage ? { before: 0 } : undefined, children: [new TextRun({ text: t })] })];
+// 另起一页的标题：Word 2013+ 模式把新页第一段的段前距吃掉（2003 模式不吃），靠段前分页不稳——
+// 照 Word 排版的正规做法「分页符 + 连续分节符」：标题是新一节的第一段，段前距照留（组节见 pushParts）
+const pageTop = (): Block => NEW_PAGE;
+const titlePara = (t: string, newPage = true): Block[] => [...(newPage ? [pageTop()] : []), new Paragraph({ style: 'Abstract', children: [new TextRun({ text: t })] })];
 function abstractPages(ctx: Ctx): Block[] {
   const { doc, s } = ctx;
   const out: Block[] = [];
@@ -520,7 +524,8 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
 
   const isReport = s.stage !== 'final';
   // 页眉：范例里校名式「哈尔滨工业大学博士学位论文」；博士双面交替，奇数页排本章章标题（STYLEREF 1 取当前标题 1）
-  const headerPara = (kids: ParagraphChild[]) => new Paragraph({ style: 'Header', border: { bottom: { style: BorderStyle.THICK_THIN_SMALL_GAP, size: 18, space: 1 } }, children: kids });
+  // 页眉线粗上细下（模板与范例都是）：Word 的 thinThickSmallGap 当底边框画出来正是这样
+const headerPara = (kids: ParagraphChild[]) => new Paragraph({ style: 'Header', border: { bottom: { style: BorderStyle.THIN_THICK_SMALL_GAP, size: 18, space: 1 } }, children: kids });
   const school = `哈尔滨工业大学${DOC_TYPE[s.degreeLevel]}`;
   const header = L.header ? new Header({ children: [headerPara(s.degreeLevel === 'doctor' && !isReport ? [new SimpleField('STYLEREF 1 \\* MERGEFORMAT', school)] : [new TextRun({ text: school })])] }) : undefined;
   const evenHeader = L.header && s.degreeLevel === 'doctor' && !isReport ? new Header({ children: [headerPara([new TextRun({ text: school })])] }) : undefined;
@@ -542,8 +547,8 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
   for (let i = 0; i < coverSections.length; i++) {
     const c = coverSections[i], prev = coverSections[i - 1];
     // 版面相同的合成一节，页与页之间硬分页
-    if (prev && JSON.stringify(prev.L) === JSON.stringify(c.L)) { const last = sections[sections.length - 1]; (last.children as Block[]).push(pageBreak(), ...c.blocks); continue; }
-    sections.push({ properties: { page: { size: A4, margin: c.L.margin }, titlePage: false }, children: [...c.blocks] });
+    if (prev && JSON.stringify(prev.L) === JSON.stringify(c.L)) { const last = sections[sections.length - 1]; (last.children as (Paragraph | Table)[]).push(pageBreak(), ...c.blocks.filter((b): b is Paragraph | Table => !isNewPage(b))); continue; }
+    sections.push({ properties: { page: { size: A4, margin: c.L.margin }, titlePage: false }, children: c.blocks.filter((b): b is Paragraph | Table => !isNewPage(b)) });
   }
   // 开了奇偶页不同（博士）后每一节都要把 even 也给全，不然前置部分的偶数页页眉页脚是空的
   const plainHeader = () => new Header({ children: [headerPara([new TextRun({ text: school })])] });
@@ -555,16 +560,27 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
     headers: header && LL.header ? { default: roman ? plainHeader() : header, ...(evenHeader ? { even: roman ? plainHeader() : evenHeader } : {}) } : { default: blank(), ...(evenHeader ? { even: blank() } : {}) },
     footers: LL.footer && footerFor() ? { default: footerFor()!, ...(evenHeader ? { even: footerFor()! } : {}) } : { default: blankF(), ...(evenHeader ? { even: blankF() } : {}) },
   });
-  /** 一串「页 / 块」按版面分节：相邻同版面的并在一节里（各自已带分页），不同的另起一节接着编页码 */
+  /** 一串「页 / 块」组成节：另起一页的地方（NEW_PAGE）＝ 上一节末尾一个分页符、下一节是连续分节符（页眉页脚、版面沿用），
+   *  版面变了的另起「下一页」分节符并把页眉页脚重给；页码在一串里接着编 */
+  type Sec = ISectionOptions & { __L?: string };
   const pushParts = (parts: { L: Layout; blocks: Block[] }[], roman: boolean) => {
     let firstOfRun = true;
     for (const part of parts) {
-      if (!part.blocks.length) continue;
-      const last = sections[sections.length - 1] as (ISectionOptions & { __L?: string }) | undefined;
-      if (last && last.__L === JSON.stringify(part.L) && !firstOfRun) { (last.children as Block[]).push(...part.blocks); continue; }
-      const sec = { ...hf(part.L, roman, firstOfRun), children: [...part.blocks], __L: JSON.stringify(part.L) } as ISectionOptions & { __L?: string };
-      sections.push(sec);
-      firstOfRun = false;
+      const segs: (Paragraph | Table)[][] = [[]];
+      for (const b of part.blocks) { if (isNewPage(b)) segs.push([]); else segs[segs.length - 1].push(b); }
+      const key = JSON.stringify(part.L);
+      for (const seg of segs) {
+        if (!seg.length) continue;
+        const last = sections[sections.length - 1] as Sec | undefined;
+        if (last && last.__L === key && !firstOfRun) {
+          // 同版面：分页符 + 连续分节符
+          (last.children as (Paragraph | Table)[]).push(new Paragraph({ children: [new PageBreak()] }));
+          sections.push({ properties: { ...props(part.L, roman, false), type: SectionType.CONTINUOUS }, children: seg, __L: key } as Sec);
+        } else {
+          sections.push({ ...hf(part.L, roman, firstOfRun), children: seg, __L: key } as Sec);
+          firstOfRun = false;
+        }
+      }
     }
   };
   // 前置：摘要、Abstract、符号及缩略语、目录（罗马页码；顺序照模板）
@@ -574,7 +590,7 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
     parts.push({ L: pageLayout(Lfront, 'nomenclature'), blocks: nomenclature(ctx) });
     if (resolvePage(doc, 'tableOfContents').value) {
       const any = parts.some((x) => x.blocks.length);
-      parts.push({ L: pageLayout(Lfront, 'toc'), blocks: [...(any ? [pageTop()] : []), new Paragraph({ style: 'FrontTitle', spacing: any ? { before: 0 } : undefined, children: [new TextRun({ text: '目\u3000录' })] }), new TableOfContents("目录", { hyperlink: true, headingStyleRange: '1-3', stylesWithLevels: [{ styleName: 'Abstract Title', level: 1 }] }) as unknown as Paragraph] });
+      parts.push({ L: pageLayout(Lfront, 'toc'), blocks: [...(any ? [pageTop()] : []), new Paragraph({ style: 'FrontTitle', children: [new TextRun({ text: '目\u3000录' })] }), new TableOfContents("目录", { hyperlink: true, headingStyleRange: '1-3', stylesWithLevels: [{ styleName: 'Abstract Title', level: 1 }] }) as unknown as Paragraph] });
     }
     pushParts(parts, true);
   }
@@ -616,14 +632,28 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
     hyphenation: s.hyphenate === true ? { autoHyphenation: true, hyphenationZone: 360, consecutiveHyphenLimit: W.hyphenLimit || undefined, doNotHyphenateCaps: !W.hyphenateCaps } : undefined,
     sections,
   });
-  return postprocess(await Packer.toBlob(document), W);
+  return postprocess(await Packer.toBlob(document), W, L.line);
 }
 
 // 段落对话框的「对齐到网格」：范例里除表格之外全都不勾（模板每条样式的 snap-to-docgrid: false），
 // docx 库没有段落级的开关，包好之后往 styles.xml 里补 <w:snapToGrid w:val="0"/>（要放在 pPr 的 spacing 之前）
 const UNSNAP = ['Normal', 'Heading1', 'Heading2', 'Heading3', 'Heading4', 'Caption', 'Code', 'Reference', 'FootnoteText', 'Header', 'Footer', 'Abstract', 'TOC1', 'TOC2', 'TOC3', 'TOC4'];
-async function postprocess(blob: Blob, W: ReturnType<typeof wordLinebreakOptions>): Promise<Blob> {
+async function postprocess(blob: Blob, W: ReturnType<typeof wordLinebreakOptions>, linePitch: number): Promise<Blob> {
   const zip = await JSZip.loadAsync(blob);
+  // 正文里按「行」给的段前 / 段后（图前一行、题注后一行、关键词前一行、符号页小标题前半行）：docx 库只会写磅数，
+  // 补上 Word 的 beforeLines / afterLines（百分之一行），Word 有它就按行算，行距变了也跟着变
+  const dp = 'word/document.xml';
+  let dx = await zip.file(dp)!.async('string');
+  const lines = (v: string) => { const n = Number(v); if (!n) return null; for (const k of [100, 50, 200]) if (Math.abs(n - Math.round(linePitch * k / 100)) <= 1) return k; return null; };
+  const byLines = (x: string) => x.replace(/<w:spacing ([^>]*?)\/>/g, (m, attrs: string) => {
+    let out = attrs;
+    const b = /w:before="(\d+)"/.exec(attrs), a = /w:after="(\d+)"/.exec(attrs);
+    const bl = b && lines(b[1]), al = a && lines(a[1]);
+    if (bl && !/w:beforeLines=/.test(attrs)) out = out.replace(b![0], `w:beforeLines="${bl}" ${b![0]}`);
+    if (al && !/w:afterLines=/.test(attrs)) out = out.replace(a![0], `w:afterLines="${al}" ${a![0]}`);
+    return out === attrs ? m : `<w:spacing ${out}/>`;
+  });
+  zip.file(dp, byLines(dx));
   // settings.xml：字符间距控制。放在 <w:compat> 前面（schema 里 characterSpacingControl 在 compat 之前）
   const sp = 'word/settings.xml';
   let sx = await zip.file(sp)!.async('string');
@@ -633,7 +663,7 @@ async function postprocess(blob: Blob, W: ReturnType<typeof wordLinebreakOptions
     zip.file(sp, sx);
   }
   const path = 'word/styles.xml';
-  let xml = await zip.file(path)!.async('string');
+  let xml = byLines(await zip.file(path)!.async('string'));
   // Normal 的「定义了文档网格时自动调整右缩进」：Word 默认开，关了才写
   if (!W.adjustRightIndent) xml = xml.replace(/(<w:style [^>]*w:styleId="Normal"[^>]*>[\s\S]*?<w:pPr>)/, '$1<w:adjustRightInd w:val="0"/>');
   for (const id of UNSNAP) {

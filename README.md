@@ -244,8 +244,10 @@ layout/presets.typ 与 styles/presets.typ 量下来的数；编号用 numbering.
 PDF 逐行量的；页序、页码样式（前置「- I -」、主体「- 1 -」）、符号与缩略语合页、目录不列自己、两字章名撑开、题注双语开关、
 参考文献全列且中文档用全角标点，都照模板的样子。工程 JSON 里的局部版面（`settings.layout` 的 doc / frontmatter /
 mainmatter / backmatter / pages.*：margin、line-pitch、char-pitch、char-excess、base-size、header / footer 的 shown 与 from-edge）
-折成 Word 的节属性，页级改写单独成节接着编页码。另起一页的标题前面是一个定高空段带分页而不是段前距——Word 2013+ 模式会把
-新页第一段的段前距吃掉（2003 模式不吃），章前间距在两种兼容模式下都得在。对拍法：站内导出 docx，AppleScript 让本机 Word
+折成 Word 的节属性，页级改写单独成节接着编页码。另起一页的标题走 Word 排版的正规做法「分页符 + 连续分节符」，标题是新一节的
+第一段——Word 2013+ 模式会把新页第一段的段前距吃掉（2003 模式不吃），只有分节符起的段落例外，章前间距在两种兼容模式下都在。
+按行给的段前段后（图前一行、题注后一行、章标题段前一行）写成 Word 的「N 行」（beforeLines / afterLines）而不是磅数；
+中文档整篇 hint="eastAsia"，省略号、破折号这些两可字符跟中文字体走。对拍法：站内导出 docx，AppleScript 让本机 Word
 存成 PDF，与站内导出的 Typst PDF 逐页并排看（pypdfium2 栅格化，逐行比基线位置、字号、字体）。
 
 ## 许可
