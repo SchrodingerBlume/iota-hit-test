@@ -1,21 +1,17 @@
 // 关键词这种「一串短项」的输入：一项一个标签。
 //   输入框里回车 / 逗号 / 分号 / 失焦 → 加进去；粘贴一串按分隔符拆开
-//   ← → 在输入框首尾往标签上走（选中态），Backspace 先选中最后一个、再按才删，Delete 直接删
-//   双击或选中后回车 → 就地改；改空 = 删
-//   ✕ 删；拖着换位置（别的标签让开），⌥ + ← / → 也能挪
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent as RPointerEvent } from 'react';
-import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
+//   点一下标签选中，标签两头露出 ‹ › 挪位置（⌥ + ← / → 也行）；← → 在输入框首尾往标签上走，
+//   Backspace 先选中最后一个、再按才删，Delete 直接删；双击或选中后回车就地改，改空 = 删；✕ 删
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { t as tx } from '../i18n';
 
-interface Drag { from: number; to: number; x: number; y: number; w: number; h: number; ox: number; oy: number; active: boolean }
 const SEP = /[;；,，\n]/;
 
 export function TagInput({ value, onChange, placeholder, dataInfo }: { value: string[]; onChange: (v: string[]) => void; placeholder?: string; dataInfo?: string }) {
   const [draft, setDraft] = useState('');
   const [sel, setSel] = useState<number | null>(null);
   const [edit, setEdit] = useState<{ i: number; text: string } | null>(null);
-  const [drag, setDrag] = useState<Drag | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const editRef = useRef<HTMLInputElement>(null);
   const items = useRef(new Map<string, HTMLSpanElement>());
@@ -51,10 +47,10 @@ export function TagInput({ value, onChange, placeholder, dataInfo }: { value: st
       e.preventDefault();
       if (sel === null) setSel(value.length - 1); else remove(sel);
     } else if (e.key === 'Delete' && !draft && sel !== null) { e.preventDefault(); remove(sel); }
+    else if (e.altKey && sel !== null && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); const to = e.key === 'ArrowLeft' ? Math.max(0, sel - 1) : Math.min(value.length - 1, sel + 1); move(sel, to); setSel(to); }
     else if (e.key === 'ArrowLeft' && atStart && value.length) { e.preventDefault(); setSel(sel === null ? value.length - 1 : Math.max(0, sel - 1)); }
     else if (e.key === 'ArrowRight' && sel !== null) { e.preventDefault(); setSel(sel + 1 < value.length ? sel + 1 : null); }
     else if (e.key === 'Escape' && sel !== null) { e.preventDefault(); setSel(null); }
-    else if (e.altKey && sel !== null && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); const to = e.key === 'ArrowLeft' ? Math.max(0, sel - 1) : Math.min(value.length - 1, sel + 1); move(sel, to); setSel(to); }
     else if (e.key.length === 1 && sel !== null) setSel(null);
   };
   const move = (from: number, to: number) => {
@@ -65,9 +61,6 @@ export function TagInput({ value, onChange, placeholder, dataInfo }: { value: st
     onChange(next);
   };
 
-  // 拖动中的显示顺序：被拖的那个先挪到目标位，别的让开
-  const order = drag?.active && drag.from !== drag.to ? (() => { const next = [...value]; const [it] = next.splice(drag.from, 1); next.splice(drag.to, 0, it); return next; })() : value;
-
   // FLIP：顺序一变（拖动让位、松手落位、⌥ 方向键），每个标签从旧位置滑到新位置
   useLayoutEffect(() => {
     const next = new Map<string, DOMRect>();
@@ -75,7 +68,7 @@ export function TagInput({ value, onChange, placeholder, dataInfo }: { value: st
     for (const [k, r] of next) {
       const p = prevRects.current.get(k);
       const el = items.current.get(k);
-      if (!p || !el || (drag?.active && value[drag.from] === k)) continue;
+      if (!p || !el) continue;
       const dx = p.left - r.left, dy = p.top - r.top;
       if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) continue;
       el.style.transition = 'none';
@@ -85,40 +78,9 @@ export function TagInput({ value, onChange, placeholder, dataInfo }: { value: st
     prevRects.current = next;
   });
 
-  const onPointerDown = (e: RPointerEvent<HTMLSpanElement>, i: number) => {
-    if (e.button !== 0 || (e.target as HTMLElement).closest('button, input')) return;
-    e.preventDefault();
-    const r = e.currentTarget.getBoundingClientRect();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    setDrag({ from: i, to: i, x: e.clientX, y: e.clientY, w: r.width, h: r.height, ox: e.clientX - r.left, oy: e.clientY - r.top, active: false });
-  };
-  const onPointerMove = (e: RPointerEvent<HTMLSpanElement>) => {
-    if (!drag) return;
-    const active = drag.active || Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 4;
-    if (!active) return;
-    // 目标位：按阅读顺序数有多少个标签的中心在指针前面（先比行，再比同行里的横向）
-    const key = value[drag.from];
-    let to = 0;
-    for (const [k, el] of items.current) {
-      if (k === key) continue;
-      const r = el.getBoundingClientRect();
-      const cy = r.top + r.height / 2, cx = r.left + r.width / 2;
-      if (cy < e.clientY - r.height / 2 || (Math.abs(cy - e.clientY) <= r.height / 2 && cx < e.clientX)) to++;
-    }
-    setDrag({ ...drag, x: e.clientX, y: e.clientY, to: Math.min(to, value.length - 1), active: true });
-  };
-  const onPointerUp = (i: number) => {
-    if (!drag) return;
-    if (drag.active) { move(drag.from, drag.to); setSel(drag.to); }
-    else { setSel(i); input.current?.focus(); }
-    setDrag(null);
-  };
-
   return (
-    <div className={`tags ${drag?.active ? 'is-dragging' : ''}`} onPointerDown={(e) => { if (e.target === e.currentTarget) { e.preventDefault(); input.current?.focus(); setSel(null); } }}>
-      {order.map((t) => {
-        const i = value.indexOf(t);
-        const ghost = drag?.active && drag.from === i;
+    <div className="tags" onPointerDown={(e) => { if (e.target === e.currentTarget) { e.preventDefault(); input.current?.focus(); setSel(null); } }}>
+      {value.map((t, i) => {
         if (edit && edit.i === i) {
           return (
             <span key={t} className="tag-item is-editing" ref={(el) => { if (el) items.current.set(t, el); else items.current.delete(t); }}>
@@ -127,33 +89,26 @@ export function TagInput({ value, onChange, placeholder, dataInfo }: { value: st
             </span>
           );
         }
+        const on = sel === i;
         return (
           <span
             key={t}
             ref={(el) => { if (el) items.current.set(t, el); else items.current.delete(t); }}
-            className={`tag-item ${ghost ? 'is-ghost' : ''} ${sel === i ? 'is-selected' : ''}`}
-            title={tx("双击改；拖动换位置")}
-            onPointerDown={(e) => onPointerDown(e, i)}
-            onPointerMove={onPointerMove}
-            onPointerUp={() => onPointerUp(i)}
-            onPointerCancel={() => setDrag(null)}
+            className={`tag-item ${on ? 'is-selected' : ''}`}
+            title={tx("点一下选中，两头的箭头挪位置；双击改")}
+            onPointerDown={(e) => { e.preventDefault(); if ((e.target as HTMLElement).closest('button')) return; setSel(on ? null : i); input.current?.focus(); }}
             onDoubleClick={() => startEdit(i)}
           >
+            {on && i > 0 && <button type="button" className="tag-move" title={tx("往前挪")} tabIndex={-1} onClick={() => { move(i, i - 1); setSel(i - 1); input.current?.focus(); }}><ChevronLeft /></button>}
             {t}
-            <button type="button" title={tx("删除")} tabIndex={-1} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); remove(i); }}><X /></button>
+            {on && i < value.length - 1 && <button type="button" className="tag-move" title={tx("往后挪")} tabIndex={-1} onClick={() => { move(i, i + 1); setSel(i + 1); input.current?.focus(); }}><ChevronRight /></button>}
+            <button type="button" title={tx("删除")} tabIndex={-1} onClick={() => remove(i)}><X /></button>
           </span>
         );
       })}
       <input ref={input} data-info={dataInfo} value={draft} placeholder={value.length ? tx("回车添加") : placeholder ?? tx("输入后回车")} onChange={(e) => { setDraft(e.target.value); if (sel !== null) setSel(null); }} onKeyDown={onKey}
         onPaste={(e) => { const text = e.clipboardData.getData('text'); if (SEP.test(text)) { e.preventDefault(); add(draft + text); setDraft(''); } }}
         onBlur={() => { commit(); setSel(null); }} />
-      {/* 提起来的那个挂到 body 上：编辑区容器有 container-type（布局包含），position: fixed 会以它为准，跟着滚动一起跑偏 */}
-      {drag?.active && createPortal(
-        <span className="tag-item is-lifted" style={{ position: 'fixed', left: drag.x - drag.ox, top: drag.y - drag.oy, width: drag.w, height: drag.h, pointerEvents: 'none', zIndex: 50 }}>
-          {value[drag.from]}
-        </span>,
-        document.body,
-      )}
     </div>
   );
 }

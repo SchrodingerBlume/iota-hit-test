@@ -830,8 +830,10 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .tag-item button { border: 0; background: none; padding: 0; width: 18px; height: 18px; display: inline-grid; place-items: center; color: var(--accent-ink); opacity: 0.6; cursor: pointer; border-radius: var(--r-round); }
 .tag-item button:hover { opacity: 1; background: var(--accent-soft-2); }
 .tag-item button svg { width: 12px; height: 12px; }
-.tag-item.is-selected { background: var(--accent); color: #fff; }
-.tag-item.is-selected button { color: #fff; }
+.tag-item.is-selected { background: var(--accent); color: #fff; padding-left: 4px; }
+.tag-item.is-selected button { color: #fff; opacity: 0.85; }
+.tag-item .tag-move { width: 16px; height: 18px; }
+.tag-item .tag-move svg { width: 13px; height: 13px; }
 .tag-item.is-editing { padding: 0 6px; background: var(--panel); box-shadow: inset 0 0 0 1px var(--accent); }
 .tag-item.is-editing input { border: 0; background: none; outline: none; font: inherit; color: var(--ink); padding: 2px 0; min-width: 2em; }
 .tags input::placeholder { color: var(--muted); opacity: 0.6; }
@@ -889,11 +891,7 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .denote-pop .chip-pop { left: 0; top: 100%; }
 .denote-foot { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-family: var(--sans); font-size: 12px; color: var(--muted); }
 /* 关键词拖动换位置 */
-.tag-item { cursor: grab; user-select: none; -webkit-user-select: none; touch-action: none; }
-.tags.is-dragging { cursor: grabbing; }
-.tags.is-dragging .tag-item { cursor: grabbing; }
-.tag-item.is-ghost { opacity: 0.3; }
-.tag-item.is-lifted { box-shadow: var(--shadow-2); transform: scale(1.04); background: var(--accent-soft-2); animation: none; }
+.tag-item { cursor: default; user-select: none; -webkit-user-select: none; }
 /* typst.ts 内建的 SVG 样式（crates/conversion/vec2svg/src/frontend/typst.svg.css）：增量渲染的
    SVG 不自带它，以前是靠正文里公式预览小 SVG 顺带的 <style> 遮着的——切到别的节那份卸掉，
    文本选择层就显形成重影、链接框变成黑条。这里抄一份钉在预览上；文本选择层我们有自己的
