@@ -2,7 +2,8 @@
 import { useMemo } from 'react';
 import { useStore, type RichKey } from '../model/store';
 import { PAGE_DEFS, resolvePage } from '../model/pages';
-import { TriSeg, ON_OFF, SettingSwitch } from './TriSwitch';
+import { TriSeg, ON_OFF, SettingSwitch, TriSwitch } from './TriSwitch';
+import { SWITCHES, SWITCH_GROUPS } from '../model/options';
 import type { Abbreviation, SymbolEntry, DefensePerson, Pages, OpenrightKey, ThesisDoc } from '../model/types';
 import { RichEditor } from '../editor/RichEditor';
 import { BibEditor } from './BibEditor';
@@ -117,16 +118,53 @@ export function IndexPanel() {
   );
 }
 
-export function RichSection({ title, lead, richKey, headings, blocks, placeholder, extra }: { title: string; lead?: string; richKey: RichKey; headings: boolean; blocks?: boolean; placeholder?: string; extra?: React.ReactNode }) {
+/** 正文、附录这种长页：开关不摆在编辑器上面，标题右边一个「内容 / 设置」切换，设置页单独一屏；编辑器切走时只是藏起来，不卸 */
+export function RichSection({ title, lead, richKey, headings, blocks, placeholder, extra, settings }: { title: string; lead?: string; richKey: RichKey; headings: boolean; blocks?: boolean; placeholder?: string; extra?: React.ReactNode; settings?: React.ReactNode }) {
   const part = richKey === 'body' ? 'body' : richKey === 'appendix' ? 'appendix' : 'other';
   const value = useStore((s) => s.doc[richKey]);
   const setRich = useStore((s) => s.setRich);
+  const [tab, setTab] = useState<'content' | 'settings'>('content');
   return (
     <>
-      <h2>{title}</h2>
+      <div className="page-head">
+        <h2>{title}</h2>
+        {settings && (
+          <div className="seg page-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={tab === 'content'} className={tab === 'content' ? 'on' : ''} onClick={() => setTab('content')}>{tx("内容")}</button>
+            <button type="button" role="tab" aria-selected={tab === 'settings'} className={tab === 'settings' ? 'on' : ''} onClick={() => setTab('settings')}>{tx("设置")}</button>
+          </div>
+        )}
+      </div>
       {lead && <p className="lead">{lead}</p>}
-      {extra}
-      <RichEditor instanceKey={richKey} value={value} onChange={(v) => setRich(richKey, v)} headings={headings} blocks={blocks ?? true} placeholder={placeholder} part={part} richKey={richKey} />
+      {tab === 'settings' && settings}
+      <div hidden={tab === 'settings'}>
+        {extra}
+        <RichEditor instanceKey={richKey} value={value} onChange={(v) => setRich(richKey, v)} headings={headings} blocks={blocks ?? true} placeholder={placeholder} part={part} richKey={richKey} />
+      </div>
+    </>
+  );
+}
+
+/** 正文的开关：题注与编号、标题、列表那几组（登记表里 place: 'body' 的），加正文各章右手页起 */
+export function BodySettings() {
+  const settings = useStore((s) => s.doc.settings);
+  const setSettings = useStore((s) => s.setSettings);
+  return (
+    <>
+      {SWITCH_GROUPS.map((g) => {
+        const defs = SWITCHES.filter((d) => d.group === g && d.place === 'body' && (!d.applies || d.applies(settings)));
+        if (!defs.length) return null;
+        return (
+          <div className="card" key={g}>
+            <h3>{g}</h3>
+            {defs.map((d) => <TriSwitch key={d.key} def={d} settings={settings} onChange={(v) => setSettings({ [d.key]: v } as any)} />)}
+          </div>
+        );
+      })}
+      <div className="card">
+        <h3>{tx("页面")}</h3>
+        <OpenrightSwitch orKey="mainmatter" label={tx("各章右手页起")} />
+      </div>
     </>
   );
 }

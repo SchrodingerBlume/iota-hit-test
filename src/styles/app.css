@@ -161,6 +161,9 @@ code { font-family: var(--mono); font-size: 0.92em; }
 /* 编辑 / 分栏 / 预览切换：刚露面的那一栏淡入 */
 .work, .preview { animation: fade var(--base) var(--ease); }
 .work h2 { margin: 0 0 4px; font-size: 19px; font-weight: 650; letter-spacing: 0.01em; }
+.page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.page-head h2 { margin: 0; }
+.page-tabs button { padding: 3px 12px; font-size: 12.5px; }
 .work .lead { color: var(--muted); margin: 0 0 16px; max-width: 72ch; }
 
 .preview { border-left: 1px solid var(--line); display: grid; grid-template-rows: 40px 1fr; min-height: 0; background: var(--preview-bg); position: relative; container-type: inline-size; }

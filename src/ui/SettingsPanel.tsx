@@ -35,7 +35,7 @@ export function SettingsPanel() {
             {defs.map((d) => {
               const sw = <TriSwitch key={d.key} def={d} settings={settings} onChange={(v) => setSettings({ [d.key]: v } as any)} />;
               // 全篇的右翻页总闸下面挂前置 / 正文两段各自的
-              return d.key === 'openright' ? <div key={d.key} className="page-row">{sw}<OpenrightSwitch orKey="frontmatter" label={t("前置部分")} sub /><OpenrightSwitch orKey="mainmatter" label={t("正文各章")} sub /></div> : sw;
+              return d.key === 'openright' ? <div key={d.key} className="page-row">{sw}<OpenrightSwitch orKey="frontmatter" label={t("前置部分")} sub /></div> : sw;
             })}
           </div>
         );

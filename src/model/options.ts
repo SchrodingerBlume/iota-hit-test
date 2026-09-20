@@ -101,7 +101,7 @@ export interface SwitchDef<V extends string | boolean = boolean> {
   applies?: (s: Settings) => boolean;
   group: string;
   /** 只关乎某一页的开关放到那一页去（摘要、缩略语、附录、页面设置、论文信息、论文类型），不在论文设置里列 */
-  place?: 'abstract' | 'nomenclature' | 'appendix' | 'toc' | 'cover' | 'titlepage' | 'type';
+  place?: 'abstract' | 'nomenclature' | 'appendix' | 'toc' | 'cover' | 'titlepage' | 'type' | 'body';
 }
 
 const isReport = (s: Settings) => s.stage !== 'final';
@@ -124,6 +124,7 @@ export const SWITCHES: SwitchDef<any>[] = [
     hint: t("中文在上、英文在下。规范只要求博士学位论文的图题表题中英双语"),
     choices: onOff,
     group: t("题注与编号"),
+    place: 'body',
     resolve: (s) => {
       if (isReportBody(s)) return { value: false, reason: t("{{v0}}报告一律单语", { v0: stageName[s.stage] }) };
       return s.degreeLevel === 'doctor'
@@ -137,6 +138,7 @@ export const SWITCHES: SwitchDef<any>[] = [
     hint: t("「图 1-1」并在章标题处重置，还是全文连续「图 1」"),
     choices: onOff,
     group: t("题注与编号"),
+    place: 'body',
     resolve: (s) => {
       const bySection = (s.campus === 'harbin' && s.degreeLevel === 'bachelor' && s.stage === 'proposal')
         || (s.campus === 'shenzhen' && s.degreeLevel !== 'bachelor' && s.stage === 'interim');
@@ -151,6 +153,7 @@ export const SWITCHES: SwitchDef<any>[] = [
     hint: t("与图表分开：可以「图表按章、公式连续」"),
     choices: onOff,
     group: t("题注与编号"),
+    place: 'body',
     resolve: (s) => (bodyStage(s) === 'final'
       ? { value: true, reason: t("指南 2.11：公式按章编号") }
       : { value: false, reason: t("报告连续编号 (1)") }),
@@ -161,6 +164,7 @@ export const SWITCHES: SwitchDef<any>[] = [
     hint: t("范例印的是半角；指南叙述写全角，两者矛盾，取印出来的那个"),
     choices: onOff,
     group: t("题注与编号"),
+    place: 'body',
     resolve: () => ({ value: false, reason: t("跟范例：半角括号") }),
   },
   {
@@ -169,6 +173,7 @@ export const SWITCHES: SwitchDef<any>[] = [
     hint: t("规范说分图题「可以只用中文书写」"),
     choices: onOff,
     group: t("题注与编号"),
+    place: 'body',
     resolve: () => ({ value: false, reason: t("分图题只排中文") }),
   },
   {
@@ -177,6 +182,7 @@ export const SWITCHES: SwitchDef<any>[] = [
     hint: t("Word 里「标题 1」样式上那个「段前分页」的勾"),
     choices: onOff,
     group: t("标题与页面"),
+    place: 'body',
     resolve: (s) => (isReportBody(s)
       ? { value: false, reason: t("报告的一级标题按节处理，不自动分页。") }
       : { value: true, reason: t("论文每一章另起一页") }),
@@ -197,6 +203,7 @@ export const SWITCHES: SwitchDef<any>[] = [
     hint: t("「摘  要」「绪  论」固定空一个字"),
     choices: onOff,
     group: t("标题与页面"),
+    place: 'body',
     resolve: () => ({ value: true, reason: t("两字章名一律撑开") }),
   },
   {
@@ -222,7 +229,8 @@ export const SWITCHES: SwitchDef<any>[] = [
     label: t("编号列表续行悬挂"),
     hint: t("Word 范例的「（1）……」是普通段落，续行不悬挂"),
     choices: onOff,
-    group: t("缩略语与列表"),
+    group: t("列表"),
+    place: 'body',
     resolve: () => ({ value: false, reason: t("跟范例：不悬挂") }),
   },
   {
@@ -230,7 +238,8 @@ export const SWITCHES: SwitchDef<any>[] = [
     label: t("圆点列表续行悬挂"),
     hint: t("指南没规定圆点列表；关掉就与编号列表一样排成段"),
     choices: onOff,
-    group: t("缩略语与列表"),
+    group: t("列表"),
+    place: 'body',
     resolve: () => ({ value: true, reason: t("原生的悬挂") }),
   },
   {
@@ -394,7 +403,7 @@ export function resolveSwitch<V>(def: SwitchDef<any>, s: Settings): { effective:
   return raw === 'auto' ? { effective: auto.value, auto, isAuto: true } : { effective: raw as V, auto, isAuto: false };
 }
 
-export const SWITCH_GROUPS = [t("题注与编号"), t("标题与页面"), t("缩略语与列表"), t("字体"), t("排版引擎")] as const;
+export const SWITCH_GROUPS = [t("题注与编号"), t("标题与页面"), t("列表"), t("字体"), t("排版引擎")] as const;
 
 export const defaultSettings = (): Settings => ({
   styles: {},
