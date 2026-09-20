@@ -321,7 +321,7 @@ export function App() {
           <span className="rb-leading">
             <Menu positioning="below-start">
               <MenuTrigger disableButtonEnhancement>
-                <Button appearance="primary" className="rb-file" onMouseDown={(e) => e.preventDefault()}>{tx("文件")}</Button>
+                <Button appearance="subtle" className="rb-file" onMouseDown={(e) => e.preventDefault()}>{tx("文件")}</Button>
               </MenuTrigger>
               <MenuPopover className="rb-file-menu">
                 <MenuList>
