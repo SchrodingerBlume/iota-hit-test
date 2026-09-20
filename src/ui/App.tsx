@@ -28,7 +28,7 @@ import { Preview } from './Preview';
 import { usePreviewSurface } from './PreviewEditLayer';
 import { useTheme, type ThemePref } from './theme';
 import { useLayoutPrefs } from './layout';
-import { Ribbon } from './Ribbon';
+import { Ribbon, HistoryButtons } from './Ribbon';
 import { FluentProvider, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuItemRadio, MenuDivider, Button, Tooltip, Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions } from '@fluentui/react-components';
 import { Fold } from './Fold';
 import { SettingSwitch } from './TriSwitch';
@@ -365,6 +365,7 @@ export function App() {
                 </MenuList>
               </MenuPopover>
             </Menu>
+            {view === 'editor' && <HistoryButtons />}
             {view === 'editor' && <span className="rb-proj">{doc.name}</span>}
           </span>
         ); const trailing = (

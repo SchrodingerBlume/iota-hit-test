@@ -85,7 +85,29 @@ export interface RibbonLayout {
   setMode: (m: LayoutMode) => void;
 }
 
-/** 常用符号：论文里常打的（破折号、间隔号、单位、希腊字母、上下标数字…） */
+/** 当前编辑器：最近聚焦的富文本，或预览区里正在编辑的那份 */
+function useActiveEditor() {
+  const activeKey = usePreviewSurface((s) => s.activeKey);
+  const [editor, setEditor] = useState<Editor | null>(null);
+  useEffect(() => {
+    const pick = () => setEditor(activeKey ? getEditor(activeKey) ?? null : null);
+    pick();
+    return onRegistryChange(pick);
+  }, [activeKey]);
+  useEditorTick(editor);
+  return editor && !editor.isDestroyed ? editor : null;
+}
+
+/** 撤销 / 重做：放在「文件」右边，Word 快速访问工具栏的位置 */
+export function HistoryButtons() {
+  const ed = useActiveEditor();
+  return (
+    <span className="rb-history">
+      <B title={tx("撤销 (⌘Z)")} icon={<ArrowUndo20Regular />} disabled={!ed?.can().undo()} run={() => ed!.chain().focus().undo().run()} />
+      <B title={tx("重做 (⌘⇧Z)")} icon={<ArrowRedo20Regular />} disabled={!ed?.can().redo()} run={() => ed!.chain().focus().redo().run()} />
+    </span>
+  );
+}
 
 export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonLayout; leading?: ReactNode; trailing?: ReactNode; minimal?: boolean }) {
   const activeKey = usePreviewSurface((s) => s.activeKey);
@@ -93,7 +115,6 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const section = useStore((s) => s.section);
   // 样式格子跟着当前编辑的那一节：附录里是「附录 A / A.1」
   const levels = levelLabels(settings, section === 'appendix' ? 'appendix' : 'body');
-  const [editor, setEditor] = useState<Editor | null>(null);
   const [tab, setTab] = useState<TabKey>('home');
   const [autoTable, setAutoTable] = useState(false);
   const [userCollapsed, setCollapsed] = useState<boolean>(() => { try { return localStorage.getItem(COLLAPSE_KEY) === '1'; } catch { return false; } });
@@ -106,15 +127,9 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const [tableDlg, setTableDlg] = useState<TableDialogKind | null>(null);
   const [painter, setPainter] = useState<Mark[] | null>(null);
   const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const pick = () => setEditor(activeKey ? getEditor(activeKey) ?? null : null);
-    pick();
-    return onRegistryChange(pick);
-  }, [activeKey]);
-  useEditorTick(editor);
+  const ed = useActiveEditor();
   const meta = activeKey ? getEditorMeta(activeKey) : undefined;
-  const ins = useInsertActions(editor);
-  const ed = editor && !editor.isDestroyed ? editor : null;
+  const ins = useInsertActions(ed);
   const inTable = !!ed?.isActive('table');
   const inFigure = !!ed?.isActive('figure');
   // 上下文页：光标进表格 / 选中插图时自动切过去，离开时切回（用户自己点过别的页就不再管）
@@ -347,10 +362,6 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                   <B title={tx("剪切（⌘X）")} icon={<Cut20Regular />} disabled={none || ed.state.selection.empty} run={clipboard.cut}>{tx("剪切")}</B>
                   <B title={tx("复制（⌘C）")} icon={<Copy20Regular />} disabled={none || ed.state.selection.empty} run={clipboard.copy}>{tx("复制")}</B>
                   <B title={tx("格式刷：先选中有格式的字，点它，再选中要刷的字")} icon={<PaintBrush20Regular />} on={!!painter} disabled={none} run={() => { if (painter) setPainter(null); else if (ed) { const { from, to } = ed.state.selection; const marks = from === to ? ed.state.storedMarks ?? ed.state.selection.$from.marks() : ed.state.doc.resolve(from + 1).marks(); setPainter([...marks]); } }}>{tx("格式刷")}</B>
-                </Stack>
-                <Stack>
-                  <B title={tx("撤销 (⌘Z)")} icon={<ArrowUndo20Regular />} run={() => chain().undo().run()} disabled={none || !ed.can().undo()}>{tx("撤销")}</B>
-                  <B title={tx("重做 (⌘⇧Z)")} icon={<ArrowRedo20Regular />} run={() => chain().redo().run()} disabled={none || !ed.can().redo()}>{tx("重做")}</B>
                 </Stack>
               </Group>
               <Group label={tx("字体")}>

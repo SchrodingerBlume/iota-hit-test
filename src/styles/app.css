@@ -942,6 +942,8 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .ribbon { position: relative; z-index: 20; }
 .rb-tabs { padding-top: 1px; padding-bottom: 0; }
 .rb-tabs .rb-file { padding: 2px 10px !important; min-height: 26px; height: 26px; }
+.rb-history { display: inline-flex; align-items: center; }
+.rb-history .rb-btn { min-width: 26px; height: 26px; min-height: 26px; padding: 3px; }
 .rb-tabs .rb-leading .brand-mark { width: 22px; height: 22px; }
 .rb-tablist [role=tab] { padding-top: 3px !important; padding-bottom: 3px !important; min-height: 0 !important; }
 .rb-tabs { align-items: center; }
