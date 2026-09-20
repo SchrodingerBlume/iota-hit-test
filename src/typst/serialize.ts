@@ -356,10 +356,14 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   const withArgs = (fn: string, ...xs: string[]) => { const a = xs.filter(Boolean); return a.length ? `#show: ${fn}.with(${a.join(', ')})` : `#show: ${fn}`; };
   const pageLayout = (k: string) => layoutArg(s.layout?.pages?.[k]);
   parts.push(withArgs('frontmatter', or('frontmatter'), layoutArg(s.layout?.frontmatter)));
+  // 封面、内封、目录与清单这几页预览里退回原版断行（layout: (linebreaks: none)）：封面内封的空行、字段表按模板自己的网格模拟
+  // 量高落位，在 msword 段落里量会漂；清单条目的悬挂宽是模板 measure 编号量出来的，同一个坑（章名左缘 133.05 → 135.73 → 140.64）。
+  // 这几页条目短、不折行，用模板自己的网格模拟与原版一字不差
+  const stockLayout = (k: string) => layoutArg(preview && msword(s) ? { ...(s.layout?.pages?.[k] ?? {}), linebreaks: 'none' } : s.layout?.pages?.[k]);
   const covers = (['cover', 'titlepage'] as const).filter((k) => resolvePage(doc, k).value);
   for (const k of covers) {
     const xiaoer = k === 'cover' ? s.titleEnXiaoer : s.titleEnXiaoerTitlepage;
-    parts.push(`#${k}(${[xiaoer !== 'auto' ? `title-en-xiaoer: ${tri(xiaoer)}` : '', ...localInfoArgs(doc, k), pageLayout(k)].filter(Boolean).join(', ')})`);
+    parts.push(`#${k}(${[xiaoer !== 'auto' ? `title-en-xiaoer: ${tri(xiaoer)}` : '', ...localInfoArgs(doc, k), stockLayout(k)].filter(Boolean).join(', ')})`);
   }
 
   const rich = (key: RichKey, opts: { headings: boolean; headingBase?: number }) => serializeDoc(doc[key], { ...opts, knownLabels, preview, map: { key, posOf: indexPositions(doc[key] as any) } });
@@ -374,17 +378,14 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   const nomen = nomenclature(doc, or('nomenclature'));
   if (nomen) parts.push(nomen);
 
-  // 目录与清单这几页预览里退回原版断行：条目的悬挂宽是模板 measure 编号量出来的，在 msword 段落里量会随
-  // 引擎的量法漂（章名左缘 133.05 → 135.73 → 140.64）；这几页条目短、不折行，用模板自己的网格模拟与原版一字不差
-  const listLayout = (k: string) => layoutArg(preview && msword(s) ? { ...(s.layout?.pages?.[k] ?? {}), linebreaks: 'none' } : s.layout?.pages?.[k]);
   // 目录出哪几份：模板 lang: auto 按学位（博士两份）；lang 只收一种语言，要两份就各出一次（模板按语言计次，不算重复）
   if (resolvePage(doc, 'tableOfContents').value) {
     const langs = s.tocLang === 'auto' ? [''] : s.tocLang === 'both' ? ['lang: "zh"', 'lang: "en"'] : [`lang: "${s.tocLang}"`];
-    for (const l of langs) parts.push(`#table-of-contents(${[or('tableOfContents'), l, listLayout('toc')].filter(Boolean).join(', ')})`);
+    for (const l of langs) parts.push(`#table-of-contents(${[or('tableOfContents'), l, stockLayout('toc')].filter(Boolean).join(', ')})`);
   }
-  if (resolvePage(doc, 'listOfFigures').value) parts.push(`#list-of-figures(${[or('listOfFigures'), listLayout('listOfFigures')].filter(Boolean).join(', ')})`);
-  if (resolvePage(doc, 'listOfTables').value) parts.push(`#list-of-tables(${[or('listOfTables'), listLayout('listOfTables')].filter(Boolean).join(', ')})`);
-  if (resolvePage(doc, 'listOfEquations').value) parts.push(`#list-of-equations(${[or('listOfEquations'), listLayout('listOfEquations')].filter(Boolean).join(', ')})`);
+  if (resolvePage(doc, 'listOfFigures').value) parts.push(`#list-of-figures(${[or('listOfFigures'), stockLayout('listOfFigures')].filter(Boolean).join(', ')})`);
+  if (resolvePage(doc, 'listOfTables').value) parts.push(`#list-of-tables(${[or('listOfTables'), stockLayout('listOfTables')].filter(Boolean).join(', ')})`);
+  if (resolvePage(doc, 'listOfEquations').value) parts.push(`#list-of-equations(${[or('listOfEquations'), stockLayout('listOfEquations')].filter(Boolean).join(', ')})`);
 
   // ── 主体 ──
   parts.push(withArgs('mainmatter', or('mainmatter'), layoutArg(s.layout?.mainmatter)));
