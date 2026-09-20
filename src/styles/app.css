@@ -1157,7 +1157,18 @@ body.is-resizing .preview-stage { pointer-events: none; }
 /* 只管挂在 #root 里的那个 provider——Fluent 给弹层建的传送门节点也带同一个类名，别把它撑成整页盖住内容 */
 #root > .fluent-root { height: 100%; }
 .fluent-root { background: transparent !important; color: inherit; font-family: var(--sans) !important; }
-.rb-tablist { margin: 0 8px; }
+.rb-tablist { margin: 0 8px; min-width: 0; }
+.rb-tablist .rb-tab-more { min-width: 22px !important; max-width: 22px; padding: 0 !important; height: 26px; min-height: 26px; align-self: center; margin-left: 2px; }
+.rb-style-short { display: none; }
+/* 窄屏：样式格子收成 正文 / H1…H4 / 项 那种一行小钮 */
+.ribbon { container-type: inline-size; }
+@container (max-width: 1180px) {
+  .rb-styles { gap: 2px; align-self: center; }
+  .rb-style { min-width: 34px; height: 26px; padding: 0 6px; }
+  .rb-style span, .rb-style small { display: none; }
+  .rb-style-short, .rb-style-p span, .rb-style-item span { display: block; font-size: 12.5px; font-weight: 500; font-family: var(--sans); }
+  .rb-style-item span { font-size: 12px; }
+}
 .rb-tablist .fui-Tab { padding: 8px 12px; font-size: 13.5px; }
 .rb-tab-ctx { color: var(--orange, #fc9000) !important; }
 .rb-tab-ctx.fui-Tab[aria-selected="true"]::after { background-color: var(--orange, #fc9000) !important; }

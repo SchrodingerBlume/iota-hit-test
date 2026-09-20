@@ -9,7 +9,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 import type { Editor } from '@tiptap/core';
 import type { Mark } from '@tiptap/pm/model';
 import { create } from 'zustand';
-import { TabList, Tab, Button, SplitButton, Popover, PopoverTrigger, PopoverSurface, Tooltip, Input, Checkbox, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuItemCheckbox, MenuDivider, type MenuButtonProps } from '@fluentui/react-components';
+import { TabList, Tab, Button, SplitButton, Popover, PopoverTrigger, PopoverSurface, Tooltip, Input, Checkbox, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuItemCheckbox, MenuDivider, Overflow, OverflowItem, useOverflowMenu, useIsOverflowItemVisible, type MenuButtonProps } from '@fluentui/react-components';
 import {
   ArrowUndo20Regular, ArrowRedo20Regular, TextBold20Regular, TextItalic20Regular, TextUnderline20Regular, TextStrikethrough20Regular, TextSubscript20Regular, TextSuperscript20Regular,
   Code20Regular, ClearFormatting20Regular, PaintBrush20Regular, Cut20Regular, Copy20Regular, ClipboardPaste20Regular, TextBulletListLtr20Regular, TextNumberListLtr20Regular, TextIndentDecreaseLtr20Regular,
@@ -71,6 +71,25 @@ const COLLAPSE_KEY = 'iota4web-ribbon-collapsed-v2';
 
 /** 查找栏开关，⌘F 也从这儿开 */
 export const useFindBar = create<{ open: boolean; set: (open: boolean) => void }>((set) => ({ open: false, set: (open) => set({ open }) }));
+
+/** 窄屏放不下的选项卡收在右端的 ▾ 里（Word 也是） */
+function TabOverflowMenu({ tabs, onPick }: { tabs: { key: TabKey; label: string }[]; onPick: (k: TabKey) => void }) {
+  const { ref, isOverflowing } = useOverflowMenu<HTMLButtonElement>();
+  if (!isOverflowing) return null;
+  return (
+    <Menu positioning="below-end">
+      <MenuTrigger disableButtonEnhancement>
+        <Button ref={ref} appearance="subtle" size="small" className="rb-btn rb-menu rb-tab-more" aria-label={tx("更多选项卡")} onMouseDown={(e) => e.preventDefault()} />
+      </MenuTrigger>
+      <MenuPopover><MenuList>{tabs.map((t) => <HiddenTabItem key={t.key} tab={t} onPick={onPick} />)}</MenuList></MenuPopover>
+    </Menu>
+  );
+}
+function HiddenTabItem({ tab, onPick }: { tab: { key: TabKey; label: string }; onPick: (k: TabKey) => void }) {
+  const visible = useIsOverflowItemVisible(tab.key);
+  if (visible) return null;
+  return <MenuItem onClick={() => onPick(tab.key)}>{tab.label}</MenuItem>;
+}
 
 /** 一个分组：一排东西，底下一行小字组名（Word 的样子） */
 function Group({ label, children }: { label: string; children: ReactNode }) {
@@ -253,6 +272,20 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
     return () => document.removeEventListener('mousedown', onDown);
   }, [peek]);
   const afterCommand = useCallback(() => { if (collapsed) setPeek(false); setPop(null); }, [collapsed]);
+  const shownTabs = TABS.filter((t) => (t.key !== 'table' || inTable) && (t.key !== 'figure' || inFigure));
+  // 选项卡那一栏能有多宽：整行减去左边那几个钮、收起钮、右端状态那一串；放不下的选项卡收进 ▾
+  const [tabsMax, setTabsMax] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    const row = root.current?.querySelector<HTMLElement>('.rb-tabs');
+    if (!row) return;
+    const w = (sel: string) => row.querySelector<HTMLElement>(sel)?.getBoundingClientRect().width ?? 0;
+    const measure = () => { const max = Math.floor(row.clientWidth - w('.rb-leading') - w('.rb-collapse') - w('.rb-pin') - w('.rb-trailing') - 44); setTabsMax((prev) => (Math.abs((prev ?? -1) - max) < 1 ? prev : max)); };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(row);
+    for (const sel of ['.rb-leading', '.rb-trailing']) { const el = row.querySelector(sel); if (el) ro.observe(el); }
+    return () => ro.disconnect();
+  }, [minimal]);
   // 菜单关掉时 Fluent 会把焦点还给菜单钮，改完字得把焦点送回编辑器
   const pickCase = (k: CaseKind) => refocusPreviewAfter(() => { if (!ed) return; changeCase(ed, k); setTimeout(() => ed.view.focus(), 0); });
   // 格式刷：记下选区的格式，下一次选中一段就刷上去
@@ -375,11 +408,16 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
         <div className="rb-tabs-left">
           {leading}
           {!minimal && (
-            <TabList selectedValue={bodyVisible ? tab : ''} onTabSelect={(_, d) => onTab(d.value as TabKey)} size="small" appearance="subtle" className="rb-tablist">
-              {TABS.filter((t) => (t.key !== 'table' || inTable) && (t.key !== 'figure' || inFigure)).map((t) => (
-                <Tab key={t.key} value={t.key} className={CTX_TABS.includes(t.key) ? 'rb-tab-ctx' : ''} onMouseDown={(e) => e.preventDefault()} onDoubleClick={() => toggleCollapsed(!collapsed)}>{t.label}</Tab>
-              ))}
-            </TabList>
+            <Overflow minimumVisible={1} padding={0}>
+              <TabList selectedValue={bodyVisible ? tab : ''} onTabSelect={(_, d) => onTab(d.value as TabKey)} size="small" appearance="subtle" className="rb-tablist" style={{ maxWidth: tabsMax }}>
+                {shownTabs.map((t) => (
+                  <OverflowItem key={t.key} id={t.key} priority={t.key === tab ? 2 : 1}>
+                    <Tab value={t.key} className={CTX_TABS.includes(t.key) ? 'rb-tab-ctx' : ''} onMouseDown={(e) => e.preventDefault()} onDoubleClick={() => toggleCollapsed(!collapsed)}>{t.label}</Tab>
+                  </OverflowItem>
+                ))}
+                <TabOverflowMenu tabs={shownTabs} onPick={onTab} />
+              </TabList>
+            </Overflow>
           )}
           {collapsed && peek && !shortScreen && <Button size="small" appearance="primary" icon={<Pin20Regular />} className="rb-pin" onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(false)}>{tx("固定")}</Button>}
           {!minimal && !shortScreen && (
@@ -468,7 +506,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                 <div className="rb-styles">
                   <button type="button" className={`rb-style rb-style-p ${ed?.isActive('paragraph') ? 'on' : ''}`} disabled={none} title={tx("正文段落")} onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(() => chain().setParagraph().run())} onContextMenu={(e) => { e.preventDefault(); useBlockMenu.getState().openStyle(0); }}><span>{tx("正文")}</span></button>
                   {levels.map(({ level: l, name, sample }) => (
-                    <button key={l} type="button" className={`rb-style rb-style-h${l} ${ed?.isActive('heading', { level: l }) ? 'on' : ''}`} disabled={none || !headings} title={tx("{{v0}}标题（{{l}} 级）", { v0: name || tx("{{l}} 级", { l: l }), l: l })} onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(() => chain().toggleHeading({ level: l as 1 | 2 | 3 | 4 }).run())} onContextMenu={(e) => { e.preventDefault(); useBlockMenu.getState().openStyle(l); }}><span>{sample}</span><small>{name || tx("{{l}} 级", { l: l })}</small></button>
+                    <button key={l} type="button" className={`rb-style rb-style-h${l} ${ed?.isActive('heading', { level: l }) ? 'on' : ''}`} disabled={none || !headings} title={tx("{{v0}}标题（{{l}} 级）", { v0: name || tx("{{l}} 级", { l: l }), l: l })} onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(() => chain().toggleHeading({ level: l as 1 | 2 | 3 | 4 }).run())} onContextMenu={(e) => { e.preventDefault(); useBlockMenu.getState().openStyle(l); }}><span>{sample}</span><small>{name || tx("{{l}} 级", { l: l })}</small><b className="rb-style-short">H{l}</b></button>
                   ))}
                   <button type="button" className={`rb-style rb-style-item ${ed?.isActive('orderedList') ? 'on' : ''}`} disabled={none} title={tx("项：款底下那一级——指南说是「（1）」题序、内容接排的段落写法，不是标题；用编号列表")} onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(() => chain().toggleOrderedList().run())}><span>（1）</span><small>{tx("项")}</small></button>
                 </div>
