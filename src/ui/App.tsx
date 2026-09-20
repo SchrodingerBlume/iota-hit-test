@@ -43,7 +43,7 @@ const NAV: { key: Section; label: string; group: string; k?: string }[] = [
   { key: 'settings', label: tx("论文设置"), group: tx("设置") },
   { key: 'abstract', label: tx("摘要"), group: tx("前置") },
   { key: 'nomenclature', label: tx("符号与缩略语"), group: tx("前置") },
-  { key: 'toc', label: tx("目录与索引"), group: tx("前置") },
+  { key: 'toc', label: tx("目录"), group: tx("前置") },
   { key: 'body', label: tx("正文"), group: tx("主体") },
   { key: 'conclusion', label: tx("结论"), group: tx("主体") },
   { key: 'bibliography', label: tx("参考文献"), group: tx("后置") },

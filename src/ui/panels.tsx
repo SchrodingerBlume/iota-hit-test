@@ -380,7 +380,7 @@ export function PageSettings({ pages, title, children }: { pages: (keyof Pages)[
 export function TocPanel() {
   return (
     <>
-      <h2>{tx("目录与索引")}</h2>
+      <h2>{tx("目录")}</h2>
       <p className="lead">{tx("目录规范要求必有；三份索引规范没提，默认不排。条目都从正文里自动收，这里只管排不排、从哪一页起。")}</p>
       <PageSettings pages={['tableOfContents', 'listOfFigures', 'listOfTables', 'listOfEquations']} />
     </>
