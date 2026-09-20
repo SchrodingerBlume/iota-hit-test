@@ -5,6 +5,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { t as tx } from '../i18n';
+import { textWidth } from './textWidth';
 
 const SEP = /[;；,，\n]/;
 
@@ -33,6 +34,8 @@ export function TagInput({ value, onChange, placeholder, dataInfo }: { value: st
     requestAnimationFrame(() => input.current?.focus());
   };
   useEffect(() => { if (edit) { editRef.current?.focus(); editRef.current?.select(); } }, [edit?.i]);
+  const [editW, setEditW] = useState(24);
+  useLayoutEffect(() => { if (edit && editRef.current) setEditW(Math.max(24, Math.ceil(textWidth(editRef.current, edit.text)) + 16)); }, [edit?.text, edit?.i]);
   useEffect(() => { if (sel !== null && sel >= value.length) setSel(value.length ? value.length - 1 : null); }, [value.length, sel]);
 
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -84,7 +87,7 @@ export function TagInput({ value, onChange, placeholder, dataInfo }: { value: st
         if (edit && edit.i === i) {
           return (
             <span key={t} className="tag-item is-editing" ref={(el) => { if (el) items.current.set(t, el); else items.current.delete(t); }}>
-              <input ref={editRef} value={edit.text} size={Math.max(2, edit.text.length + 1)} onChange={(e) => setEdit({ i, text: e.target.value })} onBlur={() => finishEdit(true)}
+              <input ref={editRef} value={edit.text} style={{ width: editW }} onChange={(e) => setEdit({ i, text: e.target.value })} onBlur={() => finishEdit(true)}
                 onKeyDown={(e) => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); finishEdit(true); } else if (e.key === 'Escape') { e.preventDefault(); finishEdit(false); } }} />
             </span>
           );
