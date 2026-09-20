@@ -16,5 +16,5 @@ export const INLINE_FONTS: { key: FontRole; label: string }[] = [
   { key: 'songti', label: t("宋体") }, { key: 'heiti', label: t("黑体") }, { key: 'kaishu', label: t("楷体") }, { key: 'fangsong', label: t("仿宋") },
 ];
 
-/** 各级段落模板默认的字号（写作指南那张表），增大 / 减小字号从这儿起步 */
+/** 各级段落的模板默认字号，也是增大/减小字号命令的起点。 */
 export const BLOCK_SIZE: Record<string, string> = { paragraph: 'xiaosi', h1: 'xiaoer', h2: 'xiaosan', h3: 'sihao', h4: 'xiaosi' };

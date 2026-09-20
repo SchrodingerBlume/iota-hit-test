@@ -46,9 +46,9 @@ const MARKS: Record<string, () => string> = {
 };
 const INSERT: Record<string, () => string> = {
   table: () => t("插入表格"), tableFigure: () => t("插入表格"), tableRow: () => t("插入行"), tableCell: () => t("插入列"), tableHeader: () => t("插入列"),
-  figure: () => t("插入图片"), equation: () => t("公式插入"), mathInline: () => t("公式插入"), eqdenote: () => t("插入符号说明"),
+  figure: () => t("插入图片"), equation: () => t("插入公式"), mathInline: () => t("插入公式"), eqdenote: () => t("插入符号说明"),
   pageBreak: () => t("分页符"), hardBreak: () => t("换行符"), footnote: () => t("插入脚注"), cite: () => t("插入引文"), ref: () => t("交叉引用"),
-  idx: () => t("标记索引项"), abbr: () => t("插入缩略语"), ccwd: () => t("插入符号"), algorithm: () => t("插入伪代码"), codeFigure: () => t("插入代码"), codeBlock: () => t("插入代码"),
+  idx: () => t("标记索引项"), abbr: () => t("插入缩略语"), ccwd: () => t("插入符号"), algorithm: () => t("插入算法"), codeFigure: () => t("插入代码块"), codeBlock: () => t("插入代码块"),
   bulletList: () => t("项目符号"), orderedList: () => t("编号"), listItem: () => t("项目符号和编号"), heading: () => t("样式"), paragraph: () => t("样式"), blockquote: () => t("段落格式"),
 };
 const REMOVE: Record<string, () => string> = { table: () => t("删除表格"), tableFigure: () => t("删除表格"), tableRow: () => t("删除行"), tableCell: () => t("删除列"), tableHeader: () => t("删除列") };

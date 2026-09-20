@@ -1,7 +1,4 @@
-// 从编辑器的 JSON 直接生成 Word 文档（docx 库）。样式表与版面不在这儿写数：导出前编一份只有设定的小文档问模板
-// （template.ts 的 queryFacts），模板解出来的样式字典、页面设置逐键翻成 Word 的属性——模板的键名本来就是照 Word
-// 对话框起的。正文不经过 Typst；编号用 numbering.ts 算，参考文献用 GB/T 7714 的 CSL 排。封面、内封、答辩决议、声明这些表单页在 pages.ts，
-// 位置照模板排出来的 PDF 逐行量的。页序照模板：封面、内封（中、英）、摘要、Abstract、符号及缩略语、目录、正文、结论、参考文献、附录、成果、答辩决议、声明、致谢、简历
+// 直接从编辑器 JSON 生成 Word 文档。样式与页面参数由 template.ts 向 iota-hit 查询后映射为 OOXML。
 import {
   Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, TabStopType, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle, SectionType, Bookmark,
   FootnoteReferenceRun, TableOfContents, PageBreak, PageNumber, Header, Footer, NumberFormat, CommentRangeStart, CommentRangeEnd, CommentReference,
@@ -609,8 +606,8 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
 /** 文献条目悬挂几个字：最宽的号「［12］」——全角方括号一个字一个、数字半个字（英文档半角方括号各三分之一）；模板（omni）是量号的宽 */
 const hangingChars = (n: number, lang: 'zh' | 'en') => Math.round(((lang === 'zh' ? 2 : 0.67) + 0.5 * String(n).length) * 100) / 100;
 
-/** 样式表整张换成从模板翻出来的：docx 库自带的那几条（标题 1～6 带颜色、脚注、超链接……）里同名的删掉，
- *  没有的（超链接、脚注引用、批注）留着。settings.xml 补字符间距控制 */
+/** 使用模板样式替换 docx 同名默认项，保留模板未提供的超链接、脚注引用和批注样式；
+ *  同时在 settings.xml 中补充字符间距控制。 */
 async function postprocess(blob: Blob, W: ReturnType<typeof wordLinebreakOptions>, sx: { docDefaults: string; styles: string[] }): Promise<Blob> {
   const zip = await JSZip.loadAsync(blob);
   const path = 'word/styles.xml';

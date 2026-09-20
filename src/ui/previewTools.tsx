@@ -1,5 +1,4 @@
-// 预览栏上的小件：页码（可跳页）、字数（点开是 Word 的「字数统计」）、缩放菜单（Word 的「缩放」对话框那几档）、
-// 预览底色（默认 / 日间 / 夜间 / 护眼 / 羊皮纸）
+// 页面视图状态栏：页码、字数统计、缩放和页面颜色。
 import { useEffect, useMemo, useRef, useState, type ReactElement, type Ref } from 'react';
 import { create } from 'zustand';
 import { Popover, PopoverTrigger, PopoverSurface, Slider, Tooltip } from '@fluentui/react-components';
@@ -21,7 +20,7 @@ export function PageIndicator({ current, total, onJump }: { current: number; tot
       {tx("第")}{' '}
       {editing
         ? <input ref={input} className="pv-page-input" value={val} onChange={(e) => setVal(e.target.value.replace(/\D/g, ''))} onBlur={commit} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } else if (e.key === 'Escape') setEditing(false); }} style={{ width: `${Math.max(2, String(total).length + 1)}ch` }} />
-        : <button type="button" className="pv-link" title={tx("点击跳到指定页")} onClick={start}>{current}</button>}
+        : <button type="button" className="pv-link" title={tx("单击可转到指定页")} onClick={start}>{current}</button>}
       {' '}{tx("页，共 {{n}} 页", { n: total })}
     </span>
   );
@@ -41,7 +40,7 @@ export function WordCountBadge({ pages, children }: { pages: number; children?: 
       </PopoverTrigger>
       <PopoverSurface className="pv-pop">
         <div className="pv-pop-title">{tx("字数统计")}</div>
-        <div className="pv-pop-sub">{tx("统计信息:")}</div>
+        <div className="pv-pop-sub">{tx("统计信息：")}</div>
         {rows.map(([k, v]) => <div key={k} className="pv-stat"><span>{k}</span><b>{fmt(v)}</b></div>)}
       </PopoverSurface>
     </Popover>
@@ -70,7 +69,7 @@ export function ZoomMenu({ zoom, zoomTo, fitPage, labelRef, children }: { zoom: 
           <button type="button" className="pv-row" onClick={() => { fitPage(); setOpen(false); }}>{tx("整页")}</button>
         </div>
         <div className="pv-zoom-pct">
-          <span>{tx("百分比:")}</span>
+          <span>{tx("百分比：")}</span>
           <input className="pv-page-input" value={val} onChange={(e) => setVal(e.target.value.replace(/\D/g, ''))} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } }} style={{ width: '4ch' }} />%
           <button type="button" className="btn btn-xs" onClick={commit}>{tx("确定")}</button>
         </div>

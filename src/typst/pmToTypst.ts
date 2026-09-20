@@ -424,7 +424,7 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
       const unnumbered = n.attrs?.numbered === false;
       const label = unnumbered ? '' : labelOf(n.attrs, 'eq');
       const body = n.attrs?.mode === 'typst' ? `$ ${src} $` : `#mitex(${backtick(src)})`;
-      // 不编号：模板给所有块公式编号，要在局部把 numbering 关掉
+      // 模板默认给行间公式编号；未编号公式需在局部禁用 numbering。
       if (unnumbered) return tag(opts, n, 'node', `#[#set math.equation(numbering: none)\n${body}]`);
       return tag(opts, n, 'node', body) + (label ? ` <${label}>` : '');
     }

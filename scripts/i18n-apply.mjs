@@ -1,4 +1,4 @@
-// 把 zh.ts 里润色过的值（值 ≠ 键）反写进代码的 t("…")，再重跑抽取让键值归一
+// 将 zh.ts 中值不等于键的词条写回 t("…")，然后重新生成词条表。
 //   node scripts/i18n-apply.mjs
 import fs from 'node:fs';
 import path from 'node:path';

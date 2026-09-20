@@ -11,8 +11,8 @@ export class Crash extends Component<{ children: ReactNode }, { error: Error | n
     if (!e) return this.props.children;
     return (
       <div className="crash">
-        <h2>{t("界面出错了")}</h2>
-        <p>{t("工程已存在本机，刷新页面即可继续。把下面这段发给开发者能帮忙定位：")}</p>
+        <h2>{t("应用发生错误")}</h2>
+        <p>{t("工程已保存在当前浏览器中。请刷新页面后继续；如问题再次出现，请将以下信息发送给开发者：")}</p>
         <pre>{`${e.name}: ${e.message}\n${e.stack ?? ''}`}</pre>
         <button type="button" className="btn btn-primary" onClick={() => location.reload()}>{t("刷新页面")}</button>
       </div>

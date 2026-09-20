@@ -69,7 +69,7 @@ export function normalizeDoc(raw: Partial<ThesisDoc>): ThesisDoc {
   delete (doc.settings as any).fakeItalic;
   doc.info = { ...base.info, ...(raw.info ?? {}) };
   doc.pages = { ...base.pages, ...(raw.pages ?? {}) };
-  // 旧工程：一个总开关管符号表与缩略语表，拆开；关着的旧布尔照旧，开着的（原来是默认）改成 auto
+  // 迁移旧工程：将符号表与缩略语表总开关拆分；false 保留，true 转为 auto。
   const rp: any = raw.pages ?? {};
   if (rp.symbolsPage === undefined && rp.nomenclature === false) { doc.pages.symbolsPage = false; doc.pages.abbreviationsPage = false; }
   for (const k of ['declarations', 'appendix', 'symbolsPage', 'abbreviationsPage', 'nomenclatureMerged'] as (keyof Pages)[]) if (rp[k] === true) (doc.pages as any)[k] = 'auto';

@@ -188,7 +188,7 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
     if (containerRef.current) { relayoutPages(containerRef.current, perRow); setRenderTick((t) => t + 1); }
   }, [perRow]);
 
-  // 触屏：两指捏合缩放（浏览器自己的页面缩放被 touch-action 关掉了）
+  // 触屏使用双指缩放；touch-action 已禁用浏览器页面缩放。
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -331,17 +331,17 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
         <button type="button" className="btn btn-xs preview-refresh" title={tx("重新排版当前文档")} disabled={refreshDisabled || status !== 'ready' || compiling} onMouseDown={(e) => e.preventDefault()} onClick={onRefresh}><RefreshCw /><span>{compiling ? tx("正在刷新…") : tx("刷新预览")}</span></button>
         {status === 'ready' && lastMs !== null && pages > 0 && <span className="page-status"><PageIndicator current={Math.min(curPage, pages)} total={pages} onJump={jumpToPage} /></span>}
         {status === 'ready' && lastMs !== null && <span className="page-status"><WordCountBadge pages={pages} /></span>}
-        {status === 'ready' && errors.length > 0 && <span className="err-badge" title={tx("下面列了出错的位置")}>{errors.length} {' '}{tx("个错误")}</span>}
+        {status === 'ready' && errors.length > 0 && <span className="err-badge" title={tx("错误位置如下")}>{errors.length} {' '}{tx("个错误")}</span>}
         <span className="spacer" />
         <BgMenu />
         <span className="join zoom-tools">
-          <button type="button" className="btn btn-xs btn-icon" title={tx("缩小（触控板捏合、⌘/Ctrl + 滚轮也行）")} onClick={() => zoomBy(1 / 1.1)}><ZoomOut /></button>
+          <button type="button" className="btn btn-xs btn-icon" title={tx("缩小（也可使用触控板手势或 ⌘/Ctrl + 滚轮）")} onClick={() => zoomBy(1 / 1.1)}><ZoomOut /></button>
           <ZoomMenu zoom={zoom} zoomTo={zoomTo} fitPage={fitPage} labelRef={zoomLabelRef} />
-          <button type="button" className="btn btn-xs btn-icon" title={tx("放大（触控板捏合、⌘/Ctrl + 滚轮也行）")} onClick={() => zoomBy(1.1)}><ZoomIn /></button>
+          <button type="button" className="btn btn-xs btn-icon" title={tx("放大（也可使用触控板手势或 ⌘/Ctrl + 滚轮）")} onClick={() => zoomBy(1.1)}><ZoomIn /></button>
           <button type="button" className="btn btn-xs btn-icon" title={tx("页宽")} onClick={() => zoomTo(1)}><Maximize2 /></button>
-          <button type="button" className="btn btn-xs btn-icon" title={tx("整页：一页正好放进视口")} onClick={fitPage}><Minimize2 /></button>
+          <button type="button" className="btn btn-xs btn-icon" title={tx("整页：在窗口中显示一整页")} onClick={fitPage}><Minimize2 /></button>
         </span>
-        <span className="join page-layout-tools" title={tx("每行几页（Word 的「多页」视图）")}>
+        <span className="join page-layout-tools" title={tx("设置多页视图中每行显示的页数")}>
           {([1, 2, 3] as const).map((n) => <button key={n} type="button" className={`btn btn-xs per-row ${perRow === n ? 'on' : ''}`} title={tx("每行 {{n}} 页", { n: n })} onClick={() => setPerRow(n)}>{n}</button>)}
         </span>
         <div className="preview-progress" aria-hidden />
@@ -359,7 +359,7 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
           <div className="boot">
             <h3>{tx("排版引擎启动失败")}</h3>
             <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{fatal}</pre>
-            <div className="muted">{tx("重新加载页面后再试。")}</div>
+            <div className="muted">{tx("请重新加载页面后重试。")}</div>
           </div>
         )}
         {status === 'ready' && shown.length > 0 && (
@@ -381,7 +381,7 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
           </div>
         )}
         {renderError && <div className="diag err" style={{ marginBottom: 12, padding: 8 }}>{tx("渲染失败：")}{renderError}</div>}
-        {status === 'ready' && !artifact && !compiling && !errors.length && <div className="preview-empty">{tx("还没有内容")}</div>}
+        {status === 'ready' && !artifact && !compiling && !errors.length && <div className="preview-empty">{tx("暂无内容")}</div>}
         {/* 渲染器会整个改写 preview-doc 的内容，编辑层只能做它的兄弟盖在上面 */}
         <div ref={canvasRef} className="preview-canvas">
           <div ref={stageRef} className="preview-stage" style={{ width: '100%' }}>

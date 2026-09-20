@@ -31,15 +31,15 @@ function HeadingView({ node, updateAttributes, editor, getPos }: NodeViewProps) 
   return (
     <NodeViewWrapper className={`hd hd-${level} ${en ? 'has-en' : ''} ${numbered ? '' : 'is-unnumbered'}`} data-level={level} onContextMenu={onContextMenu}>
       <div className="hd-row">
-        {numbered && <span className="hd-num" contentEditable={false} title={t("{{levelName}}标题（{{level}} 级）· 编号按模板规则算，预览为准", { levelName: levelName, level: level })}>{num ?? ''}</span>}
+        {numbered && <span className="hd-num" contentEditable={false} title={t("{{levelName}}标题（{{level}} 级）", { levelName: levelName, level: level })}>{num ?? ''}</span>}
         <NodeViewContent className="hd-zh" />
-        <button type="button" className={`hd-toggle ${numbered ? '' : 'on'}`} contentEditable={false} disabled={!editable} title={numbered ? t("这条标题不编号（如「引言」「结束语」这类）") : t("恢复编号")} onMouseDown={(e) => e.preventDefault()} onClick={() => updateAttributes({ numbered: !numbered })}><Hash /></button>
+        <button type="button" className={`hd-toggle ${numbered ? '' : 'on'}`} contentEditable={false} disabled={!editable} title={numbered ? t("不为此标题编号，例如“引言”或“结束语”") : t("恢复编号")} onMouseDown={(e) => e.preventDefault()} onClick={() => updateAttributes({ numbered: !numbered })}><Hash /></button>
       </div>
       <div className="hd-en" contentEditable={false}>
         <input
           data-attr="en"
           value={en}
-          placeholder={t("English title（博士双语目录用，可空）")}
+          placeholder={t("英文标题（用于博士双语目录，可留空）")}
           disabled={!editable}
           onChange={(e) => updateAttributes({ en: e.target.value })}
           onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}

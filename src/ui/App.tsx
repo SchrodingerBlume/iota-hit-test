@@ -260,7 +260,7 @@ export function App() {
     try {
       const r = await exportPdf(serializeProject(doc).main);
       if (r.pdf) download(`${doc.info.title.split('\n')[0] || tx("论文")}.pdf`, r.pdf, 'application/pdf');
-      else alert(tx("导出失败：") + r.diagnostics.map((d) => d.message).join('\n'));
+      else alert(tx("无法导出 PDF：") + r.diagnostics.map((d) => d.message).join('\n'));
     } finally { setBusy(null); }
   };
   const onSaveProject = async () => {
@@ -297,20 +297,20 @@ export function App() {
       case 'abstract': return <AbstractPanel />;
       case 'nomenclature': return <NomenclaturePanel />;
       case 'body': return <RichSection title={tx("正文")} richKey="body" headings placeholder={tx("输入正文…")} settings={<BodySettings />} />;
-      case 'conclusion': return <RichSection title={tx("结论")} richKey="conclusion" headings={false} extra={<div className="card"><OpenrightSwitch orKey="conclusion" label={tx("右手页起")} /></div>} />;
+      case 'conclusion': return <RichSection title={tx("结论")} richKey="conclusion" headings={false} extra={<div className="card"><OpenrightSwitch orKey="conclusion" label={tx("从奇数页开始")} /></div>} />;
       case 'bibliography': return <BibPanel which="bibliography" />;
-      case 'appendix': return <RichSection title={tx("附录")} richKey="appendix" headings placeholder={tx("输入附录…")} settings={<><PageSettings pages={['appendix']}><SettingSwitch k="appendixNumbering" /></PageSettings><p className="lead">{tx("题注编号、标题、列表那几组开关正文与附录共用，在「正文 → 设置」里。")}</p></>} />;
+      case 'appendix': return <RichSection title={tx("附录")} richKey="appendix" headings placeholder={tx("输入附录…")} settings={<PageSettings pages={['appendix']}><SettingSwitch k="appendixNumbering" /></PageSettings>} />;
       case 'achievements': return <BibPanel which="achievements" />;
       case 'defense': return <DefensePanel />;
       case 'declarations': return <DeclarationsPanel />;
-      case 'acknowledgement': return <RichSection title={tx("致谢")} richKey="acknowledgement" headings={false} blocks={false} extra={<div className="card"><OpenrightSwitch orKey="acknowledgement" label={tx("右手页起")} /></div>} />;
+      case 'acknowledgement': return <RichSection title={tx("致谢")} richKey="acknowledgement" headings={false} blocks={false} extra={<div className="card"><OpenrightSwitch orKey="acknowledgement" label={tx("从奇数页开始")} /></div>} />;
       case 'index': return <IndexPanel />;
       case 'resume': return <RichSection title={tx("个人简历")} richKey="resume" headings={false} blocks={false} extra={<PageSettings pages={['resume']} />} />;
     }
   })();
 
   const dot = compile.status === 'error' ? 'err' : compile.status === 'booting' || compile.compiling ? 'busy' : 'ok';
-  const statusText = compile.status === 'booting' ? tx("正在准备预览…") : compile.status === 'error' ? tx("预览不可用") : busy ?? (compile.compiling ? tx("正在更新预览…") : compile.diagnostics.some((d) => d.severity === 'error') ? tx("排版失败") : compile.lastMs !== null ? tx("预览已更新（{{s}} s）", { s: (compile.lastMs / 1000).toFixed(1) }) : tx("预览已更新"));
+  const statusText = compile.status === 'booting' ? tx("正在准备预览…") : compile.status === 'error' ? tx("预览不可用") : busy ?? (compile.compiling ? tx("正在更新预览…") : compile.diagnostics.some((d) => d.severity === 'error') ? tx("排版失败") : compile.lastMs !== null ? tx("预览已更新（{{s}} 秒）", { s: (compile.lastMs / 1000).toFixed(1) }) : tx("预览已更新"));
   const GROUP_ICON: Record<string, React.ReactNode> = { 设置: <SlidersHorizontal />, 前置: <BookText />, 主体: <PenLine />, 后置: <Library /> };
 
   return (
@@ -322,10 +322,10 @@ export function App() {
         {(() => { const canExportPdf = hasDocument && compile.status === 'ready' && !busy; const leading = (
           <span className="rb-leading">
             {view === 'editor' && (<>
-              <Tooltip content={tx("主页")} relationship="label" withArrow positioning="below">
+              <Tooltip content={tx("返回主页")} relationship="label" withArrow positioning="below">
                 <Button appearance="subtle" size="small" className="rb-btn" icon={<Home20Regular />} onMouseDown={(e) => e.preventDefault()} onClick={() => setView('projects')} />
               </Tooltip>
-              <Tooltip content={tx("保存：下载副本（.iota.json）")} relationship="label" withArrow positioning="below">
+              <Tooltip content={tx("下载副本（.iota.json）")} relationship="label" withArrow positioning="below">
                 <Button appearance="subtle" size="small" className="rb-btn" icon={<Save20Regular />} disabled={!hasDocument} onMouseDown={(e) => e.preventDefault()} onClick={() => void onSaveProject()} />
               </Tooltip>
               <HistoryButtons />
@@ -368,11 +368,11 @@ export function App() {
             </Menu>
             <Menu positioning="below-end">
               <MenuTrigger disableButtonEnhancement>
-                <button type="button" className="brand-btn" title={tx("iota-hit · 关于")}><Logo size={30} /></button>
+                <button type="button" className="brand-btn" title={tx("iota4web · 关于")}><Logo size={30} /></button>
               </MenuTrigger>
               <MenuPopover>
                 <MenuList>
-                  <MenuItem icon={<Info20Regular />} onClick={() => setAbout(true)}>{tx("关于 iota-hit")}</MenuItem>
+                  <MenuItem icon={<Info20Regular />} onClick={() => setAbout(true)}>{tx("关于 iota4web")}</MenuItem>
                   <MenuItem onClick={() => window.open('https://github.com/SchrodingerBlume/iota-hit-test', '_blank', 'noopener')}>GitHub</MenuItem>
                 </MenuList>
               </MenuPopover>
@@ -417,12 +417,12 @@ export function App() {
                 <DialogTitle><span className="about-title"><Logo size={40} />iota-hit</span></DialogTitle>
                 <DialogContent>
                   <p>{tx("哈尔滨工业大学学位论文在线编辑器，使用 iota-hit 模板排版。预览引擎基于 Typst 0.15.1，并采用接近 Microsoft Word 的中文断行规则。全部排版均在浏览器中完成。")}</p>
-                  <p>{tx("字体：Noto Serif / Sans CJK SC、FandolKai、TeX Gyre Termes / Heros、DejaVu Sans Mono；也可读本机字体切到 Windows / macOS 档。")}</p>
+                  <p>{tx("内置 Noto CJK、FandolKai、TeX Gyre 和 DejaVu Sans Mono 字体；也可读取本机字体并使用 Windows 或 macOS 字体方案。")}</p>
                   <p className="muted">{tx("文档和图片仅保存在当前浏览器中。请定期选择“文件 → 下载副本”进行备份。")}</p>
                   <p className="muted">{tx("导出 Word 时的参考文献由 citeproc-js（Frank Bennett，CPAL 许可）按 GB/T 7714 排版。")}</p>
                   <p className="muted">{tx("Typst 是 Typst GmbH 的商标；本站与 Typst GmbH、typst.ts 及各项目作者无关。随站分发的软件、字体、Typst 包的版权与许可证全文见")}<a href={`${import.meta.env.BASE_URL}licenses.txt`} target="_blank" rel="noopener">{tx("开源许可与声明")}</a>{tx("。")}</p>
                 </DialogContent>
-                <DialogActions><Button appearance="primary" onClick={() => setAbout(false)}>{tx("好")}</Button></DialogActions>
+                <DialogActions><Button appearance="primary" onClick={() => setAbout(false)}>{tx("确定")}</Button></DialogActions>
               </DialogBody>
             </DialogSurface>
           </Dialog>

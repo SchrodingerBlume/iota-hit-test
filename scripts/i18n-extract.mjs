@@ -1,4 +1,4 @@
-// 把 src 里的中文界面文字换成 t("原文")，原文收进 src/i18n/zh.ts；已润色的值保留
+// 将 src 中的中文界面文字包装为 t("原文")，并汇总到 src/i18n/zh.ts。
 //   node scripts/i18n-extract.mjs          只统计，跳过的写到 scripts/i18n-skipped.txt
 //   node scripts/i18n-extract.mjs --write  改代码、重写 zh.ts
 // 用 ts5（typescript@5）的 API：typescript@7 没有 JS 端的编译器 API
@@ -97,7 +97,7 @@ const byFile = new Map();
 for (const [k, f] of dict) (byFile.get(f) ?? byFile.set(f, []).get(f)).push(k);
 const old = new Map();
 try { for (const m of fs.readFileSync(path.join(ROOT, 'i18n', 'zh.ts'), 'utf8').matchAll(/^  ("(?:[^"\\]|\\.)*"): ("(?:[^"\\]|\\.)*"),$/gm)) old.set(JSON.parse(m[1]), JSON.parse(m[2])); } catch { /* 还没有 */ }
-let z = `// 全站界面文字。左边是代码里的原文，改右边的值界面就变；{{name}} 是代入的变量，照抄\n// 润色：改右边的值，再跑 node scripts/i18n-apply.mjs，改后的文字会反写回代码、键值归一\n// 生成自 scripts/i18n-extract.mjs；新增文字直接在代码里写 t("…")，再跑一次抽取即可\nconst zh: Record<string, string> = {\n`;
+let z = `// 由 scripts/i18n-extract.mjs 生成。{{name}} 表示插值变量。\n// 修改词条值后运行 scripts/i18n-apply.mjs；新增界面文字请在源码中使用 t("…")。\nconst zh: Record<string, string> = {\n`;
 for (const [f, keys] of byFile) { z += `  // ── ${f}\n`; for (const k of keys) z += `  ${JSON.stringify(k)}: ${JSON.stringify(old.get(k) ?? k)},\n`; }
 z += '};\nexport default zh;\n';
 if (WRITE) fs.writeFileSync(path.join(ROOT, 'i18n', 'zh.ts'), z);

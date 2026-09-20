@@ -1,4 +1,4 @@
-// 编辑标记开着时给每个空格套一层 span.ws，样式表在上面画 Word 那样的「·」
+// 启用编辑标记时，以 span.ws 标记空格并显示中点。
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';

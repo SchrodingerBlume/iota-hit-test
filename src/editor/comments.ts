@@ -1,6 +1,5 @@
-// 批注（Word 的「审阅 → 新建批注」）：正文里用 comment 标记（@sereneinserenade/tiptap-comment-extension）
-// 圈出一段，批注本体存在工程里（doc.comments），随 .iota.json 一起走——老师导入、写批注、导出，
-// 学生再导入就看得见。这里是界面状态：面板开没开、当前是哪条、审阅者叫什么。
+// 批注范围使用 comment 标记，内容保存在 doc.comments 中并随工程文件导入、导出。
+// 此状态存储负责窗格可见性、当前批注和审阅者姓名。
 import { create } from 'zustand';
 
 const AUTHOR_KEY = 'iota4web-reviewer';

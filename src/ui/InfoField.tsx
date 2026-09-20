@@ -6,7 +6,7 @@ import { t } from '../i18n';
 type Value = string | string[];
 
 function FieldInput({ f, value, onChange, placeholder, attr }: { f: InfoFieldDef; value: Value; onChange: (v: Value) => void; placeholder?: string; attr: string }) {
-  if (f.kind === 'keywords') return <TagInput value={value as string[]} onChange={onChange} placeholder={f.key === 'keywords' ? t("输入一个关键词后回车") : 'keyword, then Enter'} dataInfo={attr} />;
+  if (f.kind === 'keywords') return <TagInput value={value as string[]} onChange={onChange} placeholder={f.key === 'keywords' ? t("输入关键词后按 Enter") : 'keyword, then Enter'} dataInfo={attr} />;
   if (f.kind === 'textarea') return <textarea data-info={attr} value={value as string} placeholder={placeholder} rows={2} onChange={(e) => onChange(e.target.value)} />;
   if (f.kind === 'month') return <input data-info={attr} type="month" value={value as string} onChange={(e) => onChange(e.target.value)} />;
   return <input data-info={attr} value={value as string} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />;

@@ -1,5 +1,5 @@
 // 符号面板（像 tinymist 的符号视图）：Typst 的整张符号表（1200 多个，codex 的 sym.txt）按类别分组、
-// 按名字 / LaTeX 命令 / 字搜索，点一下插进正文。正文里存的是字本身；每个字对应的 Typst 名与 LaTeX
+// 按名称、LaTeX 命令或字符搜索并插入正文。正文存储字符本身；每个字符对应的 Typst 名与 LaTeX
 // 命令记在 src/data/symbols.json，以后导出 Typst / LaTeX 按表换写法。
 import { useMemo, useState } from 'react';
 import { create } from 'zustand';
@@ -51,7 +51,7 @@ export function SymbolPanel({ onPick, autoFocus }: { onPick: (ch: string) => voi
   }, [q, cat]);
   return (
     <div className="sym-panel" onMouseDown={(e) => { if ((e.target as HTMLElement).tagName !== 'INPUT') e.preventDefault(); }}>
-      <Input size="small" contentBefore={<Search20Regular />} value={q} placeholder={t("搜名字 / LaTeX 命令 / 字：alpha、arrow.r、\\\\leq、≤")} onChange={(_, d) => setQ(d.value)} autoFocus={autoFocus} className="sym-search" />
+      <Input size="small" contentBefore={<Search20Regular />} value={q} placeholder={t("搜索符号")} onChange={(_, d) => setQ(d.value)} autoFocus={autoFocus} className="sym-search" />
       {!q.trim() && (
         <div className="sym-cats" role="tablist">
           <button type="button" role="tab" className={`sym-cat ${cat === 'quick' ? 'on' : ''}`} onClick={() => setCat('quick')}>{t("常用")}</button>
@@ -62,9 +62,9 @@ export function SymbolPanel({ onPick, autoFocus }: { onPick: (ch: string) => voi
         {list.map((s) => (
           <button key={s.n + s.c} type="button" className="sym-cell" title={`${s.c}${s.n ? `  sym.${s.n}` : ''}${s.l ? `  ·  ${s.l}` : ''}`} onClick={() => onPick(s.c)}>{s.c}</button>
         ))}
-        {!list.length && <p className="muted" style={{ gridColumn: '1 / -1', margin: 8 }}>{t("没有这个符号")}</p>}
+        {!list.length && <p className="muted" style={{ gridColumn: '1 / -1', margin: 8 }}>{t("未找到符号")}</p>}
       </div>
-      <div className="sym-foot muted">{q.trim() ? t("{{length}} 个", { length: list.length }) : cat === 'quick' ? t("显示常用符号；可通过分类或搜索查找其他 Typst 符号。") : t("{{length}} 个 · 悬停看 Typst 名与 LaTeX 命令", { length: list.length })}</div>
+      <div className="sym-foot muted">{q.trim() ? t("{{length}} 个", { length: list.length }) : cat === 'quick' ? t("常用符号") : t("{{length}} 个符号", { length: list.length })}</div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-// 行内原子节点（公式、引用、交叉引用、缩略语、脚注）共用的「小药丸 + 弹出编辑框」。
+// 行内原子节点共用的标签与弹出编辑器。
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NodeViewWrapper } from '@tiptap/react';
 import { t } from '../../i18n';

@@ -1,6 +1,6 @@
 // 公式底下的符号注释「式中　x——某某；」，对应 iota-hit 的 #eqdenote。
 // 编辑器里就长成模板印出来的样子：引导词一列、符号右对齐一列、破折号、说明。
-// 一行一个符号；一条挂多个符号写「x、y」。符号用 LaTeX 或 Typst 数学，点一下弹出公式编辑框。
+// 每行说明一个或多个符号；符号支持 LaTeX 与 Typst 数学语法。
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import { Handle } from './blocks';
@@ -13,8 +13,8 @@ import { Trash2, Plus, X } from 'lucide-react';
 import { t } from '../../i18n';
 
 const LEADS: { value: string; label: string; hint: string }[] = [
-  { value: 'auto', label: t("式中"), hint: t("根据文档语言显示“式中”或“where”。") },
-  { value: 'none', label: t("不印"), hint: t("续接上一段符号说明，不重复显示引导词。") },
+  { value: 'auto', label: t("式中"), hint: t("按文档语言显示“式中”或“where”") },
+  { value: 'none', label: t("不显示"), hint: t("续接上一段符号说明，不重复显示引导词。") },
 ];
 
 function SymbolCell({ row, onChange, editable }: { row: DenoteRow; onChange: (r: Partial<DenoteRow>) => void; editable: boolean }) {
@@ -33,7 +33,7 @@ function SymbolCell({ row, onChange, editable }: { row: DenoteRow; onChange: (r:
   const parts = row.symbol.split(/[、,，]/).map((s) => s.trim()).filter(Boolean);
   return (
     <span className="denote-pop" ref={ref}>
-      <button type="button" className="denote-sym-btn" disabled={!editable} title={t("点击编辑符号（LaTeX 或 Typst）")} onMouseDown={(e) => e.preventDefault()} onClick={() => setOpen((o) => !o)}>
+      <button type="button" className="denote-sym-btn" disabled={!editable} title={t("单击可编辑符号（LaTeX 或 Typst）")} onMouseDown={(e) => e.preventDefault()} onClick={() => setOpen((o) => !o)}>
         {parts.length ? parts.map((p, i) => <span key={i}>{i > 0 && '、'}<MathPreview src={forPreview(p, mode)} mode={mode} /></span>) : <em>{t("符号")}</em>}
       </button>
       {open && (
@@ -64,7 +64,7 @@ function EqDenoteView({ node, updateAttributes, selected, deleteNode, editor, ge
       <div className="denote-grid" contentEditable={false}>
         {rows.map((r, i) => (
           <div key={i} style={{ display: 'contents' }}>
-            <span className={`denote-lead ${i === 0 && !leadText ? 'is-muted' : ''}`}>{i === 0 ? (leadText || t("（不印引导词）")) : ''}</span>
+            <span className={`denote-lead ${i === 0 && !leadText ? 'is-muted' : ''}`}>{i === 0 ? (leadText || t("（不显示引导词）")) : ''}</span>
             <span className="denote-sym"><SymbolCell row={r} editable={editable} onChange={(p) => patch(i, p)} /></span>
             <span className="denote-dash">——</span>
             <span className="denote-meaning">
@@ -84,9 +84,9 @@ function EqDenoteView({ node, updateAttributes, selected, deleteNode, editor, ge
         <span className="seg" title={t("引导词")}>
           {LEADS.map((l) => <button key={l.value} type="button" className={lead === l.value ? 'on' : ''} title={l.hint} disabled={!editable} onClick={() => updateAttributes({ lead: l.value })}>{l.label}</button>)}
         </span>
-        <span className="muted">{t("规范 2.11：破折号后第一个字对齐，转行悬挂；一条挂多个符号写「x、y」")}</span>
+        <span className="muted">{t("悬挂缩进")}</span>
         <span className="spacer" />
-        <button type="button" className="blk-tool is-btn is-danger" title={t("删除整块")} disabled={!editable} onClick={deleteNode}><Trash2 /></button>
+        <button type="button" className="blk-tool is-btn is-danger" title={t("删除整组符号说明")} disabled={!editable} onClick={deleteNode}><Trash2 /></button>
       </div>
     </NodeViewWrapper>
   );

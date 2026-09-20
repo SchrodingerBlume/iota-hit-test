@@ -276,7 +276,7 @@ export interface ThesisDoc {
   declarationsOptions: DeclarationsOptions;
   body: RichDoc;
   conclusion: RichDoc;
-  /** 参考文献：结构化条目是真身，编译时生成 BibTeX */
+  /** 参考文献以结构化条目存储，编译时生成 BibTeX。 */
   references: BibEntry[];
   /** 旧版工程留下的 BibTeX 原文，读入时解析进 references 后清空 */
   bibliography: string;

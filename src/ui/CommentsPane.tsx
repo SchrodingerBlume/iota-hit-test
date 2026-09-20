@@ -1,4 +1,4 @@
-// 批注窗格（Word 右边那一栏）：每条批注一张卡，点卡片选中正文里那段；能回复、标记已解决、删除。
+// 批注窗格：选择批注卡片时同步选择正文范围。
 // 批注本体在 doc.comments，正文里的圈定是 comment 标记（data-comment-id）。
 import { useMemo, useState } from 'react';
 import { Button, Textarea, Input, Tooltip } from '@fluentui/react-components';
@@ -57,7 +57,7 @@ export function CommentsPane() {
         <Input size="small" value={author} placeholder={t("审阅者姓名")} onChange={(_, d) => setAuthor(d.value)} style={{ width: 110 }} />
         <Tooltip content={t("收起批注窗格")} relationship="label"><Button size="small" appearance="subtle" icon={<Dismiss20Regular />} onClick={() => setOpen(false)} /></Tooltip>
       </div>
-      {resolvedCount > 0 && <button type="button" className="comments-toggle" onClick={() => setShowResolved((v) => !v)}>{showResolved ? t("隐藏") : t("显示")}{t("已解决的")}{' '}{resolvedCount} {' '}{t("条")}</button>}
+      {resolvedCount > 0 && <button type="button" className="comments-toggle" onClick={() => setShowResolved((v) => !v)}>{showResolved ? t("隐藏") : t("显示")}{t("显示已解决的批注")}{' '}{resolvedCount} {' '}{t("条")}</button>}
       {!here.length && <p className="muted comments-empty">{t("此部分没有批注。")}</p>}
       {here.map((c) => (
         <div key={c.id} className={`comment-card ${active === c.id ? 'is-active' : ''} ${c.resolved ? 'is-resolved' : ''}`} onClick={() => jump(c)}>

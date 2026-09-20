@@ -39,8 +39,8 @@ function LocalInfoCard({ page }: { page: LocalInfoPage }) {
   const setLocalInfo = useStore((s) => s.setLocalInfo);
   return (
     <div className="card">
-      <h3>{tx("只在这一页改的信息")}</h3>
-      <p className="field-hint">{tx("留空就印「论文信息」里填的那一份；填了只改这一页，别处不动")}</p>
+      <h3>{tx("本页专用信息")}</h3>
+      <p className="field-hint">{tx("留空时使用“论文信息”中的内容；填写后仅覆盖当前页面。")}</p>
       <div className="grid2">
         {localInfoFields(page, settings).map((f) => (
           <InfoField key={f.key} f={f} value={local?.[f.key] ?? (f.kind === 'keywords' ? [] : '')} onChange={(v) => setLocalInfo(page, { [f.key]: v })}

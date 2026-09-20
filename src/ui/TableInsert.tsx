@@ -42,17 +42,17 @@ export function TableSizeDialog({ onInsert, onClose }: { onInsert: (rows: number
               <Checkbox label={t("第一行是表头（三线表的栏头，跨页时续页重排）")} checked={d.header} onChange={(_, e) => set({ header: !!e.checked })} />
             </fieldset>
             <fieldset className="dlg-fs">
-              <legend>{t("“自动调整”操作")}</legend>
+              <legend>{t("自动调整")}</legend>
               <RadioGroup value={d.fit} onChange={(_, e) => set({ fit: e.value as TableFit })}>
                 <span className="style-row">
                   <Radio value="fixed" label={t("固定列宽：")} />
                   <LengthInput value={d.colWidth === 'auto' ? '' : d.colWidth} defaultUnit="cm" allowed={['cm', 'mm', 'in', 'pt', 'em', '%', 'fr']} disabled={d.fit !== 'fixed'} placeholder={t("自动")} width={110} onChange={(v) => set({ colWidth: v ?? 'auto' })} />
                 </span>
-                <Radio value="content" label={t("根据内容调整表格")} />
-                <Radio value="window" label={t("根据窗口调整表格（撑满版心）")} />
+                <Radio value="content" label={t("根据内容自动调整表格")} />
+                <Radio value="window" label={t("根据窗口调整表格（适应版心宽度）")} />
               </RadioGroup>
             </fieldset>
-            <Checkbox label={t("为新表格记住此尺寸")} checked={remember} onChange={(_, e) => setRemember(!!e.checked)} />
+            <Checkbox label={t("设为新表格的默认尺寸")} checked={remember} onChange={(_, e) => setRemember(!!e.checked)} />
           </DialogContent>
           <DialogActions>
             <Button appearance="secondary" onClick={onClose}>{t("取消")}</Button>
@@ -76,7 +76,7 @@ export function TableTextDialog({ onInsert, onClose }: { onInsert: (text: string
         <DialogBody>
           <DialogTitle action={<DialogTrigger action="close"><Button appearance="subtle" icon={<Dismiss20Regular />} /></DialogTrigger>}>{t("从文本 / Markdown 插入表格")}</DialogTitle>
           <DialogContent>
-            <p className="muted style-hint">{t("粘贴 Excel 单元格、CSV 或 Markdown 表格。")}</p>
+            <p className="muted style-hint">{t("粘贴 Excel 单元格、CSV 数据或 Markdown 表格。")}</p>
             <Textarea value={text} onChange={(_, d) => setText(d.value)} placeholder={EXAMPLE} rows={9} resize="vertical" className="table-text-input" autoFocus spellCheck={false} />
             <div className="style-row" style={{ marginTop: 8, justifyContent: 'space-between' }}>
               <Checkbox label={t("第一行是表头")} checked={parsed ? (parsed.header || header) : header} disabled={!!parsed?.header} onChange={(_, d) => setHeader(!!d.checked)} />
@@ -84,7 +84,7 @@ export function TableTextDialog({ onInsert, onClose }: { onInsert: (text: string
             </div>
           </DialogContent>
           <DialogActions>
-            <Button appearance="subtle" onClick={() => setText(EXAMPLE)}>{t("插入示例")}</Button>
+            <Button appearance="subtle" onClick={() => setText(EXAMPLE)}>{t("使用示例")}</Button>
             <Button appearance="secondary" onClick={onClose}>{t("取消")}</Button>
             <Button appearance="primary" disabled={!parsed} onClick={() => onInsert(text, parsed?.header || header)}>{t("插入")}</Button>
           </DialogActions>

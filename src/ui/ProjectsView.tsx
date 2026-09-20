@@ -38,7 +38,7 @@ function ProjectCard({ p, active }: { p: ProjectMeta; active: boolean }) {
         {active && !editing && <span className="proj-badge">{tx("当前")}</span>}
       </div>
       <div className="proj-tags">{tags.map((t) => <span key={t} className="tag">{t}</span>)}</div>
-      <div className="proj-meta muted"><Clock />{fmtTime(p.updatedAt)} {' '}{tx("修改")}</div>
+      <div className="proj-meta muted"><Clock />{fmtTime(p.updatedAt)} {' '}{tx("修改时间")}</div>
       <div className="proj-actions">
         <button type="button" className="btn btn-xs btn-primary" onClick={() => void openProject(p.id)}><FolderOpen />{tx("打开")}</button>
         <button type="button" className="btn btn-xs btn-ghost" onClick={() => { setName(p.name); setEditing(true); }}><Pencil />{tx("重命名")}</button>
@@ -81,7 +81,7 @@ export function ProjectsView() {
         delete raw.imageData;
         await importProject(raw, images);
       } catch (error) {
-        alert(tx("无法打开文档：{{v0}}", { v0: error instanceof Error ? error.message : tx("文件读取失败。") }));
+        alert(tx("无法打开文档：{{v0}}", { v0: error instanceof Error ? error.message : tx("无法读取文件。") }));
       }
     };
     input.click();
@@ -101,7 +101,7 @@ export function ProjectsView() {
           <p className="lead">{tx("文档保存在当前浏览器中。跨设备使用或长期保存时，请下载副本。")}</p>
         </div>
         <div className="projects-actions">
-          <button type="button" className="btn" disabled={!loaded} onClick={onOpenProject}><FolderOpen />{tx("打开…")}</button>
+          <button type="button" className="btn" disabled={!loaded} onClick={onOpenProject}><FolderOpen />{tx("打开文档…")}</button>
           {canBack && <button type="button" className="btn" onClick={() => setView('editor')}><ArrowLeft />{tx("回到「")}{doc.name}」</button>}
         </div>
       </div>
@@ -130,14 +130,14 @@ export function ProjectsView() {
             </label>
             <label className={`tpl ${template === 'sample' ? 'on' : ''}`}>
               <input type="radio" name="tpl" checked={template === 'sample'} onChange={() => setTemplate('sample')} />
-              <Sparkles /><span><b>{tx("示例论文")}</b><small>{tx("含正文、图表和公式示例")}</small></span>
+              <Sparkles /><span><b>{tx("示例论文")}</b><small>{tx("包含正文、图表和公式示例")}</small></span>
             </label>
           </div>
           <button type="button" className="btn btn-primary" disabled={creating || !loaded} onClick={() => void onCreate()}><FilePlus2 />{creating ? tx("正在创建…") : tx("创建")}</button>
         </div>
         <div className="proj-list">
           <h3 className="proj-list-title">{tx("最近使用")}{' '}<span className="muted">{projects.length}</span></h3>
-          {!projects.length && <div className="muted">{tx("还没有文档。")}</div>}
+          {!projects.length && <div className="muted">{tx("暂无文档。")}</div>}
           {projects.map((p) => <ProjectCard key={p.id} p={p} active={p.id === doc.id && loaded} />)}
         </div>
       </div>

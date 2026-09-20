@@ -1,7 +1,4 @@
-// 伪代码（算法）：模板的 lovelace 那一路——一行一个列表项，`-` 不编号（输入、输出），`+` 编号，
-// 嵌套就是缩进。这里是个逐行编辑的表：每行一个输入框、缩进级别、上下增删；排成
-//   #figure(lovelace[ - input: … + line + … ], caption: […]) <alg:…>
-// 行里的内容是 Typst 标记：$公式$、*粗体* 照写；关键字（for / if / return…）模板自己认。
+// lovelace 算法节点：未编号的输入/输出行使用 `-`，编号步骤使用 `+`，嵌套层级表示缩进。
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import { Handle } from './blocks';
@@ -47,35 +44,35 @@ function AlgorithmView({ node, updateAttributes, selected, deleteNode, editor, g
     <NodeViewWrapper className={`blk alg ${selected ? 'is-selected' : ''}`} ref={wrap}>
       <Handle editor={editor} getPos={getPos} />
       <div className="alg-head" contentEditable={false}>
-        {num && <span className="cap-num" title={tx("编号按模板规则算，预览为准")}>{num}</span>}
-        <AutoInput className="cap-input" data-attr="caption" disabled={!editable} value={node.attrs.caption ?? ''} placeholder={tx("算法题")} minWidth={80} onChange={(e) => updateAttributes({ caption: e.target.value })} />
-        <AutoInput className="cap-input-en" data-attr="captionEn" disabled={!editable} value={node.attrs.captionEn ?? ''} placeholder={tx("English caption（可空）")} minWidth={60} onChange={(e) => updateAttributes({ captionEn: e.target.value })} />
+        {num && <span className="cap-num" title={tx("编号由模板生成，以页面视图为准")}>{num}</span>}
+        <AutoInput className="cap-input" data-attr="caption" disabled={!editable} value={node.attrs.caption ?? ''} placeholder={tx("算法题注")} minWidth={80} onChange={(e) => updateAttributes({ caption: e.target.value })} />
+        <AutoInput className="cap-input-en" data-attr="captionEn" disabled={!editable} value={node.attrs.captionEn ?? ''} placeholder={tx("英文题注（可留空）")} minWidth={60} onChange={(e) => updateAttributes({ captionEn: e.target.value })} />
       </div>
       <div className="alg-body" contentEditable={false}>
         {io.map((t, i) => (
           <div key={`io${i}`} className="alg-line alg-io">
             <span className="alg-no">–</span>
             <input value={t} disabled={!editable} placeholder="input: …" onChange={(e) => setIo(io.map((x, k) => (k === i ? e.target.value : x)))} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); const l = [...io]; l.splice(i + 1, 0, ''); setIo(l); } else if (e.key === 'Backspace' && !t) { e.preventDefault(); setIo(io.filter((_, k) => k !== i)); } }} />
-            <button type="button" className="alg-btn" title={tx("删掉这行")} disabled={!editable} onClick={() => setIo(io.filter((_, k) => k !== i))}><Trash2 /></button>
+            <button type="button" className="alg-btn" title={tx("删除此行")} disabled={!editable} onClick={() => setIo(io.filter((_, k) => k !== i))}><Trash2 /></button>
           </div>
         ))}
         {lines.map((l, i) => (
           <div key={i} className="alg-line" style={{ paddingLeft: `${l.level * 1.6}em` }}>
             <span className="alg-no">{i + 1}</span>
-            <input value={l.text} disabled={!editable} placeholder={i === 0 ? tx("for $t = 1$ to $T$ do   （Tab 缩进，回车加一行）") : ''} onChange={(e) => setLines(lines.map((x, k) => (k === i ? { ...x, text: e.target.value } : x)))} onKeyDown={(e) => onKey(i, e)} />
+            <input value={l.text} disabled={!editable} placeholder={i === 0 ? tx("for $t = 1$ to $T$ do（Tab 增加缩进，Enter 新建一行）") : ''} onChange={(e) => setLines(lines.map((x, k) => (k === i ? { ...x, text: e.target.value } : x)))} onKeyDown={(e) => onKey(i, e)} />
             <span className="alg-tools">
               <button type="button" className="alg-btn" title={tx("减少缩进（Shift+Tab）")} disabled={!editable || !l.level} onClick={() => setLines(lines.map((x, k) => (k === i ? { ...x, level: Math.max(0, x.level - 1) } : x)))}><ChevronLeft /></button>
               <button type="button" className="alg-btn" title={tx("增加缩进（Tab）")} disabled={!editable} onClick={() => setLines(lines.map((x, k) => (k === i ? { ...x, level: Math.min(6, x.level + 1) } : x)))}><ChevronRight /></button>
               <button type="button" className="alg-btn" title={tx("上移")} disabled={!editable || i === 0} onClick={() => move(i, -1)}><ArrowUp /></button>
               <button type="button" className="alg-btn" title={tx("下移")} disabled={!editable || i === lines.length - 1} onClick={() => move(i, 1)}><ArrowDown /></button>
-              <button type="button" className="alg-btn" title={tx("删掉这行")} disabled={!editable || lines.length <= 1} onClick={() => setLines(lines.filter((_, k) => k !== i))}><Trash2 /></button>
+              <button type="button" className="alg-btn" title={tx("删除此行")} disabled={!editable || lines.length <= 1} onClick={() => setLines(lines.filter((_, k) => k !== i))}><Trash2 /></button>
             </span>
           </div>
         ))}
       </div>
       <div className="blk-tools" contentEditable={false} onMouseDown={(e) => e.stopPropagation()}>
-        <button type="button" className="blk-tool is-btn" disabled={!editable} onClick={() => setIo([...io, io.length ? 'output: ' : 'input: '])}><Plus />{tx("输入 / 输出行")}</button>
-        <button type="button" className="blk-tool is-btn" disabled={!editable} onClick={() => { setLines([...lines, { text: '', level: 0 }]); focusLine(lines.length); }}><Plus />{tx("加一行")}</button>
+        <button type="button" className="blk-tool is-btn" disabled={!editable} onClick={() => setIo([...io, io.length ? 'output: ' : 'input: '])}><Plus />{tx("输入或输出行")}</button>
+        <button type="button" className="blk-tool is-btn" disabled={!editable} onClick={() => { setLines([...lines, { text: '', level: 0 }]); focusLine(lines.length); }}><Plus />{tx("添加一行")}</button>
         <label className="blk-tool" title={tx("交叉引用用的标签；留空则自动生成")}>
           <Tag />
           <input value={node.attrs.label ?? ''} placeholder={`alg:${node.attrs.uid ?? ''}`} disabled={!editable} onChange={(e) => updateAttributes({ label: e.target.value.trim() })} />

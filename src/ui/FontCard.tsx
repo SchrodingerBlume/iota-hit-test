@@ -51,11 +51,11 @@ export function FontCard() {
             {mathChoices.map((f) => <option key={f} value={f}>{f}</option>)}
           </select>
           {canQuery && <button type="button" className="btn" disabled={!!busy || status !== 'ready'} onClick={() => void scanMathFonts()}>{t("读取本机数学字体")}</button>}
-          {mathFont && !mathLoaded && !busy && <span className="muted" style={{ fontSize: 12 }}>{t("尚未装入，当前用替代字体")}</span>}
+          {mathFont && !mathLoaded && !busy && <span className="muted" style={{ fontSize: 12 }}>{t("尚未加载，当前使用替代字体")}</span>}
           {fontset === 'webapp' && busy && <span className="muted" style={{ fontSize: 12 }}>{busy}</span>}
         </div>
         {fontset === 'webapp' && error && <div className="diag err" style={{ marginTop: 6, padding: '6px 10px', borderRadius: 'var(--r-s)', border: '1px solid' }}>{error}</div>}
-        <span className="field-hint">{t("扫描本机所有带 MATH 表的 OpenType 字体（Cambria Math、STIX Two Math、Latin Modern Math、XITS Math……）；选中的字体每次进站自动再读一遍。")}</span>
+        <span className="field-hint">{t("扫描本机数学字体")}</span>
       </div>
 
       {fontset !== 'webapp' && (
@@ -94,7 +94,7 @@ export function FontCard() {
 
           {fonts.length > 0 && (
             <details style={{ marginTop: 8 }}>
-              <summary className="muted" style={{ fontSize: 12, cursor: 'pointer' }}>{t("已装入")}{' '}{fonts.length} {' '}{t("个字体文件，共")}{' '}{fmtMB(fonts.reduce((s, f) => s + f.size, 0))} MB</summary>
+              <summary className="muted" style={{ fontSize: 12, cursor: 'pointer' }}>{t("已加载")}{' '}{fonts.length} {' '}{t("个字体文件，共")}{' '}{fmtMB(fonts.reduce((s, f) => s + f.size, 0))} MB</summary>
               <ul className="font-list">
                 {fonts.map((f) => (
                   <li key={f.id}>

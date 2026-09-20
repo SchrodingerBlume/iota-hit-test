@@ -17,7 +17,7 @@ import { INFO_FIELDS } from '../model/info';
 import { InfoField } from './InfoField';
 import { t as tx } from '../i18n';
 
-// ── 索引词登记：正文里 #idx[词] 标的都在这儿列着，改名、删除、跳过去 ──
+// ── 索引项：列出正文中的 #idx 标记，支持重命名、删除与定位 ──
 const IDX_KEYS: RichKey[] = ['abstractZh', 'abstractEn', 'body', 'conclusion', 'appendix', 'acknowledgement', 'resume'];
 const SECTION_OF: Record<RichKey, string> = { abstractZh: 'abstract', abstractEn: 'abstract', body: 'body', conclusion: 'conclusion', appendix: 'appendix', acknowledgement: 'acknowledgement', resume: 'resume' };
 const KEY_LABEL: Record<RichKey, string> = { abstractZh: tx("中文摘要"), abstractEn: tx("英文摘要"), body: tx("正文"), conclusion: tx("结论"), appendix: tx("附录"), acknowledgement: tx("致谢"), resume: tx("简历") };
@@ -76,7 +76,7 @@ export function IndexPanel() {
     setEditing(null);
   };
   const unregister = (term: string) => {
-    // 删掉登记、留下正文里的字
+    // 删除索引标记，保留正文文字。
     for (const key of IDX_KEYS) if (doc[key]) setRich(key, mapIdx(doc[key] as any, (n) => (n.attrs?.text === term ? (n.attrs?.text ? { type: 'text', text: String(n.attrs.text) } : null) : n)) as any);
   };
   const jump = async (h: IdxHit) => {
@@ -90,7 +90,7 @@ export function IndexPanel() {
     <>
       <h2>{tx("索引")}</h2>
       <PageSettings pages={['index']} />
-      {!terms.length && <p className="muted">{tx("没有索引项。选择文字后，单击“引用”中的“标记条目”。")}</p>}
+      {!terms.length && <p className="muted">{tx("未找到索引项。")}</p>}
       {terms.length > 0 && (
         <table className="idx-table">
           <thead><tr><th>{tx("词")}</th><th>{tx("出现")}</th><th>{tx("位置")}</th><th /></tr></thead>
@@ -100,12 +100,12 @@ export function IndexPanel() {
                 <td>
                   {editing === term
                     ? <input className="idx-rename" value={draft} autoFocus onChange={(e) => setDraft(e.target.value)} onBlur={() => rename(term, draft)} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') rename(term, draft); if (e.key === 'Escape') setEditing(null); }} />
-                    : <button type="button" className="idx-term" title={tx("改名（全篇同名的一起改）")} onClick={() => { setEditing(term); setDraft(term); }}>{term || <em className="muted">{tx("（空）")}</em>}</button>}
+                    : <button type="button" className="idx-term" title={tx("重命名（同时更新全文中的同名项）")} onClick={() => { setEditing(term); setDraft(term); }}>{term || <em className="muted">{tx("（空）")}</em>}</button>}
                 </td>
                 <td className="muted">{list.length} {' '}{tx("处")}</td>
                 <td>
                   <ul className="idx-hits">
-                    {list.map((h, i) => <li key={i}><button type="button" className="idx-jump" title={tx("跳到这一处")} onClick={() => void jump(h)}>{KEY_LABEL[h.key]}</button><span className="muted"> {h.context}</span></li>)}
+                    {list.map((h, i) => <li key={i}><button type="button" className="idx-jump" title={tx("转到此处")} onClick={() => void jump(h)}>{KEY_LABEL[h.key]}</button><span className="muted"> {h.context}</span></li>)}
                   </ul>
                 </td>
                 <td><button type="button" className="btn btn-xs" onClick={() => unregister(term)}>{tx("取消标记")}</button></td>
@@ -197,7 +197,7 @@ export function AbstractPanel() {
       <h2>{tx("摘要")}</h2>
       <PageSettings pages={['abstract']}><SettingSwitch k="abstractKeywordsAbove" /></PageSettings>
       <h3>{tx("中文摘要")}</h3>
-      <RichEditor instanceKey="abstractZh" richKey="abstractZh" value={zh} onChange={(v) => setRich('abstractZh', v)} headings={false} blocks={false} placeholder={tx("中文摘要……")} />
+      <RichEditor instanceKey="abstractZh" richKey="abstractZh" value={zh} onChange={(v) => setRich('abstractZh', v)} headings={false} blocks={false} placeholder={tx("输入中文摘要…")} />
       <Keywords k="keywords" />
       <h3 style={{ marginTop: 20 }}>Abstract</h3>
       <RichEditor instanceKey="abstractEn" richKey="abstractEn" value={en} onChange={(v) => setRich('abstractEn', v)} headings={false} blocks={false} placeholder="English abstract…" />
@@ -207,8 +207,8 @@ export function AbstractPanel() {
 }
 
 
-/** 登记表里的格子：回车到下一行同一列（末行就加一行），↑↓ 换行，整行空着按 Backspace 删掉这行，
- *  粘贴带换行 / 制表符的文本按行列铺开（从 Word / Excel 的表里直接拷过来） */
+/** 登记表单元格：Enter 或方向键切换行，末行自动新增，空行按 Backspace 删除；
+ *  从 Word 或 Excel 粘贴的换行/制表符文本按行列填充。 */
 function useGrid<R>(rows: R[], onChange: (r: R[]) => void, blank: () => R, cols: (keyof R)[], isEmpty: (r: R) => boolean) {
   const table = useRef<HTMLTableElement>(null);
   const focus = (i: number, col: number) => requestAnimationFrame(() => { const el = table.current?.querySelector<HTMLInputElement>(`[data-cell="${i}:${col}"]`); el?.focus(); });
@@ -261,7 +261,7 @@ export function NomenclaturePanel() {
         <div className="card-head"><h3>{tx("缩略语")}</h3><button type="button" className="btn btn-xs btn-ghost" onClick={() => setAdvanced((a) => !a)}>{advanced ? tx("收起高级选项") : tx("高级选项")}</button></div>
         <table className="nom-form" ref={ab.table}>
           <colgroup><col style={{ width: 110 }} /><col /><col />{advanced && <><col style={{ width: 100 }} /><col style={{ width: 100 }} /><col style={{ width: 64 }} /></>}<col className="cx" /></colgroup>
-          <thead><tr><th>{tx("缩写")}</th><th>{tx("中文全称")}</th><th>{tx("英文全称")}</th>{advanced && <><th>{tx("显示文字")}</th><th>{tx("复数")}</th><th>{tx("进索引")}</th></>}<td className="def-x" /></tr></thead>
+          <thead><tr><th>{tx("缩写")}</th><th>{tx("中文全称")}</th><th>{tx("英文全称")}</th>{advanced && <><th>{tx("显示文字")}</th><th>{tx("复数")}</th><th>{tx("收录到索引")}</th></>}<td className="def-x" /></tr></thead>
           <tbody>
             {abbreviations.map((r, i) => {
               const set = (patch: Partial<Abbreviation>) => ab.set(i, patch);
@@ -271,9 +271,9 @@ export function NomenclaturePanel() {
                   <td><input value={r.long} placeholder={tx("有限元方法")} {...ab.cell(i, 1)} onChange={(e) => set({ long: e.target.value })} /></td>
                   <td><input value={r.longEn} placeholder="Finite Element Method" {...ab.cell(i, 2)} onChange={(e) => set({ longEn: e.target.value })} /></td>
                   {advanced && <>
-                    <td><input value={r.short ?? ''} placeholder={r.key || tx("同键")} title={tx("印出来的缩写；空 = 与键相同")} {...ab.cell(i, 3)} onChange={(e) => set({ short: e.target.value })} /></td>
-                    <td><input value={r.plural ?? ''} placeholder={(r.short || r.key) ? `${r.short || r.key}s` : tx("缩写+s")} title={tx("复数形式；空 = 缩写加 s")} {...ab.cell(i, 4)} onChange={(e) => set({ plural: e.target.value })} /></td>
-                    <td className="center"><select value={r.indexed === undefined ? '' : r.indexed ? 'yes' : 'no'} onChange={(e) => set({ indexed: e.target.value === '' ? undefined : e.target.value === 'yes' })}><option value="">{tx("跟总开关")}</option><option value="yes">{tx("进")}</option><option value="no">{tx("不进")}</option></select></td>
+                    <td><input value={r.short ?? ''} placeholder={r.key || tx("与缩写相同")} title={tx("设置文档中显示的缩写；留空时与缩写键相同。")} {...ab.cell(i, 3)} onChange={(e) => set({ short: e.target.value })} /></td>
+                    <td><input value={r.plural ?? ''} placeholder={(r.short || r.key) ? `${r.short || r.key}s` : tx("缩写+s")} title={tx("设置复数形式；留空时在缩写后添加 s。")} {...ab.cell(i, 4)} onChange={(e) => set({ plural: e.target.value })} /></td>
+                    <td className="center"><select value={r.indexed === undefined ? '' : r.indexed ? 'yes' : 'no'} onChange={(e) => set({ indexed: e.target.value === '' ? undefined : e.target.value === 'yes' })}><option value="">{tx("使用全局设置")}</option><option value="yes">{tx("收录")}</option><option value="no">{tx("不收录")}</option></select></td>
                   </>}
                   <td className="def-x"><button type="button" title={tx("删除这一行")} onClick={() => setAbbreviations(abbreviations.filter((_, j) => j !== i))}>✕</button></td>
                 </tr>
@@ -282,8 +282,8 @@ export function NomenclaturePanel() {
           </tbody>
         </table>
         <div className="row def-add">
-          <button type="button" className="btn btn-xs" onClick={() => { setAbbreviations([...abbreviations, { key: '', long: '', longEn: '' }]); ab.focus(abbreviations.length, 0); }}>{tx("＋ 添加一行")}</button>
-          <span className="muted small">{tx("回车下一行；整行空着按 Backspace 删；从 Word / Excel 拷一整块粘进来会按行列铺开")}</span>
+          <button type="button" className="btn btn-xs" onClick={() => { setAbbreviations([...abbreviations, { key: '', long: '', longEn: '' }]); ab.focus(abbreviations.length, 0); }}>{tx("＋ 添加")}</button>
+          <span className="muted small">{tx("可粘贴 Word 表格或 Excel 单元格")}</span>
         </div>
         <SettingSwitch k="abbreviationLinks" />
         <SettingSwitch k="abbreviationIndexed" />
@@ -294,16 +294,16 @@ export function NomenclaturePanel() {
       </div>
       <div className="card">
         <h3>{tx("表格格式")}</h3>
-        <TriSeg label={tx("排序方式")} hint={tx("hithesis 按缩写字母序；也可以照你登记的顺序")} choices={[{ value: 'alpha', label: tx("字母序") }, { value: 'declared', label: tx("添加顺序") }]} value={opts.sort ?? 'auto'} auto={{ value: 'alpha', reason: tx("hithesis 按缩写字母序（不分大小写）") }} onChange={(v) => setOpts({ sort: v as any })} />
-        <TriSeg label={tx("显示范围")} hint={tx("只列正文里用过的，还是登记的全部缩略语")} choices={[{ value: 'used', label: tx("已使用的缩略语") }, { value: 'all', label: tx("全部缩略语") }]} value={opts.usedOnly ?? 'auto'} auto={{ value: 'used', reason: tx("只列正文里用过的（hithesis 同）") }} onChange={(v) => setOpts({ usedOnly: v as any })} />
-        <TriSeg label={tx("显示标题行")} hint={tx("「符号 / 说明」「缩写 / 全称」那一行")} choices={ON_OFF} value={opts.header === 'auto' ? 'auto' : opts.header === 'on'} auto={{ value: false, reason: tx("跟模板：hithesis 与 thuthesis 都不印列头") }} onChange={(v) => setOpts({ header: v === 'auto' ? 'auto' : v ? 'on' : 'off' })} />
+        <TriSeg label={tx("排序方式")} hint={tx("按缩写字母顺序或添加顺序排列。")} choices={[{ value: 'alpha', label: tx("字母序") }, { value: 'declared', label: tx("添加顺序") }]} value={opts.sort ?? 'auto'} auto={{ value: 'alpha', reason: tx("hithesis 按缩写字母序（不分大小写）") }} onChange={(v) => setOpts({ sort: v as any })} />
+        <TriSeg label={tx("显示范围")} hint={tx("已使用 / 全部")} choices={[{ value: 'used', label: tx("已使用的缩略语") }, { value: 'all', label: tx("全部缩略语") }]} value={opts.usedOnly ?? 'auto'} auto={{ value: 'used', reason: tx("仅显示正文中已使用的缩略语") }} onChange={(v) => setOpts({ usedOnly: v as any })} />
+        <TriSeg label={tx("显示标题行")} hint={tx("显示“符号 / 说明”或“缩写 / 全称”标题行")} choices={ON_OFF} value={opts.header === 'auto' ? 'auto' : opts.header === 'on'} auto={{ value: false, reason: tx("按模板设置不显示标题行") }} onChange={(v) => setOpts({ header: v === 'auto' ? 'auto' : v ? 'on' : 'off' })} />
         <div className="triseg">
-          <div className="triseg-lab" title={tx("说明列从左边多远起，两张表共用；留空按内容自动")}>{tx("说明列起点")}</div>
+          <div className="triseg-lab" title={tx("留空时自动调整")}>{tx("说明列起点")}</div>
           <span className="row"><input className="input" style={{ width: 90 }} type="number" min={1} max={8} step={0.1} value={opts.hangingIndent} placeholder={tx("自动")} onChange={(e) => setOpts({ hangingIndent: e.target.value })} /><span className="muted">cm</span></span>
           <div className="triseg-note">{opts.hangingIndent ? tx("说明列从 {{hangingIndent}} cm 起", { hangingIndent: opts.hangingIndent }) : tx("自动适应符号和缩写的宽度")}</div>
         </div>
         {both && (
-          <TriSeg label={tx("合并页的小标题")} hint={tx("一页两段时，「符号」「缩略语」两个小标题照哪一页的样子")} choices={[{ value: 'achievements', label: tx("照成果页") }, { value: 'declarations', label: tx("照声明页") }, { value: 'no-subheadings', label: tx("不印") }]} value={opts.form === 'auto' ? 'auto' : opts.form} auto={{ value: 'achievements', reason: tx("宋体小四加粗顶格（成果页的组名样式）") }} onChange={(v) => setOpts({ form: v as any })} />
+          <TriSeg label={tx("合并页的小标题")} hint={tx("小标题样式")} choices={[{ value: 'achievements', label: tx("使用成果页样式") }, { value: 'declarations', label: tx("使用声明页样式") }, { value: 'no-subheadings', label: tx("不显示") }]} value={opts.form === 'auto' ? 'auto' : opts.form} auto={{ value: 'achievements', reason: tx("宋体小四加粗顶格（成果页的组名样式）") }} onChange={(v) => setOpts({ form: v as any })} />
         )}
       </div>
     </>
@@ -379,7 +379,6 @@ export function DefensePanel() {
   return (
     <>
       <h2>{tx("答辩决议")}</h2>
-      <p className="lead">{tx("学位论文评阅人、答辩委员会名单及答辩决议——研究生终稿排在成果之后、声明之前。照纸质表填：人比行多就先借别块的空行、再加行。")}</p>
       <PageSettings pages={['defense']} />
       <div className="card def-card">
         <table className="def-form">
@@ -438,15 +437,15 @@ function openrightAuto(doc: ThesisDoc, orKey: OpenrightKey): { value: boolean; r
   const m = orKey !== matter ? doc.openright?.[matter as OpenrightKey] : undefined;
   if (m === true || m === false) return { value: m, reason: tx("跟随所在部分的设定") };
   const gate = doc.settings.openright;
-  if (gate === true || gate === false) return { value: gate, reason: tx("跟随全篇总闸（论文设置里的「右翻页」）") };
-  return { value: false, reason: doc.settings.degreeLevel === 'doctor' ? tx("模板按学位：博士只内封右翻，各段都不跳") : tx("模板按学位：{{v0}}各段都不跳", { v0: doc.settings.degreeLevel === 'master' ? tx("硕士") : tx("本科") }) };
+  if (gate === true || gate === false) return { value: gate, reason: tx("使用“论文设置”中的全局右翻页设置") };
+  return { value: false, reason: doc.settings.degreeLevel === 'doctor' ? tx("使用模板设置") : tx("按学位模板设置：{{v0}}各部分连续排版。", { v0: doc.settings.degreeLevel === 'master' ? tx("硕士") : tx("本科") }) };
 }
 
 export function OpenrightSwitch({ orKey, label, sub }: { orKey: OpenrightKey; label: string; sub?: boolean }) {
   const doc = useStore((s) => s.doc);
   const setOpenright = useStore((s) => s.setOpenright);
   const v = doc.openright?.[orKey] ?? 'auto';
-  return <TriSeg className={sub ? 'is-sub' : ''} label={label} hint={tx("从右手页（奇数页）起，前面不够就补一张空白页；Auto 往上跟：所在部分 → 全篇总闸 → 模板按学位的表")} choices={ON_OFF} value={v} auto={openrightAuto(doc, orKey)} onChange={(x) => setOpenright({ [orKey]: x })} />;
+  return <TriSeg className={sub ? 'is-sub' : ''} label={label} hint={tx("奇数页")} choices={ON_OFF} value={v} auto={openrightAuto(doc, orKey)} onChange={(x) => setOpenright({ [orKey]: x })} />;
 }
 
 /** 某几页的页面设置：显示不显示、右手页起（缩进挂在该页下面）、再加这一页自己的开关 */
@@ -474,10 +473,9 @@ export function DeclarationsPanel() {
   return (
     <>
       <h2>{tx("原创性声明与使用权限")}</h2>
-      <p className="lead">{tx("指南 1.7：声明的正文是规范给死的（本科 / 研究生、学术 / 实践成果各一份，模板按论文类型选），作者与导师在纸上签名。这里只管排不排、从哪一页起，和声明里《》那一格填什么。")}</p>
       <PageSettings pages={['declarations']} />
       <div className="card">
-        <TriSeg label={tx("《》里的题目")} hint={tx("模板 declarations(title:)：自动印论文信息的题目；留白是给一段空白手写；也可以另填一份")} choices={[{ value: 'blank', label: tx("留白手写") }, { value: 'custom', label: tx("另填") }]} value={opts.title === 'auto' ? 'auto' : opts.title} auto={{ value: 'auto' as any, reason: tx("印论文信息里填的题目"), mixed: tx("论文题目") }} onChange={(v) => setOpts({ title: v as any })} />
+        <TriSeg label={tx("声明中的论文题目")} hint={tx("论文信息 / 留白 / 另填")} choices={[{ value: 'blank', label: tx("留白手写") }, { value: 'custom', label: tx("另填") }]} value={opts.title === 'auto' ? 'auto' : opts.title} auto={{ value: 'auto' as any, reason: tx("使用“论文信息”中的题目"), mixed: tx("论文题目") }} onChange={(v) => setOpts({ title: v as any })} />
         {opts.title === 'custom' && <input className="input" value={opts.customTitle} placeholder={title.split('\n').join('')} onChange={(e) => setOpts({ customTitle: e.target.value })} />}
       </div>
     </>
@@ -489,7 +487,6 @@ export function TocPanel() {
   return (
     <>
       <h2>{tx("目录")}</h2>
-      <p className="lead">{tx("目录规范要求必有；三份索引规范没提，默认不排。条目都从正文里自动收，这里只管排不排、从哪一页起。")}</p>
       <PageSettings pages={['tableOfContents', 'listOfFigures', 'listOfTables', 'listOfEquations']} />
     </>
   );
@@ -508,11 +505,11 @@ function SymbolTable({ rows, onChange }: { rows: SymbolEntry[]; onChange: (r: Sy
         <tbody>
           {rows.map((r, i) => (
             <tr key={i} className={editing === i ? 'is-editing' : ''}>
-              <td className="sym-preview"><button type="button" className="sym-btn" title={tx("点开可视化编辑")} onClick={() => setEditing(editing === i ? null : i)}><MathPreview src={r.symbol} mode={r.mode === 'typst' ? 'typst' : 'latex'} empty="…" /></button></td>
+              <td className="sym-preview"><button type="button" className="sym-btn" title={tx("单击以打开可视化编辑器")} onClick={() => setEditing(editing === i ? null : i)}><MathPreview src={r.symbol} mode={r.mode === 'typst' ? 'typst' : 'latex'} empty="…" /></button></td>
               <td className="sym-src">
                 <input className="mono" value={r.symbol} placeholder={r.mode === 'typst' ? 'eta' : '\\eta'} {...g.cell(i, 0)} onChange={(e) => set(i, { symbol: e.target.value })} />
-                {r.mode === 'typst' && <span className="seg sym-mode" title={tx("这一行是 Typst 写法（老版本存的）；新的一律 LaTeX")}>
-                  <button type="button" onClick={() => set(i, { mode: 'latex' })}>{tx("改成 LaTeX")}</button>
+                {r.mode === 'typst' && <span className="seg sym-mode" title={tx("Typst 符号")}>
+                  <button type="button" onClick={() => set(i, { mode: 'latex' })}>{tx("转换为 LaTeX")}</button>
                   <button type="button" className="on">Typst</button>
                 </span>}
               </td>
@@ -529,8 +526,8 @@ function SymbolTable({ rows, onChange }: { rows: SymbolEntry[]; onChange: (r: Sy
         </div>
       )}
       <div className="row def-add">
-        <button type="button" className="btn btn-xs" onClick={() => { onChange([...rows, { symbol: '', mode: 'latex', meaning: '' }]); g.focus(rows.length, 0); }}>{tx("＋ 添加一行")}</button>
-        <span className="muted small">{tx("符号按 LaTeX 写；点预览可视化编辑")}</span>
+        <button type="button" className="btn btn-xs" onClick={() => { onChange([...rows, { symbol: '', mode: 'latex', meaning: '' }]); g.focus(rows.length, 0); }}>{tx("＋ 添加")}</button>
+        <span className="muted small">{tx("LaTeX")}</span>
       </div>
     </>
   );

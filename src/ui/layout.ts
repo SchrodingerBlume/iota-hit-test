@@ -20,7 +20,7 @@ export function useLayoutPrefs() {
   const compact = useMedia(COMPACT);
   const portrait = useMedia(PORTRAIT);
   const stacked = compact && portrait && prefs.mode === 'split';
-  // 窄屏上的左栏是抽屉：开着的偏好不带过去，切回宽屏再按偏好
+  // 窄屏使用临时导航抽屉，不覆盖宽屏下的导航窗格偏好。
   const [drawer, setDrawer] = useState(false);
   useEffect(() => { if (!compact) setDrawer(false); }, [compact]);
 

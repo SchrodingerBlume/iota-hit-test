@@ -1,4 +1,4 @@
-// 大纲（Word 的导航窗格）：当前这一节里的标题树，点一下跳过去
+// 导航窗格：显示当前部分的标题树，并支持定位到标题。
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { create } from 'zustand';
 import { useStore, type RichKey } from '../model/store';
@@ -75,7 +75,7 @@ export function OutlinePane({ richKey: key, onJump }: { richKey: RichKey; onJump
   };
   return (
     <div className="outline">
-      {!items.length && <div className="muted outline-empty">{t("还没有标题")}</div>}
+      {!items.length && <div className="muted outline-empty">{t("此部分没有标题")}</div>}
       {items.map((h, i) => (
         <button key={i} ref={i === cur ? curRef : undefined} type="button" className={`outline-item l${h.level} ${i === cur ? 'is-current' : ''}`} aria-current={i === cur ? 'location' : undefined} onClick={() => jump(h.pos)} title={h.text}>
           {h.num && <span className="outline-num">{h.num}</span>}<span>{h.text || t("（空标题）")}</span>

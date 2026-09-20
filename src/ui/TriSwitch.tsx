@@ -38,7 +38,7 @@ export function TriSeg<V>({ label, hint, choices, value, auto, onChange, showAut
       <div className="triseg-note" title={auto.reason}>
         {isAuto
           ? auto.reason
-          : <>{t("已固定为")}{' '}<b className={`t-${toneOf(eff)}`}>{labelOf(eff)}</b>{(showAutoWhenFixed || auto.mixed || auto.value !== value) && <> · {t("自动档会是「{{v}}」", { v: auto.mixed ?? labelOf(auto.value) })}</>}</>}
+          : <>{t("已固定为")}{' '}<b className={`t-${toneOf(eff)}`}>{labelOf(eff)}</b>{(showAutoWhenFixed || auto.mixed || auto.value !== value) && <> · {t("自动设置为“{{v}}”", { v: auto.mixed ?? labelOf(auto.value) })}</>}</>}
       </div>
     </div>
   );

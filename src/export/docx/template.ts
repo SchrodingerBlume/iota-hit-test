@@ -1,6 +1,4 @@
-// 导出 Word 要的样式表与版面一律问模板：编一份只有设定的小文档，query 它记下的 metadata。模板的键名照 Word
-// 对话框起（asian-font / size / line-spacing / above / first-line-indent / snap-to-grid / sticky……），一个键对应
-// Word 的一个属性，这里逐键翻成 styles.xml 与节属性，不另写数；用户在工程 JSON 里改的样式、版面也就跟着进 Word
+// 查询 iota-hit 的样式与页面参数，并映射为 Word 样式表和节属性。
 import type { ThesisDoc, Settings } from '../../model/types';
 import { IOTA_HIT_VERSION, iotaHitShow, layoutArg, typstDict } from '../../typst/serialize';
 import { queryTypst } from '../../compiler/client';
@@ -76,7 +74,7 @@ export const tw = (pt: number) => Math.round(pt * 20);
 const twFloor = (pt: number) => Math.floor(pt * 20 + 1e-6);
 export const isLines = (v: unknown): v is Lines => !!v && typeof v === 'object' && 'lines' in (v as object);
 export const isChars = (v: unknown): v is Chars => !!v && typeof v === 'object' && 'chars' in (v as object);
-/** 段前 / 段后折成缇：几行 × 这一节的「一行」（网格开着是行跨度，关着是字号） */
+/** 将段前/段后行数换算为缇；启用网格时使用行跨度，否则使用字号。 */
 export const gapTwips = (v: Lines | number | undefined, P: PageSetup): number => (v === undefined ? 0 : isLines(v) ? twFloor(v.lines * P.docgrid['line-unit']) : tw(v));
 export const asianOf = (st: Style) => st['asian-font'];
 export const latinOf = (st: Style) => st['latin-font'];
@@ -163,7 +161,7 @@ export function stylesXml(F: Facts, s: Settings, o: { hangingChars: number }): {
   const body = S.body;
   const serif = F.fonts.serif, songti = F.fonts[asianOf(body) ?? 'songti'];
   const docDefaults = `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="${esc(serif)}" w:eastAsia="${esc(songti)}" w:hAnsi="${esc(serif)}" w:cs="${esc(serif)}"/><w:lang w:val="en-US" w:eastAsia="zh-CN" w:bidi="ar-SA"/></w:rPr></w:rPrDefault><w:pPrDefault/></w:docDefaults>`;
-  // 正文：范例的 Normal 写着 widowControl=0（孤行寡行不拦，模板同）；字体紧缩与网格右缩进两个 Word 开关也落在这儿
+  // Normal 样式沿用范例的 widowControl=0，并写入字距调整与网格右缩进设置。
   const normalLead = `<w:widowControl w:val="0"/>${W.adjustRightIndent ? '' : '<w:adjustRightInd w:val="0"/>'}`;
   const styles: string[] = [
     styleXml('Normal', 'Normal', { isDefault: true, pPr: pPr({ ...body, 'latin-font': latinOf(body) ?? 'serif' }, P, { lead: normalLead }), rPr: rPr({ ...body, 'latin-font': latinOf(body) ?? 'serif' }, F, zh, { kern: W.kern ? 2 : undefined }) }),

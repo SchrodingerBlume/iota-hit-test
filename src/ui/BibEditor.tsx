@@ -59,20 +59,20 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
   }, [entries, emptyGroups]);
   const [groupFilter, setGroupFilter] = useState<string | null>(null);
   const newGroup = () => {
-    const name = prompt(tx("新分组的名字（比如「第 2 章」「综述」「待读」）："))?.trim();
+    const name = prompt(tx("输入分组名称，例如“第 2 章”“综述”或“待读”："))?.trim();
     if (!name) return;
     setEmptyGroups((g) => (g.includes(name) ? g : [...g, name]));
     setGroupFilter(name);
   };
   const renameGroup = (g: string) => {
-    const name = prompt(tx("分组改名："), g)?.trim();
+    const name = prompt(tx("重命名分组："), g)?.trim();
     if (!name || name === g) return;
     onChange(entries.map((e) => (e.group === g ? { ...e, group: name } : e)));
     setEmptyGroups((s) => s.map((x) => (x === g ? name : x)));
     if (groupFilter === g) setGroupFilter(name);
   };
   const deleteGroup = (g: string) => {
-    if (!confirm(tx("解散分组「{{g}}」？里面的条目保留，只是不再分组。", { g: g }))) return;
+    if (!confirm(tx("要取消分组“{{g}}”吗？其中的条目将保留并移至“未分组”。", { g: g }))) return;
     onChange(entries.map((e) => (e.group === g ? { ...e, group: undefined } : e)));
     setEmptyGroups((s) => s.filter((x) => x !== g));
     if (groupFilter === g) setGroupFilter(null);
@@ -115,7 +115,7 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
   };
   const importFile = async (f: File) => {
     const parsed = parseBibtex(await f.text()).map((p) => ({ ...p, group: p.group ?? (groupFilter || undefined) }));
-    if (!parsed.length) { alert(tx("这个文件里没解析出条目")); return; }
+    if (!parsed.length) { alert(tx("未从此文件中解析出任何条目")); return; }
     // 同 key 的当作更新，其余追加
     const byKey = new Map(entries.map((e) => [e.key, e]));
     const merged = [...entries];
@@ -148,8 +148,8 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
     <div className="bib">
       <aside className="bib-list">
         <div className="bib-tools">
-          <span className="bib-search"><Search /><input value={q} placeholder={tx("搜索 key、题名、作者…")} onChange={(e) => setQ(e.target.value)} /></span>
-          <select className="bib-filter" value={filter} onChange={(e) => setFilter(e.target.value)} title={tx("按类型筛")}>
+          <span className="bib-search"><Search /><input value={q} placeholder={tx("搜索引用键、题名或作者…")} onChange={(e) => setQ(e.target.value)} /></span>
+          <select className="bib-filter" value={filter} onChange={(e) => setFilter(e.target.value)} title={tx("按类型筛选")}>
             <option value="">{tx("全部类型")}</option>
             {types.map((t) => <option key={t.type} value={t.type}>{t.label}</option>)}
           </select>
@@ -157,20 +157,20 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
         <div className="bib-add">
           <AddMenu types={types} onAdd={add} />
           <span className="join">
-            <button type="button" className="btn btn-xs btn-icon" title={tx("导入 .bib 文件（同 key 的更新，其余追加）")} onClick={() => fileInput.current?.click()}><Upload /></button>
-            <button type="button" className="btn btn-xs btn-icon" title={groupFilter ? tx("导出分组「{{groupFilter}}」为 .bib（分组写在 groups 字段，JabRef 同款）", { groupFilter: groupFilter }) : tx("导出全部为 .bib（分组写在 groups 字段，JabRef 同款）")} onClick={() => { const set = groupFilter === null ? entries : entries.filter((e) => (groupFilter === '' ? !e.group?.trim() : e.group?.trim() === groupFilter)); download(groupFilter ? fileName.replace(/\.bib$/, `-${groupFilter}.bib`) : fileName, generateBibtex(set, { withGroups: true })); }} disabled={!entries.length}><Download /></button>
-            <button type="button" className={`btn btn-xs btn-icon ${raw !== null ? 'on' : ''}`} title={tx("直接改 BibTeX 源码")} onClick={() => { setRaw(raw === null ? generateBibtex(entries, { withGroups: true }) : null); setRawError(null); }}><Code2 /></button>
+            <button type="button" className="btn btn-xs btn-icon" title={tx("导入 .bib 文件")} onClick={() => fileInput.current?.click()}><Upload /></button>
+            <button type="button" className="btn btn-xs btn-icon" title={groupFilter ? tx("导出分组“{{groupFilter}}”", { groupFilter: groupFilter }) : tx("导出 .bib 文件")} onClick={() => { const set = groupFilter === null ? entries : entries.filter((e) => (groupFilter === '' ? !e.group?.trim() : e.group?.trim() === groupFilter)); download(groupFilter ? fileName.replace(/\.bib$/, `-${groupFilter}.bib`) : fileName, generateBibtex(set, { withGroups: true })); }} disabled={!entries.length}><Download /></button>
+            <button type="button" className={`btn btn-xs btn-icon ${raw !== null ? 'on' : ''}`} title={tx("编辑 BibTeX 源代码")} onClick={() => { setRaw(raw === null ? generateBibtex(entries, { withGroups: true }) : null); setRawError(null); }}><Code2 /></button>
           </span>
           <input ref={fileInput} type="file" accept=".bib,text/plain" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importFile(f); e.target.value = ''; }} />
         </div>
         <div className="bib-groups">
           <button type="button" className={`bib-group-chip ${groupFilter === null ? 'on' : ''}`} onClick={() => setGroupFilter(null)}>{tx("全部")}{' '}<span className="muted">{entries.length}</span></button>
           {groups.map((g) => (
-            <button key={g} type="button" className={`bib-group-chip ${groupFilter === g ? 'on' : ''}`} onClick={() => setGroupFilter(g)} onDoubleClick={() => renameGroup(g)} title={tx("双击改名")}><Folder />{g} <span className="muted">{entries.filter((e) => e.group?.trim() === g).length}</span></button>
+            <button key={g} type="button" className={`bib-group-chip ${groupFilter === g ? 'on' : ''}`} onClick={() => setGroupFilter(g)} onDoubleClick={() => renameGroup(g)} title={tx("双击可重命名")}><Folder />{g} <span className="muted">{entries.filter((e) => e.group?.trim() === g).length}</span></button>
           ))}
           {entries.some((e) => !e.group?.trim()) && groups.length > 0 && <button type="button" className={`bib-group-chip ${groupFilter === '' ? 'on' : ''}`} onClick={() => setGroupFilter('')}>{tx("未分组")}{' '}<span className="muted">{entries.filter((e) => !e.group?.trim()).length}</span></button>}
           <button type="button" className="bib-group-chip is-add" title={tx("新建分组")} onClick={newGroup}><FolderPlus /></button>
-          {groupFilter && <button type="button" className="bib-group-chip is-del" title={tx("解散这个分组")} onClick={() => deleteGroup(groupFilter)}><Trash2 /></button>}
+          {groupFilter && <button type="button" className="bib-group-chip is-del" title={tx("取消分组")} onClick={() => deleteGroup(groupFilter)}><Trash2 /></button>}
         </div>
         <ul className="bib-items">
           {(groupFilter === null && groups.length ? groupedList(list) : [['', list] as [string, BibEntry[]]]).map(([g, items]) => (
@@ -190,7 +190,7 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
                         <span className="bib-mark">[{p.mark}]</span>
                         <span className="bib-item-body">
                           <span className="bib-title">{p.title}</span>
-                          <span className="bib-sub muted">{[p.who, p.year].filter(Boolean).join(' · ')}<code>{e.key}</code>{cited && <span className="bib-cited" title={tx("正文里引用过")}><Check /></span>}</span>
+                          <span className="bib-sub muted">{[p.who, p.year].filter(Boolean).join(' · ')}<code>{e.key}</code>{cited && <span className="bib-cited" title={tx("已在正文中引用")}><Check /></span>}</span>
                         </span>
                       </li>
                     );
@@ -199,7 +199,7 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
               )}
             </li>
           ))}
-          {!list.length && <li className="muted bib-empty">{entries.length ? tx("没有匹配的条目") : tx("还没有条目：点「添加」，或导入 .bib")}</li>}
+          {!list.length && <li className="muted bib-empty">{entries.length ? tx("未找到匹配的条目") : tx("尚无条目。请选择“添加”或导入 .bib 文件。")}</li>}
         </ul>
         <div className="muted bib-count">{entries.length} {' '}{tx("条")}{citedKeys ? tx(" · 已引用 {{length}}", { length: entries.filter((e) => citedKeys.has(e.key)).length }) : ''}</div>
       </aside>
@@ -208,7 +208,7 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
         {raw !== null ? (
           <div className="bib-raw">
             <div className="row" style={{ marginBottom: 8 }}>
-              <b>{tx("BibTeX 源码")}</b><span className="muted" style={{ fontSize: 12 }}>{tx("改完点「应用」，会重新解析成条目（key 相同的保留选中状态）")}</span>
+              <b>{tx("BibTeX 源代码")}</b><span className="muted" style={{ fontSize: 12 }}>{tx("应用更改")}</span>
               <span className="spacer" style={{ flex: 1 }} />
               <button type="button" className="btn btn-xs" onClick={() => { setRaw(null); setRawError(null); }}>{tx("取消")}</button>
               <button type="button" className="btn btn-xs btn-primary" onClick={applyRaw}><Check />{tx("应用")}</button>
@@ -217,7 +217,7 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
             <textarea className="mono input bib-raw-text" value={raw} spellCheck={false} onChange={(e) => setRaw(e.target.value)} />
           </div>
         ) : !current || !def ? (
-          <div className="bib-blank muted">{entries.length ? tx("在左边选一条") : tx("左边「添加」一条，或导入 .bib 文件")}</div>
+          <div className="bib-blank muted">{entries.length ? tx("请在左侧选择一个条目") : tx("请在左侧选择“添加”，或导入 .bib 文件")}</div>
         ) : (
           <div key={current.id} className="bib-fields work-inner">
             <div className="bib-head">
@@ -229,12 +229,12 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
                 </select>
               </label>
               <label className="field" style={{ flex: 1 }}>
-                <span className="field-label">{tx("引用 key")}</span>
+                <span className="field-label">{tx("引用键")}</span>
                 <span className="row" style={{ flexWrap: 'nowrap' }}>
                   <input className="mono-input" value={current.key} onChange={(e) => patch(current.id, (x) => ({ ...x, key: e.target.value.replace(/[^\w:.\-+/]/g, '') }))} />
-                  <button type="button" className="btn btn-xs btn-icon" title={tx("按作者+年份重新生成")} onClick={() => patch(current.id, (x) => ({ ...x, key: suggestKey(x, new Set(entries.filter((o) => o.id !== x.id).map((o) => o.key))) }))}><Wand2 /></button>
+                  <button type="button" className="btn btn-xs btn-icon" title={tx("按作者和年份重新生成引用键")} onClick={() => patch(current.id, (x) => ({ ...x, key: suggestKey(x, new Set(entries.filter((o) => o.id !== x.id).map((o) => o.key))) }))}><Wand2 /></button>
                 </span>
-                {entries.some((o) => o.id !== current.id && o.key === current.key) && <span className="field-hint" style={{ color: 'var(--danger)' }}>{tx("key 与另一条重复")}</span>}
+                {entries.some((o) => o.id !== current.id && o.key === current.key) && <span className="field-hint" style={{ color: 'var(--danger)' }}>{tx("引用键与其他条目重复")}</span>}
               </label>
               <label className="field" style={{ flex: '0 0 150px' }}>
                 <span className="field-label">{tx("分组")}</span>
@@ -244,7 +244,7 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
                 </select>
               </label>
               <span className="join bib-actions" style={{ flex: 'none' }}>
-                <button type="button" className="btn btn-xs btn-icon" title={tx("复制一条")} onClick={() => duplicate(current)}><Copy /></button>
+                <button type="button" className="btn btn-xs btn-icon" title={tx("复制条目")} onClick={() => duplicate(current)}><Copy /></button>
                 <button type="button" className="btn btn-xs btn-icon btn-danger" title={tx("删除")} onClick={() => remove(current.id)}><Trash2 /></button>
               </span>
             </div>
@@ -260,12 +260,12 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
                     <span className="field-label"><code>{k}</code></span>
                     <span className="row" style={{ flexWrap: 'nowrap' }}>
                       <input value={current.fields[k]} onChange={(e) => setField(k, e.target.value)} />
-                      <button type="button" className="btn btn-xs btn-icon" title={tx("删掉这个字段")} onClick={() => patch(current.id, (x) => { const fields = { ...x.fields }; delete fields[k]; return { ...x, fields }; })}><Trash2 /></button>
+                      <button type="button" className="btn btn-xs btn-icon" title={tx("删除此字段")} onClick={() => patch(current.id, (x) => { const fields = { ...x.fields }; delete fields[k]; return { ...x, fields }; })}><Trash2 /></button>
                     </span>
                   </label>
                 ))}
                 <ExtraAdder onAdd={(k) => setField(k, '')} />
-                <p className="muted" style={{ fontSize: 12 }}>{tx("omni-gb7714 认的 biblatex 字段都能写：subtitle、series、eid、cstr、entrysubtype、langid、sortkey……")}</p>
+                <p className="muted" style={{ fontSize: 12 }}>{tx("BibLaTeX 字段")}</p>
               </div>
             )}
           </div>
@@ -279,7 +279,7 @@ function FieldInput({ f, value, onChange }: { f: FieldDef; value: string; onChan
   const wide = f.kind === 'names' || f.kind === 'long' || f.key === 'title' || f.key === 'booktitle' || f.key === 'url';
   return (
     <label className={`field ${wide ? 'wide' : ''}`}>
-      <span className="field-label">{f.label}{f.required && <span className="req">*</span>}{f.kind === 'names' && <span className="muted"> {' '}{tx("· 一行一个")}</span>}</span>
+      <span className="field-label">{f.label}{f.required && <span className="req">*</span>}{f.kind === 'names' && <span className="muted"> {' '}{tx("· 每行一人")}</span>}</span>
       {f.kind === 'names'
         ? <textarea rows={Math.max(1, Math.min(6, splitNames(value).length || 1))} value={splitNames(value).join('\n')} placeholder={tx("张三\n李四\nSmith, John")} onChange={(e) => onChange(joinNames(e.target.value))} />
         : f.kind === 'long'
@@ -309,7 +309,7 @@ function ExtraAdder({ onAdd }: { onAdd: (k: string) => void }) {
   return (
     <span className="row">
       <input className="input" style={{ width: 160 }} value={k} placeholder={tx("字段名，如 series")} onChange={(e) => setK(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter' && k) { onAdd(k); setK(''); } }} />
-      <button type="button" className="btn btn-xs" disabled={!k} onClick={() => { onAdd(k); setK(''); }}><Plus />{tx("加字段")}</button>
+      <button type="button" className="btn btn-xs" disabled={!k} onClick={() => { onAdd(k); setK(''); }}><Plus />{tx("添加字段")}</button>
     </span>
   );
 }

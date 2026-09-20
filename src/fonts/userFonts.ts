@@ -1,6 +1,6 @@
 // 用户字体：两条来路。
-//   1. Local Font Access API（Chromium 桌面版）：点一下授权，按家族名只挑模板要的那几副，
-//      字节直接转移进编译 worker，不存库也不上传——每次进站点一下就有
+//   1. Local Font Access API（Chromium 桌面版）：授权后按家族名读取模板所需字体，
+//      字节直接转移到编译 worker，不上传服务器。
 //   2. 自己选字体文件（任何浏览器）：存进 IndexedDB，下次自动装上
 // 主线程只留元数据（名字、大小、来路），字节一律住在 worker 里；本机那一套动辄三四百 MB。
 import { create } from 'zustand';
@@ -9,7 +9,7 @@ import { saveFontFile, loadFontFile, deleteFontFile, listFontFiles } from '../mo
 import type { Fontset } from '../model/types';
 import { t } from '../i18n';
 
-/** 模板各档的角色 → 家族名（抄自 iota-hit/src/fonts/presets.typ 的 presets） */
+/** 模板字体角色与家族名，来源为 iota-hit/src/fonts/presets.typ。 */
 export const PRESET_ROLES: Record<Exclude<Fontset, 'webapp'>, { role: string; label: string; family: string; optional?: boolean }[]> = {
   windows: [
     { role: 'songti', label: t("宋体"), family: 'SimSun' },
@@ -94,7 +94,7 @@ interface FontState {
   autoReadLocal: (extra?: string[]) => Promise<void>;
   /** 本机扫出来的数学字体（有 MATH 表的）家族名，记在本机 */
   mathFonts: string[];
-  /** 扫一遍本机字体，挑出带 MATH 表的（要用户点一下） */
+  /** 扫描本机字体并返回包含 MATH 表的字体；调用前需要用户授权。 */
   scanMathFonts: () => Promise<void>;
   /** 把这一家族的字读进编译器 */
   loadFamily: (family: string) => Promise<void>;
@@ -190,8 +190,8 @@ export const useFontState = create<FontState>((set, get) => ({
     set({ busy: t("正在加载字体…"), error: null });
     try {
     const list = [...files].filter((f) => /\.(otf|ttf|ttc|otc)$/i.test(f.name));
-    if (!list.length) { set({ error: t("只认 .otf / .ttf / .ttc 文件") }); return; }
-    set({ busy: t("读取字体文件…"), error: null });
+    if (!list.length) { set({ error: t("请选择 .otf、.ttf 或 .ttc 字体文件") }); return; }
+    set({ busy: t("选择字体文件…"), error: null });
     const fonts = [...get().fonts];
     const seen = new Set(fonts.map((f) => f.id));
     const add: { id: string; data: ArrayBuffer }[] = [];

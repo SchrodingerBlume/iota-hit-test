@@ -1,9 +1,4 @@
-// 预览渲染：vector 产物 → SVG，挂进容器。
-//
-// 会话常驻。worker 每次发来的是与上一版的差（增量服务），这里 merge 进会话，让渲染器
-// 只吐出「与 DOM 现状的差」（renderSvgDiff），再用 typst.ts 的补丁算法按 data-tid 复用
-// 没变的 <g>——改一个字只动那一页，十几页的文档主线程也就几毫秒，而不是整张 SVG 换 innerHTML。
-// 页与页之间的白纸、空当、页码画在另一张 SVG（page-chrome）里，不跟补丁算法抢同一棵树。
+// 将 Typst 增量产物渲染为 SVG。内容层按 data-tid 更新，纸张与页码由独立的 page-chrome 层绘制。
 import { createTypstRenderer, type TypstRenderer, type RenderSession } from '@myriaddreamin/typst.ts';
 import { FOCUS_TAIL_WIDTH } from '../typst/serialize';
 import * as rendererWrapper from '@myriaddreamin/typst-ts-renderer';
@@ -16,7 +11,7 @@ let ready: Promise<void> | null = null;
 export function initRenderer(): Promise<void> {
   if (ready) return ready;
   ready = (async () => {
-    // 旧的 render_svg 路径画完会去调 window.typstProcessSvg，没定义就崩；留个空函数保险
+    // 兼容旧 render_svg 路径调用的全局回调。
     const w = window as unknown as { typstProcessSvg?: unknown };
     if (typeof w.typstProcessSvg !== 'function') w.typstProcessSvg = () => {};
     renderer = createTypstRenderer();

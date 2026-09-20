@@ -1,10 +1,4 @@
-// 右键一段 / 一条标题弹出的块级菜单（Word 右键里的「段落」「样式」那一组），
-// 以及「修改样式」对话框。编辑区与预览区都能唤出，命令作用于同一份编辑器。
-//
-// 模板的口子只有两层：单条标题能改的是 #chapter(numbering:, openright:, spread:) 这几个
-// 参数；字体、字号、对齐、行距、段前段后是*一级一条*的样式表（iota-hit(styles:)），
-// 改了就是这一级所有标题一起变——这正是 Word「修改样式」的语义，也是模板刻意
-// 不给单条标题开字体口子的原因（局部 styles 只接表格）。
+// 段落快捷菜单与“修改样式”对话框。标题样式按级别保存，修改后应用于全文同级标题。
 import { ZIHAO } from '../model/zihao';
 import { useMemo, useState, type ReactNode } from 'react';
 import { create } from 'zustand';
@@ -27,7 +21,7 @@ interface State {
   req: MenuReq | null;
   open: (r: Omit<MenuReq, 'nonce'>) => void;
   close: () => void;
-  /** 「修改样式」对话框开着的那一级：0 = 正文，1–4 = 标题级别 */
+  /** “修改样式”对话框当前编辑的级别：0 为正文，1—4 为标题。 */
   styleLevel: number | null;
   openStyle: (level: number) => void;
   closeStyle: () => void;
@@ -140,13 +134,13 @@ export function BlockMenu() {
                     <>
                       <MenuDivider />
                       <MenuGroup>
-                        <MenuGroupHeader>{t("另起页（右手页起）")}</MenuGroupHeader>
+                        <MenuGroupHeader>{t("另起一页（从右手页开始）")}</MenuGroupHeader>
                         {(['auto', 'true', 'false'] as const).map((v) => (
                           <MenuItemRadio key={v} name="openright" value={v} icon={v === 'auto' ? undefined : <DocumentPageBreak20Regular />} onClick={() => patchAttrs({ openright: v })}>{v === 'auto' ? t("自动（使用文档设置）") : v === 'true' ? t("是") : t("否")}</MenuItemRadio>
                         ))}
                       </MenuGroup>
                       <MenuGroup>
-                        <MenuGroupHeader>{t("两字标题撑开（绪　论）")}</MenuGroupHeader>
+                        <MenuGroupHeader>{t("两字标题分散对齐（绪　论）")}</MenuGroupHeader>
                         {(['auto', 'true', 'false'] as const).map((v) => (
                           <MenuItemRadio key={v} name="spread" value={v} onClick={() => patchAttrs({ spread: v })}>{v === 'auto' ? t("自动（使用文档设置）") : v === 'true' ? t("分散对齐") : t("不分散")}</MenuItemRadio>
                         ))}
@@ -155,7 +149,7 @@ export function BlockMenu() {
                   )}
                 </>
               ) : (
-                <MenuItemCheckbox name="opts" value="noIndent" icon={<TextAlignLeft20Regular />} onClick={() => patchAttrs({ noIndent: !info.node.attrs.noIndent })}>{t("这一段不首行缩进")}</MenuItemCheckbox>
+                <MenuItemCheckbox name="opts" value="noIndent" icon={<TextAlignLeft20Regular />} onClick={() => patchAttrs({ noIndent: !info.node.attrs.noIndent })}>{t("取消首行缩进")}</MenuItemCheckbox>
               )}
               {info.inTable && (
                 <>
@@ -175,7 +169,7 @@ export function BlockMenu() {
                 </>
               )}
               <MenuDivider />
-              <MenuItem icon={<TextEditStyle20Regular />} onClick={() => openStyle(level)}>{t("修改「")}{levelName(settings, level, part)}{t("」样式…")}<span className="muted"> {' '}{t("全篇同级")}</span></MenuItem>
+              <MenuItem icon={<TextEditStyle20Regular />} onClick={() => openStyle(level)}>{t("修改「")}{levelName(settings, level, part)}{t("」样式…")}<span className="muted"> {' '}{t("应用于全文同级标题")}</span></MenuItem>
             </MenuList>
           )}
         </MenuPopover>
@@ -219,13 +213,13 @@ function StyleDialog({ level }: { level: number }) {
         <DialogBody>
           <DialogTitle action={<DialogTrigger action="close"><Button appearance="subtle" icon={<Dismiss20Regular />} /></DialogTrigger>}>{t("修改样式：")}{levelName(settings, level)}</DialogTitle>
           <DialogContent>
-            <p className="muted style-hint">{t("全篇同级一起变（与 Word 的「修改样式」一样）；留 Auto 的项按模板排。模板默认：")}{TEMPLATE_DEFAULTS[key]}</p>
+            <p className="muted style-hint">{t("应用于全文同级样式")}{TEMPLATE_DEFAULTS[key]}</p>
             {field(t("中文字体"), (
               <Dropdown size="small" expandIcon={<i className="rb-caret" />} value={FONTS.find((f) => f.key === draft.fontZh)?.label ?? t("自动")} selectedOptions={[draft.fontZh ?? 'auto']} onOptionSelect={(_, d) => set({ fontZh: d.optionValue === 'auto' ? undefined : d.optionValue })}>
                 <Option value="auto" text={t("自动")}>{t("自动")}</Option>
                 {FONTS.map((f) => <Option key={f.key} value={f.key} text={f.label}>{f.label}</Option>)}
               </Dropdown>
-            ), t("西文照模板的字体方案配（Times New Roman 一类）"))}
+            ), t("使用当前字体方案"))}
             {field(t("字号"), (
               <span className="style-row">
                 <Dropdown size="small" expandIcon={<i className="rb-caret" />} value={typeof draft.size === 'number' ? `${draft.size} pt` : ZIHAO.find((z) => z.key === draft.size)?.label ?? t("自动")} selectedOptions={[typeof draft.size === 'number' ? 'pt' : draft.size ?? 'auto']} onOptionSelect={(_, d) => set({ size: d.optionValue === 'auto' ? undefined : d.optionValue === 'pt' ? (typeof draft.size === 'number' ? draft.size : 12) : d.optionValue })}>
@@ -242,7 +236,7 @@ function StyleDialog({ level }: { level: number }) {
                 <Option value="true" text={t("加粗")}>{t("加粗")}</Option>
                 <Option value="false" text={t("不加粗")}>{t("不加粗")}</Option>
               </Dropdown>
-            ), t("中文黑体本身够重，规范不要求加粗；宋体没有粗体面时按「伪粗」设置合成"))}
+            ), t("中文加粗"))}
             {field(t("对齐"), (
               <Dropdown size="small" expandIcon={<i className="rb-caret" />} value={ALIGNS.find((a) => a.key === draft.align)?.label ?? t("自动")} selectedOptions={[draft.align ?? 'auto']} onOptionSelect={(_, d) => set({ align: d.optionValue === 'auto' ? undefined : (d.optionValue as StyleEntry['align']) })}>
                 <Option value="auto" text={t("自动")}>{t("自动")}</Option>
@@ -260,13 +254,13 @@ function StyleDialog({ level }: { level: number }) {
             ))}
             {field(t("段前 / 段后"), (
               <span className="style-row">
-                <LengthInput value={draft.above ?? ''} defaultUnit="lines" allowed={GAP_UNITS} placeholder={t("段前：Auto")} onChange={(v) => set({ above: v })} width={120} />
-                <LengthInput value={draft.below ?? ''} defaultUnit="lines" allowed={GAP_UNITS} placeholder={t("段后：Auto")} onChange={(v) => set({ below: v })} width={120} />
+                <LengthInput value={draft.above ?? ''} defaultUnit="lines" allowed={GAP_UNITS} placeholder={t("段前：自动")} onChange={(v) => set({ above: v })} width={120} />
+                <LengthInput value={draft.below ?? ''} defaultUnit="lines" allowed={GAP_UNITS} placeholder={t("段后：自动")} onChange={(v) => set({ below: v })} width={120} />
               </span>
-            ), t("Word 段落对话框的「段前 / 段后」：光写数按行，也可写 6pt / 1em / 0.3cm；相邻两段取较大者"))}
+            ), t("段前和段后"))}
             {field(t("字符间距"), (
               <LengthInput value={draft.tracking ?? ''} defaultUnit="pt" allowed={ABS_UNITS} placeholder="Auto" onChange={(v) => set({ tracking: v })} width={110} />
-            ), t("Word 字体对话框的「字符间距」：光写数按磅，也可写 0.1mm"))}
+            ), t("字符间距"))}
             {key === 'body' && <p className="muted style-hint">{t("首行缩进和两端对齐使用当前论文模板。")}</p>}
           </DialogContent>
           <DialogActions>

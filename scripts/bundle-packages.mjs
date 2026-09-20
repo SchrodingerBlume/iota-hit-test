@@ -25,7 +25,7 @@ const dataDir = path.join(home, 'Library', 'Application Support', 'typst', 'pack
 const cacheDir = path.join(home, 'Library', 'Caches', 'typst', 'packages');
 
 // 包里不该带进浏览器的东西：测试、PDF、图片样张、构建脚本
-const EXCLUDE_DIRS = new Set(['tests', '.git', '.github', '__pycache__', 'bench', 'ci', '_probe', '.backup', '.claude', 'easy-zh-manual', 'docs', 'examples', 'gallery', 'thumbnail', 'thumbnails', 'test', 'assets/test']);
+const EXCLUDE_DIRS = new Set(['tests', '.git', '.github', '__pycache__', 'bench', 'ci', '_probe', '.backup', 'easy-zh-manual', 'docs', 'examples', 'gallery', 'thumbnail', 'thumbnails', 'test', 'assets/test']);
 const EXCLUDE_EXT = new Set(['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.DS_Store', '.pyc', '.py', '.sh', '.zip']);
 
 // 打包时模板的提交号（工作区有未提交改动就加 -dirty），给「模板更新了没」的检查用

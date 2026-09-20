@@ -32,21 +32,21 @@ function Caption({ node, updateAttributes, kindName, editable, prefix }: { node:
   return (
     <div className="cap" contentEditable={false}>
       <div className="cap-zh">
-        {prefix && <span className="cap-num" title={t("编号按模板规则算，预览为准")}>{prefix}</span>}
+        {prefix && <span className="cap-num" title={t("编号由模板生成，以页面视图为准")}>{prefix}</span>}
         <AutoInput className="cap-input" data-attr="caption" disabled={!editable} value={node.attrs.caption ?? ''} placeholder={t("{{kindName}}题", { kindName: kindName })} minWidth={60} onChange={(e) => updateAttributes({ caption: e.target.value })} />
       </div>
       <div className="cap-en">
-        <AutoInput className="cap-input-en" data-attr="captionEn" disabled={!editable} value={node.attrs.captionEn ?? ''} placeholder={t("English caption（博士双语题注用，可空）")} minWidth={60} onChange={(e) => updateAttributes({ captionEn: e.target.value })} />
+        <AutoInput className="cap-input-en" data-attr="captionEn" disabled={!editable} value={node.attrs.captionEn ?? ''} placeholder={t("英文题注（用于博士双语题注，可留空）")} minWidth={60} onChange={(e) => updateAttributes({ captionEn: e.target.value })} />
       </div>
     </div>
   );
 }
 
 /** 悬停 / 选中时浮出的工具条 */
-/** 块左侧的把手（BlockNote 的 ⋮⋮）：悬停出现，按住拖动整块，点一下选中整块 */
+/** 块操作柄：悬停显示，支持拖动和整块选择。 */
 export function Handle({ editor, getPos, title }: { editor: NodeViewProps['editor']; getPos: NodeViewProps['getPos']; title?: string }) {
   return (
-    <span className="blk-handle" contentEditable={false} data-drag-handle draggable title={title ?? t("拖动移动，点击选中")}
+    <span className="blk-handle" contentEditable={false} data-drag-handle draggable title={title ?? t("拖动可移动；单击可选择")}
       onMouseDown={(e) => { if (e.button !== 0) return; const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }}>
       <svg viewBox="0 0 10 16" width="10" height="16" aria-hidden><circle cx="3" cy="3" r="1.4" /><circle cx="7" cy="3" r="1.4" /><circle cx="3" cy="8" r="1.4" /><circle cx="7" cy="8" r="1.4" /><circle cx="3" cy="13" r="1.4" /><circle cx="7" cy="13" r="1.4" /></svg>
     </span>
@@ -129,13 +129,13 @@ function SubFigureCell({ sub, index, editable, onChange, onRemove, letter, label
   return (
     <div className="subfig" title={t("分图 ({{letter}})，标签 {{labelBase}}-{{v2}}", { letter: letter, labelBase: labelBase, v2: letter })}>
       {url ? <img src={url} alt="" style={{ width: figurePx(sub.width), maxWidth: '100%' }} draggable={false} /> : (
-        <label className="fig-drop fig-drop-sm"><ImageUp /><span>{sub.image ? t("找不到 {{image}}", { image: sub.image }) : t("选图")}</span><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>
+        <label className="fig-drop fig-drop-sm"><ImageUp /><span>{sub.image ? t("未找到 {{image}}", { image: sub.image }) : t("选择图片")}</span><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>
       )}
-      <div className="subfig-cap"><span className="cap-num">({letter})</span><AutoInput className="cap-input" disabled={!editable} value={sub.caption} placeholder={t("分图题")} minWidth={40} onChange={(e) => onChange({ caption: e.target.value })} /></div>
+      <div className="subfig-cap"><span className="cap-num">({letter})</span><AutoInput className="cap-input" disabled={!editable} value={sub.caption} placeholder={t("分图题注")} minWidth={40} onChange={(e) => onChange({ caption: e.target.value })} /></div>
       <div className="subfig-tools">
         <LengthInput value={sub.width} defaultUnit="cm" disabled={!editable} onChange={(v) => onChange({ width: v ?? '6cm' })} width={70} />
-        <label className="blk-tool is-btn" title={t("换图")}><ImageUp /><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>
-        <button type="button" className="blk-tool is-btn is-danger" title={t("删掉分图 ({{letter}})", { letter: letter })} disabled={!editable} onClick={onRemove}><Trash2 /></button>
+        <label className="blk-tool is-btn" title={t("更改图片")}><ImageUp /><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>
+        <button type="button" className="blk-tool is-btn is-danger" title={t("删除分图 ({{letter}})", { letter: letter })} disabled={!editable} onClick={onRemove}><Trash2 /></button>
         <span className="muted" style={{ fontSize: 11 }}>#{index + 1}</span>
       </div>
     </div>
@@ -175,7 +175,7 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
         ) : url ? <img src={url} alt="" style={{ width: figurePx(node.attrs.width), maxWidth: '100%' }} draggable={false} /> : (
           <label className="fig-drop">
             <ImageUp />
-            <span>{name ? t("找不到图片 {{name}}，点击重新选择", { name: name }) : t("选择图片（PNG / JPG / SVG）")}</span>
+            <span>{name ? t("未找到图片 {{name}}。请单击重新选择。", { name: name }) : t("选择图片（PNG / JPG / SVG）")}</span>
             <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/gif" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} />
           </label>
         )}
@@ -184,19 +184,19 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
       {captionOnly && (
         <div className="subcaps" contentEditable={false}>
           {subs.map((s, i) => (
-            <span key={i} className="subfig-cap"><span className="cap-num">({letters[i] ?? i + 1})</span><AutoInput className="cap-input" disabled={!editable} value={s.caption} placeholder={t("分图题")} minWidth={40} onChange={(e) => setSubs(subs.map((x, k) => (k === i ? { ...x, caption: e.target.value } : x)))} /><button type="button" className="blk-tool is-btn is-danger" title={t("删掉这条分图题")} disabled={!editable} onClick={() => setSubs(subs.filter((_, k) => k !== i))}><Trash2 /></button></span>
+            <span key={i} className="subfig-cap"><span className="cap-num">({letters[i] ?? i + 1})</span><AutoInput className="cap-input" disabled={!editable} value={s.caption} placeholder={t("分图题注")} minWidth={40} onChange={(e) => setSubs(subs.map((x, k) => (k === i ? { ...x, caption: e.target.value } : x)))} /><button type="button" className="blk-tool is-btn is-danger" title={t("删除此分图题注")} disabled={!editable} onClick={() => setSubs(subs.filter((_, k) => k !== i))}><Trash2 /></button></span>
           ))}
         </div>
       )}
       <Tools>
-        <label className="blk-tool" title={t("图的宽度：cm / mm / pt / em / %（相对版心宽）")}>
+        <label className="blk-tool" title={t("宽度")}>
           <MoveHorizontal />
           <LengthInput value={node.attrs.width ?? 8} defaultUnit="cm" disabled={!editable} onChange={(v) => updateAttributes({ width: v ?? 8 })} width={84} />
         </label>
         <LabelField node={node} updateAttributes={updateAttributes} prefix="fig" editable={editable} />
-        <button type="button" className="blk-tool is-btn" title={t("加一张分图（多张分图排成一张母图，分图题 (a)(b)…）")} disabled={!editable} onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.onchange = async () => { const files = [...(input.files ?? [])]; const add: SubFig[] = []; for (const f of files) { const r = await env.addImage(f); add.push({ image: r.name, width: r.width && r.height ? `${Math.min(7, Math.max(3, Math.round((r.width / 96) * 2.54 * 10) / 10))}cm` : '6cm', caption: '' }); } const base = subs.length ? subs : (name ? [{ image: name, width: node.attrs.width ?? '6cm', caption: '' }] : []); setSubs([...base, ...add]); }; input.click(); }}><PencilLine />{t("分图")}</button>
-        {!!name && (!subs.length || captionOnly) && <button type="button" className="blk-tool is-btn" title={t("这张图里已经画着 (a)(b)：分图题连排在图题之下（模板的 #subs）")} disabled={!editable} onClick={() => setSubs([...subs, { image: '', width: '', caption: '' }])}><PencilLine />{t("分图题")}</button>}
-        {!subs.length && <label className="blk-tool is-btn" title={t("换一张图")}><ImageUp /><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>}
+        <button type="button" className="blk-tool is-btn" title={t("添加分图")} disabled={!editable} onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.onchange = async () => { const files = [...(input.files ?? [])]; const add: SubFig[] = []; for (const f of files) { const r = await env.addImage(f); add.push({ image: r.name, width: r.width && r.height ? `${Math.min(7, Math.max(3, Math.round((r.width / 96) * 2.54 * 10) / 10))}cm` : '6cm', caption: '' }); } const base = subs.length ? subs : (name ? [{ image: name, width: node.attrs.width ?? '6cm', caption: '' }] : []); setSubs([...base, ...add]); }; input.click(); }}><PencilLine />{t("分图")}</button>
+        {!!name && (!subs.length || captionOnly) && <button type="button" className="blk-tool is-btn" title={t("分图题注置于总题注下方")} disabled={!editable} onClick={() => setSubs([...subs, { image: '', width: '', caption: '' }])}><PencilLine />{t("分图题注")}</button>}
+        {!subs.length && <label className="blk-tool is-btn" title={t("更改图片")}><ImageUp /><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>}
         <button type="button" className="blk-tool is-btn is-danger" title={t("删除插图")} disabled={!editable} onClick={deleteNode}><Trash2 /></button>
       </Tools>
     </NodeViewWrapper>
@@ -221,7 +221,7 @@ export const Figure = Node.create({
 });
 
 // ── 表（figure 壳 + 真表格） ─────────────────────────────────────
-/** 行 / 列把手（SuperDoc 那种）：表头上方每列一条、表左每行一条，点一下整列 / 整行选中 */
+/** 表格行列操作柄：位于表格顶部与左侧，用于选择整列或整行。 */
 function RowColHandles({ wrap, editor, getPos, node, hover }: { wrap: React.RefObject<HTMLDivElement | null>; editor: NodeViewProps['editor']; getPos: NodeViewProps['getPos']; node: NodeViewProps['node']; hover: boolean }) {
   const [geo, setGeo] = useState<{ cols: { x: number; w: number }[]; rows: { y: number; h: number }[]; top: number; left: number } | null>(null);
   useEffect(() => {
@@ -356,9 +356,9 @@ function EquationView({ node, updateAttributes, selected, deleteNode, editor, ge
     <NodeViewWrapper className={`blk eq ${selected ? 'is-selected' : ''} ${editing ? 'is-editing' : ''}`}>
       <Handle editor={editor} getPos={getPos} />
       {!editing && (
-        <div className="eq-line" contentEditable={false} onClick={() => editable && setEditing(true)} title={t("点击编辑公式")}>
+        <div className="eq-line" contentEditable={false} onClick={() => editable && setEditing(true)} title={t("单击可编辑公式")}>
           <span className="eq-spacer" />
-          <span className="eq-render"><MathPreview src={forPreview(src, mode)} mode={mode} display empty={<em className="muted">{t("空公式，点击编辑")}</em>} /></span>
+          <span className="eq-render"><MathPreview src={forPreview(src, mode)} mode={mode} display empty={<em className="muted">{t("公式为空，单击可编辑")}</em>} /></span>
           <span className="eq-number">{numbered ? num : ''}</span>
         </div>
       )}
@@ -402,7 +402,7 @@ export const Equation = Node.create({
 function PageBreakView({ selected, deleteNode }: NodeViewProps) {
   return (
     <NodeViewWrapper className={`blk pb ${selected ? 'is-selected' : ''}`} contentEditable={false}>
-      <span>{t("分页")}</span>
+      <span>{t("分页符")}</span>
       <Tools><button type="button" className="blk-tool is-btn is-danger" title={t("删除分页")} onClick={deleteNode}><Trash2 /></button></Tools>
     </NodeViewWrapper>
   );

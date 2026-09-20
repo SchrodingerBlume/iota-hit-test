@@ -225,7 +225,7 @@ export function startCompiler() {
           ...(m.glyphs && s.para && (input?.version ?? -1) >= s.para.version ? { para: null } : {}),
         });
         // 线性内存只涨不缩，快顶到 4 GB 时趁没在打字先换个 worker，别等它陷进去
-        if ((m.mem ?? 0) > MEM_RESTART && !pending) restartCompiler(t("wasm 内存 {{v0}} MB，预防性重启", { v0: Math.round((m.mem ?? 0) / 1048576) }));
+        if ((m.mem ?? 0) > MEM_RESTART && !pending) restartCompiler(t("排版引擎占用 {{v0}} MB 内存，正在重新启动", { v0: Math.round((m.mem ?? 0) / 1048576) }));
         else flush();
         break;
       }

@@ -1,9 +1,4 @@
-// 公式编辑：行间公式与行内公式共用。
-//
-// LaTeX 档（默认）是所见即所得的——公式本身就是编辑区（MathLive）：光标在分式、上下标里
-// 进出，打 `/` 成分式、`^` 上标、`alpha` 变 α，Tab 跳到下一个空位；要看源码点「源码」，
-// 屏幕键盘给平板与不记命令的人。Typst 档是源码 + 实时预览（页面里的 wasm 引擎编一个小片段，
-// 与正文同一套字体）。符号面板两档通用：点一下把结构插到光标处，□ 是占位。
+// 行间与行内公式共用的编辑器。LaTeX 使用 MathLive，Typst 使用源码与实时预览。
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MathfieldElement } from 'mathlive';
 import 'mathlive/fonts.css';
@@ -12,7 +7,7 @@ import { PALETTE, insertTemplate, nextHole } from './palette';
 import { LayoutGrid, ChevronUp, Keyboard, Code2 } from 'lucide-react';
 import { t as tx } from '../../i18n';
 
-// 字体已随 fonts.css 打进站内；别再去网上找。菜单、音效都关掉
+// MathLive 字体已随站点分发；禁用远程字体与音效。
 MathfieldElement.fontsDirectory = null;
 MathfieldElement.soundsDirectory = null;
 
@@ -144,7 +139,7 @@ export function MathEditor({ value, mode, display, onChange, onMode, autoFocus, 
       {latex ? (
         <div className="math-field-box" ref={box}>
           <math-field ref={mf as any} default-mode={display ? 'math' : 'inline-math'} style={{ fontSize: compact ? 18 : 22 }} />
-          {!value.trim() && <span className="math-field-hint">{tx("输入公式：按")}{' '}<code>/</code> {' '}{tx("插入分式，按")}<code>^</code> {' '}{tx("输入上标，输入")}<code>alpha</code> {' '}{tx("得到 α；也可从符号面板选择。")}</span>}
+          {!value.trim() && <span className="math-field-hint">{tx("在此处键入公式。")}</span>}
         </div>
       ) : (
         <div className="math-preview-box">
@@ -166,14 +161,14 @@ export function MathEditor({ value, mode, display, onChange, onMode, autoFocus, 
       )}
       <div className="math-src-row">
         {/* 公式只走 LaTeX（模板侧 mitex）；老文档里 Typst 写法的公式还能编，这里只给一个改成 LaTeX 的口 */}
-        {!latex && <span className="seg" title={tx("这条公式是 Typst 写法（老版本存的）；新公式一律 LaTeX")}>
-          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => onMode('latex')}>{tx("改成 LaTeX")}</button>
+        {!latex && <span className="seg" title={tx("Typst 公式")}>
+          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => onMode('latex')}>{tx("转换为 LaTeX")}</button>
           <button type="button" className="on" onMouseDown={(e) => e.preventDefault()}>Typst</button>
         </span>}
         {latex && <button type="button" className={`btn btn-xs btn-icon ${showSource ? 'on' : ''}`} title={tx("查看或编辑 LaTeX 源代码")} onMouseDown={(e) => e.preventDefault()} onClick={() => setShowSource((s) => !s)}><Code2 /></button>}
         {latex && <button type="button" className={`btn btn-xs btn-icon ${kbd ? 'on' : ''}`} title={tx("屏幕数学键盘")} onMouseDown={(e) => e.preventDefault()} onClick={toggleKeyboard}><Keyboard /></button>}
         <span className="spacer" />
-        {latex ? <span className="muted math-tip">{tx("Tab 跳到下一个空位 ·")}{' '}{compact ? tx("回车") : tx("⌘/Ctrl + 回车")}{tx("完成")}</span> : <span className="muted math-tip">{tx("□ 是占位，Tab 跳到下一个")}</span>}
+        {latex ? <span className="muted math-tip">{tx("按 Tab 移至下一处 ·")}{' '}{compact ? tx("回车") : tx("⌘/Ctrl + 回车")}{tx("完成")}</span> : <span className="muted math-tip">{tx("□ 表示占位符；按 Tab 移至下一项")}</span>}
         <button type="button" className={`btn btn-xs btn-icon ${palette ? 'on' : ''}`} title={tx("符号面板")} onMouseDown={(e) => e.preventDefault()} onClick={() => setPalette((p) => !p)}>{palette ? <ChevronUp /> : <LayoutGrid />}</button>
       </div>
       {(error || latexError) && <div className="math-error">{error ?? latexError}</div>}

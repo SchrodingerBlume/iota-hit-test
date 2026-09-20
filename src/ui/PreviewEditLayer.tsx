@@ -1,9 +1,4 @@
-// 预览区直接编辑：盖在排版结果上的一层。
-//
-// 操作逻辑照 Word：点哪儿光标落哪儿，拖动选一段，双击选词、三击选段，直接打字、退格、
-// 回车分段、方向键上下左右，⌘B/I/U 加粗强调下划线，⌘Z 撤销，复制粘贴，中文输入法照常。
-// 真身仍是左侧的 ProseMirror 文档：这里的光标就是编辑器的选区，每一次击键都翻成编辑器
-// 命令发过去，排版结果随即重排。字形表更新前，新敲的字先「暂印」在光标处。
+// 页面视图的编辑覆盖层。输入与选区写回 ProseMirror；字形映射更新前先显示临时文字。
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { create } from 'zustand';
 import type { Editor } from '@tiptap/core';
@@ -231,8 +226,8 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   const pageTo = (p: number, x: number, y: number) => { const g = geom[toDisplay(p)]; return g ? { left: g.left + x * g.scale, top: g.top + y * g.scale, scale: g.scale } : null; };
   const stale = index.version !== docVersion();
   const oldPos = (pos: number, assoc: -1 | 1) => (activeKey ? (stale ? toOldPos(activeKey, index.version, pos, assoc) : pos) : null);
-  /** 还没排进去的那几个字：光标锚在它们前面那一点（选中一段再打字时那一点是删掉那段的左端，不是右端），
-   *  盖住的文字宽度由 overlay 补 */
+  /** 尚未进入排版结果的文字：光标锚定在输入起点；替换选区时使用原选区左端，
+   *  覆盖文字的宽度由 overlay 补偿。 */
   const pendingLen = pending && pending.key === activeKey && !pending.fading && composing === null && index.version < pending.version ? pending.text.length : 0;
   const caret = useMemo((): CaretRect | null => {
     if (!sel || !activeKey) return null;
@@ -277,7 +272,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     const t = window.setTimeout(() => setPending((p) => (p && p.fading ? null : p)), 220);
     return () => window.clearTimeout(t);
   }, [pending]);
-  // 删掉的字在重排前就该消失（Word 是当场没的）：编译那一版里的字形，映射到现在的位置若已塌成空，
+  // 删除内容应在重排前隐藏：若旧字形映射到当前文档后已折叠为空，
   // 就盖一块纸色把它遮掉
   const gone = useMemo(() => {
     if (!stale || !activeKey) return [] as { page: number; x: number; y: number; w: number; h: number }[];
@@ -558,9 +553,8 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     setSelection(ed, extend ? ed.state.selection.anchor : p, p);
   };
   /**
-   * 退格 / 删除。ProseMirror 的键位表只管并段、删节点，单个字的删除是交给浏览器的
-   * contenteditable 做的——这儿没有浏览器帮忙，得自己删：按字素（合成字符、代理对算一个），
-   * Alt 按词，⌘ 到行首 / 行尾；有选区就删选区；在段首 / 段尾、贴着原子节点时才交给键位表并段。
+   * 退格与删除。此层不使用 contenteditable，因此自行处理字素、单词和行级删除；
+   * 合并段落和删除原子节点仍交给 ProseMirror 键位表。
    */
   const deleteChar = (ed: Editor, dir: -1 | 1, unit: 'char' | 'word' | 'line') => {
     const { doc, selection } = ed.state;
@@ -757,7 +751,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
         ref={inputRef}
         className="pv-input"
         style={{ left: inputPos.current.left, top: inputPos.current.top, height: Math.max(1, caretH) }}
-        aria-label={tx("在预览里直接编辑")}
+        aria-label={tx("直接编辑页面")}
         autoCapitalize="off" autoCorrect="off" spellCheck={false} autoComplete="off"
         onFocus={() => setSurface({ focused: true })}
         onBlur={() => {

@@ -16,7 +16,7 @@ export function LinkDialog({ initialHref, initialText, textLocked, onSubmit, onR
           <DialogTitle action={<DialogTrigger action="close"><Button appearance="subtle" icon={<Dismiss20Regular />} /></DialogTrigger>}>{initialHref ? t("编辑链接") : t("插入链接")}</DialogTitle>
           <DialogContent>
             <div className="style-field"><Label className="style-label">{t("地址")}</Label><Input value={href} placeholder={t("https://… 或 doi:10.…")} onChange={(_, d) => setHref(d.value)} autoFocus onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter' && ok) onSubmit(normalized(), text.trim() || url); }} /></div>
-            <div className="style-field"><Label className="style-label">{t("显示文本")}</Label><Input value={text} placeholder={textLocked ? t("（选中的文字）") : t("留空就显示地址")} disabled={textLocked} onChange={(_, d) => setText(d.value)} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter' && ok) onSubmit(normalized(), text.trim() || url); }} /></div>
+            <div className="style-field"><Label className="style-label">{t("显示文本")}</Label><Input value={text} placeholder={textLocked ? t("（选中的文字）") : t("留空时显示链接地址")} disabled={textLocked} onChange={(_, d) => setText(d.value)} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter' && ok) onSubmit(normalized(), text.trim() || url); }} /></div>
           </DialogContent>
           <DialogActions>
             {onRemove && <Button appearance="subtle" onClick={onRemove}>{t("取消超链接")}</Button>}

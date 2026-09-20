@@ -32,11 +32,11 @@ export function locateDiagnostic(where: string, main: string, segments: Segment[
 /** Typst 的原话翻成用户看得懂的；翻不了的照抄 */
 export function humanize(message: string): { text: string; internal: boolean } {
   let m: RegExpExecArray | null;
-  if ((m = /^label `<([^>]+)>` is not attached to anything/.exec(message))) return { text: t("标签 {{label}} 没挂到任何元素上——这是本站生成排版代码时出的问题，请把这条反馈给开发者", { label: m[1] }), internal: true };
-  if ((m = /^label `<([^>]+)>` does not exist/.exec(message))) return { text: t("引用的目标 {{label}} 不存在：被引用的图、表、公式或标题已删掉，或还没加标签", { label: m[1] }), internal: false };
-  if ((m = /^label `<([^>]+)>` occurs multiple times/.exec(message))) return { text: t("标签 {{label}} 出现了不止一次", { label: m[1] }), internal: false };
-  if ((m = /^unknown font family: (.+)/.exec(message))) return { text: t("找不到字体 {{font}}：本机字体档没读到这副字，或它不在字体方案里", { font: m[1] }), internal: false };
-  if (/^file not found/.test(message)) return { text: t("找不到图片文件：图片可能没导入，或已从工程里删掉"), internal: false };
-  if (/^unexpected|^expected|unclosed delimiter/.test(message)) return { text: t("生成的排版代码有语法错误——这是本站的问题，请把这条反馈给开发者：") + message, internal: true };
+  if ((m = /^label `<([^>]+)>` is not attached to anything/.exec(message))) return { text: t("标签 {{label}} 未关联到任何元素。", { label: m[1] }), internal: true };
+  if ((m = /^label `<([^>]+)>` does not exist/.exec(message))) return { text: t("引用目标 {{label}} 不存在。", { label: m[1] }), internal: false };
+  if ((m = /^label `<([^>]+)>` occurs multiple times/.exec(message))) return { text: t("标签 {{label}} 重复出现", { label: m[1] }), internal: false };
+  if ((m = /^unknown font family: (.+)/.exec(message))) return { text: t("找不到字体 {{font}}。", { font: m[1] }), internal: false };
+  if (/^file not found/.test(message)) return { text: t("未找到图片。"), internal: false };
+  if (/^unexpected|^expected|unclosed delimiter/.test(message)) return { text: t("排版错误：") + message, internal: true };
   return { text: message, internal: false };
 }

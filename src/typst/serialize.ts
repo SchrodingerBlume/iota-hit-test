@@ -239,7 +239,7 @@ function nomenclature(doc: ThesisDoc, openright = ''): string {
   }
   if (wantSymbols) parts.push(`#list-of-symbols(${[...shared, ...(openright ? [openright] : [])].join(', ')})[\n${symbolLines}\n]`);
   if (wantAbbrs) parts.push(`#list-of-abbreviations(${abbrDict}${withOpts([...abbrOpts, ...(openright ? [openright] : [])])})`);
-  // 不印缩略语表（关了、或报告档里模板本来就跳过）：只声明条目，正文里的缩写照常首次展开
+  // 不生成缩略语表时仍声明条目，使缩写可在正文首次出现时展开。
   else if (abbrs.length) parts.push(`#list-of-abbreviations(${abbrDict}, form: none, shown: true)`);
   return parts.join('\n\n');
 }
@@ -498,4 +498,3 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   const { text: main, segments } = stripMarks(parts.join('\n\n') + '\n');
   return { main, files, images: [...collectImages(chapterDoc as any)], segments };
 }
-

@@ -33,7 +33,7 @@ class StaticPackageRegistry {
   }
 }
 
-/** 带进度、走 Cache API 的下载；文件名不变内容会变的（包、字体）按 version 分开存，旧版本顺手删掉 */
+/** 通过 Cache API 下载并报告进度；按版本隔离同名资源并清理旧版本。 */
 async function fetchCached(url: string, version: string | number | null, onBytes?: (n: number) => void): Promise<Uint8Array> {
   let cache: Cache | undefined;
   try { cache = await caches.open(CACHE); } catch { cache = undefined; }
@@ -98,7 +98,7 @@ let wasmBytes: Uint8Array | undefined;
 
 async function init(base: string) {
   const t0 = performance.now();
-  const progress: Progress = { phase: t("准备"), loaded: 0, total: 0 };
+  const progress: Progress = { phase: t("正在准备…"), loaded: 0, total: 0 };
   const report = (detail?: string) => post({ type: 'progress', progress: { ...progress, detail } });
 
   const [fontManifest, pkgManifest] = await Promise.all([
@@ -114,13 +114,13 @@ async function init(base: string) {
   const wasmSize = 30_200_000; // 进度条用的估计值
   progress.total = wasmSize + fonts.filter((f) => !f.lazy).reduce((s, f) => s + f.size, 0) + packages.reduce((s, p) => s + p.size, 0);
 
-  progress.phase = t("下载排版引擎");
+  progress.phase = t("正在下载排版引擎…");
   report('typst 0.15.1 · wasm');
   let wasmLoaded = 0;
   const wasm = wasmBytes = await fetchCached(wasmUrl, import.meta.env.DEV ? (await fetch(wasmUrl, { method: 'HEAD' })).headers.get('etag') : null, (n) => { wasmLoaded += n; progress.loaded += n; report('typst 0.15.1 · wasm'); });
   progress.loaded += Math.max(0, wasmSize - wasmLoaded);
 
-  progress.phase = t("下载字体");
+  progress.phase = t("正在下载字体…");
   const fontBuffers: (Uint8Array | { info: unknown; url: string })[] = [];
   // 大字体并发拉，小的顺序无所谓
   await Promise.all(fonts.map(async (f) => {
@@ -131,7 +131,7 @@ async function init(base: string) {
   }));
   bundledFonts = fontBuffers.filter((f): f is Uint8Array => f instanceof Uint8Array);
 
-  progress.phase = t("下载模板与依赖包");
+  progress.phase = t("正在下载模板和依赖包…");
   const am = new MemoryAccessModel();
   const registry = new StaticPackageRegistry(am);
   await Promise.all(packages.map(async (p) => {
@@ -139,7 +139,7 @@ async function init(base: string) {
     registry.add(p, await ensureGzip(buf));
   }));
 
-  progress.phase = t("启动编译器");
+  progress.phase = t("正在启动排版引擎…");
   progress.loaded = progress.total;
   report();
   compiler = createTypstCompiler();
@@ -233,7 +233,7 @@ async function compile(msg: Extract<ToWorker, { type: 'compile' }>) {
     // 不走 typst.ts 的 compile() 包装：自己拿世界快照，编完留着，字形表从同一份文档上取
     const raw = (compiler as any).compiler;
     try { world?.free(); } catch { /* 已经释放过 */ }
-    // sys.inputs.preview：main.typ 里预览专用的东西（空行上的隐形 ¶）只在这儿生效，PDF 不带
+    // sys.inputs.preview 仅启用预览辅助内容，例如空段落的透明段落标记。
     world = raw.snapshot(undefined, mainPath, [['preview', '1'], ...Object.entries(msg.inputs ?? {})]);
     let res: any;
     let diagnostics: Diagnostic[];
@@ -344,7 +344,7 @@ ${body}
   }
 }
 
-/** 编一份小文档、query 它的 metadata：模板解出来的样式表与版面就从这儿读 */
+/** 编译查询文档并读取模板提供的样式与页面元数据。 */
 async function query(msg: Extract<ToWorker, { type: 'query' }>) {
   if (!compiler) return;
   compiler.addSource('/query.typ', msg.main);

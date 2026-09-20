@@ -15,7 +15,7 @@ import { useEditorEnv } from './env';
 import { usePreviewSurface } from '../ui/PreviewEditLayer';
 import { t as tx } from '../i18n';
 
-/** 功能区按钮的亮暗只取决于这几样：光标处的标记、所在段的类型与属性、祖先块、选区空不空、能不能撤销重做 */
+/** 功能区按钮状态依赖选区、段落、祖先块以及撤消/恢复能力。 */
 function editorSignature(editor: Editor): string {
   const { state } = editor;
   const { selection } = state;
@@ -206,12 +206,12 @@ export function TableAlignTools({ editor }: { editor: Editor }) {
           <Button size="small" style={{ width: '100%', marginTop: 6 }} onMouseDown={(e) => e.preventDefault()} onClick={() => apply(null, null)}>{tx("恢复默认（居中）")}</Button>
         </PopoverSurface>
       </Popover>
-      <B title={rowScope ? tx("对齐作用于整行（点击改为只作用于当前 / 选中的单元格）") : tx("对齐只作用于当前 / 选中的单元格（点击改为整行）")} on={rowScope} icon={<TableCellEdit20Regular />} run={() => setRowScope((r) => !r)}>{tx("整行")}</B>
+      <B title={rowScope ? tx("应用于整行") : tx("应用于所选单元格")} on={rowScope} icon={<TableCellEdit20Regular />} run={() => setRowScope((r) => !r)}>{tx("整行")}</B>
       <Sep />
-      <label className="tb-field" title={tx("当前列的宽度：cm / mm / in / pt / em / %（相对版心）/ fr（按份分剩余宽度；列线可拖，拖的是像素）。留空 = 自动")}>
+      <label className="tb-field" title={tx("列宽")}>
         {tx("列宽")}{' '}<LengthInput value={cols[col] ?? (cw === '' ? '' : `${cw}cm`)} defaultUnit="cm" allowed={['cm', 'mm', 'in', 'pt', 'em', '%', 'fr']} placeholder={tx("自动")} width={84} onChange={setCol} />
       </label>
-      <label className="tb-field" title={tx("当前行的高度：cm / mm / pt / em。留空 = 自动")}>
+      <label className="tb-field" title={tx("行高")}>
         {tx("行高")}{' '}<LengthInput value={info.rowHeight ?? ''} defaultUnit="cm" placeholder={tx("自动")} width={84} onChange={(v) => editor.chain().setRowAttribute('height', v ?? null).run()} />
       </label>
     </>
@@ -233,9 +233,9 @@ export function FontSizeTool() {
   return (
     <span className="tb-size" title={tx("调整编辑区显示字号，不影响文档排版。")}>
       <TextFontSize20Regular className="tb-size-ico" />
-      <B title={tx("字号小一点")} run={() => setSize(size - 1)} disabled={size <= 13}>A−</B>
+      <B title={tx("减小字号")} run={() => setSize(size - 1)} disabled={size <= 13}>A−</B>
       <span className="tb-size-val">{Math.round(size)}</span>
-      <B title={tx("字号大一点")} run={() => setSize(size + 1)} disabled={size >= 24}>A+</B>
+      <B title={tx("增大字号")} run={() => setSize(size + 1)} disabled={size >= 24}>A+</B>
     </span>
   );
 }

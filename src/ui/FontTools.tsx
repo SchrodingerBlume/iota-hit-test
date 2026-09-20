@@ -21,10 +21,10 @@ export function FontFamilyPicker({ ed }: { ed: Editor | null }) {
   const role: FontRole | undefined = ed?.getAttributes('fontFamily').role;
   const cur = INLINE_FONTS.find((f) => f.key === role);
   return (
-    <Tooltip content={tx("中文字体：模板的宋 / 黑 / 楷 / 仿宋四个角色，换整套字体方案时跟着换")} relationship="description" positioning="below" withArrow>
+    <Tooltip content={tx("中文字体")} relationship="description" positioning="below" withArrow>
       <Dropdown size="small" className="rb-font" expandIcon={caret} disabled={!ed} value={cur?.label ?? tx("默认")} selectedOptions={[role ?? 'auto']}
         onOptionSelect={(_, d) => refocusPreviewAfter(() => { const c = ed!.chain().focus(); (d.optionValue === 'auto' ? c.unsetFontFamily() : c.setFontFamily(d.optionValue as FontRole)).run(); })}>
-        <Option value="auto" text={tx("默认")}>{tx("默认（跟样式）")}</Option>
+        <Option value="auto" text={tx("默认")}>{tx("默认（使用样式）")}</Option>
         {INLINE_FONTS.map((f) => <Option key={f.key} value={f.key} text={f.label}><span data-font={f.key}>{f.label}</span></Option>)}
       </Dropdown>
     </Tooltip>
@@ -43,9 +43,9 @@ export function FontSizePicker({ ed }: { ed: Editor | null }) {
   };
   return (
     <>
-      <Tooltip content={tx("字号：模板的字号表（初号…小六）")} relationship="description" positioning="below" withArrow>
+      <Tooltip content={tx("字号采用模板的中文字号表（初号至小六）。")} relationship="description" positioning="below" withArrow>
         <Dropdown size="small" className="rb-size" expandIcon={caret} disabled={!ed} value={cur?.label ?? tx("默认")} selectedOptions={[size ?? 'auto']} onOptionSelect={(_, d) => (d.optionValue === 'auto' ? refocusPreviewAfter(() => ed!.chain().focus().unsetFontSize().run()) : set(d.optionValue!))}>
-          <Option value="auto" text={tx("默认")}>{tx("默认（跟样式）")}</Option>
+          <Option value="auto" text={tx("默认")}>{tx("默认（使用样式）")}</Option>
           {ZIHAO.map((z) => <Option key={z.key} value={z.key} text={z.label}>{z.label}<span className="muted"> {z.pt}pt</span></Option>)}
         </Dropdown>
       </Tooltip>

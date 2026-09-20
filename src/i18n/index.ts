@@ -1,4 +1,4 @@
-// 界面文字统一从 zh.ts 读：键是代码里的原文，值改了界面就变；{{name}} 代入变量
+// 界面词条集中在 zh.ts；{{name}} 表示插值变量。
 import i18next from 'i18next';
 import zh from './zh';
 

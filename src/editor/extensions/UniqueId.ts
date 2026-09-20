@@ -1,5 +1,5 @@
 // 给能被引用的节点（标题、图、表、公式）补一个稳定的 uid，作 Typst 标签用：
-// <fig:uid> <tab:uid> <eq:uid> <sec:uid>。复制粘贴出来的重复 uid 也在这儿重发。
+// 为图、表、公式和标题维护唯一标签，并修复复制粘贴产生的重复 uid。
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 

@@ -1,6 +1,6 @@
 // 关键词这种「一串短项」的输入：一项一个标签。
 //   输入框里回车 / 逗号 / 分号 / 失焦 → 加进去；粘贴一串按分隔符拆开
-//   点一下标签选中，标签两头露出 ‹ › 挪位置（⌥ + ← / → 也行）；← → 在输入框首尾往标签上走，
+//   单击标签后可通过两端箭头或 ⌥ + ← / → 调整顺序；← → 可在输入框与标签之间移动，
 //   Backspace 先选中最后一个、再按才删，Delete 直接删；双击或选中后回车就地改，改空 = 删；✕ 删
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -98,18 +98,18 @@ export function TagInput({ value, onChange, placeholder, dataInfo }: { value: st
             key={t}
             ref={(el) => { if (el) items.current.set(t, el); else items.current.delete(t); }}
             className={`tag-item ${on ? 'is-selected' : ''}`}
-            title={tx("点一下选中，两头的箭头挪位置；双击改")}
+            title={tx("单击可选择，拖动两端箭头可调整范围，双击可编辑。")}
             onPointerDown={(e) => { e.preventDefault(); if ((e.target as HTMLElement).closest('button')) return; setSel(on ? null : i); input.current?.focus(); }}
             onDoubleClick={() => startEdit(i)}
           >
-            {on && i > 0 && <button type="button" className="tag-move" title={tx("往前挪")} tabIndex={-1} onClick={() => { move(i, i - 1); setSel(i - 1); input.current?.focus(); }}><ChevronLeft /></button>}
+            {on && i > 0 && <button type="button" className="tag-move" title={tx("向前移动")} tabIndex={-1} onClick={() => { move(i, i - 1); setSel(i - 1); input.current?.focus(); }}><ChevronLeft /></button>}
             {t}
-            {on && i < value.length - 1 && <button type="button" className="tag-move" title={tx("往后挪")} tabIndex={-1} onClick={() => { move(i, i + 1); setSel(i + 1); input.current?.focus(); }}><ChevronRight /></button>}
+            {on && i < value.length - 1 && <button type="button" className="tag-move" title={tx("向后移动")} tabIndex={-1} onClick={() => { move(i, i + 1); setSel(i + 1); input.current?.focus(); }}><ChevronRight /></button>}
             <button type="button" title={tx("删除")} tabIndex={-1} onClick={() => remove(i)}><X /></button>
           </span>
         );
       })}
-      <input ref={input} data-info={dataInfo} value={draft} placeholder={value.length ? tx("回车添加") : placeholder ?? tx("输入后回车")} onChange={(e) => { setDraft(e.target.value); if (sel !== null) setSel(null); }} onKeyDown={onKey}
+      <input ref={input} data-info={dataInfo} value={draft} placeholder={value.length ? tx("按 Enter 添加") : placeholder ?? tx("输入后按 Enter")} onChange={(e) => { setDraft(e.target.value); if (sel !== null) setSel(null); }} onKeyDown={onKey}
         onPaste={(e) => { const text = e.clipboardData.getData('text'); if (SEP.test(text)) { e.preventDefault(); add(draft + text); setDraft(''); } }}
         onBlur={() => { commit(); setSel(null); }} />
     </div>

@@ -1,5 +1,4 @@
-// 富文本编辑器：TipTap + 我们的节点。value 是 ProseMirror JSON，onChange 回同样的 JSON。
-// 工具栏一行：常用的摆在外面，插入类的收进「插入」菜单；选中文字时浮出气泡菜单。
+// TipTap 富文本编辑器。输入与输出均为 ProseMirror JSON。
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { TextSelection } from '@tiptap/pm/state';
 import { Slice, Fragment, type Node as PMNode } from '@tiptap/pm/model';
@@ -116,7 +115,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
       NoIndentParagraph,
       ...(headings ? [HeadingEn] : []),
       Superscript, Subscript,
-      Placeholder.configure({ placeholder: placeholder ?? t("输入文本…") }),
+      Placeholder.configure({ placeholder: placeholder ?? t("在此输入文字…") }),
       TableKit.configure({ table: { resizable: true, cellMinWidth: 40 }, tableCell: false, tableHeader: false, tableRow: false }),
       AlignedTableCell, AlignedTableHeader, SizedTableRow, TableExtras,
       Figure, TableFigure, CodeFigure, Algorithm, Equation, PageBreak, EqDenote, BlockCaptionKeys, MathInputRules,
@@ -259,7 +258,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     return () => { unsub(); void off; editor.off('transaction', apply); };
   }, [editor]);
 
-  // 编辑标记（¶）与预览同一个开关：开着就给编辑区挂 show-marks，样式表画段末的 ¶
+  // 编辑区与页面视图共用编辑标记开关；show-marks 负责绘制段落标记。
   useEffect(() => {
     if (!editor) return;
     const apply = () => {
@@ -364,7 +363,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
               }}
               onKeyDown={(event) => { if (event.nativeEvent.isComposing || event.keyCode === 229) return; if (event.key === 'Tab') { event.preventDefault(); const el = event.currentTarget; const start = el.selectionStart, end = el.selectionEnd; changeSource(source.slice(0, start) + '  ' + source.slice(end), false); requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = start + 2; }); } }} />
             {sourceError && <p className="diag err" role="alert">{sourceError} {' '}{t("草稿已保存，预览保留上次有效内容。")}</p>}
-            <details className="markdown-help"><summary>{t("Markdown 语法")}</summary><p>{t("# 标题 · **加粗** · *斜体* · ~~删除线~~ · 列表 · 表格 · 代码块")}</p><p>{t("公式、图片、题注和引用等专用内容保留在 iota-node 代码块或 iota 注释中。任务列表在富文本中显示为 [ ] / [x]。")}</p></details>
+            <details className="markdown-help"><summary>{t("Markdown 语法")}</summary><p>{t("# 标题 · **加粗** · *斜体* · ~~删除线~~ · 列表 · 表格 · 代码块")}</p><p>{t("公式、图片、题注和引文")}</p></details>
           </>}
           <div hidden={sourceMode}>
             {editor && !sourceMode && <Bubble editor={editor} />}
@@ -404,14 +403,14 @@ function Bubble({ editor }: { editor: Editor }) {
   return (
     <BubbleMenu editor={editor} className="bubble" options={bubbleOptions} shouldShow={bubbleShouldShow}>
       <B title={t("加粗 (⌘B)")} icon={<TextBold20Regular />} on={editor.isActive('bold')} run={() => editor.chain().focus().toggleBold().run()} />
-      <B title={t("强调（排楷体）(⌘I)")} icon={<TextItalic20Regular />} on={editor.isActive('italic')} run={() => editor.chain().focus().toggleItalic().run()} />
+      <B title={t("倾斜（中文按设置使用楷体）(⌘I)")} icon={<TextItalic20Regular />} on={editor.isActive('italic')} run={() => editor.chain().focus().toggleItalic().run()} />
       <B title={t("下划线 (⌘U)")} icon={<TextUnderline20Regular />} on={editor.isActive('underline')} run={() => editor.chain().focus().toggleUnderline().run()} />
       <B title={t("上标 (⌘.)")} icon={<TextSuperscript20Regular />} on={editor.isActive('superscript')} run={() => editor.chain().focus().toggleSuperscript().run()} />
       <B title={t("下标 (⌘,)")} icon={<TextSubscript20Regular />} on={editor.isActive('subscript')} run={() => editor.chain().focus().toggleSubscript().run()} />
       <span className="tb-sep" />
-      <B title={t("变成行内公式（LaTeX）")} icon={<MathFormula20Regular />} run={() => { const { from, to } = editor.state.selection; const text = editor.state.doc.textBetween(from, to, ' '); editor.chain().focus().insertContent({ type: 'mathInline', attrs: { src: text, mode: 'latex' } }).run(); }} />
-      <B title={t("在此引用文献")} icon={<Book20Regular />} run={() => { editor.chain().focus().setTextSelection(editor.state.selection.to).run(); insertInline('cite'); }} />
-      <B title={t("登记为索引词")} icon={<BookmarkAdd20Regular />} run={() => { const { from, to } = editor.state.selection; const text = editor.state.doc.textBetween(from, to, ' '); editor.chain().focus().insertContent({ type: 'idx', attrs: { text } }).run(); }} />
+      <B title={t("转换为行内公式（LaTeX）")} icon={<MathFormula20Regular />} run={() => { const { from, to } = editor.state.selection; const text = editor.state.doc.textBetween(from, to, ' '); editor.chain().focus().insertContent({ type: 'mathInline', attrs: { src: text, mode: 'latex' } }).run(); }} />
+      <B title={t("插入引文")} icon={<Book20Regular />} run={() => { editor.chain().focus().setTextSelection(editor.state.selection.to).run(); insertInline('cite'); }} />
+      <B title={t("标记索引项")} icon={<BookmarkAdd20Regular />} run={() => { const { from, to } = editor.state.selection; const text = editor.state.doc.textBetween(from, to, ' '); editor.chain().focus().insertContent({ type: 'idx', attrs: { text } }).run(); }} />
     </BubbleMenu>
   );
 }

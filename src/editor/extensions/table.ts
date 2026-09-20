@@ -74,7 +74,7 @@ function cellContext(state: any): { rowPos: number; row: any; cellIndex: number;
 
 export const TableExtras = Extension.create({
   name: 'tableExtras',
-  // Word：选中整行 / 整列按 Backspace 是删掉行列（Delete 只清内容，原生就是）
+  // 与 Word 一致：Backspace 删除选中的整行或整列，Delete 仅清除内容。
   addKeyboardShortcuts() {
     return {
       Backspace: () => {
