@@ -1116,7 +1116,8 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .rich .search-hit.is-current { background: rgba(252, 144, 0, 0.6); outline: 1px solid #fc9000; }
 
 /* 顶栏并进功能区的选项卡行 */
-.rb-tabs { display: grid; grid-template-columns: 1fr minmax(0, max-content) 1fr; align-items: center; min-height: 34px; padding: 0 6px 0 10px; gap: 2px; }
+/* 三栏：文档名居中；两边的栏最少也得装下自己的东西，窄了就把文档名往边上推而不是压上去 */
+.rb-tabs { display: grid; grid-template-columns: minmax(max-content, 1fr) minmax(0, max-content) minmax(max-content, 1fr); align-items: center; min-height: 34px; padding: 0 6px 0 10px; gap: 2px; }
 .rb-tabs-left { display: flex; align-items: center; gap: 2px; }
 .rb-leading { display: inline-flex; align-items: center; gap: 6px; margin-right: 10px; }
 .brand-btn { border: 0; background: none; padding: 2px; margin-left: 4px; border-radius: var(--r-round); display: inline-flex; cursor: pointer; }
