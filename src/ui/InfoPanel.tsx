@@ -29,15 +29,19 @@ export function InfoPanel() {
           <div className="card" key={g}>
             <h3>{g}</h3>
             <div className="grid2">
-              {fields.map((f) => (
-                <label className="field" key={f.key} style={f.kind === 'textarea' ? { gridColumn: '1 / -1' } : undefined}>
-                  <span className="field-label">{f.label}</span>
-                  <FieldInput f={f} info={info} setInfo={setInfo} />
-                  {f.hint && <span className="field-hint">{f.hint}</span>}
-                </label>
-              ))}
+              {fields.map((f) => {
+                // 关键词那种带按钮的复合控件不能套 <label>：点标签任何地方都会转成点里面第一个按钮（第一个 ✕）
+                const Tag = f.kind === 'keywords' ? 'div' : 'label';
+                return (
+                  <Tag className="field" key={f.key} style={f.kind === 'textarea' ? { gridColumn: '1 / -1' } : undefined}>
+                    <span className="field-label">{f.label}</span>
+                    <FieldInput f={f} info={info} setInfo={setInfo} />
+                    {f.hint && <span className="field-hint">{f.hint}</span>}
+                    {f.key === 'titleEn' && <div className="field-switches"><SettingSwitch k="titleEnXiaoer" /><SettingSwitch k="titleEnXiaoerTitlepage" /></div>}
+                  </Tag>
+                );
+              })}
             </div>
-            {g === INFO_GROUPS[0] && <SettingSwitch k="titleEnXiaoer" />}
           </div>
         );
       })}

@@ -201,12 +201,21 @@ export const SWITCHES: SwitchDef<any>[] = [
   },
   {
     key: 'titleEnXiaoer',
-    label: t("英文题目用小二号"),
-    hint: t("封面与内封的英文题目太长时可强制缩成小二号"),
+    label: t("封面英文题目用小二号"),
+    hint: t("封面的英文题目：自动是先按二号排、空行让步全用尽还装不下才降小二；开 = 主动缩，关 = 强制二号"),
     choices: onOff,
     group: t("标题与页面"),
     place: 'info',
-    resolve: () => ({ value: false, reason: t("按题目长度自动让步，排不下才缩") }),
+    resolve: () => ({ value: false, reason: t("先按二号排，空行让步用尽还装不下才缩") }),
+  },
+  {
+    key: 'titleEnXiaoerTitlepage',
+    label: t("内封英文题目用小二号"),
+    hint: t("英文内封的英文题目：这一页是固定序列，没有空行让步，整页装不下才降小二"),
+    choices: onOff,
+    group: t("标题与页面"),
+    place: 'info',
+    resolve: () => ({ value: false, reason: t("先按二号排，整页装不下才缩") }),
   },
   {
     key: 'enumHanging',
@@ -417,6 +426,7 @@ export const defaultSettings = (): Settings => ({
   appendixNumbering: 'auto',
   tocLang: 'auto',
   titleEnXiaoer: 'auto',
+  titleEnXiaoerTitlepage: 'auto',
   linebreaker: 'auto',
   wordCompat: 'auto',
 });

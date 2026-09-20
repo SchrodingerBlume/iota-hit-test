@@ -1,27 +1,60 @@
-// 关键词这种「一串短项」的输入：一项一个标签，✕ 删，回车 / 逗号 / 分号 / 失焦时把输入框里的加进去。
-// 标签可以拖着换位置：按住拖，别的标签让开（滑过去），松手落位；也可以选中标签后按 ⌥←/→ 挪。
-import { useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent as RPointerEvent } from 'react';
+// 关键词这种「一串短项」的输入：一项一个标签。
+//   输入框里回车 / 逗号 / 分号 / 失焦 → 加进去；粘贴一串按分隔符拆开
+//   ← → 在输入框首尾往标签上走（选中态），Backspace 先选中最后一个、再按才删，Delete 直接删
+//   双击或选中后回车 → 就地改；改空 = 删
+//   ✕ 删；拖着换位置（别的标签让开），⌥ + ← / → 也能挪
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent as RPointerEvent } from 'react';
 import { X } from 'lucide-react';
 import { t as tx } from '../i18n';
 
 interface Drag { from: number; to: number; x: number; y: number; w: number; h: number; ox: number; oy: number; active: boolean }
+const SEP = /[;；,，\n]/;
 
 export function TagInput({ value, onChange, placeholder, dataInfo }: { value: string[]; onChange: (v: string[]) => void; placeholder?: string; dataInfo?: string }) {
   const [draft, setDraft] = useState('');
+  const [sel, setSel] = useState<number | null>(null);
+  const [edit, setEdit] = useState<{ i: number; text: string } | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
-  const box = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const editRef = useRef<HTMLInputElement>(null);
   const items = useRef(new Map<string, HTMLSpanElement>());
   const prevRects = useRef(new Map<string, DOMRect>());
 
-  const commit = () => {
-    const parts = draft.split(/[;；,，]/).map((s) => s.trim()).filter(Boolean);
+  const add = (text: string) => {
+    const parts = text.split(SEP).map((s) => s.trim()).filter(Boolean);
     if (parts.length) onChange([...value, ...new Set(parts.filter((p) => !value.includes(p)))]);
-    setDraft('');
   };
+  const commit = () => { add(draft); setDraft(''); };
+  const remove = (i: number) => { onChange(value.filter((_, j) => j !== i)); setSel(null); input.current?.focus(); };
+  const startEdit = (i: number) => { setEdit({ i, text: value[i] }); setSel(null); };
+  const finishEdit = (keep: boolean) => {
+    if (!edit) return;
+    const text = edit.text.trim();
+    if (keep && text && text !== value[edit.i]) onChange(value.map((v, j) => (j === edit.i ? text : v)).filter((v, j, a) => a.indexOf(v) === j));
+    else if (keep && !text) onChange(value.filter((_, j) => j !== edit.i));
+    setEdit(null);
+    requestAnimationFrame(() => input.current?.focus());
+  };
+  useEffect(() => { if (edit) { editRef.current?.focus(); editRef.current?.select(); } }, [edit?.i]);
+  useEffect(() => { if (sel !== null && sel >= value.length) setSel(value.length ? value.length - 1 : null); }, [value.length, sel]);
+
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-    if (e.key === 'Enter' || e.key === ',' || e.key === '，' || e.key === ';' || e.key === '；') { e.preventDefault(); commit(); }
-    else if (e.key === 'Backspace' && !draft && value.length) onChange(value.slice(0, -1));
+    const el = e.currentTarget;
+    const atStart = el.selectionStart === 0 && el.selectionEnd === 0;
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (sel !== null && !draft) startEdit(sel); else commit();
+    } else if (e.key === ',' || e.key === '，' || e.key === ';' || e.key === '；') { e.preventDefault(); commit(); }
+    else if (e.key === 'Backspace' && !draft && value.length) {
+      e.preventDefault();
+      if (sel === null) setSel(value.length - 1); else remove(sel);
+    } else if (e.key === 'Delete' && !draft && sel !== null) { e.preventDefault(); remove(sel); }
+    else if (e.key === 'ArrowLeft' && atStart && value.length) { e.preventDefault(); setSel(sel === null ? value.length - 1 : Math.max(0, sel - 1)); }
+    else if (e.key === 'ArrowRight' && sel !== null) { e.preventDefault(); setSel(sel + 1 < value.length ? sel + 1 : null); }
+    else if (e.key === 'Escape' && sel !== null) { e.preventDefault(); setSel(null); }
+    else if (e.altKey && sel !== null && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); const to = e.key === 'ArrowLeft' ? Math.max(0, sel - 1) : Math.min(value.length - 1, sel + 1); move(sel, to); setSel(to); }
+    else if (e.key.length === 1 && sel !== null) setSel(null);
   };
   const move = (from: number, to: number) => {
     if (from === to) return;
@@ -52,7 +85,8 @@ export function TagInput({ value, onChange, placeholder, dataInfo }: { value: st
   });
 
   const onPointerDown = (e: RPointerEvent<HTMLSpanElement>, i: number) => {
-    if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return;
+    if (e.button !== 0 || (e.target as HTMLElement).closest('button, input')) return;
+    e.preventDefault();
     const r = e.currentTarget.getBoundingClientRect();
     e.currentTarget.setPointerCapture(e.pointerId);
     setDrag({ from: i, to: i, x: e.clientX, y: e.clientY, w: r.width, h: r.height, ox: e.clientX - r.left, oy: e.clientY - r.top, active: false });
@@ -72,44 +106,46 @@ export function TagInput({ value, onChange, placeholder, dataInfo }: { value: st
     }
     setDrag({ ...drag, x: e.clientX, y: e.clientY, to: Math.min(to, value.length - 1), active: true });
   };
-  const onPointerUp = () => {
+  const onPointerUp = (i: number) => {
     if (!drag) return;
-    if (drag.active) move(drag.from, drag.to);
+    if (drag.active) { move(drag.from, drag.to); setSel(drag.to); }
+    else { setSel(i); input.current?.focus(); }
     setDrag(null);
-  };
-  const onTagKey = (e: KeyboardEvent<HTMLSpanElement>, i: number) => {
-    if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-      e.preventDefault();
-      const to = e.key === 'ArrowLeft' ? Math.max(0, i - 1) : Math.min(value.length - 1, i + 1);
-      move(i, to);
-      requestAnimationFrame(() => items.current.get(value[i])?.focus());
-    } else if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); onChange(value.filter((_, j) => j !== i)); }
   };
 
   return (
-    <div ref={box} className={`tags ${drag?.active ? 'is-dragging' : ''}`} onClick={(e) => { if (!drag) (e.currentTarget.querySelector('input') as HTMLInputElement)?.focus(); }}>
+    <div className={`tags ${drag?.active ? 'is-dragging' : ''}`} onPointerDown={(e) => { if (e.target === e.currentTarget) { e.preventDefault(); input.current?.focus(); setSel(null); } }}>
       {order.map((t) => {
         const i = value.indexOf(t);
         const ghost = drag?.active && drag.from === i;
+        if (edit && edit.i === i) {
+          return (
+            <span key={t} className="tag-item is-editing" ref={(el) => { if (el) items.current.set(t, el); else items.current.delete(t); }}>
+              <input ref={editRef} value={edit.text} size={Math.max(2, edit.text.length + 1)} onChange={(e) => setEdit({ i, text: e.target.value })} onBlur={() => finishEdit(true)}
+                onKeyDown={(e) => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); finishEdit(true); } else if (e.key === 'Escape') { e.preventDefault(); finishEdit(false); } }} />
+            </span>
+          );
+        }
         return (
           <span
             key={t}
             ref={(el) => { if (el) items.current.set(t, el); else items.current.delete(t); }}
-            className={`tag-item ${ghost ? 'is-ghost' : ''}`}
-            tabIndex={0}
-            title={tx("拖动换位置；⌥ + ← / → 也行")}
+            className={`tag-item ${ghost ? 'is-ghost' : ''} ${sel === i ? 'is-selected' : ''}`}
+            title={tx("双击改；拖动换位置")}
             onPointerDown={(e) => onPointerDown(e, i)}
             onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={onPointerUp}
-            onKeyDown={(e) => onTagKey(e, i)}
+            onPointerUp={() => onPointerUp(i)}
+            onPointerCancel={() => setDrag(null)}
+            onDoubleClick={() => startEdit(i)}
           >
             {t}
-            <button type="button" title={tx("删除")} tabIndex={-1} onClick={(e) => { e.stopPropagation(); onChange(value.filter((_, j) => j !== i)); }}><X /></button>
+            <button type="button" title={tx("删除")} tabIndex={-1} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); remove(i); }}><X /></button>
           </span>
         );
       })}
-      <input data-info={dataInfo} value={draft} placeholder={value.length ? '' : placeholder ?? tx("输入后回车")} onChange={(e) => setDraft(e.target.value)} onKeyDown={onKey} onBlur={commit} />
+      <input ref={input} data-info={dataInfo} value={draft} placeholder={value.length ? tx("回车添加") : placeholder ?? tx("输入后回车")} onChange={(e) => { setDraft(e.target.value); if (sel !== null) setSel(null); }} onKeyDown={onKey}
+        onPaste={(e) => { const text = e.clipboardData.getData('text'); if (SEP.test(text)) { e.preventDefault(); add(draft + text); setDraft(''); } }}
+        onBlur={() => { commit(); setSel(null); }} />
       {drag?.active && (
         <span className="tag-item is-lifted" style={{ position: 'fixed', left: drag.x - drag.ox, top: drag.y - drag.oy, width: drag.w, height: drag.h, pointerEvents: 'none', zIndex: 50 }}>
           {value[drag.from]}

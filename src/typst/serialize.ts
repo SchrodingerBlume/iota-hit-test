@@ -333,9 +333,11 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   const withArgs = (fn: string, ...xs: string[]) => { const a = xs.filter(Boolean); return a.length ? `#show: ${fn}.with(${a.join(', ')})` : `#show: ${fn}`; };
   const pageLayout = (k: string) => layoutArg(s.layout?.pages?.[k]);
   parts.push(withArgs('frontmatter', or('frontmatter'), layoutArg(s.layout?.frontmatter)));
-  const coverArgs = s.titleEnXiaoer !== 'auto' ? `title-en-xiaoer: ${tri(s.titleEnXiaoer)}` : '';
   const covers = (['cover', 'titlepage'] as const).filter((k) => resolvePage(doc, k).value);
-  for (const k of covers) parts.push(`#${k}(${[coverArgs, pageLayout(k)].filter(Boolean).join(', ')})`);
+  for (const k of covers) {
+    const xiaoer = k === 'cover' ? s.titleEnXiaoer : s.titleEnXiaoerTitlepage;
+    parts.push(`#${k}(${[xiaoer !== 'auto' ? `title-en-xiaoer: ${tri(xiaoer)}` : '', pageLayout(k)].filter(Boolean).join(', ')})`);
+  }
 
   const rich = (key: RichKey, opts: { headings: boolean; headingBase?: number }) => serializeDoc(doc[key], { ...opts, knownLabels, preview, map: { key, posOf: indexPositions(doc[key] as any) } });
   const abstractZh = rich('abstractZh', { headings: false });

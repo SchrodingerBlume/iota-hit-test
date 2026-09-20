@@ -80,7 +80,9 @@ export interface Settings {
   /** 目录出哪几份：auto ＝ 模板按学位（博士中英两份、硕本只中文；英文档只英文） */
   tocLang: Tri<'zh' | 'en' | 'both'>;
   /** 英文题目强制小二号（封面与内封的 title-en-xiaoer） */
+  /** 封面、内封各一个：模板两页各收各的 title-en-xiaoer，让步规则也不同 */
   titleEnXiaoer: TriBool;
+  titleEnXiaoerTitlepage: TriBool;
   /** 预览的断行引擎：Word 式（本站 fork，只进预览）或 Typst 原版的两种 */
   linebreaker: Tri<'msword' | 'optimized' | 'simple'>;
   /** Word 式断行按哪一版 Word 的规则；紧缩、右缩进按中文 Word 默认写死 */
