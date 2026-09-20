@@ -240,7 +240,10 @@ fork 主线已并入 typst 上游 main（带 #792：中日文旁的换行空格�
 layout/presets.typ 与 styles/presets.typ 量下来的数；编号用 numbering.ts 算，参考文献用 GB/T 7714-2015 的 CSL 排
 （citation-js），LaTeX 公式转成 Word 原生公式（MathML → OMML，src/export/docx/omml.ts），Typst 写法的公式由站内引擎
 画成图；脚注、批注（Word 批注）、三线表、分图、算法、代码都有。打开时 Word 会问「是否更新域」，答「是」目录才有页码。
-封面 / 内封 / 声明页 / 答辩信息表这些表单页还没做（第二阶段）。
+表单页（封面、中英文内封、答辩决议表、原创性声明与使用权限）在 `src/export/docx/pages.ts`，每一行落在哪是照模板排出来的
+PDF 逐行量的；页序、页码样式（前置「- I -」、主体「- 1 -」）、符号与缩略语合页、目录不列自己、两字章名撑开、题注双语开关、
+参考文献全列且中文档用全角标点，都照模板的样子。对拍法：站内导出 docx，AppleScript 让本机 Word 存成 PDF，与站内导出的
+Typst PDF 逐页并排看（pypdfium2 栅格化）。
 
 ## 许可
 
