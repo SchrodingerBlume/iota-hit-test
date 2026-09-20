@@ -330,6 +330,8 @@ export const SWITCHES: SwitchDef<any>[] = [
     hint: t("Word「布局 → 断字 → 自动」：行尾的英文单词按音节断开加连字符（Typst 的 text.hyphenate；Word 式断行下照 Word 的规则——0.25 英寸断字区、先整词后音节）。模板默认关——两份范例的 Word 都没开；两端对齐下西文多时开了更匀。导出 docx 写进 autoHyphenation"),
     choices: onOff,
     group: t("字体"),
+    // 暂时不列：fork 的断字与 Word 的对不上；工程 JSON 里写死了的照旧显示（连续断字次数、全大写那两项跟着它）
+    applies: (s) => s.hyphenate !== 'auto',
     resolve: () => ({ value: false, reason: t("模板默认不断字（照 Word 的默认）") }),
   },
   {
