@@ -20,7 +20,7 @@ import {
   ChevronUp20Regular, ChevronDown20Regular, ChevronLeft20Regular, ChevronRight20Regular, Dismiss20Regular, Pin20Regular, Grid20Regular, TextParagraph20Regular,
   Translate20Regular, ImageEdit20Regular, Delete20Regular, TableSimple20Regular, ClipboardTextLtr20Regular,
   CommentAdd20Regular, CommentDismiss20Regular, Comment20Regular, TextBulletListSquare20Regular, TextEditStyle20Regular,
-  ZoomIn20Regular, AutoFitWidth20Regular, DocumentOnePage20Regular, DocumentMultiple20Regular, TextChangeCase20Regular, TextWordCount20Regular, PanelLeftText20Regular,
+  ZoomIn20Regular, AutoFitWidth20Regular, DocumentOnePage20Regular, DocumentMultiple20Regular, TextChangeCase20Regular, TextWordCount20Regular, PanelLeftText20Regular, ChevronDoubleRight16Regular,
 } from '@fluentui/react-icons';
 import { useStore } from '../model/store';
 import { getEditor, getEditorMeta, onRegistryChange } from '../editor/registry';
@@ -79,7 +79,7 @@ function TabOverflowMenu({ tabs, onPick }: { tabs: { key: TabKey; label: string 
   return (
     <Menu positioning="below-end">
       <MenuTrigger disableButtonEnhancement>
-        <Button ref={ref} appearance="subtle" size="small" className="rb-btn rb-menu rb-tab-more" aria-label={tx("更多选项卡")} onMouseDown={(e) => e.preventDefault()} />
+        <Button ref={ref} appearance="subtle" size="small" className="rb-btn rb-tab-more" icon={<ChevronDoubleRight16Regular />} aria-label={tx("更多选项卡")} onMouseDown={(e) => e.preventDefault()} />
       </MenuTrigger>
       <MenuPopover><MenuList>{tabs.map((t) => <HiddenTabItem key={t.key} tab={t} onPick={onPick} />)}</MenuList></MenuPopover>
     </Menu>
@@ -279,7 +279,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
     const row = root.current?.querySelector<HTMLElement>('.rb-tabs');
     if (!row) return;
     const w = (sel: string) => row.querySelector<HTMLElement>(sel)?.getBoundingClientRect().width ?? 0;
-    const measure = () => { const max = Math.floor(row.clientWidth - w('.rb-leading') - w('.rb-collapse') - w('.rb-pin') - w('.rb-trailing') - 44); setTabsMax((prev) => (Math.abs((prev ?? -1) - max) < 1 ? prev : max)); };
+    const measure = () => { const max = Math.floor(row.clientWidth - w('.rb-leading') - w('.rb-trailing') - 44); setTabsMax((prev) => (Math.abs((prev ?? -1) - max) < 1 ? prev : max)); };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(row);
@@ -409,6 +409,8 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
           {leading}
           {!minimal && (
             <Overflow minimumVisible={1} padding={0}>
+              {/* 选项卡栏撑满左栏剩下的宽（Fluent 的溢出量的是容器宽，内容定宽的话宽回去也不会把选项卡放回来）；
+                  固定 / 收起钮放在栏里、跟在最后一个选项卡后面，登记成永不隐藏的项让它们占的宽也算进去 */}
               <TabList selectedValue={bodyVisible ? tab : ''} onTabSelect={(_, d) => onTab(d.value as TabKey)} size="small" appearance="subtle" className="rb-tablist" style={{ maxWidth: tabsMax }}>
                 {shownTabs.map((t) => (
                   <OverflowItem key={t.key} id={t.key} priority={t.key === tab ? 2 : 1}>
@@ -416,14 +418,16 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                   </OverflowItem>
                 ))}
                 <TabOverflowMenu tabs={shownTabs} onPick={onTab} />
+                {collapsed && peek && !shortScreen && <OverflowItem id="pin" priority={99}><Button size="small" appearance="primary" icon={<Pin20Regular />} className="rb-pin" onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(false)}>{tx("固定")}</Button></OverflowItem>}
+                {!shortScreen && (
+                  <OverflowItem id="collapse" priority={99}>
+                    <Tooltip content={collapsed ? tx("固定功能区（双击选项卡也行）") : tx("收起功能区（双击选项卡也行）")} relationship="label" positioning="below">
+                      <button type="button" className={`fold-btn is-vert rb-collapse ${collapsed ? '' : 'is-open'}`} aria-expanded={!collapsed} aria-label={collapsed ? tx("固定功能区") : tx("收起功能区")} onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(!collapsed)}><i className="rb-caret" /></button>
+                    </Tooltip>
+                  </OverflowItem>
+                )}
               </TabList>
             </Overflow>
-          )}
-          {collapsed && peek && !shortScreen && <Button size="small" appearance="primary" icon={<Pin20Regular />} className="rb-pin" onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(false)}>{tx("固定")}</Button>}
-          {!minimal && !shortScreen && (
-            <Tooltip content={collapsed ? tx("固定功能区（双击选项卡也行）") : tx("收起功能区（双击选项卡也行）")} relationship="label" positioning="below">
-              <button type="button" className={`fold-btn is-vert rb-collapse ${collapsed ? '' : 'is-open'}`} aria-expanded={!collapsed} aria-label={collapsed ? tx("固定功能区") : tx("收起功能区")} onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(!collapsed)}><i className="rb-caret" /></button>
-            </Tooltip>
           )}
         </div>
         {!minimal && <span className="rb-proj" title={docName}>{docName}</span>}

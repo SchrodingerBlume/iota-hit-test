@@ -1157,8 +1157,10 @@ body.is-resizing .preview-stage { pointer-events: none; }
 /* 只管挂在 #root 里的那个 provider——Fluent 给弹层建的传送门节点也带同一个类名，别把它撑成整页盖住内容 */
 #root > .fluent-root { height: 100%; }
 .fluent-root { background: transparent !important; color: inherit; font-family: var(--sans) !important; }
-.rb-tablist { margin: 0 8px; min-width: 0; }
+.rb-tablist { margin: 0 8px; min-width: 0; flex: 1 1 auto; }
 .rb-tablist .rb-tab-more { min-width: 22px !important; max-width: 22px; padding: 0 !important; height: 26px; min-height: 26px; align-self: center; margin-left: 2px; }
+.rb-tablist .rb-collapse { align-self: center; margin-left: 4px; }
+.rb-tablist .rb-pin { align-self: center; }
 .rb-style-short { display: none; }
 /* 窄屏：样式格子收成 正文 / H1…H4 / 项 那种一行小钮 */
 .ribbon { container-type: inline-size; }
