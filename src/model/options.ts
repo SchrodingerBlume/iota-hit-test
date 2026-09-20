@@ -405,8 +405,8 @@ SWITCHES.push({
   resolve: () => ({ value: true, reason: t("中文 Word 默认「只压缩标点符号」") }),
 }, {
   key: 'wordKern',
-  label: t("字体紧缩"),
-  hint: t("Word 样式的「为字体调整字间距」（kern）：开着时相邻两个全角标点（如「），」）前一个只占半格，一行装得多。预览按此断行，导出 docx 写进正文样式"),
+  label: t("为字体调整字间距"),
+  hint: t("Word「字体 → 高级 → 为字体调整字间距」那一勾（docx 里样式的 kern）。中文 Word 的正文样式默认开着，效果是相邻两个全角标点（如「），」「。」」）前一个只占半格，一行能多装半个字；关了每个标点都占整格。预览按此断行，导出 docx 写进正文样式"),
   choices: onOff,
   group: t("排版引擎"),
   applies: (s) => (s.linebreaker === 'auto' ? 'msword' : s.linebreaker) === 'msword',
