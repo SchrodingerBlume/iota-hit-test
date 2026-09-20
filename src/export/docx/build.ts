@@ -13,6 +13,7 @@ import type { PMNode } from '../../typst/pmToTypst';
 import { labelOf, CAPTION_CITE, captionCiteKeys } from '../../typst/pmToTypst';
 import { computeNumbering, type NumberInfo } from '../../typst/numbering';
 import { resolvePage } from '../../model/pages';
+import { wordLinebreakOptions } from '../../typst/serialize';
 import { parseLines } from '../../editor/extensions/algorithm';
 import { imageBytes, imageDimensions } from '../../editor/imageCache';
 import { mathmlToOmml } from './omml';
@@ -66,7 +67,7 @@ function styles(s: Settings, L: Layout) {
       footnoteText: { run: { size: ZIHAO.xiaowu * HALF }, paragraph: { indent: { firstLine: 0 }, spacing: { line: 240, lineRule: LineRuleType.AUTO } } },
     },
     paragraphStyles: [
-      { id: 'Normal', name: 'Normal', run: { size: ZIHAO.xiaosi * HALF, font: fonts() }, paragraph: { indent: { firstLine: L.firstLine }, spacing: { line: 300, lineRule: LineRuleType.AUTO }, alignment: AlignmentType.JUSTIFIED } },
+      { id: 'Normal', name: 'Normal', run: { size: ZIHAO.xiaosi * HALF, font: fonts(), kern: wordLinebreakOptions(s).kern ? 2 : undefined }, paragraph: { indent: { firstLine: L.firstLine }, spacing: { line: 300, lineRule: LineRuleType.AUTO }, alignment: AlignmentType.JUSTIFIED } },
       { id: 'Caption', name: 'caption', basedOn: 'Normal', next: 'Normal', run: { size: ZIHAO.wuhao * HALF }, paragraph: { alignment: AlignmentType.CENTER, indent: { firstLine: 0 }, spacing: { line: 300, lineRule: LineRuleType.AUTO }, keepNext: true } },
       { id: 'TableText', name: 'Table Text', basedOn: 'Normal', run: { size: ZIHAO.wuhao * HALF }, paragraph: { alignment: AlignmentType.CENTER, indent: { firstLine: 0 }, spacing: { line: 240, lineRule: LineRuleType.AUTO } } },
       { id: 'Code', name: 'Code', basedOn: 'Normal', run: { size: ZIHAO.wuhao * HALF, font: fonts(FONT.mono, FONT.mono) }, paragraph: { indent: { firstLine: 0 }, spacing: { line: 240, lineRule: LineRuleType.AUTO }, alignment: AlignmentType.LEFT } },
@@ -466,6 +467,9 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
   if (main[0] instanceof Paragraph && (main[0] as any).properties?.root?.some?.((r: any) => r?.rootKey === 'w:pageBreakBefore')) { /* 首页由分节起 */ }
   sections.push({ ...hf(false), children: main });
 
+  // 断行引擎那几个 Word 开关照样写进 docx：兼容模式、调整中西文字符宽度、断字；字体紧缩在 Normal 样式的 kern 上，
+  // 标点压缩（characterSpacingControl）与网格右缩进（adjustRightInd）docx 库没有口，包好后往 xml 里补
+  const W = wordLinebreakOptions(s);
   const document = new Document({
     creator: doc.info.author || 'iota-hit', title: doc.info.title,
     styles: styles(s, L) as any,
@@ -474,18 +478,31 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
     comments: { children: ctx.comments },
     features: { updateFields: true },
     evenAndOddHeaderAndFooters: !!evenHeader,
+    compatabilityModeVersion: W.compat,
+    compatibility: { balanceSingleByteDoubleByteWidth: W.balance },
+    hyphenation: s.hyphenate === true ? { autoHyphenation: true, hyphenationZone: 360, consecutiveHyphenLimit: W.hyphenLimit || undefined, doNotHyphenateCaps: !W.hyphenateCaps } : undefined,
     sections,
   });
-  return unsnap(await Packer.toBlob(document));
+  return postprocess(await Packer.toBlob(document), W);
 }
 
 // 段落对话框的「对齐到网格」：范例里除表格之外全都不勾（模板每条样式的 snap-to-docgrid: false），
 // docx 库没有段落级的开关，包好之后往 styles.xml 里补 <w:snapToGrid w:val="0"/>（要放在 pPr 的 spacing 之前）
 const UNSNAP = ['Normal', 'Heading1', 'Heading2', 'Heading3', 'Heading4', 'Caption', 'Code', 'Reference', 'FootnoteText', 'Header', 'Footer', 'Abstract', 'TOC1', 'TOC2', 'TOC3', 'TOC4'];
-async function unsnap(blob: Blob): Promise<Blob> {
+async function postprocess(blob: Blob, W: ReturnType<typeof wordLinebreakOptions>): Promise<Blob> {
   const zip = await JSZip.loadAsync(blob);
+  // settings.xml：字符间距控制。放在 <w:compat> 前面（schema 里 characterSpacingControl 在 compat 之前）
+  const sp = 'word/settings.xml';
+  let sx = await zip.file(sp)!.async('string');
+  if (!sx.includes('w:characterSpacingControl')) {
+    const tag = `<w:characterSpacingControl w:val="${W.compress ? 'compressPunctuation' : 'doNotCompress'}"/>`;
+    sx = sx.includes('<w:compat>') || sx.includes('<w:compat/>') ? sx.replace(/<w:compat\b/, tag + '<w:compat') : sx.replace('</w:settings>', tag + '</w:settings>');
+    zip.file(sp, sx);
+  }
   const path = 'word/styles.xml';
   let xml = await zip.file(path)!.async('string');
+  // Normal 的「定义了文档网格时自动调整右缩进」：Word 默认开，关了才写
+  if (!W.adjustRightIndent) xml = xml.replace(/(<w:style [^>]*w:styleId="Normal"[^>]*>[\s\S]*?<w:pPr>)/, '$1<w:adjustRightInd w:val="0"/>');
   for (const id of UNSNAP) {
     xml = xml.replace(new RegExp(`(<w:style [^>]*w:styleId="${id}"[^>]*>[\\s\\S]*?)(<w:pPr>)([\\s\\S]*?)(</w:pPr>)`), (_m, head, open, body, close) => {
       if (body.includes('w:snapToGrid')) return _m;

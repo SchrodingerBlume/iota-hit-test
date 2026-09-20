@@ -395,6 +395,58 @@ SWITCHES.push({
   group: t("排版引擎"),
   applies: (s) => (s.linebreaker === 'auto' ? 'msword' : s.linebreaker) === 'msword',
   resolve: () => ({ value: '11', reason: t("学校范例是 Word 2003 的 .doc") }),
+}, {
+  key: 'wordCompress',
+  label: t("标点压缩"),
+  hint: t("Word「字符间距控制」：压缩标点（行末的闭标点压半格、挂出）还是不压缩（标点保持全宽、永不挂出，行末遇到开标点就把前一个字带下去）。预览按此断行，导出 docx 写进 characterSpacingControl"),
+  choices: onOff,
+  group: t("排版引擎"),
+  applies: (s) => (s.linebreaker === 'auto' ? 'msword' : s.linebreaker) === 'msword',
+  resolve: () => ({ value: true, reason: t("中文 Word 默认「只压缩标点符号」") }),
+}, {
+  key: 'wordKern',
+  label: t("字体紧缩"),
+  hint: t("Word 样式的「为字体调整字间距」（kern）：开着时相邻两个全角标点（如「），」）前一个只占半格，一行装得多。预览按此断行，导出 docx 写进正文样式"),
+  choices: onOff,
+  group: t("排版引擎"),
+  applies: (s) => (s.linebreaker === 'auto' ? 'msword' : s.linebreaker) === 'msword',
+  resolve: () => ({ value: true, reason: t("中文 Word 的默认样式开着") }),
+}, {
+  key: 'wordBalanceWidths',
+  label: t("调整中西文字符宽度"),
+  hint: t("Word 兼容选项「调整单字节与双字节字符间距」（balanceSingleByteDoubleByteWidth）：开着时字符网格下西文字形只加网格余量的一半，关了加整份。预览按此断行，导出 docx 写进兼容选项"),
+  choices: onOff,
+  group: t("排版引擎"),
+  applies: (s) => (s.linebreaker === 'auto' ? 'msword' : s.linebreaker) === 'msword',
+  resolve: () => ({ value: true, reason: t("中文 Word 新建的文档都开着") }),
+}, {
+  key: 'wordAdjustRightIndent',
+  label: t("网格下自动调整右缩进"),
+  hint: t("段落的「如果定义了文档网格，则自动调整右缩进」：只在 2003～2010 兼容档带字符网格时起作用。预览按此断行，导出 docx 写进正文样式"),
+  choices: onOff,
+  group: t("排版引擎"),
+  applies: (s) => (s.linebreaker === 'auto' ? 'msword' : s.linebreaker) === 'msword' && (s.wordCompat === 'auto' || s.wordCompat !== '15'),
+  resolve: () => ({ value: true, reason: t("Word 段落的默认") }),
+}, {
+  key: 'hyphenLimit',
+  label: t("连续断字行数上限"),
+  hint: t("开了西文断字时，最多几行连续以连字符结尾（Word 的「连续断字次数」）。预览按此断行，导出 docx 写进 consecutiveHyphenLimit"),
+  choices: [
+    { value: '0', label: t("不限") },
+    { value: '2', label: '2' },
+    { value: '3', label: '3' },
+  ],
+  group: t("排版引擎"),
+  applies: (s) => s.hyphenate === true,
+  resolve: () => ({ value: '0', reason: t("Word 的默认不限") }),
+}, {
+  key: 'hyphenateCaps',
+  label: t("大写单词也断字"),
+  hint: t("开了西文断字时，全大写的单词（缩写、机构名）断不断（Word 的「大写单词断字」）。预览按此断行，导出 docx 写进 doNotHyphenateCaps"),
+  choices: onOff,
+  group: t("排版引擎"),
+  applies: (s) => s.hyphenate === true,
+  resolve: () => ({ value: true, reason: t("Word 的默认断") }),
 });
 
 export function resolveSwitch<V>(def: SwitchDef<any>, s: Settings): { effective: V; auto: Resolved<V>; isAuto: boolean } {
@@ -438,6 +490,12 @@ export const defaultSettings = (): Settings => ({
   titleEnXiaoerTitlepage: 'auto',
   linebreaker: 'auto',
   wordCompat: 'auto',
+  wordCompress: 'auto',
+  wordKern: 'auto',
+  wordBalanceWidths: 'auto',
+  wordAdjustRightIndent: 'auto',
+  hyphenLimit: 'auto',
+  hyphenateCaps: 'auto',
 });
 
 export type { TriBool };

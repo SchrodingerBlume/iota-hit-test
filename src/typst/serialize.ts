@@ -1,6 +1,6 @@
 // 整份工程 → main.typ（以及要一起交给编译器的旁文件）。
 // 结构照 iota-hit/template/example.typ：前置 → 主体 → 附录 → 后置。
-import type { ThesisDoc, Settings, Info, StyleEntry, OpenrightKey, LayoutDict, LocalInfoPage } from '../model/types';
+import type { ThesisDoc, Settings, Info, StyleEntry, OpenrightKey, LayoutDict, LocalInfoPage, TriBool } from '../model/types';
 import { INFO_FIELDS, localInfoFields, type InfoFieldDef } from '../model/info';
 import { serializeDoc, escapeText, collectImages, collectRefTargets, collectCiteKeys, indexPositions, type PMNode } from './pmToTypst';
 import { computeNumbering } from './numbering';
@@ -57,11 +57,23 @@ function tri(v: 'auto' | boolean | string): string {
 /** 预览用 Word 式断行（本站 fork 的 par(linebreaks: (mode: "msword"))）；导出的 .typ 不带 */
 const msword = (s: Settings) => (s.linebreaker === 'auto' ? 'msword' : s.linebreaker) === 'msword';
 /** 断行引擎的字典：预览里由 worker 用 --input linebreaks=… 告诉模板，模板自己按各部件的网格发 set par(linebreaks:)、不再发模拟网格的 tracking */
+/** Word 那几个影响断行的开关，解成 fork 的 linebreaks 字典键；auto 都照中文 Word 的默认 */
+export function wordLinebreakOptions(s: Settings): { compat: number; compress: boolean; kern: boolean; balance: boolean; adjustRightIndent: boolean; hyphenLimit: number; hyphenateCaps: boolean } {
+  const on = (v: TriBool) => v === 'auto' || v === true;
+  return {
+    compat: s.wordCompat === 'auto' ? 11 : Number(s.wordCompat),
+    compress: on(s.wordCompress),
+    kern: on(s.wordKern),
+    balance: on(s.wordBalanceWidths),
+    adjustRightIndent: on(s.wordAdjustRightIndent),
+    hyphenLimit: s.hyphenLimit === 'auto' ? 0 : Number(s.hyphenLimit),
+    hyphenateCaps: on(s.hyphenateCaps),
+  };
+}
 export function linebreaksInput(s: Settings): string | null {
   if (!msword(s)) return null;
-  const compat = s.wordCompat === 'auto' ? 11 : Number(s.wordCompat);
-  // 紧缩与右缩进照中文 Word 的默认
-  return JSON.stringify({ mode: 'msword', compat, kern: true, 'adjust-right-indent': true });
+  const o = wordLinebreakOptions(s);
+  return JSON.stringify({ mode: 'msword', compat: o.compat, kern: o.kern, 'adjust-right-indent': o.adjustRightIndent, 'balance-widths': o.balance, compress: o.compress, 'consecutive-hyphens': o.hyphenLimit, 'hyphenate-caps': o.hyphenateCaps });
 }
 /** 预览里走 fork 时表格单元格的那一档（闭标点只压半格不挂出、老模式不按整格）：模板只发原版认得的字典，
  *  这一键站内在单元格上补——读到模板发的那份原样加一键，模板不用认识 fork */

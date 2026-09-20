@@ -87,6 +87,17 @@ export interface Settings {
   linebreaker: Tri<'msword' | 'optimized' | 'simple'>;
   /** Word 式断行按哪一版 Word 的规则；紧缩、右缩进按中文 Word 默认写死 */
   wordCompat: Tri<'11' | '12' | '14' | '15'>;
+  /** Word 的字符间距控制：压缩标点（开）/ 不压缩（关）；fork 的 compress，导出 docx 写 characterSpacingControl */
+  wordCompress: TriBool;
+  /** Word 的「为字体调整字间距」（样式的 kern）：fork 的 kern，相邻两个全角标点前一个压半格 */
+  wordKern: TriBool;
+  /** Word 兼容选项「调整单字节与双字节字符间距」（balanceSingleByteDoubleByteWidth）：fork 的 balance-widths */
+  wordBalanceWidths: TriBool;
+  /** 段落的「定义了文档网格时自动调整右缩进」：fork 的 adjust-right-indent，只在 2003～2010 档带网格时有用 */
+  wordAdjustRightIndent: TriBool;
+  /** 断字：连续几行行尾带连字符的上限（0 不限）与大写单词断不断；fork 的 consecutive-hyphens / hyphenate-caps，导出 docx 写进 settings */
+  hyphenLimit: Tri<'0' | '2' | '3'>;
+  hyphenateCaps: TriBool;
   /**
    * 版面（Word「页面设置」：页边距、文档网格、页眉页脚）的局部改写。界面上不开，只从工程 JSON 里改：
    * 键与模板 layout: 字典同名（margin、char-pitch、line-pitch、base-size、header、footer…），值照 Typst 原话写

@@ -135,15 +135,19 @@ npm run test:compile # 不开浏览器，在 Node 里用同一颗 wasm 编一份
 
 预览用的编译器 wasm 是 Typst 0.15.1 加上本机 fork `typst-with-msword-linebreaks` 的 `#set par(linebreaks: "msword")`：
 按 Word 的规则断行、排字符网格、压缩标点、标点悬挂。兼容模式可选：auto ＝ 11（学校范例是 Word 2003 的 .doc，老模式行末落在整格上、12.4543 步进比版心短 1.8pt，Word macOS 导出的博士范例 PDF 实测 508.0）；作者原稿是 2013+ 的 docx（行末贴版心）就选 15，杨文艺那份 JSON 显式写的 15；选老模式时行末不贴边是 Word 的真实行为，不是错；紧缩、右缩进按中文 Word 的默认写死。
-设置里只有「断行引擎」（Word 式 / Typst 最优 / Typst 贪心）与「Word 兼容模式」两项，只进预览；**导出的 .typ 不带这些**，原版 Typst 照编。
-引擎是环境，不是文档参数：预览编译时 worker 用 `sys.inputs` 传 `linebreaks=<JSON>`（`{"mode":"msword","compat":15,"kern":true,"adjust-right-indent":true}`），
+设置里是「断行引擎」（Word 式 / Typst 最优 / Typst 贪心）、「Word 兼容模式」，以及 fork 认的那几个 Word 开关：标点压缩（字符间距控制 `compress`）、
+字体紧缩（样式的 kern）、调整中西文字符宽度（`balance-widths`）、网格下自动调整右缩进、开了西文断字后的连续断字行数上限与大写单词断字
+（`consecutive-hyphens` / `hyphenate-caps`；msword 档的断字照 Word：0.25in 断字区、先整词后音节）。这些只进预览，**导出的 .typ 不带**，原版 Typst 照编；
+**导出 Word 时按 Word 的口写进 docx**：`compatSetting compatibilityMode`、`characterSpacingControl`、`balanceSingleByteDoubleByteWidth`、
+Normal 样式的 `w:kern` 与 `adjustRightInd`、`autoHyphenation / hyphenationZone / consecutiveHyphenLimit / doNotHyphenateCaps`，预览里怎么断，Word 里就怎么断。
+引擎是环境，不是文档参数：预览编译时 worker 用 `sys.inputs` 传 `linebreaks=<JSON>`（`{"mode":"msword","compat":11,"kern":true,"adjust-right-indent":true,"balance-widths":true,"compress":true,"consecutive-hyphens":0,"hyphenate-caps":true}`），
 模板读到它就不再发模拟网格用的 `text(tracking:)` 与西文补偿那几条规则，改在每次换版面（文档级、各段、带自己网格的成果页 / 声明页）
 处自己发 `set par(linebreaks: (mode: "msword", char-excess: 网格增量, …))`——各部件用的就是模板算的那份网格，站内不再注入任何规则；只有表格单元格例外：fork 的 `cell: true` 档（闭标点只压半格不挂出、老模式不按整格取整）模板不认识，站内在预览里发一条 `show table.cell`，读到模板发的那份字典原样加一键。
 要让某一页退回原版断行，工程 JSON 里给那页 `layout: { "linebreaks": "none" }` 即可（见下面「版面的局部改写」）。
 
 fork 主线已并入 typst 上游 main（带 #792：中日文旁的换行空格丢掉），而 typst.ts 0.8.1 的导出 / world 层编不过 main 的 Format API，
 站内这颗 wasm 走 0.15.1 线：fork 的 msword 提交 + #792 那两个提交 cherry-pick 到 0.15.1 基线（`vendor/typst-ts-web-compiler/FORK_COMMIT`
-记着来历），typst.ts 侧补一个 `SyntaxKind::Space` 拆分的小补丁（`scripts/wasm-patch/reflexo-space-kind.patch`）。typst.ts 跟上 0.16 后再换主线。
+记着来历；重编：克隆 fork、`checkout 88a6f5669`、`cherry-pick -X theirs` #792 两个提交与之后所有 msword 提交，把这棵树传给 `scripts/merge-msword.sh`），typst.ts 侧补一个 `SyntaxKind::Space` 拆分的小补丁（`scripts/wasm-patch/reflexo-space-kind.patch`）。typst.ts 跟上 0.16 后再换主线。
 
 内存：comemo 的记忆在 typst.ts 的 web 编译器里没人清，177 页的论文每改一次设置涨一两百 MB，顶到 wasm32 的 4 GB 就 `unreachable`、
 整个实例作废——`compiler-glyph-map.patch` 顺手给 `TypstCompiler` 加了 `evict(max_age)`，worker 每次整编后 `evict(1)`（只留上一轮命中过的，论文选项一改缓存键全换，多留几代就是几份布局堆着）；
