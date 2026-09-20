@@ -32,6 +32,7 @@ import { useEditorEnv, NumberingContext, RichKeyContext } from './env';
 import { computeNumbering, type Part } from '../typst/numbering';
 import { useStore, type RichKey } from '../model/store';
 import { registerEditor, unregisterEditor, getEditor } from './registry';
+import { trackHistory } from './historyLog';
 import { B, useEditorTick, useInsertActions, useRichSize } from './tools';
 import { MirrorCaret, mirrorCaretKey } from './extensions/MirrorCaret';
 import { Search } from './extensions/Search';
@@ -131,7 +132,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     },
     onBlur: ({ editor }) => commitChange(editor),
     // 每一笔改动的 mapping 记下来：预览区的字形表要靠它把老位置换算成新位置
-    onTransaction: ({ transaction }) => { if (richKey) recordTransaction(richKey, transaction); },
+    onTransaction: ({ editor, transaction }) => { if (richKey) recordTransaction(richKey, transaction); trackHistory(editor, transaction); },
     editorProps: {
       attributes: { class: 'rich', spellcheck: 'false' },
       // 光标离视口上下沿不到 40px 就滚，滚到留 72px：Word 那种贴着边打字看不见下一行的感觉要不得
@@ -227,7 +228,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     if (value === lastEmitted.current) return;
     invalidatePositions();
     lastEmitted.current = value;
-    editor.commands.setContent(value, { emitUpdate: false });
+    editor.chain().setMeta('undoLabel', t("编辑")).setContent(value, { emitUpdate: false }).run();
   }, [editor, value]);
 
   // 登记到编辑器表里：预览区直接编辑要找到它（挂上来时内容就是工程里那份，位置不必作废）
@@ -288,7 +289,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     try {
       const next = fromMarkdown(text, headings);
       editor.schema.nodeFromJSON(next).check();
-      if (JSON.stringify(editor.getJSON()) !== JSON.stringify(next)) editor.commands.setContent(next);
+      if (JSON.stringify(editor.getJSON()) !== JSON.stringify(next)) editor.chain().setMeta('undoLabel', t("编辑")).setContent(next).run();
       setSourceError('');
       return true;
     } catch (error) { setSourceError((error as Error).message); return false; }

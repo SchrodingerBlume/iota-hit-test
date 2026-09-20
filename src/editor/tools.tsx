@@ -4,6 +4,7 @@
 import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
 import type { Editor, JSONContent } from '@tiptap/core';
 import { createTable } from '@tiptap/extension-table';
+import { undoDepth, redoDepth } from '@tiptap/pm/history';
 import { Button, ToggleButton, Tooltip, Divider, Popover, PopoverTrigger, PopoverSurface } from '@fluentui/react-components';
 import { TextAlignCenter20Regular, TableCellEdit20Regular, TextFontSize20Regular } from '@fluentui/react-icons';
 import { currentCellInfo } from './extensions/table';
@@ -24,7 +25,7 @@ function editorSignature(editor: Editor): string {
   const chain: string[] = [];
   for (let d = $from.depth; d > 0; d--) chain.push($from.node(d).type.name);
   const node = 'node' in selection ? (selection as { node?: { type: { name: string } } }).node?.type.name ?? '' : '';
-  return [marks, parent.type.name, JSON.stringify(parent.attrs), chain.join('>'), node, selection.empty ? 1 : 0, editor.can().undo() ? 1 : 0, editor.can().redo() ? 1 : 0].join('|');
+  return [marks, parent.type.name, JSON.stringify(parent.attrs), chain.join('>'), node, selection.empty ? 1 : 0, undoDepth(state), redoDepth(state)].join('|');
 }
 
 /** 编辑器的事务里只有按钮亮暗要用的那几样变了才重画（连续打字时基本不重画），一帧合成一次 */

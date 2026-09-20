@@ -9,7 +9,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 import type { Editor } from '@tiptap/core';
 import type { Mark } from '@tiptap/pm/model';
 import { create } from 'zustand';
-import { TabList, Tab, Button, Popover, PopoverTrigger, PopoverSurface, Tooltip, Input, Checkbox, Menu, MenuTrigger, MenuPopover, MenuList, MenuItemCheckbox } from '@fluentui/react-components';
+import { TabList, Tab, Button, SplitButton, Popover, PopoverTrigger, PopoverSurface, Tooltip, Input, Checkbox, Menu, MenuTrigger, MenuPopover, MenuList, MenuItemCheckbox, type MenuButtonProps } from '@fluentui/react-components';
 import {
   ArrowUndo20Regular, ArrowRedo20Regular, TextBold20Regular, TextItalic20Regular, TextUnderline20Regular, TextStrikethrough20Regular, TextSubscript20Regular, TextSuperscript20Regular,
   Code20Regular, ClearFormatting20Regular, PaintBrush20Regular, Cut20Regular, Copy20Regular, ClipboardPaste20Regular, TextBulletListLtr20Regular, TextNumberListLtr20Regular, TextIndentDecreaseLtr20Regular,
@@ -23,6 +23,7 @@ import {
 } from '@fluentui/react-icons';
 import { useStore } from '../model/store';
 import { getEditor, getEditorMeta, onRegistryChange } from '../editor/registry';
+import { historyLog, entryText } from '../editor/historyLog';
 import { usePreviewSurface, usePreviewMarks } from './PreviewEditLayer';
 import { useBlockMenu } from '../editor/BlockMenu';
 import { B, Sep, useEditorTick, useInsertActions, TableAlignTools, FontSizeTool, refocusPreviewAfter } from '../editor/tools';
@@ -98,13 +99,41 @@ function useActiveEditor() {
   return editor && !editor.isDestroyed ? editor : null;
 }
 
-/** 撤销 / 重做：放在「文件」右边，Word 快速访问工具栏的位置 */
+/** 撤消 / 恢复：挂在「文件」右边，Word 快速访问工具栏的位置；撤消带下拉，能一次退回好几步 */
 export function HistoryButtons() {
   const ed = useActiveEditor();
+  const [open, setOpen] = useState(false);
+  const [hover, setHover] = useState(0);
+  const [, bump] = useState(0);
+  const log = ed ? historyLog(ed) : null;
+  const undoTop = log?.undo[log.undo.length - 1], redoTop = log?.redo[log.redo.length - 1];
+  const items = log ? [...log.undo].reverse() : [];
+  const undoN = (n: number) => { setOpen(false); refocusPreviewAfter(() => { for (let i = 0; i < n; i++) ed!.commands.undo(); ed!.commands.focus(); }); };
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHover(Math.min(items.length, hover + 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHover(Math.max(1, hover - 1)); }
+    else if (e.key === 'Enter') { e.preventDefault(); undoN(hover || 1); }
+  };
   return (
     <span className="rb-history">
-      <B title={tx("撤销 (⌘Z)")} icon={<ArrowUndo20Regular />} disabled={!ed?.can().undo()} run={() => ed!.chain().focus().undo().run()} />
-      <B title={tx("重做 (⌘⇧Z)")} icon={<ArrowRedo20Regular />} disabled={!ed?.can().redo()} run={() => ed!.chain().focus().redo().run()} />
+      <Popover open={open} onOpenChange={(_, d) => { setOpen(d.open); setHover(0); }} positioning="below-start" trapFocus={false}>
+        <PopoverTrigger disableButtonEnhancement>
+          {(trigger) => (
+            <Tooltip content={undoTop ? tx("撤消 {{s}} (⌘Z)", { s: entryText(undoTop) }) : tx("无法撤消 (⌘Z)")} relationship="description" withArrow positioning="below" onVisibleChange={(_, d) => { if (d.visible) bump((n) => n + 1); }}>
+              <SplitButton appearance="subtle" size="small" icon={<ArrowUndo20Regular />} disabled={!undoTop}
+                primaryActionButton={{ className: 'rb-btn', 'aria-label': tx("撤消"), onMouseDown: (e: React.MouseEvent) => e.preventDefault(), onClick: () => refocusPreviewAfter(() => ed!.chain().focus().undo().run()) }}
+                menuButton={{ ...(trigger as MenuButtonProps), className: 'rb-btn rb-undo-arrow', 'aria-label': tx("撤消列表"), onMouseDown: (e: React.MouseEvent) => e.preventDefault() }} />
+            </Tooltip>
+          )}
+        </PopoverTrigger>
+        <PopoverSurface className="undo-pop" onKeyDown={onKey}>
+          <div className="undo-list" onMouseLeave={() => setHover(0)}>
+            {items.map((e, i) => <div key={i} className={`undo-item ${i < hover ? 'on' : ''}`} onMouseEnter={() => setHover(i + 1)} onClick={() => undoN(i + 1)}>{entryText(e)}</div>)}
+          </div>
+          <div className="undo-foot">{hover ? tx("撤消 {{n}} 次操作", { n: hover }) : tx("取消")}</div>
+        </PopoverSurface>
+      </Popover>
+      <B title={redoTop ? tx("恢复 {{s}} (⌘Y)", { s: entryText(redoTop) }) : tx("无法恢复 (⌘Y)")} icon={<ArrowRedo20Regular />} disabled={!redoTop} run={() => ed!.chain().focus().redo().run()} />
     </span>
   );
 }
@@ -112,6 +141,7 @@ export function HistoryButtons() {
 export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonLayout; leading?: ReactNode; trailing?: ReactNode; minimal?: boolean }) {
   const activeKey = usePreviewSurface((s) => s.activeKey);
   const settings = useStore((s) => s.doc.settings);
+  const docName = useStore((s) => s.doc.name);
   const section = useStore((s) => s.section);
   // 样式格子跟着当前编辑的那一节：附录里是「附录 A / A.1」
   const levels = levelLabels(settings, section === 'appendix' ? 'appendix' : 'body');
@@ -331,20 +361,23 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
     <div ref={root} className={`ribbon ${none ? 'is-idle' : ''} ${collapsed ? 'is-collapsed' : ''} ${peek ? 'is-peek' : ''}`} onClick={(e) => { const t = e.target as HTMLElement; if (t.closest('.rb-btn') && !t.closest('.rb-keep')) afterCommand(); }}>
       <SymbolPicker onPick={(ch) => { chain().insertContent(ch).run(); }} />
       <div className="rb-tabs">
-        {leading}
-        {!minimal && (
-          <TabList selectedValue={bodyVisible ? tab : ''} onTabSelect={(_, d) => onTab(d.value as TabKey)} size="small" appearance="subtle" className="rb-tablist">
-            {TABS.filter((t) => (t.key !== 'table' || inTable) && (t.key !== 'figure' || inFigure)).map((t) => (
-              <Tab key={t.key} value={t.key} className={CTX_TABS.includes(t.key) ? 'rb-tab-ctx' : ''} onMouseDown={(e) => e.preventDefault()} onDoubleClick={() => toggleCollapsed(!collapsed)}>{t.label}</Tab>
-            ))}
-          </TabList>
-        )}
-        {collapsed && peek && !shortScreen && <Button size="small" appearance="primary" icon={<Pin20Regular />} className="rb-pin" onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(false)}>{tx("固定")}</Button>}
-        {!minimal && !shortScreen && (
-          <Tooltip content={collapsed ? tx("固定功能区（双击选项卡也行）") : tx("收起功能区（双击选项卡也行）")} relationship="label" positioning="below">
-            <button type="button" className={`fold-btn is-vert rb-collapse ${collapsed ? '' : 'is-open'}`} aria-expanded={!collapsed} aria-label={collapsed ? tx("固定功能区") : tx("收起功能区")} onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(!collapsed)}><ChevronRight20Regular /></button>
-          </Tooltip>
-        )}
+        <div className="rb-tabs-left">
+          {leading}
+          {!minimal && (
+            <TabList selectedValue={bodyVisible ? tab : ''} onTabSelect={(_, d) => onTab(d.value as TabKey)} size="small" appearance="subtle" className="rb-tablist">
+              {TABS.filter((t) => (t.key !== 'table' || inTable) && (t.key !== 'figure' || inFigure)).map((t) => (
+                <Tab key={t.key} value={t.key} className={CTX_TABS.includes(t.key) ? 'rb-tab-ctx' : ''} onMouseDown={(e) => e.preventDefault()} onDoubleClick={() => toggleCollapsed(!collapsed)}>{t.label}</Tab>
+              ))}
+            </TabList>
+          )}
+          {collapsed && peek && !shortScreen && <Button size="small" appearance="primary" icon={<Pin20Regular />} className="rb-pin" onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(false)}>{tx("固定")}</Button>}
+          {!minimal && !shortScreen && (
+            <Tooltip content={collapsed ? tx("固定功能区（双击选项卡也行）") : tx("收起功能区（双击选项卡也行）")} relationship="label" positioning="below">
+              <button type="button" className={`fold-btn is-vert rb-collapse ${collapsed ? '' : 'is-open'}`} aria-expanded={!collapsed} aria-label={collapsed ? tx("固定功能区") : tx("收起功能区")} onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(!collapsed)}><ChevronRight20Regular /></button>
+            </Tooltip>
+          )}
+        </div>
+        {!minimal && <span className="rb-proj" title={docName}>{docName}</span>}
         {trailing}
       </div>
       {!minimal && (

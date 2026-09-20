@@ -50,7 +50,7 @@ function ProjectCard({ p, active }: { p: ProjectMeta; active: boolean }) {
 }
 
 export function ProjectsView() {
-  const { projects, doc, createProject, setView, loaded } = useStore();
+  const { projects, doc, createProject, importProject, setView, loaded } = useStore();
   const [name, setName] = useState('');
   const [settings, setSettings] = useState<Settings>(() => defaultSettings());
   const [template, setTemplate] = useState<'blank' | 'sample'>('blank');
@@ -58,6 +58,34 @@ export function ProjectsView() {
   const creatingRef = useRef(false);
   const canBack = loaded && projects.some((p) => p.id === doc.id);
 
+  /** 打开下载过的副本（.iota.json） */
+  const onOpenProject = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.onchange = async () => {
+      const f = input.files?.[0];
+      if (!f) return;
+      try {
+        const raw = JSON.parse(await f.text());
+        if (!raw || typeof raw !== 'object' || !raw.info || !raw.settings || raw.body?.type !== 'doc') {
+          throw new Error(tx("请选择有效的 .iota.json 文档。"));
+        }
+        const imageData: Record<string, string> = raw.imageData ?? {};
+        const images: { name: string; blob: Blob }[] = [];
+        for (const [name, b64] of Object.entries(imageData)) {
+          if (typeof b64 !== 'string') throw new Error(tx("文档中的图片数据无效。"));
+          const bin = atob(b64);
+          images.push({ name, blob: new Blob([Uint8Array.from(bin, (c) => c.charCodeAt(0))]) });
+        }
+        delete raw.imageData;
+        await importProject(raw, images);
+      } catch (error) {
+        alert(tx("无法打开文档：{{v0}}", { v0: error instanceof Error ? error.message : tx("文件读取失败。") }));
+      }
+    };
+    input.click();
+  };
   const onCreate = async () => {
     if (!loaded || creatingRef.current) return;
     creatingRef.current = true;
@@ -72,7 +100,10 @@ export function ProjectsView() {
           <h2>{tx("我的文档")}</h2>
           <p className="lead">{tx("文档保存在当前浏览器中。跨设备使用或长期保存时，请下载副本。")}</p>
         </div>
-        {canBack && <button type="button" className="btn" onClick={() => setView('editor')}><ArrowLeft />{tx("回到「")}{doc.name}」</button>}
+        <div className="projects-actions">
+          <button type="button" className="btn" disabled={!loaded} onClick={onOpenProject}><FolderOpen />{tx("打开…")}</button>
+          {canBack && <button type="button" className="btn" onClick={() => setView('editor')}><ArrowLeft />{tx("回到「")}{doc.name}」</button>}
+        </div>
       </div>
       <div className="projects-grid">
         <div className="card new-proj">

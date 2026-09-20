@@ -33,7 +33,7 @@ import { FluentProvider, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, Men
 import { Fold } from './Fold';
 import { SettingSwitch } from './TriSwitch';
 import { watchReflow } from './reflow';
-import { Apps20Regular, DocumentAdd20Regular, Save20Regular, FolderOpen20Regular, DocumentPdf20Regular, Document20Regular, Info20Regular, WeatherSunny20Regular, WeatherMoon20Regular, Navigation20Regular, ChevronLeft20Regular } from '@fluentui/react-icons';
+import { Home20Regular, Save20Regular, DocumentPdf20Regular, Document20Regular, Info20Regular, WeatherSunny20Regular, WeatherMoon20Regular, Navigation20Regular, ChevronLeft20Regular } from '@fluentui/react-icons';
 import { fluentLight, fluentDark } from './fluent';
 import { SlidersHorizontal, BookText, PenLine, Library } from 'lucide-react';
 import { t as tx } from '../i18n';
@@ -205,7 +205,7 @@ function download(name: string, data: BlobPart, type: string) {
 }
 
 export function App() {
-  const { doc, section, loaded, view, setView, setSection, load, importProject, setImages } = useStore();
+  const { doc, section, loaded, view, setView, setSection, load, setImages } = useStore();
   const compile = useCompileState();
   const [refresh, setRefresh] = useState(0);
   const previewFocused = usePreviewSurface((s) => s.focused);
@@ -271,33 +271,6 @@ export function App() {
     }
     download(`${doc.info.title.split('\n')[0] || tx("论文")}.iota.json`, JSON.stringify({ ...doc, imageData: images }, null, 1), 'application/json');
   };
-  const onOpenProject = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json,application/json';
-    input.onchange = async () => {
-      const f = input.files?.[0];
-      if (!f) return;
-      try {
-        const raw = JSON.parse(await f.text());
-        if (!raw || typeof raw !== 'object' || !raw.info || !raw.settings || raw.body?.type !== 'doc') {
-          throw new Error(tx("请选择有效的 .iota.json 文档。"));
-        }
-        const imageData: Record<string, string> = raw.imageData ?? {};
-        const images: { name: string; blob: Blob }[] = [];
-        for (const [name, b64] of Object.entries(imageData)) {
-          if (typeof b64 !== 'string') throw new Error(tx("文档中的图片数据无效。"));
-          const bin = atob(b64);
-          images.push({ name, blob: new Blob([Uint8Array.from(bin, (c) => c.charCodeAt(0))]) });
-        }
-        delete raw.imageData;
-        await importProject(raw, images);
-      } catch (error) {
-        alert(tx("无法打开文档：{{v0}}", { v0: error instanceof Error ? error.message : tx("文件读取失败。") }));
-      }
-    };
-    input.click();
-  };
   const onExportDocx = async () => {
     setBusy(tx("正在生成 Word 文档…"));
     try {
@@ -312,7 +285,6 @@ export function App() {
     download('main.typ', project.main, 'text/plain');
     for (const [name, text] of Object.entries(project.files)) download(name, text, 'text/plain');
   };
-  const onNew = () => setView('projects');
 
   const panel = (() => {
     switch (section) {
@@ -353,11 +325,7 @@ export function App() {
               </MenuTrigger>
               <MenuPopover className="rb-file-menu">
                 <MenuList>
-                  <MenuItem icon={<Apps20Regular />} disabled={view === 'projects' && !hasDocument} onClick={() => setView(view === 'projects' ? 'editor' : 'projects')}>{view === 'projects' ? tx("返回文档") : tx("我的文档")}</MenuItem>
-                  <MenuItem icon={<DocumentAdd20Regular />} onClick={onNew}>{tx("新建文档…")}</MenuItem>
-                  <MenuDivider />
                   <MenuItem icon={<Save20Regular />} disabled={!hasDocument} onClick={onSaveProject}>{tx("下载副本（.iota.json）")}</MenuItem>
-                  <MenuItem icon={<FolderOpen20Regular />} disabled={!loaded} onClick={onOpenProject}>{tx("打开…")}</MenuItem>
                   <MenuDivider />
                   <MenuItem icon={<DocumentPdf20Regular />} disabled={!hasDocument || compile.status !== 'ready' || !!busy} onClick={() => void onExportPdf()}>{tx("导出 PDF")}</MenuItem>
                   <MenuItem icon={<Document20Regular />} disabled={!hasDocument} onClick={onExportTypst}>{tx("导出 Typst 源文件")}</MenuItem>
@@ -365,8 +333,12 @@ export function App() {
                 </MenuList>
               </MenuPopover>
             </Menu>
+            {view === 'editor' && (
+              <Tooltip content={tx("主页")} relationship="label" withArrow positioning="below">
+                <Button appearance="subtle" size="small" className="rb-btn" icon={<Home20Regular />} onMouseDown={(e) => e.preventDefault()} onClick={() => setView('projects')} />
+              </Tooltip>
+            )}
             {view === 'editor' && <HistoryButtons />}
-            {view === 'editor' && <span className="rb-proj">{doc.name}</span>}
           </span>
         ); const trailing = (
           <span className="rb-trailing">
