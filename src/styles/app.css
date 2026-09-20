@@ -16,6 +16,7 @@
   --ink: #202020;
   --ink-2: #3a3f44;
   --muted: #6b7378;
+  --caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='3'%3E%3Cpath d='M0 0h6L3 3z' fill='%236b7378'/%3E%3C/svg%3E");
   --line: #e3e6e8;
   --line-2: #d3d8dc;
   --accent: var(--hit);
@@ -67,6 +68,7 @@
   --ink: #d4d4d4;
   --ink-2: #b8bcc2;
   --muted: #8b9198;
+  --caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='3'%3E%3Cpath d='M0 0h6L3 3z' fill='%238b9198'/%3E%3C/svg%3E");
   --line: #3a3a3a;
   --line-2: #474747;
   --accent: #4e9fc9;
@@ -99,6 +101,7 @@
 html, body, #root { height: 100%; margin: 0; }
 body { font: 14px/1.5 var(--sans); color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; }
 button, input, select, textarea { font: inherit; color: inherit; }
+select:not([multiple]) { appearance: none; background-image: var(--caret) !important; background-repeat: no-repeat !important; background-position: right 8px center !important; }
 button { cursor: pointer; }
 code { font-family: var(--mono); font-size: 0.92em; }
 .muted { color: var(--muted); }
@@ -238,6 +241,7 @@ code { font-family: var(--mono); font-size: 0.92em; }
 /* 摘要底下的关键词：与上面的编辑器隔开一点，与下一份摘要的标题隔开多一点 */
 .abstract-keywords { margin: 12px 0 4px; }
 .field input, .field select, .field textarea, .input { width: 100%; padding: 7px 9px; border: 1px solid var(--line-2); border-radius: var(--r-s); background: var(--panel); color: var(--ink); transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease), background-color var(--base) var(--ease); }
+.field select, select.input { padding-right: 22px; }
 .field input:hover, .field textarea:hover, .field select:hover, .input:hover { border-color: var(--muted); }
 .field input:focus, .field textarea:focus, .field select:focus, .input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .field textarea { resize: vertical; min-height: 58px; font-family: inherit; }
@@ -247,7 +251,7 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 @container (max-width: 400px) { .axis { grid-template-columns: minmax(0, 1fr); gap: 4px; } .axis .lab { padding-top: 0; } }
 .axis:last-child { border-bottom: 0; }
 .axis .lab { font-weight: 600; padding-top: 5px; }
-.axis select { padding: 6px 30px 6px 9px; border: 1px solid var(--line-2); border-radius: var(--r-s); background: var(--panel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7378' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 9px center; appearance: none; max-width: 260px; color: var(--ink); transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease); }
+.axis select { padding: 6px 22px 6px 9px; border: 1px solid var(--line-2); border-radius: var(--r-s); background-color: var(--panel); appearance: none; max-width: 260px; color: var(--ink); transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease); }
 .axis select:hover { border-color: var(--muted); }
 .axis select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .axis .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
@@ -605,7 +609,7 @@ html.theme-anim :not(svg, svg *) { transition: background-color 320ms var(--ease
 .projects-grid { display: grid; grid-template-columns: minmax(320px, 420px) minmax(0, 1fr); gap: 20px; max-width: 1200px; margin: 0 auto; align-items: start; }
 .new-proj { position: sticky; top: 0; }
 .new-axes { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
-.new-axes select { padding: 6px 30px 6px 9px; border: 1px solid var(--line-2); border-radius: var(--r-s); background: var(--panel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7378' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 9px center; appearance: none; color: var(--ink); }
+.new-axes select { padding: 6px 22px 6px 9px; border: 1px solid var(--line-2); border-radius: var(--r-s); background-color: var(--panel); appearance: none; color: var(--ink); }
 .tpl-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
 .tpl { display: flex; gap: 8px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--r-s); cursor: pointer; transition: border-color var(--fast) var(--ease), background-color var(--fast) var(--ease); }
 .tpl input { display: none; }
@@ -651,7 +655,7 @@ html.theme-anim :not(svg, svg *) { transition: background-color 320ms var(--ease
 .bib-search { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line-2); border-radius: var(--r-s); padding: 0 8px; background: var(--panel); }
 .bib-search svg { width: 14px; height: 14px; color: var(--muted); flex: none; }
 .bib-search input { border: 0; background: none; padding: 6px 0; width: 100%; outline: none; }
-.bib-filter { border: 1px solid var(--line-2); border-radius: var(--r-s); background: var(--panel); color: var(--ink); padding: 0 6px; font-size: 12px; }
+.bib-filter { border: 1px solid var(--line-2); border-radius: var(--r-s); background-color: var(--panel); color: var(--ink); padding: 0 20px 0 6px; font-size: 12px; }
 .bib-add { display: flex; gap: 6px; align-items: center; padding: 0 10px 8px; border-bottom: 1px solid var(--line); }
 .bib-add .btn.on { background: var(--accent-soft); color: var(--accent-ink); }
 .bib-add-menu { left: 0; right: auto; min-width: 200px; max-height: 60vh; overflow: auto; }
@@ -1139,9 +1143,11 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .rb-btn.rb-big { flex-direction: column; height: 56px; min-width: 52px; padding: 3px 6px 2px; gap: 2px; font-weight: 400; font-size: 12px; justify-content: flex-start; }
 .rb-btn.rb-big .fui-Button__icon, .rb-btn.rb-big .fui-ToggleButton__icon { margin: 0; }
 .rb-btn.rb-big svg { width: 22px; height: 22px; }
-/* 展开钮的小三角：统一 6×3 */
-.rb-btn.rb-menu::after, .rb-tri::after { content: ''; width: 0; height: 0; border: 3px solid transparent; border-top-color: currentColor; margin-left: 2px; opacity: 0.6; }
-.rb-btn.rb-big.rb-menu::after, .rb-tri::after { margin: 0; }
+/* 展开钮的小三角：统一 6×3（按钮用 ::after，Fluent Dropdown 用 .rb-caret 元素） */
+.rb-menu::after, .rb-tri::after, .rb-caret { content: ''; display: inline-block; width: 0; height: 0; border: 3px solid transparent; border-top-color: currentColor; opacity: 0.6; }
+.rb-menu::after { margin-left: 2px; }
+.rb-btn.rb-big.rb-menu::after { margin: 0; }
+.rb-trailing .theme-btn { max-width: none; padding: 1px 4px 1px 2px; }
 /* 主钮 + 它的小箭头（撤消、编辑标记）：两半连成一块，光标落在哪一半都一起亮，所在那半更亮 */
 .rb-split { display: inline-flex; align-items: center; }
 .rb-split .rb-btn:not(.rb-menu) { border-top-right-radius: 0; border-bottom-right-radius: 0; border-right-width: 0; padding-right: 0; min-width: 0; }
@@ -1258,7 +1264,7 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .nom-form td input:hover { background: var(--panel-2); }
 .nom-form td input:focus { background: var(--accent-soft); }
 .nom-form td input::placeholder { color: var(--muted); opacity: 0.4; }
-.nom-form td select { border: 0; background: none; font: inherit; color: var(--ink); height: 32px; padding: 0 4px; }
+.nom-form td select { border: 0; background-color: transparent; font: inherit; color: var(--ink); height: 32px; padding: 0 18px 0 4px; }
 .nom-form .def-x { border: 0; padding: 0 0 0 4px; }
 .nom-form .def-x button { border: 0; background: none; color: var(--muted); opacity: 0; width: 22px; height: 22px; border-radius: var(--r-s); font-size: 11px; cursor: pointer; transition: opacity var(--fast) var(--ease), background-color var(--fast) var(--ease); }
 .nom-form tr:hover .def-x button { opacity: 1; }

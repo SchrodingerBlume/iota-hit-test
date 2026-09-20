@@ -229,14 +229,14 @@ function StyleDialog({ level }: { level: number }) {
           <DialogContent>
             <p className="muted style-hint">{t("全篇同级一起变（与 Word 的「修改样式」一样）；留 Auto 的项按模板排。模板默认：")}{TEMPLATE_DEFAULTS[key]}</p>
             {field(t("中文字体"), (
-              <Dropdown size="small" value={FONTS.find((f) => f.key === draft.fontZh)?.label ?? t("自动")} selectedOptions={[draft.fontZh ?? 'auto']} onOptionSelect={(_, d) => set({ fontZh: d.optionValue === 'auto' ? undefined : d.optionValue })}>
+              <Dropdown size="small" expandIcon={<i className="rb-caret" />} value={FONTS.find((f) => f.key === draft.fontZh)?.label ?? t("自动")} selectedOptions={[draft.fontZh ?? 'auto']} onOptionSelect={(_, d) => set({ fontZh: d.optionValue === 'auto' ? undefined : d.optionValue })}>
                 <Option value="auto" text={t("自动")}>{t("自动")}</Option>
                 {FONTS.map((f) => <Option key={f.key} value={f.key} text={f.label}>{f.label}</Option>)}
               </Dropdown>
             ), t("西文照模板的字体方案配（Times New Roman 一类）"))}
             {field(t("字号"), (
               <span className="style-row">
-                <Dropdown size="small" value={typeof draft.size === 'number' ? `${draft.size} pt` : ZIHAO.find((z) => z.key === draft.size)?.label ?? t("自动")} selectedOptions={[typeof draft.size === 'number' ? 'pt' : draft.size ?? 'auto']} onOptionSelect={(_, d) => set({ size: d.optionValue === 'auto' ? undefined : d.optionValue === 'pt' ? (typeof draft.size === 'number' ? draft.size : 12) : d.optionValue })}>
+                <Dropdown size="small" expandIcon={<i className="rb-caret" />} value={typeof draft.size === 'number' ? `${draft.size} pt` : ZIHAO.find((z) => z.key === draft.size)?.label ?? t("自动")} selectedOptions={[typeof draft.size === 'number' ? 'pt' : draft.size ?? 'auto']} onOptionSelect={(_, d) => set({ size: d.optionValue === 'auto' ? undefined : d.optionValue === 'pt' ? (typeof draft.size === 'number' ? draft.size : 12) : d.optionValue })}>
                   <Option value="auto" text={t("自动")}>{t("自动")}</Option>
                   {ZIHAO.map((z) => <Option key={z.key} value={z.key} text={z.label}>{z.label} <span className="muted">{z.pt}pt</span></Option>)}
                   <Option value="pt" text={t("磅数…")}>{t("磅数…")}</Option>
@@ -245,21 +245,21 @@ function StyleDialog({ level }: { level: number }) {
               </span>
             ))}
             {field(t("加粗"), (
-              <Dropdown size="small" value={draft.bold === undefined ? t("自动") : draft.bold ? t("加粗") : t("不加粗")} selectedOptions={[draft.bold === undefined ? 'auto' : String(draft.bold)]} onOptionSelect={(_, d) => set({ bold: d.optionValue === 'auto' ? undefined : d.optionValue === 'true' })}>
+              <Dropdown size="small" expandIcon={<i className="rb-caret" />} value={draft.bold === undefined ? t("自动") : draft.bold ? t("加粗") : t("不加粗")} selectedOptions={[draft.bold === undefined ? 'auto' : String(draft.bold)]} onOptionSelect={(_, d) => set({ bold: d.optionValue === 'auto' ? undefined : d.optionValue === 'true' })}>
                 <Option value="auto" text={t("自动")}>{t("自动")}</Option>
                 <Option value="true" text={t("加粗")}>{t("加粗")}</Option>
                 <Option value="false" text={t("不加粗")}>{t("不加粗")}</Option>
               </Dropdown>
             ), t("中文黑体本身够重，规范不要求加粗；宋体没有粗体面时按「伪粗」设置合成"))}
             {field(t("对齐"), (
-              <Dropdown size="small" value={ALIGNS.find((a) => a.key === draft.align)?.label ?? t("自动")} selectedOptions={[draft.align ?? 'auto']} onOptionSelect={(_, d) => set({ align: d.optionValue === 'auto' ? undefined : (d.optionValue as StyleEntry['align']) })}>
+              <Dropdown size="small" expandIcon={<i className="rb-caret" />} value={ALIGNS.find((a) => a.key === draft.align)?.label ?? t("自动")} selectedOptions={[draft.align ?? 'auto']} onOptionSelect={(_, d) => set({ align: d.optionValue === 'auto' ? undefined : (d.optionValue as StyleEntry['align']) })}>
                 <Option value="auto" text={t("自动")}>{t("自动")}</Option>
                 {ALIGNS.map((a) => <Option key={a.key} value={a.key} text={a.label}>{a.label}</Option>)}
               </Dropdown>
             ))}
             {field(t("行距"), (
               <span className="style-row">
-                <Dropdown size="small" value={lsOptions.find((o) => o[0] === lsKey)?.[1] ?? t("自动")} selectedOptions={[lsKey]} onOptionSelect={(_, d) => { const v = d.optionValue!; set({ lineSpacing: v === 'auto' ? undefined : v === 'exactly' ? { exactly: typeof ls === 'object' && ls ? ls.exactly : 20 } : v === 'multiple' ? (typeof ls === 'number' ? ls : 1.3) : parseFloat(v) }); }}>
+                <Dropdown size="small" expandIcon={<i className="rb-caret" />} value={lsOptions.find((o) => o[0] === lsKey)?.[1] ?? t("自动")} selectedOptions={[lsKey]} onOptionSelect={(_, d) => { const v = d.optionValue!; set({ lineSpacing: v === 'auto' ? undefined : v === 'exactly' ? { exactly: typeof ls === 'object' && ls ? ls.exactly : 20 } : v === 'multiple' ? (typeof ls === 'number' ? ls : 1.3) : parseFloat(v) }); }}>
                   {lsOptions.map(([v, l]) => <Option key={v} value={v} text={l}>{l}</Option>)}
                 </Dropdown>
                 {typeof ls === 'object' && ls && <LengthInput value={ls.exactly} defaultUnit="pt" allowed={ABS_UNITS} allowEmpty={false} onChange={(v) => set({ lineSpacing: { exactly: v ?? 20 } })} width={100} />}

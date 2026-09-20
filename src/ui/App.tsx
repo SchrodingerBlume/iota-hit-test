@@ -347,7 +347,7 @@ export function App() {
             <Menu positioning="below-end" checkedValues={{ theme: [themePref] }} onCheckedValueChange={(_, d) => setThemePref((d.checkedItems[0] ?? 'system') as ThemePref)}>
               <MenuTrigger disableButtonEnhancement>
                 <Tooltip content={tx("外观：浅色 / 深色 / 跟随系统")} relationship="label" positioning="below">
-                  <Button appearance="subtle" size="small" className="theme-btn" icon={theme === 'dark' ? <WeatherMoon20Regular /> : <WeatherSunny20Regular />} />
+                  <Button appearance="subtle" size="small" className="theme-btn rb-menu" icon={theme === 'dark' ? <WeatherMoon20Regular /> : <WeatherSunny20Regular />} />
                 </Tooltip>
               </MenuTrigger>
               <MenuPopover>
