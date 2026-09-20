@@ -466,6 +466,24 @@ export function PageSettings({ pages, title, children }: { pages: (keyof Pages)[
   );
 }
 
+/** 原创性声明与使用权限：正文是规范给死的，这里只管排不排、从哪一页起、《》里填什么 */
+export function DeclarationsPanel() {
+  const opts = useStore((s) => s.doc.declarationsOptions);
+  const title = useStore((s) => s.doc.info.title);
+  const setOpts = useStore((s) => s.setDeclarationsOptions);
+  return (
+    <>
+      <h2>{tx("原创性声明与使用权限")}</h2>
+      <p className="lead">{tx("指南 1.7：声明的正文是规范给死的（本科 / 研究生、学术 / 实践成果各一份，模板按论文类型选），作者与导师在纸上签名。这里只管排不排、从哪一页起，和声明里《》那一格填什么。")}</p>
+      <PageSettings pages={['declarations']} />
+      <div className="card">
+        <TriSeg label={tx("《》里的题目")} hint={tx("模板 declarations(title:)：自动印论文信息的题目；留白是给一段空白手写；也可以另填一份")} choices={[{ value: 'blank', label: tx("留白手写") }, { value: 'custom', label: tx("另填") }]} value={opts.title === 'auto' ? 'auto' : opts.title} auto={{ value: 'auto' as any, reason: tx("印论文信息里填的题目"), mixed: tx("论文题目") }} onChange={(v) => setOpts({ title: v as any })} />
+        {opts.title === 'custom' && <input className="input" value={opts.customTitle} placeholder={title.split('\n').join('')} onChange={(e) => setOpts({ customTitle: e.target.value })} />}
+      </div>
+    </>
+  );
+}
+
 /** 目录、插图 / 表格 / 公式索引：没有自己的编辑页，页面设置都在这 */
 export function TocPanel() {
   return (

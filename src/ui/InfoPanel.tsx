@@ -27,7 +27,6 @@ export function InfoPanel() {
           </div>
         );
       })}
-      <PageSettings pages={['declarations']} title={tx("声明")} />
     </>
   );
 }

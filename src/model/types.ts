@@ -185,6 +185,12 @@ export interface NomenclatureOptions {
   form: 'auto' | 'achievements' | 'declarations' | 'no-subheadings';
 }
 
+export interface DeclarationsOptions {
+  /** 声明里《》那一格：auto 印论文信息的题目；blank 留白手写；custom 填 customTitle */
+  title: 'auto' | 'blank' | 'custom';
+  customTitle: string;
+}
+
 export interface SymbolEntry {
   /** 数学写法：Typst（`eta`）或 LaTeX（`\\eta`），按 mode 分 */
   symbol: string;
@@ -267,6 +273,7 @@ export interface ThesisDoc {
   abbreviations: Abbreviation[];
   symbols: SymbolEntry[];
   nomenclatureOptions: NomenclatureOptions;
+  declarationsOptions: DeclarationsOptions;
   body: RichDoc;
   conclusion: RichDoc;
   /** 参考文献：结构化条目是真身，编译时生成 BibTeX */

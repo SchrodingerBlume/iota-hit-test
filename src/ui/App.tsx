@@ -23,7 +23,7 @@ import { FontRecovery } from './FontRecovery';
 import { useFontState } from '../fonts/userFonts';
 import { SettingsPanel } from './SettingsPanel';
 import { InfoPanel, CoverPanel, TitlepagePanel } from './InfoPanel';
-import { AbstractPanel, NomenclaturePanel, RichSection, BodySettings, BibPanel, DefensePanel, TocPanel, IndexPanel, PageSettings, OpenrightSwitch } from './panels';
+import { AbstractPanel, NomenclaturePanel, RichSection, BodySettings, BibPanel, DefensePanel, DeclarationsPanel, TocPanel, IndexPanel, PageSettings, OpenrightSwitch } from './panels';
 import { Preview } from './Preview';
 import { usePreviewSurface } from './PreviewEditLayer';
 import { useTheme, type ThemePref } from './theme';
@@ -52,6 +52,7 @@ const NAV: { key: Section; label: string; group: string; k?: string }[] = [
   { key: 'appendix', label: tx("附录"), group: tx("后置") },
   { key: 'achievements', label: tx("成果"), group: tx("后置") },
   { key: 'defense', label: tx("答辩决议"), group: tx("后置") },
+  { key: 'declarations', label: tx("声明"), group: tx("后置") },
   { key: 'acknowledgement', label: tx("致谢"), group: tx("后置") },
   { key: 'resume', label: tx("个人简历"), group: tx("后置") },
   { key: 'index', label: tx("索引"), group: tx("后置") },
@@ -219,7 +220,7 @@ export function App() {
   const reflowRef = useCallback((el: HTMLDivElement | null) => { reflowStop.current?.(); reflowStop.current = el && !el.querySelector('.editor') ? watchReflow(el, '.card, .card > *, .triseg > *, .axis > *') : null; }, []);
   const lastSection = useRef(section);
   useEffect(() => {
-    if (lastSection.current !== section && mode === 'preview' && ['info', 'settings', 'cover', 'titlepage', 'toc', 'bibliography', 'achievements', 'nomenclature', 'defense', 'index'].includes(section)) setMode('split');
+    if (lastSection.current !== section && mode === 'preview' && ['info', 'settings', 'cover', 'titlepage', 'toc', 'bibliography', 'achievements', 'nomenclature', 'defense', 'declarations', 'index'].includes(section)) setMode('split');
     lastSection.current = section;
   }, [section, mode, setMode]);
   const hasDocument = loaded && useStore.getState().projects.some((p) => p.id === doc.id);
@@ -301,6 +302,7 @@ export function App() {
       case 'appendix': return <RichSection title={tx("附录")} richKey="appendix" headings placeholder={tx("输入附录…")} settings={<><PageSettings pages={['appendix']}><SettingSwitch k="appendixNumbering" /></PageSettings><p className="lead">{tx("题注编号、标题、列表那几组开关正文与附录共用，在「正文 → 设置」里。")}</p></>} />;
       case 'achievements': return <BibPanel which="achievements" />;
       case 'defense': return <DefensePanel />;
+      case 'declarations': return <DeclarationsPanel />;
       case 'acknowledgement': return <RichSection title={tx("致谢")} richKey="acknowledgement" headings={false} blocks={false} extra={<div className="card"><OpenrightSwitch orKey="acknowledgement" label={tx("右手页起")} /></div>} />;
       case 'index': return <IndexPanel />;
       case 'resume': return <RichSection title={tx("个人简历")} richKey="resume" headings={false} blocks={false} extra={<PageSettings pages={['resume']} />} />;
@@ -381,7 +383,7 @@ export function App() {
               <div key={g}>
                 <h4>{GROUP_ICON[g]}{g}</h4>
                 {NAV.filter((n) => n.group === g).map((n) => {
-                  const off = loaded && ((n.key === 'titlepage' && !resolvePage(doc, 'titlepage').value) || (n.key === 'abstract' && !resolvePage(doc, 'abstract').value) || (n.key === 'nomenclature' && !resolvePage(doc, 'symbolsPage').value && !resolvePage(doc, 'abbreviationsPage').value) || (n.key === 'appendix' && !resolvePage(doc, 'appendix').value) || (n.key === 'achievements' && !resolvePage(doc, 'achievements').value) || (n.key === 'defense' && !resolvePage(doc, 'defense').value) || (n.key === 'resume' && !resolvePage(doc, 'resume').value) || (n.key === 'index' && !resolvePage(doc, 'index').value));
+                  const off = loaded && ((n.key === 'titlepage' && !resolvePage(doc, 'titlepage').value) || (n.key === 'abstract' && !resolvePage(doc, 'abstract').value) || (n.key === 'nomenclature' && !resolvePage(doc, 'symbolsPage').value && !resolvePage(doc, 'abbreviationsPage').value) || (n.key === 'appendix' && !resolvePage(doc, 'appendix').value) || (n.key === 'achievements' && !resolvePage(doc, 'achievements').value) || (n.key === 'defense' && !resolvePage(doc, 'defense').value) || (n.key === 'declarations' && !resolvePage(doc, 'declarations').value) || (n.key === 'resume' && !resolvePage(doc, 'resume').value) || (n.key === 'index' && !resolvePage(doc, 'index').value));
                   const btn = <button key={n.key} type="button" className={`${section === n.key ? 'on' : ''} ${off ? 'off' : ''}`} aria-current={section === n.key ? 'page' : undefined} onClick={() => { setSection(n.key); if (mode === 'preview') setMode('split'); }}>{n.label}{off && <span className="k">{tx("不显示")}</span>}</button>;
                   // 正文与附录底下常驻大纲（Word 的导航窗格），可收起
                   if (n.key !== 'body' && n.key !== 'appendix') return btn;

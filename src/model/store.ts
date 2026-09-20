@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ThesisDoc, Settings, Info, RichDoc, Pages, Abbreviation, SymbolEntry, Defense, DefensePerson, ImageAsset, NomenclatureOptions, Comment, OpenrightKey, TriBool, LocalInfoPage } from './types';
+import type { ThesisDoc, Settings, Info, RichDoc, Pages, Abbreviation, SymbolEntry, Defense, DefensePerson, ImageAsset, NomenclatureOptions, DeclarationsOptions, Comment, OpenrightKey, TriBool, LocalInfoPage } from './types';
 import { emptyDoc } from './types';
 import { defaultSettings } from './options';
 import { defaultInfo } from './info';
@@ -13,7 +13,7 @@ export type RichKey = 'abstractZh' | 'abstractEn' | 'body' | 'conclusion' | 'app
 
 export type Section =
   | 'settings' | 'info' | 'cover' | 'titlepage' | 'abstract' | 'nomenclature' | 'body' | 'conclusion'
-  | 'bibliography' | 'appendix' | 'achievements' | 'defense' | 'acknowledgement' | 'resume' | 'toc' | 'index';
+  | 'bibliography' | 'appendix' | 'achievements' | 'defense' | 'declarations' | 'acknowledgement' | 'resume' | 'toc' | 'index';
 
 const person = () => ({ name: '', title: '', affiliation: '', discipline: '' });
 
@@ -29,6 +29,7 @@ export const newDoc = (): ThesisDoc => ({
   abbreviations: [],
   symbols: [],
   nomenclatureOptions: { sort: 'auto', usedOnly: 'auto', header: 'auto', hangingIndent: '', form: 'auto' },
+  declarationsOptions: { title: 'auto', customTitle: '' },
   body: emptyDoc(),
   conclusion: emptyDoc(),
   references: [],
@@ -74,6 +75,7 @@ export function normalizeDoc(raw: Partial<ThesisDoc>): ThesisDoc {
   for (const k of ['declarations', 'appendix', 'symbolsPage', 'abbreviationsPage', 'nomenclatureMerged'] as (keyof Pages)[]) if (rp[k] === true) (doc.pages as any)[k] = 'auto';
   delete (doc.pages as any).nomenclature;
   doc.nomenclatureOptions = { ...base.nomenclatureOptions, ...(raw.nomenclatureOptions ?? {}) };
+  doc.declarationsOptions = { ...base.declarationsOptions, ...(raw.declarationsOptions ?? {}) };
   doc.defense = { ...base.defense, ...(raw.defense ?? {}) };
   // 老工程：符号表里没写写法的原来按 Typst 解（eta → η）；新的一律 LaTeX，老行写明 typst 免得变味
   if (Array.isArray(doc.symbols)) doc.symbols = doc.symbols.map((e) => (e.mode ? e : { ...e, mode: 'typst' as const }));
@@ -131,6 +133,7 @@ interface State {
   setAbbreviations: (a: Abbreviation[]) => void;
   setSymbols: (s: SymbolEntry[]) => void;
   setNomenclatureOptions: (patch: Partial<NomenclatureOptions>) => void;
+  setDeclarationsOptions: (patch: Partial<DeclarationsOptions>) => void;
   setDefense: (d: Defense) => void;
   setImages: (images: ImageAsset[]) => void;
   /** 打开工程文件：并入当前项目（保留 id） */
@@ -203,6 +206,7 @@ export const useStore = create<State>((set, get) => {
     setAbbreviations: (abbreviations) => update((d) => ({ ...d, abbreviations })),
     setSymbols: (symbols) => update((d) => ({ ...d, symbols })),
     setNomenclatureOptions: (patch) => update((d) => ({ ...d, nomenclatureOptions: { ...d.nomenclatureOptions, ...patch } })),
+    setDeclarationsOptions: (patch) => update((d) => ({ ...d, declarationsOptions: { ...d.declarationsOptions, ...patch } })),
     setDefense: (defense) => update((d) => ({ ...d, defense })),
     setImages: (images) => update((d) => ({ ...d, images })),
     replaceDoc: (incoming) => {

@@ -418,7 +418,10 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   if (def) parts.push(def);
 
   if (resolvePage(doc, 'declarations').value) {
-    parts.push(`#declarations(${[or('declarations'), pageLayout('declarations')].filter(Boolean).join(', ')})`);
+    // 声明里《》那一格：模板 title: auto 印 info 的题目、[] 留白手写
+    const dt = doc.declarationsOptions ?? { title: 'auto', customTitle: '' };
+    const title = dt.title === 'blank' ? 'title: []' : dt.title === 'custom' && dt.customTitle.trim() ? `title: ${content(dt.customTitle)}` : '';
+    parts.push(`#declarations(${[or('declarations'), title, pageLayout('declarations')].filter(Boolean).join(', ')})`);
     }
   if (resolvePage(doc, 'index').value) parts.push(`#index(${[or('index'), pageLayout('index')].filter(Boolean).join(', ')})`);
 

@@ -174,7 +174,9 @@ export function defensePage(doc: ThesisDoc, title: BlockLike[]): BlockLike[] {
 export function declarationsPage(doc: ThesisDoc, title: BlockLike[], subTitle: (t: string) => Paragraph): BlockLike[] {
   const body = (t: string) => new Paragraph({ style: 'Normal', children: [new TextRun({ text: t })] });
   const sig = (who: string, before = 1) => new Paragraph({ alignment: AlignmentType.LEFT, indent: { left: 96 * PT, firstLine: 0 }, spacing: { before: before * 19.5 * PT }, children: [new TextRun({ text: `${who}签名：` }), new TextRun({ text: '\t日期：\t年\t月\t日' })], tabStops: [{ type: 'left' as any, position: 5200 }, { type: 'left' as any, position: 6600 }, { type: 'left' as any, position: 7400 }, { type: 'left' as any, position: 8000 }] });
-  const t = doc.info.title.split('\n').join('');
+  // 《》那一格照声明页的设置：留白手写就空着，另填的用另填的
+  const o = doc.declarationsOptions ?? { title: 'auto', customTitle: '' };
+  const t = o.title === 'blank' ? '\u3000'.repeat(8) : o.title === 'custom' && o.customTitle.trim() ? o.customTitle.trim() : doc.info.title.split('\n').join('');
   return [
     ...title,
     subTitle('学位论文原创性声明'),
