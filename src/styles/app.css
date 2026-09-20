@@ -983,8 +983,15 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .card .row + .triseg { margin-top: 10px; border-top: 1px solid var(--line); }
 .nav-with-outline .nav-row { display: flex; align-items: stretch; width: 100%; min-width: 0; }
 .nav-with-outline .nav-row > button:first-child { flex: 1; min-width: 0; width: auto; white-space: nowrap; }
-.nav-with-outline .nav-row > .outline-fold { display: inline-grid; flex: 0 0 26px; width: 26px; min-width: 26px; height: auto; align-self: stretch; margin-left: 2px; padding: 0; color: var(--ink-2); }
+.nav-with-outline .nav-row > .outline-fold { display: inline-grid; flex: 0 0 26px; width: 26px; min-width: 26px; height: auto; align-self: stretch; margin-left: 0; padding: 0; color: var(--ink-2); border-top-left-radius: 0; border-bottom-left-radius: 0; }
 .nav .outline-fold::before { display: none; }
+/* 节名 + 大纲开合钮是一体（同功能区的拆分钮）：连成一块，光标在哪一半都一起亮，所在那半更亮 */
+.nav-with-outline .nav-row > button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.nav-with-outline .nav-row > button:active { transform: none; }
+.nav-with-outline .nav-row:hover > button { background: var(--panel-2); color: var(--ink); }
+.nav-with-outline .nav-row > button:hover { background: var(--line); }
+.nav-with-outline .nav-row > button.on + .outline-fold, .nav-with-outline .nav-row:hover > button.on, .nav-with-outline .nav-row:hover > button.on + .outline-fold { background: var(--accent-soft); color: var(--accent-ink); }
+.nav-with-outline .nav-row > button.on:hover, .nav-with-outline .nav-row > button.on + .outline-fold:hover { background: var(--accent-soft-2); }
 .nav-with-outline .outline { margin: 0 0 4px 6px; border-left: 1px solid var(--line); }
 .outline-wrap { display: grid; grid-template-rows: 1fr; transition: grid-template-rows var(--base) var(--ease), opacity var(--base) var(--ease); }
 .outline-wrap.is-folded { grid-template-rows: 0fr; opacity: 0; }
