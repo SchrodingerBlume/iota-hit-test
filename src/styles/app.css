@@ -1219,6 +1219,33 @@ body.is-resizing .preview-stage { pointer-events: none; }
 /* 预览栏固定为 40px，与编辑区分栏顶边保持齐平；窄栏通过隐藏次要项收缩。 */
 .preview { grid-template-rows: 40px minmax(0, 1fr); }
 .preview .pane-bar { position: relative; flex-wrap: nowrap; height: 40px; min-height: 40px; padding-block: 0; overflow: hidden; }
+/* 预览栏：页码 / 字数是状态栏那种可点的字，弹出的是 Word 的「字数统计」「缩放」 */
+.pv-pages, .pv-link, .preview .pane-title { white-space: nowrap; }
+.pv-link { border: 0; background: none; padding: 2px 4px; margin: 0 -2px; border-radius: var(--r-s); color: var(--ink-2); font: inherit; cursor: pointer; }
+.pv-link:hover { background: var(--panel-2); color: var(--ink); }
+.pv-page-input { width: 3ch; padding: 1px 4px; border: 1px solid var(--accent); border-radius: var(--r-s); background: var(--panel); color: var(--ink); font: inherit; text-align: center; outline: 0; }
+.pv-pop.fui-PopoverSurface { padding: 8px 0; min-width: 200px; font-size: 12.5px; color: var(--ink); }
+.pv-pop-title { padding: 2px 14px 6px; font-weight: 600; }
+.pv-pop-sub { padding: 0 14px 4px; color: var(--muted); font-size: 11.5px; }
+.pv-stat { display: flex; justify-content: space-between; gap: 16px; padding: 3px 14px; }
+.pv-stat b { font-weight: 500; font-variant-numeric: tabular-nums; }
+.pv-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; padding: 5px 14px; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.pv-row:hover { background: var(--panel-2); }
+.pv-row.on { color: var(--accent-ink); font-weight: 600; }
+.pv-swatch { display: inline-block; width: 14px; height: 14px; border-radius: var(--r-xs); border: 1px solid var(--line-2); }
+.pv-bg-btn { flex-shrink: 0; }
+.pv-zoom.fui-PopoverSurface { min-width: 220px; padding-bottom: 10px; }
+.pv-zoom .fui-Slider { display: block; margin: 0 10px 10px; }
+.pv-zoom-grid { display: grid; grid-template-columns: 1fr 1fr; }
+.pv-zoom-grid .pv-row { padding: 4px 14px; }
+.pv-zoom-pct { display: flex; align-items: center; gap: 6px; padding: 8px 14px 0; border-top: 1px solid var(--line); margin-top: 6px; }
+.pv-zoom-btn { width: 52px; justify-content: center; }
+/* 预览底色：整块区域的颜色 + 纸的颜色；夜间把版面反色 */
+.preview[data-bg="day"] { --preview-bg: #e0e0e0; }
+.preview[data-bg="night"] { --preview-bg: #404040; --paper: #1a1a1a; }
+.preview[data-bg="night"] .preview-doc svg.typst-doc { filter: invert(0.85) hue-rotate(180deg); }
+.preview[data-bg="eye"] { --preview-bg: #a8cfb0; --paper: #c7edcc; }
+.preview[data-bg="parchment"] { --preview-bg: #c8ab7e; --paper: #f2e6d0; }
 .preview .pane-bar .btn { flex-shrink: 0; }
 .preview .pane-bar .preview-progress { top: auto; bottom: 0; }
 

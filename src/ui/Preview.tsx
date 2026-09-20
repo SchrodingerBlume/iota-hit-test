@@ -9,6 +9,7 @@ import { useStore, type RichKey } from '../model/store';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { Eye, ZoomIn, ZoomOut, Maximize2, Minimize2, Loader2, RefreshCw } from 'lucide-react';
 import { PreviewEditLayer } from './PreviewEditLayer';
+import { PageIndicator, WordCountBadge, ZoomMenu, BgMenu, usePreviewBg } from './previewTools';
 import { t as tx } from '../i18n';
 import { t as tr } from '../i18n';
 
@@ -58,6 +59,8 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
   const scrollRef = useRef<HTMLDivElement>(null);
   const pages = useCompileState((s) => s.pageCount);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [curPage, setCurPage] = useState(1);
+  const bg = usePreviewBg((s) => s.mode);
   const recovered = useRef<Uint8Array | null>(null);
   const [renderTick, setRenderTick] = useState(0);
   const virtualizeRef = useRef(NO_VIRTUALIZE);
@@ -163,6 +166,15 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
     const contentW = sc.clientWidth - 36;
     const z = (sc.clientHeight - 44) / (contentW * pageH / vb.width);
     zoomTo(z);
+  };
+  /** 跳到第 n 页（滚到那页顶上留一点边） */
+  const jumpToPage = (n: number) => {
+    const sc = scrollRef.current, svg = containerRef.current?.querySelector('svg.typst-doc') as SVGSVGElement | null, canvas = canvasRef.current;
+    const g = svg?.querySelectorAll<SVGGElement>(':scope > g.typst-page')[n - 1];
+    if (!sc || !svg || !canvas || !g) return;
+    const scale = svg.getBoundingClientRect().width / (svg.viewBox.baseVal.width || 1);
+    const canvasTop = canvas.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop;
+    sc.scrollTo({ top: canvasTop + parseFloat(g.getAttribute('data-layout-y') ?? '0') * scale - 8, behavior: 'smooth' });
   };
   const perRow = usePreviewZoom((s) => s.perRow);
   const setPerRow = usePreviewZoom((s) => s.setPerRow);
@@ -293,7 +305,10 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
       if (!c || !g0) return;
       const { top, bottom } = g0;
       const buffer = Math.max(300, bottom - top);
-      showPages(c, (_i, y, h) => !(y + h < top - buffer || y > bottom + buffer));
+      const mid = (top + bottom) / 2;
+      let cur = 0;
+      showPages(c, (i, y, h) => { if (y <= mid) cur = i; return !(y + h < top - buffer || y > bottom + buffer); });
+      setCurPage(cur + 1);
     };
     const update = () => { raf = 0; apply(measure()); };
     const schedule = () => { if (!raf) raf = requestAnimationFrame(update); };
@@ -310,18 +325,20 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
   const shown = [...errors, ...warnings.filter((w) => !/unknown font family: (kaiti_gb2312|lisu|stxinwei|simsun|simhei|kaiti|fangsong)/i.test(w.message))];
 
   return (
-    <div className={`preview ${compiling ? 'is-compiling' : ''}`}>
+    <div className={`preview ${compiling ? 'is-compiling' : ''}`} data-bg={bg}>
       <div className="pane-bar">
         <span className="pane-title"><Eye />{tx("预览")}</span>
         <button type="button" className="btn btn-xs preview-refresh" title={tx("重新排版当前文档")} disabled={refreshDisabled || status !== 'ready' || compiling} onMouseDown={(e) => e.preventDefault()} onClick={onRefresh}><RefreshCw /><span>{compiling ? tx("正在刷新…") : tx("刷新预览")}</span></button>
-        {status === 'ready' && lastMs !== null && <span className="muted page-status">{pages} {' '}{tx("页")}{compiling ? tx(" · 排版中…") : ''}</span>}
+        {status === 'ready' && lastMs !== null && pages > 0 && <span className="page-status"><PageIndicator current={Math.min(curPage, pages)} total={pages} onJump={jumpToPage} /></span>}
+        {status === 'ready' && lastMs !== null && <span className="page-status"><WordCountBadge pages={pages} /></span>}
         {status === 'ready' && errors.length > 0 && <span className="err-badge" title={tx("下面列了出错的位置")}>{errors.length} {' '}{tx("个错误")}</span>}
         <span className="spacer" />
+        <BgMenu />
         <span className="join zoom-tools">
           <button type="button" className="btn btn-xs btn-icon" title={tx("缩小（触控板捏合、⌘/Ctrl + 滚轮也行）")} onClick={() => zoomBy(1 / 1.1)}><ZoomOut /></button>
-          <button type="button" className="btn btn-xs" style={{ width: 52, justifyContent: 'center' }} title={tx("回到 100%")} onClick={() => zoomTo(1)}><span ref={zoomLabelRef}>{Math.round(zoom * 100)}%</span></button>
+          <ZoomMenu zoom={zoom} zoomTo={zoomTo} fitPage={fitPage} labelRef={zoomLabelRef} />
           <button type="button" className="btn btn-xs btn-icon" title={tx("放大（触控板捏合、⌘/Ctrl + 滚轮也行）")} onClick={() => zoomBy(1.1)}><ZoomIn /></button>
-          <button type="button" className="btn btn-xs btn-icon" title={tx("适宽")} onClick={() => zoomTo(1)}><Maximize2 /></button>
+          <button type="button" className="btn btn-xs btn-icon" title={tx("页宽")} onClick={() => zoomTo(1)}><Maximize2 /></button>
           <button type="button" className="btn btn-xs btn-icon" title={tx("整页：一页正好放进视口")} onClick={fitPage}><Minimize2 /></button>
         </span>
         <span className="join page-layout-tools" title={tx("每行几页（Word 的「多页」视图）")}>

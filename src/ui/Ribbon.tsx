@@ -20,6 +20,7 @@ import {
   ChevronUp20Regular, ChevronDown20Regular, ChevronLeft20Regular, ChevronRight20Regular, Dismiss20Regular, Pin20Regular, Grid20Regular, TextParagraph20Regular,
   Translate20Regular, ImageEdit20Regular, Delete20Regular, TableSimple20Regular, ClipboardTextLtr20Regular,
   CommentAdd20Regular, CommentDismiss20Regular, Comment20Regular, TextBulletListSquare20Regular, TextEditStyle20Regular,
+  ZoomIn20Regular, AutoFitWidth20Regular, DocumentOnePage20Regular, DocumentMultiple20Regular,
 } from '@fluentui/react-icons';
 import { useStore } from '../model/store';
 import { getEditor, getEditorMeta, onRegistryChange } from '../editor/registry';
@@ -32,6 +33,8 @@ import { levelLabels } from '../typst/numbering';
 import { ChoiceMenu } from './RibbonSettings';
 import { useEditorEnv } from '../editor/env';
 import { useOpenRequest } from '../editor/openRequest';
+import { usePreviewZoom } from './previewZoom';
+import { ZoomMenu } from './previewTools';
 import { useMedia, SHORT } from './useMedia';
 import { TableSizeDialog, TableTextDialog, readTableDefaults, type TableDialogKind } from './TableInsert';
 import { LengthInput } from './LengthInput';
@@ -229,6 +232,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const toggleMarks = usePreviewMarks((s) => s.toggle);
   const chain = () => ed!.chain().focus();
   const findOpen = useFindBar((s) => s.open);
+  const pz = usePreviewZoom();
 
   // 收起 / 展开：单击选项卡只切页（Word 也是），收起靠双击或右端的箭头
   const toggleCollapsed = (v: boolean) => { setCollapsed(v); setPeek(false); try { localStorage.setItem(COLLAPSE_KEY, v ? '1' : '0'); } catch { /* */ } };
@@ -646,6 +650,12 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                 <B title={tx("只看编辑")} big icon={<PanelLeft20Regular />} on={layout.mode === 'editor'} run={() => layout.setMode('editor')}>{tx("编辑")}</B>
                 <B title={tx("编辑 + 预览")} big icon={<LayoutColumnTwo20Regular />} on={layout.mode === 'split'} run={() => layout.setMode('split')}>{tx("并排查看")}</B>
                 <B title={tx("只看预览")} big icon={<PanelRight20Regular />} on={layout.mode === 'preview'} run={() => layout.setMode('preview')}>{tx("预览")}</B>
+              </Group>
+              <Group label={tx("缩放")}>
+                <ZoomMenu zoom={pz.zoom} zoomTo={pz.zoomTo} fitPage={pz.fitPage}><span className="rb-keep"><B title={tx("缩放：打开「缩放」菜单")} big menu icon={<ZoomIn20Regular />} run={() => {}}>{tx("缩放")}</B></span></ZoomMenu>
+                <B title={tx("页宽：一页的宽度正好放进视口")} big icon={<AutoFitWidth20Regular />} run={() => pz.zoomTo(1)}>{tx("页宽")}</B>
+                <B title={tx("单页：一页正好放进视口")} big icon={<DocumentOnePage20Regular />} on={pz.perRow === 1} run={() => { pz.setPerRow(1); pz.fitPage(); }}>{tx("单页")}</B>
+                <B title={tx("多页：一行摆两页")} big icon={<DocumentMultiple20Regular />} on={pz.perRow > 1} run={() => pz.setPerRow(pz.perRow > 1 ? 1 : 2)}>{tx("多页")}</B>
               </Group>
               <Group label={tx("编辑区字号")}>
                 <span className="rb-keep rb-inline"><FontSizeTool /></span>
