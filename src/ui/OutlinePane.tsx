@@ -52,7 +52,17 @@ export function OutlinePane({ richKey: key, onJump }: { richKey: RichKey; onJump
   }, [key, items]);
   const folded = useOutline((s) => !!s.folded[key]);
   const curRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { if (!folded) curRef.current?.scrollIntoView({ block: 'nearest' }); }, [cur, folded]);
+  // 展开动画没走完别滚：outline-wrap-inner 是 overflow: hidden，半路滚会把列表滚歪、动画也一顿；等它展开完再平滑滚过去
+  useEffect(() => {
+    const el = curRef.current;
+    if (folded || !el) return;
+    const wrap = el.closest('.outline-wrap');
+    const go = () => el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (!wrap?.getAnimations().length) { go(); return; }
+    const onEnd = (e: Event) => { if (e.target === wrap) { wrap.removeEventListener('transitionend', onEnd); go(); } };
+    wrap.addEventListener('transitionend', onEnd);
+    return () => wrap.removeEventListener('transitionend', onEnd);
+  }, [cur, folded]);
   const jump = (pos: number) => {
     onJump?.();
     const ed = getEditor(key);
