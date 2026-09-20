@@ -77,8 +77,10 @@ export function linebreaksInput(s: Settings): string | null {
 }
 /** 预览里走 fork 时表格单元格的那一档（闭标点只压半格不挂出、老模式不按整格）：模板只发原版认得的字典，
  *  这一键站内在单元格上补——读到模板发的那份原样加一键，模板不用认识 fork */
-const MSWORD_CELL = `// 表格单元格：断行引擎的 cell 档（闭标点只压半格不挂出、老模式不按整格取整）
-#show table.cell: it => context { if type(par.linebreaks) == dictionary { set par(linebreaks: par.linebreaks + (cell: true)); it } else { it } }`;
+// 表格单元格：断行引擎的 cell 档（闭标点只压半格不挂出、老模式不按整格取整）。
+// *挂在 table 上，不挂在 table.cell 上*：show table.cell 把格子包进 context 后，跨行格里 align(horizon) 的东西不再居中
+// （答辩决议页竖排的「委／员」「答辩委员会成员」整摞贴到格顶）；包整张表没这个事，格里的段照样吃到这句 set
+const MSWORD_CELL = `#show table: it => context { if type(par.linebreaks) == dictionary { set par(linebreaks: par.linebreaks + (cell: true)); it } else { it } }`;
 /** 预览里选了 Typst 原版的两种断行：写死在源码里（引擎是 fork 也认） */
 function stockPrelude(s: Settings): string {
   return msword(s) ? '' : `#set par(linebreaks: ${JSON.stringify(s.linebreaker)})`;
@@ -93,7 +95,7 @@ export function typstDict(v: unknown): string {
   const entries = Object.entries(v as Record<string, unknown>);
   return entries.length ? `(${entries.map(([k, x]) => `${k}: ${typstDict(x)}`).join(', ')})` : '(:)';
 }
-const layoutArg = (d: LayoutDict | undefined): string => (d && Object.keys(d).length ? `layout: ${typstDict(d)}` : '');
+export const layoutArg = (d: LayoutDict | undefined): string => (d && Object.keys(d).length ? `layout: ${typstDict(d)}` : '');
 const localStylesArg = (d: LayoutDict | undefined): string => (d && Object.keys(d).length ? `styles: ${typstDict(d)}` : '');
 
 function settingsArgs(s: Settings): string[] {
@@ -145,7 +147,8 @@ function settingsArgs(s: Settings): string[] {
 /** 样式表覆盖 → iota-hit(styles: (chapter: (align: left, …), …))；空项不发 */
 export function styleEntryArgs(e: StyleEntry): string[] {
   const out: string[] = [];
-  if (e.fontZh) out.push(`font-zh: ${JSON.stringify(e.fontZh)}`);
+  // 模板 2a2a53b 起照 Word 字体对话框的两格叫 asian-font / latin-font（工程 JSON 里的键名 fontZh 不动）
+  if (e.fontZh) out.push(`asian-font: ${JSON.stringify(e.fontZh)}`);
   const abs = (v: unknown, fb: string) => lengthTypst(v, 'pt', fb, ABS_UNITS);
   if (e.size !== undefined && e.size !== '') out.push(`size: ${typeof e.size === 'string' && /^[a-z]+$/.test(e.size) ? `zihao.${e.size}` : abs(e.size, '12pt')}`);
   if (e.bold !== undefined) out.push(`bold: ${e.bold}`);
@@ -301,7 +304,7 @@ export function serializePara(doc: ThesisDoc, index: number, live?: { node: PMNo
   const chapter = chapterRanges(doc.body).findIndex((r) => index >= r.from && index < r.to) + 1;
   parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *`);
   parts.push(PREVIEW_PRELUDE);
-  parts.push(`#show: iota-hit.with(\n  ${[...settingsArgs(s), ...infoArgs(doc.info, s)].join(',\n  ')},\n)`);
+  parts.push(iotaHitShow(doc));
   if (stockPrelude(s)) parts.push(stockPrelude(s));
   if (s.hyphenate === true) parts.push('#set text(hyphenate: true)');
   else if (s.hyphenate === false) parts.push('#set text(hyphenate: false)');
@@ -324,6 +327,12 @@ export function chapterRanges(body: RichDoc): { from: number; to: number }[] {
   return starts.map((a, k) => ({ from: k === 0 ? 0 : a, to: starts[k + 1] ?? nodes.length }));
 }
 
+/** `#show: iota-hit.with(…)` 那一句：设定与元信息。导出 Word 问模板要样式表的那份小文档也用它 */
+export function iotaHitShow(doc: ThesisDoc, plain = false): string {
+  const line = `#show: iota-hit.with(\n  ${[...settingsArgs(doc.settings), ...infoArgs(doc.info, doc.settings)].join(',\n  ')},\n)`;
+  return plain ? stripMarks(line).text : line;
+}
+
 export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { preview?: boolean; focus?: Focus } = {}): Project {
   if (focus) return serializeFocus(doc, focus);
   const s = doc.settings;
@@ -334,7 +343,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
 
   parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n// LaTeX 公式走 mitex 转成 Typst（包已随站内打包）\n#import "@preview/mitex:0.2.7": mitex, mi`);
   if (preview) parts.push(PREVIEW_PRELUDE);
-  parts.push(`#show: iota-hit.with(\n  ${[...settingsArgs(s), ...infoArgs(doc.info, s)].join(',\n  ')},\n)`);
+  parts.push(iotaHitShow(doc));
   if (preview && stockPrelude(s)) parts.push(stockPrelude(s));
   if (preview && msword(s)) parts.push(MSWORD_CELL);
   // 西文断字：模板在 show 规则里 set text(hyphenate: false)，之后再 set 一句就压回来（模板自己这么说明的）
@@ -462,7 +471,7 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
 
   parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n#import "@preview/mitex:0.2.7": mitex, mi`);
   parts.push(PREVIEW_PRELUDE);
-  parts.push(`#show: iota-hit.with(\n  ${[...settingsArgs(s), ...infoArgs(doc.info, s)].join(',\n  ')},\n)`);
+  parts.push(iotaHitShow(doc));
   if (stockPrelude(s)) parts.push(stockPrelude(s));
   if (msword(s)) parts.push(MSWORD_CELL);
   if (s.hyphenate === true) parts.push('#set text(hyphenate: true)');

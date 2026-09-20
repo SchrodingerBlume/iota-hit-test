@@ -97,6 +97,8 @@ export function restartCompiler(reason: string) {
   fontWaiters.clear();
   for (const w of snippetWaiters.values()) w({ artifact: null, error: reason });
   snippetWaiters.clear();
+  for (const w of queryWaiters.values()) w({ result: null, error: reason });
+  queryWaiters.clear();
   useCompileState.setState((s) => ({ status: 'booting', progress: null, compiling: false, engineGen: s.engineGen + 1, families: [], focusArtifact: null, focusAt: null, focusGlyphs: null, para: null }));
   startCompiler();
 }
@@ -159,6 +161,7 @@ let pending: CompileInput | null = null;
 const pdfWaiters = new Map<number, (r: { pdf: ArrayBuffer | null; diagnostics: Diagnostic[] }) => void>();
 const fontWaiters = new Map<number, (r: { families: string[]; error?: string }) => void>();
 const snippetWaiters = new Map<number, (r: { artifact: ArrayBuffer | null; error?: string }) => void>();
+const queryWaiters = new Map<number, (r: { result: unknown; error?: string }) => void>();
 
 function send(msg: ToWorker, transfer: Transferable[] = []) {
   worker?.postMessage(msg, transfer);
@@ -249,6 +252,11 @@ export function startCompiler() {
         snippetWaiters.delete(m.id);
         break;
       }
+      case 'query': {
+        queryWaiters.get(m.id)?.({ result: m.result, error: m.error });
+        queryWaiters.delete(m.id);
+        break;
+      }
       case 'fontsSet': {
         const s = useCompileState.getState();
         useCompileState.setState({ fontsVersion: s.fontsVersion + 1, families: m.families });
@@ -307,6 +315,19 @@ export async function updateUserFonts(add: { id: string; data: ArrayBuffer }[], 
     const id = nextId++;
     fontWaiters.set(id, resolve);
     send({ type: 'setFonts', id, add, remove }, add.map((a) => a.data));
+  });
+}
+
+/** 编一份小文档、读它的 metadata（selector 是标签）：导出 Word 时问模板要样式表与版面 */
+export function queryTypst(main: string, selector: string): Promise<{ result: unknown; error?: string }> {
+  return new Promise((resolve) => {
+    const go = () => {
+      if (useCompileState.getState().status !== 'ready') { setTimeout(go, 300); return; }
+      const id = nextId++;
+      queryWaiters.set(id, resolve);
+      send({ type: 'query', id, main, selector });
+    };
+    go();
   });
 }
 

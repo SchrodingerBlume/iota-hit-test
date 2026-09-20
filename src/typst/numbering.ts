@@ -105,8 +105,8 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
     if (part === 'appendix') {
       if (level === 1) return single ? (en ? 'Appendix' : '附录') : en ? `Appendix ${chapterMark()}` : `附录 ${chapterMark()}`;
       if (appPattern === 'hanzi' || appPattern === 'words') return level === 2 ? `${toHanzi(last)}、` : level === 3 ? `（${toHanzi(last)}）` : `${last}.`;
-      // 只有一个附录：章号那一位不存在，中文档节往下也少一位（1、1.1）；英文档照 APA 仍带字母（A.1）
-      if (single && !en) return n.slice(1).join('.');
+      // 只有一个附录：章号那一位不存在，中文档节往下也少一位、名前加「附」（附1、附1.1，模板 3638ccc）；英文档照 APA 仍带字母（A.1）
+      if (single && !en) return `附${n.slice(1).join('.')}`;
       return [chapterMark(), ...n.slice(1)].join('.');
     }
     if (isReportBody) return n.join('.');

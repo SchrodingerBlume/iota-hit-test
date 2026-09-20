@@ -344,6 +344,23 @@ ${body}
   }
 }
 
+/** 编一份小文档、query 它的 metadata：模板解出来的样式表与版面就从这儿读 */
+async function query(msg: Extract<ToWorker, { type: 'query' }>) {
+  if (!compiler) return;
+  compiler.addSource('/query.typ', msg.main);
+  const raw = (compiler as any).compiler;
+  let w: any = null;
+  try {
+    w = raw.snapshot(undefined, '/query.typ', []);
+    const res: any = w.compile(0, 3);
+    const errors = normalizeDiagnostics(res?.diagnostics).filter((d) => d.severity === 'error');
+    if (errors.length) { post({ type: 'query', id: msg.id, result: null, error: errors.map((e) => `${e.where} ${e.message}`).join('；') }); return; }
+    post({ type: 'query', id: msg.id, result: JSON.parse(w.query(0, msg.selector, 'value')) });
+  } catch (e) {
+    post({ type: 'query', id: msg.id, result: null, error: String((e as Error)?.message ?? e) });
+  } finally { try { w?.free(); } catch { /* */ } }
+}
+
 /** 换字体表：站内字体 + 用户给的字体，整表重建后塞给编译器（编译器只借用，建完就释放） */
 async function setFonts(msg: Extract<ToWorker, { type: 'setFonts' }>) {
   if (!compiler) return;
@@ -380,6 +397,7 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       case 'pdf': await pdf(msg); break;
       case 'setFonts': await setFonts(msg); break;
       case 'snippet': await snippet(msg); break;
+      case 'query': await query(msg); break;
       case 'para': await para(msg); break;
     }
   };

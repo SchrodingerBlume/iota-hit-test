@@ -235,9 +235,13 @@ fork 主线已并入 typst 上游 main（带 #792：中日文旁的换行空格�
 
 ## 导出 Word（.docx）
 
-文件菜单「导出 Word 文档」：不经过 Typst，从编辑器的 JSON 直接用 docx 库生成，样式照学校范例——页面设置、文档网格
-（linesAndChars 391 / 1861）、正文 / 标题 1～4 / 题注 / 目录 1～4 / 脚注 / 页眉页脚的字体字号行距段距全取自模板
-layout/presets.typ 与 styles/presets.typ 量下来的数；编号用 numbering.ts 算，参考文献用 GB/T 7714-2015 的 CSL 排
+文件菜单「导出 Word 文档」：正文不经过 Typst，从编辑器的 JSON 直接用 docx 库生成；**样式表与版面不在站内写数，导出前问模板**
+（`src/export/docx/template.ts`：编一份只有设定的小文档，query 它记下的 `state("banshi-styles")` 与各部件的 `layout-of`），
+模板的样式字典键名本来就是照 Word 对话框起的——asian-font / latin-font / size / bold / tracking / line-spacing / above / below
+（`(lines: n)` → beforeLines / afterLines）/ first-line-indent（`(chars: n)` → firstLineChars）/ snap-to-grid / sticky（keepNext）/
+breakable（keepLines）——逐键翻成 styles.xml（Normal、heading 1～4、caption、Figure、Table Caption、toc 1～4、header、footer……，
+名字照 Word），页面设置记录（页边距、行网格与字符网格、页眉页脚距边界、页眉边框）翻成节属性；用户在工程 JSON 里改的样式、
+版面也就跟着进 Word。编号用 numbering.ts 算，参考文献用 GB/T 7714-2015 的 CSL 排
 （citation-js），LaTeX 公式转成 Word 原生公式（MathML → OMML，src/export/docx/omml.ts），Typst 写法的公式由站内引擎
 画成图；脚注、批注（Word 批注）、三线表、分图、算法、代码都有。打开时 Word 会问「是否更新域」，答「是」目录才有页码。
 表单页（封面、中英文内封、答辩决议表、原创性声明与使用权限）在 `src/export/docx/pages.ts`，每一行落在哪是照模板排出来的
@@ -247,7 +251,8 @@ mainmatter / backmatter / pages.*：margin、line-pitch、char-pitch、char-exce
 折成 Word 的节属性，页级改写单独成节接着编页码。另起一页的标题走 Word 排版的正规做法「分页符 + 连续分节符」，标题是新一节的
 第一段——Word 2013+ 模式会把新页第一段的段前距吃掉（2003 模式不吃），只有分节符起的段落例外，章前间距在两种兼容模式下都在。
 按行给的段前段后（图前一行、题注后一行、章标题段前一行）写成 Word 的「N 行」（beforeLines / afterLines）而不是磅数；
-中文档整篇 hint="eastAsia"，省略号、破折号这些两可字符跟中文字体走。对拍法：站内导出 docx，AppleScript 让本机 Word
+中文档整篇 hint="eastAsia"，省略号、破折号这些两可字符跟中文字体走。版式兼容选项照范例的 settings.xml（表格里的行高对齐网格、
+远东版式……），不然表格一行排不到一个网格行；装图段贴网格，Word 把带图的行撑到整数个网格行、图居中，与模板模拟的一样。对拍法：站内导出 docx，AppleScript 让本机 Word
 存成 PDF，与站内导出的 Typst PDF 逐页并排看（pypdfium2 栅格化，逐行比基线位置、字号、字体）。
 
 ## 许可
