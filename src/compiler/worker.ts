@@ -320,7 +320,9 @@ async function wasmMemory(): Promise<number> {
 
 async function snippet(msg: Extract<ToWorker, { type: 'snippet' }>) {
   if (!compiler) return;
-  const body = msg.display ? `$ ${msg.src} $` : `$${msg.src}$`;
+  // LaTeX 写法走 mitex（导出 Word 时 MathML → OMML 转不过的，退回来画成图）
+  const tick = '`'.repeat(Math.max(3, (msg.src.match(/`+/g) ?? []).reduce((m, x) => Math.max(m, x.length + 1), 0)));
+  const body = msg.latex ? `#import "@preview/mitex:0.2.7": mitex, mi\n${msg.display ? `#mitex(${tick}${msg.src}${tick})` : `#mi(${tick}${msg.src}${tick})`}` : msg.display ? `$ ${msg.src} $` : `$${msg.src}$`;
   const src = `#set page(width: auto, height: auto, margin: (x: 1pt, y: 2pt), fill: none)
 #set text(size: 11pt, font: ("Times New Roman", "TeX Gyre Termes", "Noto Serif CJK SC"))
 #show math.equation: set text(font: ("Cambria Math", "TeX Gyre Termes Math"))

@@ -311,13 +311,13 @@ export async function updateUserFonts(add: { id: string; data: ArrayBuffer }[], 
 }
 
 /** 编一段 Typst 数学：等引擎就绪，不排队（片段很小，插在正文编译之间无妨） */
-export function compileSnippet(src: string, display: boolean): Promise<{ artifact: ArrayBuffer | null; error?: string }> {
+export function compileSnippet(src: string, display: boolean, latex = false): Promise<{ artifact: ArrayBuffer | null; error?: string }> {
   return new Promise((resolve) => {
     const go = () => {
       if (useCompileState.getState().status !== 'ready') { setTimeout(go, 300); return; }
       const id = nextId++;
       snippetWaiters.set(id, resolve);
-      send({ type: 'snippet', id, src, display });
+      send({ type: 'snippet', id, src, display, latex });
     };
     go();
   });

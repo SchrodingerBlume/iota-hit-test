@@ -23,7 +23,7 @@ export type ToWorker =
   /** main：正式排版用的 main.typ（不带预览记号），与预览编的那份不同 */
   | { type: 'pdf'; id: number; main: string }
   /** 编一个 Typst 数学片段，给编辑器里的公式预览用 */
-  | { type: 'snippet'; id: number; src: string; display: boolean }
+  | { type: 'snippet'; id: number; src: string; display: boolean; latex?: boolean }
   /** 增删用户字体（本机读的或自己选的文件），字节只住在 worker；改完整表重建 */
   | { type: 'setFonts'; id: number; add: { id: string; data: ArrayBuffer }[]; remove: string[] };
 

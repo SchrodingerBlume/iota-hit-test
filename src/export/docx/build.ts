@@ -96,17 +96,31 @@ interface Ctx {
 
 const text = (n: PMNode): string => (n.content ?? []).map((c) => (c.type === 'text' ? c.text ?? '' : c.type === 'hardBreak' ? '\n' : c.content ? text(c) : '')).join('');
 
-function mathXml(src: string, mode: string, ctx?: Ctx, display = false, number = ''): ParagraphChild | null {
+/** LaTeX 先清一遍再喂 MathLive：\label、\tag、\nonumber、equation 环境壳、\hline 它不认；有几条命令它吐空或吐错，换成它认的写法 */
+const cleanLatex = (src: string) => src
+  .replace(/\\(label|tag\*?)\{[^}]*\}/g, '').replace(/\\nonumber|\\notag|\\displaystyle/g, '')
+  .replace(/\\begin\{(equation|displaymath)\*?\}|\\end\{(equation|displaymath)\*?\}/g, '').replace(/\\hline/g, '')
+  .replace(/\\overline\{/g, '\\bar{').replace(/\\overrightarrow\{/g, '\\vec{').replace(/\\mbox\{/g, '\\text{').replace(/\\hspace\{[^}]*\}/g, '\\quad ')
+  .replace(/\\iff\b/g, '\\Leftrightarrow ').replace(/\\longrightarrow\b/g, '\\rightarrow ').replace(/\\longleftarrow\b/g, '\\leftarrow ').replace(/\\not=/g, '\\neq ')
+  .replace(/\\bmod\b/g, '\\;\\mathrm{mod}\\;').replace(/\\liminf\b/g, '\\operatorname{lim\\,inf}').replace(/\\limsup\b/g, '\\operatorname{lim\\,sup}')
+  .trim();
+/** MathLive 的 MathML 导出会把这几条的内容丢掉（\underbrace{a+b} 只剩 ⏟）或干脆不认——直接退回画图 */
+const UNSUPPORTED = /\\(underbrace|overbrace|underline|overleftrightarrow|overleftarrow|underrightarrow|underleftarrow|phantom|vphantom|hphantom|smash|substack|sideset|ce|SI|si|num|xrightarrow|xleftarrow|stackrel|overset|underset|mathring|widehat|widetilde|cancel|bcancel|xcancel|boxed|color|textcolor|begin\{(?:split|multline|gather|gathered|alignat|flalign|eqnarray)\*?\})/;
+/** LaTeX → OMML；转不过就 null（merror、空、丢内容、抛错都算） */
+function latexOmml(src: string, display: boolean, number: string): ParagraphChild | null {
   try {
-    if (mode === 'typst') {
-      const img = ctx?.typstMath.get(`${display ? 'D' : 'I'}${src}`);
-      return img ? new ImageRun({ type: 'png', data: img.data, transformation: { width: img.width, height: img.height } }) : null;
-    }
-    const mml = convertLatexToMathMl(src);
-    if (!mml) return null;
+    if (UNSUPPORTED.test(src)) return null;
+    const mml = convertLatexToMathMl(cleanLatex(src));
+    if (!mml || /<m(?:under|over)\s*>[^<]*<\/m(?:under|over)>/.test(mml)) return null;
     // fromXmlString 返回的是一个没名字的文档节点，真正的 m:oMath / m:oMathPara 是它的第一个孩子
     return (ImportedXmlComponent.fromXmlString(mathmlToOmml(mml, { display, number })) as any).root[0] as ParagraphChild;
   } catch { return null; }
+}
+function mathXml(src: string, mode: string, ctx?: Ctx, display = false, number = ''): ParagraphChild | null {
+  const image = (key: string) => { const img = ctx?.typstMath.get(key); return img ? new ImageRun({ type: 'png', data: img.data, transformation: { width: img.width, height: img.height } }) : null; };
+  if (mode === 'typst') return image(`${display ? 'D' : 'I'}${src}`);
+  // LaTeX：Word 原生公式；MathLive / OMML 那条路转不过的，用引擎（mitex）画成图
+  return latexOmml(src, display, number) ?? image(`L${display ? 'D' : 'I'}${src}`);
 }
 /** 编号、引用里汉字与数字之间的空格去掉：Word 自己会在中西文之间留一小段 */
 const tidy = (s: string) => s.replace(/([\u4e00-\u9fff]) (?=[\dA-Za-z(（])/g, '$1').replace(/(?<=[\dA-Za-z)）]) ([\u4e00-\u9fff])/g, '$1');
@@ -283,7 +297,7 @@ function algorithm(ctx: Ctx, n: PMNode): Block[] {
   return [...captionPara(ctx, num, String(n.attrs?.caption ?? '')), ...body];
 }
 
-function heading(ctx: Ctx, n: PMNode, part: 'body' | 'appendix'): Paragraph {
+function heading(ctx: Ctx, n: PMNode, part: 'body' | 'appendix', forceBreak = false): Paragraph {
   const level = Math.max(1, Math.min(4, Number(n.attrs?.level ?? 1)));
   const info = n.attrs?.numbered === false ? undefined : ctx.nums.get(labelOf(n.attrs, 'sec'));
   const num = info ? tidy(info.number) : '';
@@ -292,16 +306,16 @@ function heading(ctx: Ctx, n: PMNode, part: 'body' | 'appendix'): Paragraph {
   // 两字章名撑开（模板的 two-hanzi）：「绪论」→「绪　论」，目录里也照此印
   const spread = level === 1 && !en && sw<boolean>('titleSpread', ctx.s) && /^[\u4e00-\u9fff]{2}$/.test(plain);
   const kids = en ? [new TextRun({ text: en })] : spread ? [new TextRun({ text: `${plain[0]}\u3000${plain[1]}` })] : inline(ctx, n.content);
-  const pageBreak = level === 1 && part === 'body' && !(ctx.s.stage !== 'final' && !(ctx.s.campus === 'shenzhen' && ctx.s.degreeLevel === 'bachelor')) && ctx.s.heading1Pagebreak !== false;
+  const pageBreak = forceBreak || (level === 1 && !(ctx.s.stage !== 'final' && !(ctx.s.campus === 'shenzhen' && ctx.s.degreeLevel === 'bachelor')) && sw<boolean>('heading1Pagebreak', ctx.s));
   return new Paragraph({ heading: [HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3, HeadingLevel.HEADING_4][level - 1], pageBreakBefore: pageBreak, children: [...(num ? [new TextRun({ text: `${num}  ` })] : []), ...kids] });
 }
 
-function blocks(ctx: Ctx, nodes: PMNode[] = [], part: 'body' | 'appendix' | 'other', depth = 0): Block[] {
+function blocks(ctx: Ctx, nodes: PMNode[] = [], part: 'body' | 'appendix' | 'other', depth = 0, breakFirst = false): Block[] {
   const out: Block[] = [];
   for (const n of nodes) {
     switch (n.type) {
       case 'paragraph': out.push(new Paragraph({ style: 'Normal', indent: n.attrs?.noIndent || depth ? { firstLine: 0, left: depth ? depth * 24 * PT : undefined } : undefined, children: inline(ctx, n.content) })); break;
-      case 'heading': out.push(heading(ctx, n, part === 'appendix' ? 'appendix' : 'body')); break;
+      case 'heading': out.push(heading(ctx, n, part === 'appendix' ? 'appendix' : 'body', breakFirst && !out.length)); break;
       case 'figure': out.push(...figure(ctx, n)); break;
       case 'tableFigure': out.push(...tableFigure(ctx, n)); break;
       case 'equation': out.push(...equation(ctx, n)); break;
@@ -327,18 +341,18 @@ function blocks(ctx: Ctx, nodes: PMNode[] = [], part: 'body' | 'appendix' | 'oth
 }
 
 // ── 页 ───────────────────────────────────────────────────────────
-const titlePara = (t: string) => new Paragraph({ style: 'Abstract', children: [new TextRun({ text: t })] });
+// 另起一页的标题用段落自己的「段前分页」：单独放一个分页段，Word 会把新页第一段的段前距吃掉（章前间距丢了）
+const titlePara = (t: string, newPage = true) => new Paragraph({ style: 'Abstract', pageBreakBefore: newPage, children: [new TextRun({ text: t })] });
 function abstractPages(ctx: Ctx): Block[] {
   const { doc, s } = ctx;
   const out: Block[] = [];
   const zh = doc.abstractZh as PMNode, en = doc.abstractEn as PMNode;
   if (text(zh).trim()) {
-    out.push(titlePara('摘\u3000要'), ...blocks(ctx, zh.content, 'other'));
+    out.push(titlePara('摘\u3000要', false), ...blocks(ctx, zh.content, 'other'));
     if (doc.info.keywords?.length) out.push(new Paragraph({ style: 'Normal', indent: { firstLine: 0 }, spacing: { before: ctx.L.line }, children: [new TextRun({ text: "关键词：", bold: true }), new TextRun({ text: doc.info.keywords.join('；') })] }));
   }
   if (text(en).trim()) {
-    if (out.length) out.push(new Paragraph({ children: [new PageBreak()] }));
-    out.push(titlePara('Abstract'), ...blocks(ctx, en.content, 'other'));
+    out.push(titlePara('Abstract', out.length > 0), ...blocks(ctx, en.content, 'other'));
     if (doc.info.keywordsEn?.length) out.push(new Paragraph({ style: 'Normal', indent: { firstLine: 0 }, spacing: { before: ctx.L.line }, children: [new TextRun({ text: 'Keywords: ', bold: true }), new TextRun({ text: doc.info.keywordsEn.join(', ') })] }));
   }
   void s;
@@ -367,7 +381,6 @@ function nomenclature(ctx: Ctx): Block[] {
     out.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: doc.symbols.map((e) => row([mathXml(e.symbol, e.mode === 'latex' ? 'latex' : 'typst', ctx) ?? new TextRun({ text: e.symbol })], e.meaning)) }));
   }
   if (wantAbbr) {
-    if (out.length) out.push(new Paragraph({ children: [new PageBreak()] }));
     out.push(titlePara("缩略语表"));
     out.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: doc.abbreviations.map((a) => row([new TextRun({ text: a.short || a.key })], ctx.s.lang === 'en' ? a.longEn || a.long : a.long + (a.longEn ? `（${a.longEn}）` : ''))) }));
   }
@@ -425,15 +438,19 @@ async function loadImages(ctx: Ctx) {
 
 /** Typst 写法的公式（行内、行间、符号表里的）先用引擎编成图 */
 async function renderTypstFormulas(ctx: Ctx) {
-  const jobs = new Map<string, { src: string; display: boolean }>();
+  const jobs = new Map<string, { src: string; display: boolean; latex?: boolean }>();
+  // LaTeX 写法的先试一遍 MathML → OMML，转不过的也排进去画图
+  const latexJob = (src: string, display: boolean) => { if (!latexOmml(src, display, '')) jobs.set(`L${display ? 'D' : 'I'}${src}`, { src, display, latex: true }); };
   const walk = (n: PMNode) => {
-    if (n.type === 'mathInline' && n.attrs?.mode === 'typst') jobs.set(`I${n.attrs.src}`, { src: String(n.attrs.src), display: false });
-    if (n.type === 'equation' && n.attrs?.mode === 'typst') jobs.set(`D${n.attrs.src}`, { src: String(n.attrs.src), display: true });
+    if (n.type === 'mathInline' || n.type === 'equation') {
+      const src = String(n.attrs?.src ?? ''), display = n.type === 'equation';
+      if (n.attrs?.mode === 'typst') jobs.set(`${display ? 'D' : 'I'}${src}`, { src, display }); else latexJob(src, display);
+    }
     for (const c of n.content ?? []) walk(c);
   };
   for (const k of ['abstractZh', 'abstractEn', 'body', 'conclusion', 'appendix', 'acknowledgement', 'resume'] as const) walk(ctx.doc[k] as PMNode);
-  for (const e of ctx.doc.symbols) if (e.mode !== 'latex') jobs.set(`I${e.symbol}`, { src: e.symbol, display: false });
-  for (const [key, j] of jobs) { try { const img = await renderTypstMath(j.src, j.display); if (img) ctx.typstMath.set(key, img); } catch { /* 编不过就退成文字 */ } }
+  for (const e of ctx.doc.symbols) { if (e.mode !== 'latex') jobs.set(`I${e.symbol}`, { src: e.symbol, display: false }); else latexJob(e.symbol, false); }
+  for (const [key, j] of jobs) { try { const img = await renderTypstMath(j.src, j.display, !!j.latex); if (img) ctx.typstMath.set(key, img); } catch { /* 编不过就退成文字 */ } }
 }
 
 // ── 整篇 ─────────────────────────────────────────────────────────
@@ -452,7 +469,7 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
 
   const isReport = s.stage !== 'final';
   // 页眉：范例里校名式「哈尔滨工业大学博士学位论文」；博士双面交替，奇数页排本章章标题（STYLEREF 1 取当前标题 1）
-  const headerPara = (kids: ParagraphChild[]) => new Paragraph({ style: 'Header', border: { bottom: { style: BorderStyle.THIN_THICK_SMALL_GAP, size: 18, space: 1 } }, children: kids });
+  const headerPara = (kids: ParagraphChild[]) => new Paragraph({ style: 'Header', border: { bottom: { style: BorderStyle.THICK_THIN_SMALL_GAP, size: 18, space: 1 } }, children: kids });
   const school = `哈尔滨工业大学${DOC_TYPE[s.degreeLevel]}`;
   const header = L.header ? new Header({ children: [headerPara(s.degreeLevel === 'doctor' && !isReport ? [new SimpleField('STYLEREF 1 \\* MERGEFORMAT', school)] : [new TextRun({ text: school })])] }) : undefined;
   const evenHeader = L.header && s.degreeLevel === 'doctor' && !isReport ? new Header({ children: [headerPara([new TextRun({ text: school })])] }) : undefined;
@@ -475,10 +492,9 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
   if (!isReport) {
     front.push(...abstractPages(ctx));
     const nom = nomenclature(ctx);
-    if (nom.length) { if (front.length) front.push(pageBreak()); front.push(...nom); }
+    if (nom.length) front.push(...nom);
     if (resolvePage(doc, 'tableOfContents').value) {
-      if (front.length) front.push(pageBreak());
-      front.push(new Paragraph({ style: 'FrontTitle', children: [new TextRun({ text: '目\u3000录' })] }), new TableOfContents("目录", { hyperlink: true, headingStyleRange: '1-3', stylesWithLevels: [{ styleName: 'Abstract Title', level: 1 }] }) as unknown as Paragraph);
+      front.push(new Paragraph({ style: 'FrontTitle', pageBreakBefore: front.length > 0, children: [new TextRun({ text: '目\u3000录' })] }), new TableOfContents("目录", { hyperlink: true, headingStyleRange: '1-3', stylesWithLevels: [{ styleName: 'Abstract Title', level: 1 }] }) as unknown as Paragraph);
     }
   }
   const hf = (roman: boolean) => ({ properties: props(roman), headers: header ? { default: roman ? new Header({ children: [headerPara([new TextRun({ text: school })])] }) : header, ...(evenHeader && !roman ? { even: evenHeader } : {}) } : undefined, footers: footerFor() ? { default: footerFor()!, ...(evenHeader && !roman ? { even: footerFor()! } : {}) } : undefined });
@@ -487,19 +503,19 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
   // 主体与后置（阿拉伯页码）：正文、结论、参考文献、附录、成果、答辩决议、声明、致谢、简历——顺序照模板
   const main: Block[] = [...blocks(ctx, (doc.body as PMNode).content, 'body')];
   const conclusion = doc.conclusion as PMNode;
-  if (text(conclusion).trim()) main.push(pageBreak(), titlePara(isReport ? "结论" : '结\u3000论'), ...blocks(ctx, conclusion.content, 'other'));
+  if (text(conclusion).trim()) main.push(titlePara(isReport ? "结论" : '结\u3000论'), ...blocks(ctx, conclusion.content, 'other'));
   const refs = references(ctx);
-  if (refs.length) main.push(pageBreak(), ...refs);
+  if (refs.length) main.push(...refs);
   const appendix = doc.appendix as PMNode;
-  if (resolvePage(doc, 'appendix').value && text(appendix).trim()) main.push(pageBreak(), ...blocks(ctx, appendix.content, 'appendix'));
+  if (resolvePage(doc, 'appendix').value && text(appendix).trim()) main.push(...blocks(ctx, appendix.content, 'appendix', 0, true));
   const ach = achievements(ctx);
-  if (ach.length) main.push(pageBreak(), ...ach);
-  if (!isReport && resolvePage(doc, 'defense').value) main.push(pageBreak(), ...defensePage(doc, titlePara("学位论文评阅人、答辩委员会名单及答辩决议")));
-  if (!isReport && resolvePage(doc, 'declarations').value) main.push(pageBreak(), ...declarationsPage(doc, titlePara("哈尔滨工业大学学位论文原创性声明和使用权限"), (t) => new Paragraph({ style: 'SubTitle', children: [new TextRun({ text: t })] })));
+  if (ach.length) main.push(...ach);
+  if (!isReport && resolvePage(doc, 'defense').value) main.push(...defensePage(doc, titlePara("学位论文评阅人、答辩委员会名单及答辩决议")));
+  if (!isReport && resolvePage(doc, 'declarations').value) main.push(...declarationsPage(doc, titlePara("哈尔滨工业大学学位论文原创性声明和使用权限"), (t) => new Paragraph({ style: 'SubTitle', children: [new TextRun({ text: t })] })));
   const ack = doc.acknowledgement as PMNode;
-  if (text(ack).trim()) main.push(pageBreak(), titlePara('致\u3000谢'), ...blocks(ctx, ack.content, 'other'));
+  if (text(ack).trim()) main.push(titlePara('致\u3000谢'), ...blocks(ctx, ack.content, 'other'));
   const resume = doc.resume as PMNode;
-  if (resolvePage(doc, 'resume').value && text(resume).trim()) main.push(pageBreak(), titlePara("个人简历"), ...blocks(ctx, resume.content, 'other'));
+  if (resolvePage(doc, 'resume').value && text(resume).trim()) main.push(titlePara("个人简历"), ...blocks(ctx, resume.content, 'other'));
   sections.push({ ...hf(false), children: main });
 
   // 断行引擎那几个 Word 开关照样写进 docx：兼容模式、调整中西文字符宽度、断字；字体紧缩在 Normal 样式的 kern 上，

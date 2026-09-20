@@ -12,8 +12,11 @@ const e = (inner: string) => `<m:e>${inner}</m:e>`;
 
 function children(el: Element): string { return [...el.childNodes].map((c) => (c.nodeType === 1 ? conv(c as Element) : run((c.textContent ?? '').trim()))).join(''); }
 
-function conv(el: Element): string {
+function conv(el: Element | undefined): string {
+  if (!el) return '';
   const tag = el.localName;
+  // MathLive 认不得的命令吐 merror：整条当转换失败，让上层退回去画图
+  if (tag === 'merror') throw new Error('unsupported LaTeX');
   const kids = [...el.children];
   const text = (el.textContent ?? '');
   switch (tag) {

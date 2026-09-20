@@ -5,8 +5,8 @@ import { renderSnippetSvg } from '../../compiler/renderer';
 export interface MathImage { data: ArrayBuffer; width: number; height: number }
 const SCALE = 4;
 
-export async function renderTypstMath(src: string, display: boolean): Promise<MathImage | null> {
-  const r = await compileSnippet(src, display);
+export async function renderTypstMath(src: string, display: boolean, latex = false): Promise<MathImage | null> {
+  const r = await compileSnippet(src, display, latex);
   if (!r.artifact) return null;
   // 语义文本层（foreignObject）会把 canvas 弄成「被污染」导不出 PNG，一并去掉
   let svg = (await renderSnippetSvg(new Uint8Array(r.artifact))).replace(/<script[\s\S]*?<\/script>/g, '').replace(/<foreignObject[\s\S]*?<\/foreignObject>/g, '');
