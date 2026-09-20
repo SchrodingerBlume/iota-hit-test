@@ -101,7 +101,7 @@ export interface SwitchDef<V extends string | boolean = boolean> {
   applies?: (s: Settings) => boolean;
   group: string;
   /** 只关乎某一页的开关放到那一页去（摘要、缩略语、附录、页面设置、论文信息、论文类型），不在论文设置里列 */
-  place?: 'abstract' | 'nomenclature' | 'appendix' | 'pages' | 'info' | 'type';
+  place?: 'abstract' | 'nomenclature' | 'appendix' | 'toc' | 'info' | 'type';
 }
 
 const isReport = (s: Settings) => s.stage !== 'final';
@@ -298,7 +298,7 @@ export const SWITCHES: SwitchDef<any>[] = [
       { value: 'both', label: t("中英两份") },
     ],
     group: t("标题与页面"),
-    place: 'pages',
+    place: 'toc',
     resolve: (s) => {
       if (s.lang === 'en') return { value: 'en', reason: t("英文档只出英文目录") };
       return s.degreeLevel === 'doctor' ? { value: 'both', reason: t("博士档中英两份（范例）") } : { value: 'zh', reason: t("硕本只有中文目录") };

@@ -86,6 +86,7 @@ export function IndexPanel() {
   return (
     <>
       <h2>{tx("索引")}</h2>
+      <PageSettings pages={['index']} />
       {!terms.length && <p className="muted">{tx("没有索引项。选择文字后，单击“引用”中的“标记条目”。")}</p>}
       {terms.length > 0 && (
         <table className="idx-table">
@@ -144,7 +145,7 @@ export function AbstractPanel() {
   return (
     <>
       <h2>{tx("摘要")}</h2>
-      <div className="card"><SettingSwitch k="abstractKeywordsAbove" /></div>
+      <PageSettings pages={['abstract']}><SettingSwitch k="abstractKeywordsAbove" /></PageSettings>
       <h3>{tx("中文摘要")}</h3>
       <RichEditor instanceKey="abstractZh" richKey="abstractZh" value={zh} onChange={(v) => setRich('abstractZh', v)} headings={false} blocks={false} placeholder={tx("中文摘要……")} />
       <h3 style={{ marginTop: 20 }}>Abstract</h3>
@@ -166,6 +167,7 @@ export function NomenclaturePanel() {
   return (
     <>
       <h2>{tx("符号与缩略语")}</h2>
+      <PageSettings pages={both ? ['symbolsPage', 'abbreviationsPage', 'nomenclatureMerged'] : ['symbolsPage', 'abbreviationsPage']} />
       <div className="card">
         <h3>{tx("缩略语")}</h3>
         <table className="tbl">
@@ -241,6 +243,7 @@ export function BibPanel({ which }: { which: 'bibliography' | 'achievements' }) 
   return (
     <>
       <h2>{isBib ? tx("参考文献") : tx("攻读学位期间取得的成果")}</h2>
+      {!isBib && <PageSettings pages={['achievements']} />}
       {isBib
         ? <BibEditor mode="references" entries={references} onChange={setReferences} citedKeys={cited} fileName="refs.bib" />
         : <BibEditor mode="achievements" entries={achievementEntries} onChange={setAchievementEntries} fileName="achievements.bib" />}
@@ -287,6 +290,7 @@ export function DefensePanel() {
     <>
       <h2>{tx("答辩决议")}</h2>
       <p className="lead">{tx("学位论文评阅人、答辩委员会名单及答辩决议——研究生终稿排在成果之后、声明之前。照纸质表填：人比行多就先借别块的空行、再加行。")}</p>
+      <PageSettings pages={['defense']} />
       <div className="card def-card">
         <table className="def-form">
           <colgroup><col className="c0" /><col className="c1" /><col className="c2" /><col className="c3" /><col className="c4" /><col className="c5" /><col className="cx" /></colgroup>
@@ -348,36 +352,37 @@ function openrightAuto(doc: ThesisDoc, orKey: OpenrightKey): { value: boolean; r
   return { value: false, reason: doc.settings.degreeLevel === 'doctor' ? tx("模板按学位：博士只内封右翻，各段都不跳") : tx("模板按学位：{{v0}}各段都不跳", { v0: doc.settings.degreeLevel === 'master' ? tx("硕士") : tx("本科") }) };
 }
 
-function OpenrightSwitch({ orKey, label, sub }: { orKey: OpenrightKey; label: string; sub?: boolean }) {
+export function OpenrightSwitch({ orKey, label, sub }: { orKey: OpenrightKey; label: string; sub?: boolean }) {
   const doc = useStore((s) => s.doc);
   const setOpenright = useStore((s) => s.setOpenright);
   const v = doc.openright?.[orKey] ?? 'auto';
   return <TriSeg className={sub ? 'is-sub' : ''} label={label} hint={tx("从右手页（奇数页）起，前面不够就补一张空白页；Auto 往上跟：所在部分 → 全篇总闸 → 模板按学位的表")} choices={ON_OFF} value={v} auto={openrightAuto(doc, orKey)} onChange={(x) => setOpenright({ [orKey]: x })} />;
 }
 
-export function PagesPanel() {
+/** 某几页的页面设置：显示不显示、右手页起（缩进挂在该页下面）、再加这一页自己的开关 */
+export function PageSettings({ pages, title, children }: { pages: (keyof Pages)[]; title?: string; children?: React.ReactNode }) {
   return (
-    <>
-      <h2>{tx("页面设置")}</h2>
-      <div className="card">
-        <h3>{tx("右手页起")}</h3>
-        <OpenrightSwitch orKey="frontmatter" label={tx("前置部分")} />
-        <OpenrightSwitch orKey="mainmatter" label={tx("正文（各章）")} />
-        <OpenrightSwitch orKey="conclusion" label={tx("结论")} />
-        <OpenrightSwitch orKey="acknowledgement" label={tx("致谢")} />
-      </div>
-      {([tx("前置"), tx("后置")] as const).map((g) => (
-        <div className="card" key={g}>
-          <h3>{g}</h3>
-          {PAGE_DEFS.filter((d) => d.group === g).map((d) => (
-            <div key={d.key} className="page-row">
-              <PageSwitch pageKey={d.key} />
-              {OPENRIGHT_OF[d.key] && <OpenrightSwitch orKey={OPENRIGHT_OF[d.key]!} label={tx("右手页起")} sub />}
-              {d.key === 'tableOfContents' && <SettingSwitch k="tocLang" className="is-sub" />}
-            </div>
-          ))}
+    <div className="card">
+      {title && <h3>{title}</h3>}
+      {pages.map((k) => (
+        <div key={k} className="page-row">
+          <PageSwitch pageKey={k} />
+          {OPENRIGHT_OF[k] && <OpenrightSwitch orKey={OPENRIGHT_OF[k]!} label={tx("右手页起")} sub />}
+          {k === 'tableOfContents' && <SettingSwitch k="tocLang" className="is-sub" />}
         </div>
       ))}
+      {children}
+    </div>
+  );
+}
+
+/** 目录、插图 / 表格 / 公式索引：没有自己的编辑页，页面设置都在这 */
+export function TocPanel() {
+  return (
+    <>
+      <h2>{tx("目录与索引")}</h2>
+      <p className="lead">{tx("目录规范要求必有；三份索引规范没提，默认不排。条目都从正文里自动收，这里只管排不排、从哪一页起。")}</p>
+      <PageSettings pages={['tableOfContents', 'listOfFigures', 'listOfTables', 'listOfEquations']} />
     </>
   );
 }

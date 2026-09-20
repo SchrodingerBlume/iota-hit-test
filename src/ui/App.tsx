@@ -23,7 +23,7 @@ import { FontRecovery } from './FontRecovery';
 import { useFontState } from '../fonts/userFonts';
 import { SettingsPanel } from './SettingsPanel';
 import { InfoPanel } from './InfoPanel';
-import { AbstractPanel, NomenclaturePanel, RichSection, BibPanel, DefensePanel, PagesPanel, IndexPanel } from './panels';
+import { AbstractPanel, NomenclaturePanel, RichSection, BibPanel, DefensePanel, TocPanel, IndexPanel, PageSettings, OpenrightSwitch } from './panels';
 import { Preview } from './Preview';
 import { usePreviewSurface } from './PreviewEditLayer';
 import { useTheme, type ThemePref } from './theme';
@@ -41,9 +41,9 @@ import { t as tx } from '../i18n';
 const NAV: { key: Section; label: string; group: string; k?: string }[] = [
   { key: 'info', label: tx("论文信息"), group: tx("设置") },
   { key: 'settings', label: tx("论文设置"), group: tx("设置") },
-  { key: 'pages', label: tx("页面设置"), group: tx("设置") },
   { key: 'abstract', label: tx("摘要"), group: tx("前置") },
   { key: 'nomenclature', label: tx("符号与缩略语"), group: tx("前置") },
+  { key: 'toc', label: tx("目录与索引"), group: tx("前置") },
   { key: 'body', label: tx("正文"), group: tx("主体") },
   { key: 'conclusion', label: tx("结论"), group: tx("主体") },
   { key: 'bibliography', label: tx("参考文献"), group: tx("后置") },
@@ -217,7 +217,7 @@ export function App() {
   const reflowRef = useCallback((el: HTMLDivElement | null) => { reflowStop.current?.(); reflowStop.current = el && !el.querySelector('.editor') ? watchReflow(el, '.card, .card > *, .triseg > *, .axis > *') : null; }, []);
   const lastSection = useRef(section);
   useEffect(() => {
-    if (lastSection.current !== section && mode === 'preview' && ['info', 'settings', 'pages', 'bibliography', 'achievements', 'nomenclature', 'defense', 'index'].includes(section)) setMode('split');
+    if (lastSection.current !== section && mode === 'preview' && ['info', 'settings', 'toc', 'bibliography', 'achievements', 'nomenclature', 'defense', 'index'].includes(section)) setMode('split');
     lastSection.current = section;
   }, [section, mode, setMode]);
   const hasDocument = loaded && useStore.getState().projects.some((p) => p.id === doc.id);
@@ -316,18 +316,18 @@ export function App() {
     switch (section) {
       case 'settings': return <SettingsPanel />;
       case 'info': return <InfoPanel />;
-      case 'pages': return <PagesPanel />;
+      case 'toc': return <TocPanel />;
       case 'abstract': return <AbstractPanel />;
       case 'nomenclature': return <NomenclaturePanel />;
       case 'body': return <RichSection title={tx("正文")} richKey="body" headings placeholder={tx("输入正文…")} />;
-      case 'conclusion': return <RichSection title={tx("结论")} richKey="conclusion" headings={false} />;
+      case 'conclusion': return <RichSection title={tx("结论")} richKey="conclusion" headings={false} extra={<div className="card"><OpenrightSwitch orKey="conclusion" label={tx("右手页起")} /></div>} />;
       case 'bibliography': return <BibPanel which="bibliography" />;
-      case 'appendix': return <RichSection title={tx("附录")} richKey="appendix" headings placeholder={tx("输入附录…")} extra={<div className="card"><SettingSwitch k="appendixNumbering" /></div>} />;
+      case 'appendix': return <RichSection title={tx("附录")} richKey="appendix" headings placeholder={tx("输入附录…")} extra={<PageSettings pages={['appendix']}><SettingSwitch k="appendixNumbering" /></PageSettings>} />;
       case 'achievements': return <BibPanel which="achievements" />;
       case 'defense': return <DefensePanel />;
-      case 'acknowledgement': return <RichSection title={tx("致谢")} richKey="acknowledgement" headings={false} blocks={false} />;
+      case 'acknowledgement': return <RichSection title={tx("致谢")} richKey="acknowledgement" headings={false} blocks={false} extra={<div className="card"><OpenrightSwitch orKey="acknowledgement" label={tx("右手页起")} /></div>} />;
       case 'index': return <IndexPanel />;
-      case 'resume': return <RichSection title={tx("个人简历")} richKey="resume" headings={false} blocks={false} />;
+      case 'resume': return <RichSection title={tx("个人简历")} richKey="resume" headings={false} blocks={false} extra={<PageSettings pages={['resume']} />} />;
     }
   })();
 

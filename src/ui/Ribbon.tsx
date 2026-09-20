@@ -459,7 +459,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
           {tab === 'cite' && (
             <>
               <Group label={tx("目录")}>
-                <B title={tx("目录设置")} big icon={<DocumentTableSearch20Regular />} run={() => useStore.getState().setSection('pages')}>{tx("目录")}</B>
+                <B title={tx("目录设置")} big icon={<DocumentTableSearch20Regular />} run={() => useStore.getState().setSection('toc')}>{tx("目录")}</B>
                 <Stack>
                   <B title={tx("目录条目的行距、字体、字号（模板的 toc-1～toc-4）")} icon={<TextEditStyle20Regular />} run={() => useBlockMenu.getState().openStyle(-1)}>{tx("目录样式…")}</B>
                 </Stack>

@@ -3,7 +3,9 @@ import { INFO_FIELDS, INFO_GROUPS, type InfoFieldDef } from '../model/info';
 import type { Info } from '../model/types';
 import { TagInput } from './TagInput';
 import { SettingSwitch } from './TriSwitch';
+import { PageSettings } from './panels';
 import { t } from '../i18n';
+const tx = t;
 
 function FieldInput({ f, info, setInfo }: { f: InfoFieldDef; info: Info; setInfo: (p: Partial<Info>) => void }) {
   const v = info[f.key];
@@ -39,6 +41,7 @@ export function InfoPanel() {
           </div>
         );
       })}
+      <PageSettings pages={['cover', 'titlepage', 'declarations']} title={tx("封面、内封与声明")} />
     </>
   );
 }
