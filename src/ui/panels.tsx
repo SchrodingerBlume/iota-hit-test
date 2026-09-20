@@ -1,5 +1,5 @@
 // 其余的节：摘要、符号与缩略语、正文类富文本、参考文献、成果、答辩、页面设置。
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useStore, type RichKey } from '../model/store';
 import { PAGE_DEFS, resolvePage } from '../model/pages';
 import { TriSeg, ON_OFF, SettingSwitch, TriSwitch } from './TriSwitch';
@@ -206,6 +206,42 @@ export function AbstractPanel() {
   );
 }
 
+
+/** 登记表里的格子：回车到下一行同一列（末行就加一行），↑↓ 换行，整行空着按 Backspace 删掉这行，
+ *  粘贴带换行 / 制表符的文本按行列铺开（从 Word / Excel 的表里直接拷过来） */
+function useGrid<R>(rows: R[], onChange: (r: R[]) => void, blank: () => R, cols: (keyof R)[], isEmpty: (r: R) => boolean) {
+  const table = useRef<HTMLTableElement>(null);
+  const focus = (i: number, col: number) => requestAnimationFrame(() => { const el = table.current?.querySelector<HTMLInputElement>(`[data-cell="${i}:${col}"]`); el?.focus(); });
+  const set = (i: number, patch: Partial<R>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const cell = (i: number, col: number) => ({
+    'data-cell': `${i}:${col}`,
+    onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.nativeEvent.isComposing) return;
+      if (e.key === 'Enter') { e.preventDefault(); if (i + 1 >= rows.length) onChange([...rows, blank()]); focus(i + 1, col); }
+      else if (e.key === 'ArrowDown' && i + 1 < rows.length) { e.preventDefault(); focus(i + 1, col); }
+      else if (e.key === 'ArrowUp' && i > 0) { e.preventDefault(); focus(i - 1, col); }
+      else if (e.key === 'Backspace' && rows.length > 1 && isEmpty(rows[i])) { e.preventDefault(); onChange(rows.filter((_, j) => j !== i)); focus(Math.max(0, i - 1), col); }
+    },
+    onPaste: (e: React.ClipboardEvent<HTMLInputElement>) => {
+      const text = e.clipboardData.getData('text');
+      if (!/[\n\t]/.test(text)) return;
+      e.preventDefault();
+      const lines = text.split(/\r?\n/).filter((l) => l.trim());
+      const next = [...rows];
+      lines.forEach((line, k) => {
+        const parts = line.split(/\t|\s*[|｜]\s*/);
+        const at = i + k;
+        if (at >= next.length) next.push(blank());
+        const patch: Partial<R> = {};
+        parts.forEach((v, m) => { const key = cols[col + m]; if (key) (patch as any)[key] = v.trim(); });
+        next[at] = { ...next[at], ...patch };
+      });
+      onChange(next);
+    },
+  });
+  return { table, set, cell, focus };
+}
+
 export function NomenclaturePanel() {
   const abbreviations = useStore((s) => s.doc.abbreviations);
   const symbols = useStore((s) => s.doc.symbols);
@@ -216,36 +252,38 @@ export function NomenclaturePanel() {
   const setOpts = useStore((s) => s.setNomenclatureOptions);
   const both = resolvePage(doc, 'symbolsPage').value && resolvePage(doc, 'abbreviationsPage').value;
   const [advanced, setAdvanced] = useState(false);
+  const ab = useGrid<Abbreviation>(abbreviations, setAbbreviations, () => ({ key: '', long: '', longEn: '' }), ['key', 'long', 'longEn', 'short', 'plural'], (r) => !r.key && !r.long && !r.longEn);
   return (
     <>
       <h2>{tx("符号与缩略语")}</h2>
       <PageSettings pages={both ? ['symbolsPage', 'abbreviationsPage', 'nomenclatureMerged'] : ['symbolsPage', 'abbreviationsPage']} />
       <div className="card">
-        <h3>{tx("缩略语")}</h3>
-        <table className="tbl">
-          <thead><tr><th style={{ width: 110 }}>{tx("缩写")}</th><th>{tx("中文全称")}</th><th>{tx("英文全称")}</th>{advanced && <><th style={{ width: 100 }}>{tx("显示文字")}</th><th style={{ width: 100 }}>{tx("复数")}</th><th style={{ width: 60 }}>{tx("加入索引")}</th></>}<th /></tr></thead>
+        <div className="card-head"><h3>{tx("缩略语")}</h3><button type="button" className="btn btn-xs btn-ghost" onClick={() => setAdvanced((a) => !a)}>{advanced ? tx("收起高级选项") : tx("高级选项")}</button></div>
+        <table className="nom-form" ref={ab.table}>
+          <colgroup><col style={{ width: 110 }} /><col /><col />{advanced && <><col style={{ width: 100 }} /><col style={{ width: 100 }} /><col style={{ width: 64 }} /></>}<col className="cx" /></colgroup>
+          <thead><tr><th>{tx("缩写")}</th><th>{tx("中文全称")}</th><th>{tx("英文全称")}</th>{advanced && <><th>{tx("显示文字")}</th><th>{tx("复数")}</th><th>{tx("进索引")}</th></>}<td className="def-x" /></tr></thead>
           <tbody>
             {abbreviations.map((r, i) => {
-              const set = (patch: Partial<Abbreviation>) => setAbbreviations(abbreviations.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+              const set = (patch: Partial<Abbreviation>) => ab.set(i, patch);
               return (
                 <tr key={i}>
-                  <td><input style={{ fontFamily: 'var(--mono)' }} value={r.key} placeholder="FEM" onChange={(e) => set({ key: e.target.value.replace(/\s+/g, '') })} /></td>
-                  <td><input value={r.long} placeholder={tx("有限元方法")} onChange={(e) => set({ long: e.target.value })} /></td>
-                  <td><input value={r.longEn} placeholder="Finite Element Method" onChange={(e) => set({ longEn: e.target.value })} /></td>
+                  <td><input className="mono" value={r.key} placeholder="FEM" {...ab.cell(i, 0)} onChange={(e) => set({ key: e.target.value.replace(/\s+/g, '') })} /></td>
+                  <td><input value={r.long} placeholder={tx("有限元方法")} {...ab.cell(i, 1)} onChange={(e) => set({ long: e.target.value })} /></td>
+                  <td><input value={r.longEn} placeholder="Finite Element Method" {...ab.cell(i, 2)} onChange={(e) => set({ longEn: e.target.value })} /></td>
                   {advanced && <>
-                    <td><input value={r.short ?? ''} placeholder={r.key || tx("同键")} title={tx("印出来的缩写；空 = 与键相同")} onChange={(e) => set({ short: e.target.value })} /></td>
-                    <td><input value={r.plural ?? ''} placeholder={(r.short || r.key) ? `${r.short || r.key}s` : tx("缩写+s")} title={tx("复数形式；空 = 缩写加 s")} onChange={(e) => set({ plural: e.target.value })} /></td>
-                    <td style={{ textAlign: 'center' }}><select value={r.indexed === undefined ? '' : r.indexed ? 'yes' : 'no'} onChange={(e) => set({ indexed: e.target.value === '' ? undefined : e.target.value === 'yes' })} title={tx("这一条要不要登记进索引；空 = 跟「论文设置」里的开关")}><option value="">{tx("跟设置")}</option><option value="yes">{tx("是")}</option><option value="no">{tx("否")}</option></select></td>
+                    <td><input value={r.short ?? ''} placeholder={r.key || tx("同键")} title={tx("印出来的缩写；空 = 与键相同")} {...ab.cell(i, 3)} onChange={(e) => set({ short: e.target.value })} /></td>
+                    <td><input value={r.plural ?? ''} placeholder={(r.short || r.key) ? `${r.short || r.key}s` : tx("缩写+s")} title={tx("复数形式；空 = 缩写加 s")} {...ab.cell(i, 4)} onChange={(e) => set({ plural: e.target.value })} /></td>
+                    <td className="center"><select value={r.indexed === undefined ? '' : r.indexed ? 'yes' : 'no'} onChange={(e) => set({ indexed: e.target.value === '' ? undefined : e.target.value === 'yes' })}><option value="">{tx("跟总开关")}</option><option value="yes">{tx("进")}</option><option value="no">{tx("不进")}</option></select></td>
                   </>}
-                  <td><button type="button" className="del" title={tx("删除")} onClick={() => setAbbreviations(abbreviations.filter((_, j) => j !== i))}>✕</button></td>
+                  <td className="def-x"><button type="button" title={tx("删除这一行")} onClick={() => setAbbreviations(abbreviations.filter((_, j) => j !== i))}>✕</button></td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-        <div className="row" style={{ marginTop: 6 }}>
-          <button type="button" className="btn btn-xs" onClick={() => setAbbreviations([...abbreviations, { key: '', long: '', longEn: '' }])}>{tx("＋ 添加一行")}</button>
-          <button type="button" className="btn btn-xs btn-ghost" onClick={() => setAdvanced((a) => !a)}>{advanced ? tx("收起高级选项") : tx("高级选项")}</button>
+        <div className="row def-add">
+          <button type="button" className="btn btn-xs" onClick={() => { setAbbreviations([...abbreviations, { key: '', long: '', longEn: '' }]); ab.focus(abbreviations.length, 0); }}>{tx("＋ 添加一行")}</button>
+          <span className="muted small">{tx("回车下一行；整行空着按 Backspace 删；从 Word / Excel 拷一整块粘进来会按行列铺开")}</span>
         </div>
         <SettingSwitch k="abbreviationLinks" />
         <SettingSwitch k="abbreviationIndexed" />
@@ -442,37 +480,40 @@ export function TocPanel() {
 /** 物理量符号表：每行一个符号（Typst 或 LaTeX，带预览）+ 含义 */
 function SymbolTable({ rows, onChange }: { rows: SymbolEntry[]; onChange: (r: SymbolEntry[]) => void }) {
   const [editing, setEditing] = useState<number | null>(null);
-  const set = (i: number, patch: Partial<SymbolEntry>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const g = useGrid<SymbolEntry>(rows, onChange, () => ({ symbol: '', mode: 'latex', meaning: '' }), ['symbol', 'meaning'], (r) => !r.symbol && !r.meaning);
+  const set = g.set;
   return (
     <>
-      <table className="tbl sym">
-        <thead><tr><th style={{ width: 90 }}>{tx("预览")}</th><th>{tx("符号")}</th><th>{tx("含义与单位")}</th><th /></tr></thead>
+      <table className="nom-form sym" ref={g.table}>
+        <colgroup><col style={{ width: 72 }} /><col style={{ width: '34%' }} /><col /><col className="cx" /></colgroup>
+        <thead><tr><th>{tx("预览")}</th><th>{tx("符号")}</th><th>{tx("含义与单位")}</th><td className="def-x" /></tr></thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={i}>
+            <tr key={i} className={editing === i ? 'is-editing' : ''}>
               <td className="sym-preview"><button type="button" className="sym-btn" title={tx("点开可视化编辑")} onClick={() => setEditing(editing === i ? null : i)}><MathPreview src={r.symbol} mode={r.mode === 'latex' ? 'latex' : 'typst'} empty="…" /></button></td>
-              <td>
-                <span className="row" style={{ flexWrap: 'nowrap' }}>
-                  <input style={{ fontFamily: 'var(--mono)' }} value={r.symbol} placeholder={r.mode === 'latex' ? '\\eta' : 'eta'} onChange={(e) => set(i, { symbol: e.target.value })} />
-                  <span className="seg" title={tx("写法")} style={{ flex: 'none' }}>
-                    <button type="button" className={r.mode === 'latex' ? 'on' : ''} onClick={() => set(i, { mode: 'latex' })}>L</button>
-                    <button type="button" className={r.mode !== 'latex' ? 'on' : ''} onClick={() => set(i, { mode: 'typst' })}>T</button>
-                  </span>
+              <td className="sym-src">
+                <input className="mono" value={r.symbol} placeholder={r.mode === 'latex' ? '\\eta' : 'eta'} {...g.cell(i, 0)} onChange={(e) => set(i, { symbol: e.target.value })} />
+                <span className="seg sym-mode" title={tx("写法")}>
+                  <button type="button" className={r.mode === 'latex' ? 'on' : ''} onClick={() => set(i, { mode: 'latex' })}>LaTeX</button>
+                  <button type="button" className={r.mode !== 'latex' ? 'on' : ''} onClick={() => set(i, { mode: 'typst' })}>Typst</button>
                 </span>
               </td>
-              <td><input value={r.meaning} placeholder={tx("气体动力黏度，Pa·s")} onChange={(e) => set(i, { meaning: e.target.value })} /></td>
-              <td><button type="button" className="del" title={tx("删除")} onClick={() => { onChange(rows.filter((_, j) => j !== i)); setEditing(null); }}>✕</button></td>
+              <td><input value={r.meaning} placeholder={tx("气体动力黏度，Pa·s")} {...g.cell(i, 1)} onChange={(e) => set(i, { meaning: e.target.value })} /></td>
+              <td className="def-x"><button type="button" title={tx("删除这一行")} onClick={() => { onChange(rows.filter((_, j) => j !== i)); setEditing(null); }}>✕</button></td>
             </tr>
           ))}
         </tbody>
       </table>
       {editing !== null && rows[editing] && (
-        <div className="card" style={{ marginTop: 8 }}>
+        <div className="card sym-editor">
           <h3>{tx("编辑符号 · 第")}{' '}{editing + 1} {' '}{tx("行")}</h3>
           <MathEditor value={rows[editing].symbol} mode={rows[editing].mode === 'latex' ? 'latex' : 'typst'} display={false} onChange={(v) => set(editing, { symbol: v })} onMode={(m) => set(editing, { mode: m })} />
         </div>
       )}
-      <button type="button" className="btn btn-xs" style={{ marginTop: 6 }} onClick={() => onChange([...rows, { symbol: '', mode: 'latex', meaning: '' }])}>{tx("＋ 添加一行")}</button>
+      <div className="row def-add">
+        <button type="button" className="btn btn-xs" onClick={() => { onChange([...rows, { symbol: '', mode: 'latex', meaning: '' }]); g.focus(rows.length, 0); }}>{tx("＋ 添加一行")}</button>
+        <span className="muted small">{tx("符号按 LaTeX 或 Typst 写；点预览可视化编辑")}</span>
+      </div>
     </>
   );
 }
