@@ -76,7 +76,7 @@ export interface Settings {
   /** 摘要正文与关键词之间：auto ＝ 空一行（指南），none ＝ 不空，bottom ＝ 关键词挤到页底（v(1fr)） */
   abstractKeywordsAbove: Tri<'none' | 'line' | 'bottom'>;
   emDash: Tri<'cjk' | 'latin'>;
-  appendixNumbering: Tri<'letters' | 'roman' | 'numbers' | 'hanzi'>;
+  appendixNumbering: Tri<'letters' | 'roman' | 'numbers' | 'hanzi' | 'words'>;
   /** 目录出哪几份：auto ＝ 模板按学位（博士中英两份、硕本只中文；英文档只英文） */
   tocLang: Tri<'zh' | 'en' | 'both'>;
   /** 英文题目强制小二号（封面与内封的 title-en-xiaoer） */
@@ -188,9 +188,10 @@ export interface DefensePerson {
 export interface Defense {
   enabled: boolean;
   reviewers: DefensePerson[];
-  chair: DefensePerson;
+  /** 主席、秘书纸质表上各一行，但模板收一串：多了先借别块的空行、再加行 */
+  chair: DefensePerson[];
   members: DefensePerson[];
-  secretary: DefensePerson;
+  secretary: DefensePerson[];
   resolution: RichDoc;
 }
 

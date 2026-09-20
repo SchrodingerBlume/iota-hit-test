@@ -49,7 +49,7 @@ const NAV: { key: Section; label: string; group: string; k?: string }[] = [
   { key: 'bibliography', label: tx("参考文献"), group: tx("后置") },
   { key: 'appendix', label: tx("附录"), group: tx("后置") },
   { key: 'achievements', label: tx("成果"), group: tx("后置") },
-  { key: 'defense', label: tx("答辩"), group: tx("后置") },
+  { key: 'defense', label: tx("答辩决议"), group: tx("后置") },
   { key: 'acknowledgement', label: tx("致谢"), group: tx("后置") },
   { key: 'resume', label: tx("个人简历"), group: tx("后置") },
   { key: 'index', label: tx("索引"), group: tx("后置") },

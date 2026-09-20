@@ -123,7 +123,7 @@ function settingsArgs(s: Settings): string[] {
   const styles = stylesArg(s.styles ?? {});
   if (styles) args.push(styles);
   if (s.appendixNumbering !== 'auto') {
-    const pattern = { letters: 'A', roman: 'I', numbers: '1', hanzi: '一' }[s.appendixNumbering];
+    const pattern = { letters: 'A', roman: 'I', numbers: '1', hanzi: '一', words: 'One' }[s.appendixNumbering];
     args.push(`appendix-numbering: ${JSON.stringify(pattern)}`);
   }
   return args;
@@ -239,9 +239,9 @@ function defense(doc: ThesisDoc, knownLabels: Set<string>, openright = ''): stri
   const resolution = serializeDoc(d.resolution, { headings: false, knownLabels });
   return `#defense(
 ${openright ? `  ${openright},\n` : ''}  reviewers: ${list(d.reviewers)},
-  chair: ${person(d.chair)},
+  chair: ${list(d.chair)},
   members: ${list(d.members)},
-  secretary: ${person(d.secretary)},
+  secretary: ${list(d.secretary)},
   resolution: [
 ${indent(resolution, 4)}
   ],

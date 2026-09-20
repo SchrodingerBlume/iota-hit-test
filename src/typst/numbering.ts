@@ -55,8 +55,9 @@ export function levelLabels(s: Settings, part: 'body' | 'appendix' = 'body'): { 
   const en = s.lang === 'en';
   const hass = s.category === 'hass';
   if (part === 'appendix') {
-    const pat = sw<'letters' | 'roman' | 'numbers' | 'hanzi'>('appendixNumbering', s);
-    if (en) return [{ level: 1, name: 'Appendix', sample: 'Appendix A' }, { level: 2, name: 'Section', sample: 'A.1' }, { level: 3, name: '', sample: 'A.1.1' }, { level: 4, name: '', sample: 'A.1.1.1' }];
+    const pat = sw<'letters' | 'roman' | 'numbers' | 'hanzi' | 'words'>('appendixNumbering', s);
+    if (pat === 'words') return [{ level: 1, name: 'Appendix', sample: 'Appendix One' }, { level: 2, name: '节', sample: '一、' }, { level: 3, name: '条', sample: '（一）' }, { level: 4, name: '款', sample: '1.' }];
+    if (en) { const m = pat === 'numbers' ? '1' : pat === 'roman' ? 'I' : 'A'; return [{ level: 1, name: 'Appendix', sample: `Appendix ${m}` }, { level: 2, name: 'Section', sample: `${m}.1` }, { level: 3, name: '', sample: `${m}.1.1` }, { level: 4, name: '', sample: `${m}.1.1.1` }]; }
     if (pat === 'hanzi') return [{ level: 1, name: '附录', sample: '附录一' }, { level: 2, name: '节', sample: '一、' }, { level: 3, name: '条', sample: '（一）' }, { level: 4, name: '款', sample: '1.' }];
     const m = pat === 'numbers' ? '1' : pat === 'roman' ? 'I' : 'A';
     return [{ level: 1, name: '附录', sample: `附录 ${m}` }, { level: 2, name: '节', sample: `${m}.1` }, { level: 3, name: '条', sample: `${m}.1.1` }, { level: 4, name: '款', sample: `${m}.1.1.1` }];
@@ -74,7 +75,7 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
   const isReportBody = s.stage !== 'final' && !(s.campus === 'shenzhen' && s.degreeLevel === 'bachelor');
   const figByChapter = sw<boolean>('captionNumberingByChapter', s);
   const eqByChapter = sw<boolean>('equationNumberingByChapter', s);
-  const appPattern = sw<'letters' | 'roman' | 'numbers' | 'hanzi'>('appendixNumbering', s);
+  const appPattern = sw<'letters' | 'roman' | 'numbers' | 'hanzi' | 'words'>('appendixNumbering', s);
   const en = s.lang === 'en';
   const hass = s.category === 'hass';
 
@@ -91,7 +92,8 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
       if (appPattern === 'letters') return letter(counters[0]);
       if (appPattern === 'roman') return toRoman(counters[0]);
       if (appPattern === 'numbers') return String(counters[0]);
-      return en ? EN_WORDS[counters[0] - 1] ?? String(counters[0]) : toHanzi(counters[0]);
+      if (appPattern === 'words') return EN_WORDS[counters[0] - 1] ?? String(counters[0]);
+      return toHanzi(counters[0]);
     }
     return String(counters[0]);
   };
@@ -101,7 +103,7 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
     const last = n[level - 1];
     if (part === 'appendix') {
       if (level === 1) return single ? (en ? 'Appendix' : '附录') : en ? `Appendix ${chapterMark()}` : `附录 ${chapterMark()}`;
-      if (appPattern === 'hanzi') return level === 2 ? `${toHanzi(last)}、` : level === 3 ? `（${toHanzi(last)}）` : `${last}.`;
+      if (appPattern === 'hanzi' || appPattern === 'words') return level === 2 ? `${toHanzi(last)}、` : level === 3 ? `（${toHanzi(last)}）` : `${last}.`;
       // 只有一个附录：章号那一位不存在，中文档节往下也少一位（1、1.1）；英文档照 APA 仍带字母（A.1）
       if (single && !en) return n.slice(1).join('.');
       return [chapterMark(), ...n.slice(1)].join('.');

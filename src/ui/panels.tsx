@@ -248,41 +248,84 @@ export function BibPanel({ which }: { which: 'bibliography' | 'achievements' }) 
   );
 }
 
-function PersonRow({ p, onChange }: { p: DefensePerson; onChange: (p: DefensePerson) => void }) {
+const DEF_FIELDS: { k: keyof DefensePerson; label: string; ph: string }[] = [
+  { k: 'name', label: tx("姓名"), ph: '' },
+  { k: 'title', label: tx("职称（是否博导）"), ph: tx("教授（博导）") },
+  { k: 'affiliation', label: tx("工作单位"), ph: tx("哈尔滨工业大学") },
+  { k: 'discipline', label: tx("所在学科"), ph: '' },
+];
+
+/** 一个人一行四格；最后那一格外面挂一个删除钮，悬停才露 */
+function PersonCells({ p, onChange, onRemove }: { p: DefensePerson; onChange: (p: DefensePerson) => void; onRemove?: () => void }) {
   return (
-    <div className="row" style={{ marginBottom: 6 }}>
-      <input className="input" style={{ width: 110 }} value={p.name} placeholder={tx("姓名")} onChange={(e) => onChange({ ...p, name: e.target.value })} />
-      <input className="input" style={{ width: 140 }} value={p.title} placeholder={tx("职称（是否博导）")} onChange={(e) => onChange({ ...p, title: e.target.value })} />
-      <input className="input" style={{ width: 170 }} value={p.affiliation} placeholder={tx("工作单位")} onChange={(e) => onChange({ ...p, affiliation: e.target.value })} />
-      <input className="input" style={{ width: 120 }} value={p.discipline} placeholder={tx("所在学科")} onChange={(e) => onChange({ ...p, discipline: e.target.value })} />
-    </div>
+    <>
+      {DEF_FIELDS.map((f) => <td key={f.k}><input value={p[f.k]} placeholder={f.ph} onChange={(e) => onChange({ ...p, [f.k]: e.target.value })} /></td>)}
+      <td className="def-x">{onRemove && <button type="button" title={tx("删除这一行")} onClick={onRemove}>✕</button>}</td>
+    </>
   );
 }
 
+/** 照纸质表的样子：一张六列表，评阅人块、委员会块（左边竖排「答辩委员会成员」）、决议格 */
 export function DefensePanel() {
   const defense = useStore((s) => s.doc.defense);
   const { setDefense } = useStore();
-  const setList = (k: 'reviewers' | 'members', i: number, p: DefensePerson) => setDefense({ ...defense, [k]: defense[k].map((x, j) => (j === i ? p : x)) });
-  const blank = { name: '', title: '', affiliation: '', discipline: '' };
+  const blank = (): DefensePerson => ({ name: '', title: '', affiliation: '', discipline: '' });
+  type ListKey = 'reviewers' | 'chair' | 'members' | 'secretary';
+  const setAt = (k: ListKey, i: number, p: DefensePerson) => setDefense({ ...defense, [k]: defense[k].map((x, j) => (j === i ? p : x)) });
+  const add = (k: ListKey) => setDefense({ ...defense, [k]: [...defense[k], blank()] });
+  const remove = (k: ListKey, i: number) => setDefense({ ...defense, [k]: defense[k].filter((_, j) => j !== i) });
+  // 每块至少留一行放标签（纸质表上那些行总在）
+  const rows = (k: ListKey) => (defense[k].length ? defense[k] : [blank()]);
+  const block = (k: ListKey, label: string) => rows(k).map((p, i) => (
+    <tr key={`${k}${i}`}>
+      {i === 0 && <th className="def-role" rowSpan={rows(k).length}>{label}</th>}
+      <PersonCells p={p} onChange={(x) => (defense[k].length ? setAt(k, i, x) : setDefense({ ...defense, [k]: [x] }))} onRemove={defense[k].length > 1 ? () => remove(k, i) : undefined} />
+    </tr>
+  ));
+  const committeeRows = rows('chair').length + rows('members').length + rows('secretary').length;
   return (
     <>
-      <h2>{tx("评阅人、答辩委员会与决议")}</h2>
-      <div className="card">
-        <h3>{tx("评阅人")}</h3>
-        {defense.reviewers.map((p, i) => <PersonRow key={i} p={p} onChange={(x) => setList('reviewers', i, x)} />)}
-        <button type="button" className="btn btn-xs" onClick={() => setDefense({ ...defense, reviewers: [...defense.reviewers, blank] })}>{tx("＋ 评阅人")}</button>
+      <h2>{tx("答辩决议")}</h2>
+      <p className="lead">{tx("学位论文评阅人、答辩委员会名单及答辩决议——研究生终稿排在成果之后、声明之前。照纸质表填：人比行多就先借别块的空行、再加行。")}</p>
+      <div className="card def-card">
+        <table className="def-form">
+          <colgroup><col className="c0" /><col className="c1" /><col className="c2" /><col className="c3" /><col className="c4" /><col className="c5" /><col className="cx" /></colgroup>
+          <tbody>
+            <tr>
+              <th className="def-blk" colSpan={2} rowSpan={rows('reviewers').length + 1}>{tx("评阅人")}<small>{tx("（根据实际人数填写）")}</small></th>
+              {DEF_FIELDS.map((f) => <th key={f.k}>{f.label}</th>)}
+              <td className="def-x" />
+            </tr>
+            {rows('reviewers').map((p, i) => (
+              <tr key={`r${i}`}>
+                <PersonCells p={p} onChange={(x) => (defense.reviewers.length ? setAt('reviewers', i, x) : setDefense({ ...defense, reviewers: [x] }))} onRemove={defense.reviewers.length > 1 ? () => remove('reviewers', i) : undefined} />
+              </tr>
+            ))}
+            <tr>
+              <th className="def-vert" rowSpan={committeeRows + 1}><span>{tx("答辩委员会成员")}</span></th>
+              <th>{tx("职务")}</th>
+              {DEF_FIELDS.map((f) => <th key={f.k}>{f.label}</th>)}
+              <td className="def-x" />
+            </tr>
+            {block('chair', tx("主席"))}
+            {block('members', tx("委员"))}
+            {block('secretary', tx("秘书"))}
+            <tr>
+              <td className="def-res" colSpan={6}>
+                <div className="def-res-label">{tx("答辩委员会决议：")}</div>
+                <RichEditor className="is-flat" instanceKey="defense-resolution" value={defense.resolution} onChange={(v) => setDefense({ ...defense, resolution: v })} headings={false} blocks={false} placeholder={tx("答辩委员会听取了论文作者的报告，审阅了论文，经质询和讨论，认为……")} />
+              </td>
+              <td className="def-x" />
+            </tr>
+          </tbody>
+        </table>
+        <div className="row def-add">
+          <button type="button" className="btn btn-xs" onClick={() => add('reviewers')}>{tx("＋ 评阅人")}</button>
+          <button type="button" className="btn btn-xs" onClick={() => add('chair')}>{tx("＋ 主席")}</button>
+          <button type="button" className="btn btn-xs" onClick={() => add('members')}>{tx("＋ 委员")}</button>
+          <button type="button" className="btn btn-xs" onClick={() => add('secretary')}>{tx("＋ 秘书")}</button>
+        </div>
       </div>
-      <div className="card">
-        <h3>{tx("答辩委员会主席")}</h3>
-        <PersonRow p={defense.chair} onChange={(x) => setDefense({ ...defense, chair: x })} />
-        <h3 style={{ marginTop: 12 }}>{tx("委员")}</h3>
-        {defense.members.map((p, i) => <PersonRow key={i} p={p} onChange={(x) => setList('members', i, x)} />)}
-        <button type="button" className="btn btn-xs" onClick={() => setDefense({ ...defense, members: [...defense.members, blank] })}>{tx("＋ 委员")}</button>
-        <h3 style={{ marginTop: 12 }}>{tx("秘书")}</h3>
-        <PersonRow p={defense.secretary} onChange={(x) => setDefense({ ...defense, secretary: x })} />
-      </div>
-      <h3>{tx("答辩决议")}</h3>
-      <RichEditor instanceKey="defense-resolution" value={defense.resolution} onChange={(v) => setDefense({ ...defense, resolution: v })} headings={false} blocks={false} placeholder={tx("答辩委员会听取了论文作者的报告，审阅了论文，经质询与讨论，认为……")} />
     </>
   );
 }

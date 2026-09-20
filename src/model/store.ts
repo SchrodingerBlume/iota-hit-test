@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ThesisDoc, Settings, Info, RichDoc, Pages, Abbreviation, SymbolEntry, Defense, ImageAsset, NomenclatureOptions, Comment, OpenrightKey, TriBool } from './types';
+import type { ThesisDoc, Settings, Info, RichDoc, Pages, Abbreviation, SymbolEntry, Defense, DefensePerson, ImageAsset, NomenclatureOptions, Comment, OpenrightKey, TriBool } from './types';
 import { emptyDoc } from './types';
 import { defaultSettings } from './options';
 import { defaultInfo } from './info';
@@ -39,9 +39,9 @@ export const newDoc = (): ThesisDoc => ({
   defense: {
     enabled: false,
     reviewers: [person(), person()],
-    chair: person(),
+    chair: [person()],
     members: [person(), person(), person()],
-    secretary: person(),
+    secretary: [person()],
     resolution: emptyDoc(),
   },
   acknowledgement: emptyDoc(),
@@ -71,6 +71,8 @@ export function normalizeDoc(raw: Partial<ThesisDoc>): ThesisDoc {
   delete (doc.pages as any).nomenclature;
   doc.nomenclatureOptions = { ...base.nomenclatureOptions, ...(raw.nomenclatureOptions ?? {}) };
   doc.defense = { ...base.defense, ...(raw.defense ?? {}) };
+  // 旧工程：主席、秘书各一条记录 → 一串
+  for (const k of ['chair', 'secretary'] as const) if (!Array.isArray(doc.defense[k])) doc.defense[k] = [doc.defense[k] as unknown as DefensePerson];
   for (const k of ['abstractZh', 'abstractEn', 'body', 'conclusion', 'appendix', 'acknowledgement', 'resume'] as RichKey[]) {
     if (!doc[k] || doc[k].type !== 'doc') doc[k] = emptyDoc();
   }

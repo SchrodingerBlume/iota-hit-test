@@ -315,12 +315,13 @@ export const SWITCHES: SwitchDef<any>[] = [
   {
     key: 'appendixNumbering',
     label: t("附录编号"),
-    hint: t("附录 A / 附录 I / 附录 1 / 附录一"),
+    hint: t("模板的五档：附录A / 附录I / 附录1 / 附录一 / Appendix One（英文数词，只有英文档用得上）"),
     choices: [
-      { value: 'letters', label: 'A' },
-      { value: 'roman', label: 'I' },
-      { value: 'numbers', label: '1' },
-      { value: 'hanzi', label: t("一") },
+      { value: 'letters', label: 'A', hint: t("附录A ／ A.1 ／ 图A-1") },
+      { value: 'roman', label: 'I', hint: t("附录I ／ I.1 ／ 图I-1（指南没有，与字母档同形）") },
+      { value: 'numbers', label: '1', hint: t("附录1 ／ 1.1 ／ 附图1-1（图表加「附」，与正文分开）") },
+      { value: 'hanzi', label: t("一"), hint: t("附录一 ／ 一、／（一），人文社科与正文同一套写法") },
+      { value: 'words', label: 'One', hint: t("Appendix One ／ 一、／（一），人文社科的英文写法") },
     ],
     group: t("标题与页面"),
     place: 'appendix',
