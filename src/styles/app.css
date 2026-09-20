@@ -960,7 +960,6 @@ body.is-resizing .preview-stage { pointer-events: none; }
 /* 功能区：Word 的手感。自己占一层，弹出的格子、符号库不能被下面的内容盖住 */
 .ribbon { position: relative; z-index: 20; }
 .rb-tabs { padding-top: 1px; padding-bottom: 0; }
-.rb-tabs .rb-file { padding: 2px 10px !important; min-height: 26px; height: 26px; }
 .rb-history { display: inline-flex; align-items: center; }
 .rb-leading .rb-btn { min-width: 26px; height: 26px; min-height: 26px; padding: 3px; }
 /* 撤消下拉：Word 那样一列最近的操作，鼠标扫到哪一行就连同上面的一起选中，底下写「撤消 N 次操作」 */
@@ -1136,10 +1135,6 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .rb-leading .brand { gap: 7px; margin-right: 2px; font-size: 13.5px; }
 .rb-leading .brand b { font-weight: 650; }
 .rb-leading .brand-mark { width: 24px; height: 24px; border-radius: var(--r-s); font-size: 16px; }
-.rb-file { color: var(--ink) !important; background: none !important; border-radius: var(--r-s) !important; padding: 4px 12px !important; border-bottom: 0 !important; font-weight: 600; font-size: 13.5px; }
-.rb-file:hover, .rb-file.on { background: var(--panel-2) !important; }
-.rb-file-menu { left: 0; right: auto; transform-origin: top left; min-width: 260px; }
-.rb-file-menu button:disabled { opacity: 0.45; }
 .rb-proj { border: 0; background: none; color: var(--muted); font-size: 13px; padding: 4px 8px; border-radius: var(--r-s); max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rb-proj:hover, .rb-proj.on { background: var(--panel-2); color: var(--ink); }
 .rb-tab { padding: 6px 12px; border-radius: var(--r-s); border-bottom: 0; }
@@ -1210,7 +1205,6 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .rb-sep { height: 22px; align-self: center; margin: 0 3px; }
 .rb-sep.fui-Divider { min-height: 0; }
 .rb-inline { display: inline-flex; align-items: center; gap: 2px; }
-.rb-file { border-radius: var(--r-s) !important; font-weight: 600; }
 .rb-proj { color: var(--muted) !important; font-weight: 400 !important; max-width: 360px; overflow: hidden; }
 .rb-proj.on { background: var(--panel-2) !important; }
 .rb-pin { margin-left: 4px; }

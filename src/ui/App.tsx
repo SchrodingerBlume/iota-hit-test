@@ -29,7 +29,7 @@ import { usePreviewSurface } from './PreviewEditLayer';
 import { useTheme, type ThemePref } from './theme';
 import { useLayoutPrefs } from './layout';
 import { Ribbon, HistoryButtons } from './Ribbon';
-import { FluentProvider, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuItemRadio, MenuDivider, Button, Tooltip, Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions } from '@fluentui/react-components';
+import { FluentProvider, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuItemRadio, Button, Tooltip, Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions } from '@fluentui/react-components';
 import { Fold } from './Fold';
 import { SettingSwitch } from './TriSwitch';
 import { watchReflow } from './reflow';
@@ -273,12 +273,12 @@ export function App() {
     download(`${doc.info.title.split('\n')[0] || tx("论文")}.iota.json`, JSON.stringify({ ...doc, imageData: images }, null, 1), 'application/json');
   };
   const onExportDocx = async () => {
-    setBusy(tx("正在生成 Word 文档…"));
+    setBusy(tx("正在导出 Word 文档…"));
     try {
       const { buildDocx } = await import('../export/docx/build');
       const blob = await buildDocx(doc);
       download(`${doc.info.title.split('\n')[0] || tx("论文")}.docx`, blob, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    } catch (e) { alert(tx("生成 Word 文档失败：") + String((e as Error)?.message ?? e)); }
+    } catch (e) { alert(tx("无法导出 Word 文档：") + String((e as Error)?.message ?? e)); }
     finally { setBusy(null); }
   };
   const onExportTypst = () => {
@@ -318,29 +318,35 @@ export function App() {
       <FluentProvider theme={theme === 'dark' ? fluentDark : fluentLight} className="fluent-root">
       <FontRecovery />
       <div className="app" data-emph={doc.settings.emphKaishu === true ? 'kaishu' : 'italic'}>
-        {/* 顶栏并进功能区那一行：左边品牌与「文件」菜单，右边状态、导出、主题 */}
-        {(() => { const leading = (
+        {/* 顶栏并进功能区那一行：左边照 Word 的快速访问工具栏——主页、保存、撤消 / 恢复、导出；右边状态、主题 */}
+        {(() => { const canExportPdf = hasDocument && compile.status === 'ready' && !busy; const leading = (
           <span className="rb-leading">
-            <Menu positioning="below-start">
-              <MenuTrigger disableButtonEnhancement>
-                <Button appearance="subtle" className="rb-file" onMouseDown={(e) => e.preventDefault()}>{tx("文件")}</Button>
-              </MenuTrigger>
-              <MenuPopover className="rb-file-menu">
-                <MenuList>
-                  <MenuItem icon={<Save20Regular />} disabled={!hasDocument} onClick={onSaveProject}>{tx("下载副本（.iota.json）")}</MenuItem>
-                  <MenuDivider />
-                  <MenuItem icon={<DocumentPdf20Regular />} disabled={!hasDocument || compile.status !== 'ready' || !!busy} onClick={() => void onExportPdf()}>{tx("导出 PDF")}</MenuItem>
-                  <MenuItem icon={<Document20Regular />} disabled={!hasDocument} onClick={onExportTypst}>{tx("导出 Typst 源文件")}</MenuItem>
-                  <MenuItem icon={<Document20Regular />} disabled={!hasDocument} onClick={() => void onExportDocx()}>{tx("导出 Word 文档（.docx）")}</MenuItem>
-                </MenuList>
-              </MenuPopover>
-            </Menu>
-            {view === 'editor' && (
+            {view === 'editor' && (<>
               <Tooltip content={tx("主页")} relationship="label" withArrow positioning="below">
                 <Button appearance="subtle" size="small" className="rb-btn" icon={<Home20Regular />} onMouseDown={(e) => e.preventDefault()} onClick={() => setView('projects')} />
               </Tooltip>
-            )}
-            {view === 'editor' && <HistoryButtons />}
+              <Tooltip content={tx("保存：下载副本（.iota.json）")} relationship="label" withArrow positioning="below">
+                <Button appearance="subtle" size="small" className="rb-btn" icon={<Save20Regular />} disabled={!hasDocument} onMouseDown={(e) => e.preventDefault()} onClick={() => void onSaveProject()} />
+              </Tooltip>
+              <HistoryButtons />
+              <Menu positioning="below-start">
+                <span className="rb-split">
+                  <Tooltip content={tx("导出 PDF")} relationship="label" withArrow positioning="below">
+                    <Button appearance="subtle" size="small" className="rb-btn" icon={<DocumentPdf20Regular />} disabled={!canExportPdf} onMouseDown={(e) => e.preventDefault()} onClick={() => void onExportPdf()} />
+                  </Tooltip>
+                  <MenuTrigger disableButtonEnhancement>
+                    <Button appearance="subtle" size="small" className="rb-btn rb-menu" aria-label={tx("其他导出格式")} disabled={!hasDocument} onMouseDown={(e) => e.preventDefault()} />
+                  </MenuTrigger>
+                </span>
+                <MenuPopover>
+                  <MenuList>
+                    <MenuItem icon={<DocumentPdf20Regular />} disabled={!canExportPdf} onClick={() => void onExportPdf()}>{tx("导出 PDF")}</MenuItem>
+                    <MenuItem icon={<Document20Regular />} disabled={!hasDocument} onClick={onExportTypst}>{tx("导出 Typst 源文件")}</MenuItem>
+                    <MenuItem icon={<Document20Regular />} disabled={!hasDocument} onClick={() => void onExportDocx()}>{tx("导出 Word 文档（.docx）")}</MenuItem>
+                  </MenuList>
+                </MenuPopover>
+              </Menu>
+            </>)}
           </span>
         ); const trailing = (
           <span className="rb-trailing">
@@ -410,9 +416,9 @@ export function App() {
               <DialogBody>
                 <DialogTitle><span className="about-title"><Logo size={40} />iota-hit</span></DialogTitle>
                 <DialogContent>
-                  <p>{tx("哈尔滨工业大学学位论文在线编辑器。文档使用 iota-hit 模板排版；预览引擎基于 Typst 0.15.1，并加入接近 Microsoft Word 的中文断行规则。所有排版均在浏览器中完成。")}</p>
+                  <p>{tx("哈尔滨工业大学学位论文在线编辑器，使用 iota-hit 模板排版。预览引擎基于 Typst 0.15.1，并采用接近 Microsoft Word 的中文断行规则。全部排版均在浏览器中完成。")}</p>
                   <p>{tx("字体：Noto Serif / Sans CJK SC、FandolKai、TeX Gyre Termes / Heros、DejaVu Sans Mono；也可读本机字体切到 Windows / macOS 档。")}</p>
-                  <p className="muted">{tx("文档和图片保存在当前浏览器中。请定期通过“文件 → 下载副本”备份。")}</p>
+                  <p className="muted">{tx("文档和图片仅保存在当前浏览器中。请定期选择“文件 → 下载副本”进行备份。")}</p>
                   <p className="muted">{tx("导出 Word 时的参考文献由 citeproc-js（Frank Bennett，CPAL 许可）按 GB/T 7714 排版。")}</p>
                   <p className="muted">{tx("Typst 是 Typst GmbH 的商标；本站与 Typst GmbH、typst.ts 及各项目作者无关。随站分发的软件、字体、Typst 包的版权与许可证全文见")}<a href={`${import.meta.env.BASE_URL}licenses.txt`} target="_blank" rel="noopener">{tx("开源许可与声明")}</a>{tx("。")}</p>
                 </DialogContent>
