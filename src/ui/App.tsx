@@ -31,6 +31,7 @@ import { useLayoutPrefs } from './layout';
 import { Ribbon } from './Ribbon';
 import { FluentProvider, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuItemRadio, MenuDivider, Button, Tooltip, Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions } from '@fluentui/react-components';
 import { Fold } from './Fold';
+import { SettingSwitch } from './TriSwitch';
 import { watchReflow } from './reflow';
 import { Apps20Regular, DocumentAdd20Regular, Save20Regular, FolderOpen20Regular, DocumentPdf20Regular, Document20Regular, Info20Regular, WeatherSunny20Regular, WeatherMoon20Regular, Navigation20Regular, ChevronLeft20Regular } from '@fluentui/react-icons';
 import { fluentLight, fluentDark } from './fluent';
@@ -321,7 +322,7 @@ export function App() {
       case 'body': return <RichSection title={tx("正文")} richKey="body" headings placeholder={tx("输入正文…")} />;
       case 'conclusion': return <RichSection title={tx("结论")} richKey="conclusion" headings={false} />;
       case 'bibliography': return <BibPanel which="bibliography" />;
-      case 'appendix': return <RichSection title={tx("附录")} richKey="appendix" headings placeholder={tx("输入附录…")} />;
+      case 'appendix': return <RichSection title={tx("附录")} richKey="appendix" headings placeholder={tx("输入附录…")} extra={<div className="card"><SettingSwitch k="appendixNumbering" /></div>} />;
       case 'achievements': return <BibPanel which="achievements" />;
       case 'defense': return <DefensePanel />;
       case 'acknowledgement': return <RichSection title={tx("致谢")} richKey="acknowledgement" headings={false} blocks={false} />;

@@ -22,10 +22,11 @@ export function SettingsPanel() {
             </div>
           </div>
         ))}
+        {SWITCHES.filter((d) => d.place === 'type' && (!d.applies || d.applies(settings))).map((d) => <TriSwitch key={d.key} def={d} settings={settings} onChange={(v) => setSettings({ [d.key]: v } as any)} />)}
       </div>
       <FontCard />
       {SWITCH_GROUPS.map((g) => {
-        const defs = SWITCHES.filter((d) => d.group === g && (!d.applies || d.applies(settings)));
+        const defs = SWITCHES.filter((d) => d.group === g && !d.place && (!d.applies || d.applies(settings)));
         if (!defs.length) return null;
         return (
           <div className="card" key={g}>

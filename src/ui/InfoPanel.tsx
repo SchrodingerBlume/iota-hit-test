@@ -2,6 +2,7 @@ import { useStore } from '../model/store';
 import { INFO_FIELDS, INFO_GROUPS, type InfoFieldDef } from '../model/info';
 import type { Info } from '../model/types';
 import { TagInput } from './TagInput';
+import { SettingSwitch } from './TriSwitch';
 import { t } from '../i18n';
 
 function FieldInput({ f, info, setInfo }: { f: InfoFieldDef; info: Info; setInfo: (p: Partial<Info>) => void }) {
@@ -34,6 +35,7 @@ export function InfoPanel() {
                 </label>
               ))}
             </div>
+            {g === INFO_GROUPS[0] && <SettingSwitch k="titleEnXiaoer" />}
           </div>
         );
       })}

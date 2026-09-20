@@ -2,7 +2,7 @@
 import { useMemo } from 'react';
 import { useStore, type RichKey } from '../model/store';
 import { PAGE_DEFS, resolvePage } from '../model/pages';
-import { TriSeg, ON_OFF } from './TriSwitch';
+import { TriSeg, ON_OFF, SettingSwitch } from './TriSwitch';
 import type { Abbreviation, SymbolEntry, DefensePerson, Pages, OpenrightKey, ThesisDoc } from '../model/types';
 import { RichEditor } from '../editor/RichEditor';
 import { BibEditor } from './BibEditor';
@@ -114,7 +114,7 @@ export function IndexPanel() {
   );
 }
 
-export function RichSection({ title, lead, richKey, headings, blocks, placeholder }: { title: string; lead?: string; richKey: RichKey; headings: boolean; blocks?: boolean; placeholder?: string }) {
+export function RichSection({ title, lead, richKey, headings, blocks, placeholder, extra }: { title: string; lead?: string; richKey: RichKey; headings: boolean; blocks?: boolean; placeholder?: string; extra?: React.ReactNode }) {
   const part = richKey === 'body' ? 'body' : richKey === 'appendix' ? 'appendix' : 'other';
   const value = useStore((s) => s.doc[richKey]);
   const setRich = useStore((s) => s.setRich);
@@ -122,6 +122,7 @@ export function RichSection({ title, lead, richKey, headings, blocks, placeholde
     <>
       <h2>{title}</h2>
       {lead && <p className="lead">{lead}</p>}
+      {extra}
       <RichEditor instanceKey={richKey} value={value} onChange={(v) => setRich(richKey, v)} headings={headings} blocks={blocks ?? true} placeholder={placeholder} part={part} richKey={richKey} />
     </>
   );
@@ -143,6 +144,7 @@ export function AbstractPanel() {
   return (
     <>
       <h2>{tx("摘要")}</h2>
+      <div className="card"><SettingSwitch k="abstractKeywordsAbove" /></div>
       <h3>{tx("中文摘要")}</h3>
       <RichEditor instanceKey="abstractZh" richKey="abstractZh" value={zh} onChange={(v) => setRich('abstractZh', v)} headings={false} blocks={false} placeholder={tx("中文摘要……")} />
       <h3 style={{ marginTop: 20 }}>Abstract</h3>
@@ -191,6 +193,8 @@ export function NomenclaturePanel() {
           <button type="button" className="btn btn-xs" onClick={() => setAbbreviations([...abbreviations, { key: '', long: '', longEn: '' }])}>{tx("＋ 添加一行")}</button>
           <button type="button" className="btn btn-xs btn-ghost" onClick={() => setAdvanced((a) => !a)}>{advanced ? tx("收起高级选项") : tx("高级选项")}</button>
         </div>
+        <SettingSwitch k="abbreviationLinks" />
+        <SettingSwitch k="abbreviationIndexed" />
       </div>
       <div className="card">
         <h3>{tx("物理量符号")}</h3>
@@ -301,11 +305,11 @@ function openrightAuto(doc: ThesisDoc, orKey: OpenrightKey): { value: boolean; r
   return { value: false, reason: doc.settings.degreeLevel === 'doctor' ? tx("模板按学位：博士只内封右翻，各段都不跳") : tx("模板按学位：{{v0}}各段都不跳", { v0: doc.settings.degreeLevel === 'master' ? tx("硕士") : tx("本科") }) };
 }
 
-function OpenrightSwitch({ orKey, label }: { orKey: OpenrightKey; label: string }) {
+function OpenrightSwitch({ orKey, label, sub }: { orKey: OpenrightKey; label: string; sub?: boolean }) {
   const doc = useStore((s) => s.doc);
   const setOpenright = useStore((s) => s.setOpenright);
   const v = doc.openright?.[orKey] ?? 'auto';
-  return <TriSeg label={label} hint={tx("从右手页（奇数页）起，前面不够就补一张空白页；Auto 往上跟：所在部分 → 全篇总闸 → 模板按学位的表")} choices={ON_OFF} value={v} auto={openrightAuto(doc, orKey)} onChange={(x) => setOpenright({ [orKey]: x })} />;
+  return <TriSeg className={sub ? 'is-sub' : ''} label={label} hint={tx("从右手页（奇数页）起，前面不够就补一张空白页；Auto 往上跟：所在部分 → 全篇总闸 → 模板按学位的表")} choices={ON_OFF} value={v} auto={openrightAuto(doc, orKey)} onChange={(x) => setOpenright({ [orKey]: x })} />;
 }
 
 export function PagesPanel() {
@@ -325,7 +329,8 @@ export function PagesPanel() {
           {PAGE_DEFS.filter((d) => d.group === g).map((d) => (
             <div key={d.key} className="page-row">
               <PageSwitch pageKey={d.key} />
-              {OPENRIGHT_OF[d.key] && <OpenrightSwitch orKey={OPENRIGHT_OF[d.key]!} label={tx("右手页起")} />}
+              {OPENRIGHT_OF[d.key] && <OpenrightSwitch orKey={OPENRIGHT_OF[d.key]!} label={tx("右手页起")} sub />}
+              {d.key === 'tableOfContents' && <SettingSwitch k="tocLang" className="is-sub" />}
             </div>
           ))}
         </div>

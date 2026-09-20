@@ -237,7 +237,7 @@ code { font-family: var(--mono); font-size: 0.92em; }
 .field textarea { resize: vertical; min-height: 58px; font-family: inherit; }
 textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; line-height: 1.45; }
 
-.axis { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: start; padding: 9px 0; border-bottom: 1px dashed var(--line); }
+.axis { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: start; padding: 9px 0; border-bottom: 1px solid var(--line); }
 @container (max-width: 400px) { .axis { grid-template-columns: minmax(0, 1fr); gap: 4px; } .axis .lab { padding-top: 0; } }
 .axis:last-child { border-bottom: 0; }
 .axis .lab { font-weight: 600; padding-top: 5px; }
@@ -274,27 +274,25 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 
 /* ── 统一的分段控件（auto / 值） ─────────────────────
    Auto 段橙，布尔的开绿关红，多档的选中蓝；没选中的段灰字。 */
-/* 一行：名字 + 档位组，放不下时档位组自己折到下一行（每行按自己的宽度折，不是整页一刀切）；档位组太宽时里面的钮再折行 */
-.triseg { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px; padding: 9px 0; border-bottom: 1px dashed var(--line); }
-.triseg:last-child { border-bottom: 0; }
+/* 一行：名字 + 档位组，放不下时档位组自己折到下一行（每行按自己的宽度折，不是整页一刀切）；档位组太宽时里面的钮再折行。
+   选中的档只用主色浅底，不再一行一个橙 / 绿 / 红的实心块；自动档里那个「会是什么」的字用色相区分开 / 关 */
+.triseg { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.triseg:last-child { border-bottom: 0; padding-bottom: 4px; }
+.triseg:first-child { padding-top: 2px; }
 .triseg-lab { flex: 1 1 8em; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.triseg-note { flex-basis: 100%; height: 18px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
+.triseg-note { flex-basis: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.4; color: var(--muted); }
 .triseg-note b { font-weight: 600; }
 .triseg-seg { flex: 0 1 auto; max-width: 100%; display: flex; flex-wrap: wrap; gap: 1px; border-radius: var(--r-m); overflow: hidden; background: var(--line); border: 1px solid var(--line); }
-.triseg-seg button { flex: 1 0 auto; width: auto; min-width: 0; padding: 4px 11px; font-size: 12.5px; color: var(--muted); background: var(--panel); border: 0; transition: background-color var(--base) var(--ease), color var(--base) var(--ease); }
+.triseg-seg button { flex: 1 0 auto; width: auto; min-width: 0; padding: 4px 11px; font-size: 12.5px; color: var(--ink-2); background: var(--panel); border: 0; transition: background-color var(--fast) var(--ease), color var(--fast) var(--ease); }
 .triseg-seg button:hover { background: var(--panel-2); color: var(--ink); }
-.triseg-seg button.auto { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.02em; }
-.triseg-seg button.auto b { font-family: var(--sans); font-size: 12.5px; font-weight: 700; }
-.triseg-seg button.auto .triseg-arrow { opacity: 0.6; }
-.triseg-seg button.auto.on { background: var(--orange); color: #fff; }
-.triseg-seg button.auto.on b, .triseg-seg button.auto.on .triseg-arrow { color: #fff; opacity: 1; }
-.triseg-seg button.on.t-on { background: var(--ok); color: #fff; }
-.triseg-seg button.on.t-off { background: var(--danger); color: #fff; }
-.triseg-seg button.on.t-accent { background: var(--accent); color: #fff; }
-.triseg-note b.t-on, .triseg-seg button.auto:not(.on) b.t-on { color: var(--ok); }
-.triseg-note b.t-off, .triseg-seg button.auto:not(.on) b.t-off { color: var(--danger); }
-.triseg-note b.t-accent, .triseg-seg button.auto:not(.on) b.t-accent { color: var(--accent-ink); }
-.triseg-note b.t-mixed, .triseg-seg button.auto:not(.on) b.t-mixed { color: var(--orange); }
+.triseg-seg button.on { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+.triseg-seg button.auto { display: inline-flex; align-items: center; gap: 5px; }
+.triseg-seg button.auto b { font-weight: 600; }
+.triseg-seg button.auto b::before { content: '·'; margin-right: 5px; color: var(--muted); font-weight: 400; }
+.triseg-note b.t-on, .triseg-seg button.auto b.t-on { color: var(--ok); }
+.triseg-note b.t-off, .triseg-seg button.auto b.t-off { color: var(--danger); }
+.triseg-note b.t-accent, .triseg-seg button.auto b.t-accent { color: var(--accent-ink); }
+.triseg-note b.t-mixed, .triseg-seg button.auto b.t-mixed { color: var(--orange); }
 
 .toggle { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); }
 .toggle:last-child { border-bottom: 0; }
@@ -946,7 +944,15 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .rb-pop-menu button svg { width: 18px; height: 18px; color: var(--muted); }
 .table-text-dialog { max-width: 640px; }
 /* 索引登记表 */
-.page-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; }
+/* 页面设置：一页一组，该页的「右手页起」「目录语言」缩进挂在它下面 */
+.page-row { border-bottom: 1px solid var(--line); }
+.page-row:last-child { border-bottom: 0; }
+.page-row .triseg { border-bottom: 0; }
+.page-row .triseg:last-child { padding-bottom: 10px; }
+.triseg.is-sub { padding: 0 0 6px 16px; margin-top: -2px; }
+.triseg.is-sub .triseg-lab { font-weight: 500; color: var(--ink-2); }
+.triseg.is-sub .triseg-seg button { padding: 3px 9px; font-size: 12px; }
+.card .row + .triseg { margin-top: 10px; border-top: 1px solid var(--line); }
 .nav-with-outline .nav-row { display: flex; align-items: stretch; width: 100%; min-width: 0; }
 .nav-with-outline .nav-row > button:first-child { flex: 1; min-width: 0; width: auto; white-space: nowrap; }
 .nav-with-outline .nav-row > .outline-fold { display: inline-grid; flex: 0 0 26px; width: 26px; min-width: 26px; height: auto; align-self: stretch; margin-left: 2px; padding: 0; color: var(--ink-2); }

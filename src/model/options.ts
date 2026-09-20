@@ -100,6 +100,8 @@ export interface SwitchDef<V extends string | boolean = boolean> {
   resolve: (s: Settings) => Resolved<V>;
   applies?: (s: Settings) => boolean;
   group: string;
+  /** 只关乎某一页的开关放到那一页去（摘要、缩略语、附录、页面设置、论文信息、论文类型），不在论文设置里列 */
+  place?: 'abstract' | 'nomenclature' | 'appendix' | 'pages' | 'info' | 'type';
 }
 
 const isReport = (s: Settings) => s.stage !== 'final';
@@ -203,6 +205,7 @@ export const SWITCHES: SwitchDef<any>[] = [
     hint: t("封面与内封的英文题目太长时可强制缩成小二号"),
     choices: onOff,
     group: t("标题与页面"),
+    place: 'info',
     resolve: () => ({ value: false, reason: t("按题目长度自动让步，排不下才缩") }),
   },
   {
@@ -227,6 +230,7 @@ export const SWITCHES: SwitchDef<any>[] = [
     hint: t("将正文中的缩写链接到缩略语表。"),
     choices: onOff,
     group: t("缩略语与列表"),
+    place: 'nomenclature',
     resolve: () => ({ value: true, reason: t("默认链") }),
   },
   {
@@ -235,6 +239,7 @@ export const SWITCHES: SwitchDef<any>[] = [
     hint: t("开了索引页时，缩写要不要顺带进索引"),
     choices: onOff,
     group: t("缩略语与列表"),
+    place: 'nomenclature',
     resolve: () => ({ value: false, reason: t("默认不登记") }),
   },
   {
@@ -280,6 +285,7 @@ export const SWITCHES: SwitchDef<any>[] = [
       { value: 'bottom', label: t("置于页底") },
     ],
     group: t("标题与页面"),
+    place: 'abstract',
     resolve: () => ({ value: 'line', reason: t("指南：关键词在正文之后隔一行") }),
   },
   {
@@ -292,6 +298,7 @@ export const SWITCHES: SwitchDef<any>[] = [
       { value: 'both', label: t("中英两份") },
     ],
     group: t("标题与页面"),
+    place: 'pages',
     resolve: (s) => {
       if (s.lang === 'en') return { value: 'en', reason: t("英文档只出英文目录") };
       return s.degreeLevel === 'doctor' ? { value: 'both', reason: t("博士档中英两份（范例）") } : { value: 'zh', reason: t("硕本只有中文目录") };
@@ -316,6 +323,7 @@ export const SWITCHES: SwitchDef<any>[] = [
       { value: 'hanzi', label: t("一") },
     ],
     group: t("标题与页面"),
+    place: 'appendix',
     resolve: (s) => {
       if (s.lang === 'en') return { value: 'letters', reason: t("英文档一律字母") };
       if (s.category === 'hass') return { value: 'hanzi', reason: t("人文社科类用汉字") };
@@ -334,6 +342,7 @@ export const SWITCHES: SwitchDef<any>[] = [
       { value: 'none', label: t("不印") },
     ],
     group: t("标题与页面"),
+    place: 'type',
     applies: (s) => s.degreeLevel !== 'bachelor',
     resolve: (s) => (s.form === 'practice'
       ? { value: 'professional', reason: t("实践成果只有专业学位才交") }
