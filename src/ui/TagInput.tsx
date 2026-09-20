@@ -4,6 +4,7 @@
 //   双击或选中后回车 → 就地改；改空 = 删
 //   ✕ 删；拖着换位置（别的标签让开），⌥ + ← / → 也能挪
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent as RPointerEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { t as tx } from '../i18n';
 
@@ -146,10 +147,12 @@ export function TagInput({ value, onChange, placeholder, dataInfo }: { value: st
       <input ref={input} data-info={dataInfo} value={draft} placeholder={value.length ? tx("回车添加") : placeholder ?? tx("输入后回车")} onChange={(e) => { setDraft(e.target.value); if (sel !== null) setSel(null); }} onKeyDown={onKey}
         onPaste={(e) => { const text = e.clipboardData.getData('text'); if (SEP.test(text)) { e.preventDefault(); add(draft + text); setDraft(''); } }}
         onBlur={() => { commit(); setSel(null); }} />
-      {drag?.active && (
+      {/* 提起来的那个挂到 body 上：编辑区容器有 container-type（布局包含），position: fixed 会以它为准，跟着滚动一起跑偏 */}
+      {drag?.active && createPortal(
         <span className="tag-item is-lifted" style={{ position: 'fixed', left: drag.x - drag.ox, top: drag.y - drag.oy, width: drag.w, height: drag.h, pointerEvents: 'none', zIndex: 50 }}>
           {value[drag.from]}
-        </span>
+        </span>,
+        document.body,
       )}
     </div>
   );
