@@ -798,18 +798,22 @@ html.theme-anim :not(svg, svg *) { transition: background-color 320ms var(--ease
 /* 收起 / 展开全站一个样（Fold / FoldIcon）：朝右的 chevron，开着就转 90° */
 .fold-btn { display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; background: none; border-radius: var(--r-s); color: var(--muted); cursor: pointer; transition: background-color var(--fast) var(--ease), color var(--fast) var(--ease); }
 .fold-btn:hover { background: var(--panel-2); color: var(--ink); }
-.fold-btn svg, .fold-ico svg { width: 16px; height: 16px; display: block; transition: transform var(--base) var(--ease-spring); }
-.fold-btn.is-open svg, .fold-ico.is-open svg { transform: rotate(90deg); }
+.fold-btn .rb-caret, .fold-ico .rb-caret { opacity: 1; transform: rotate(-90deg); transition: transform var(--base) var(--ease-spring); }
+.fold-btn.is-open .rb-caret, .fold-ico.is-open .rb-caret { transform: none; }
 .fold-ico { display: inline-grid; place-items: center; width: 16px; height: 16px; color: var(--muted); }
 /* 上下开合的（功能区）：收着朝下、开着朝上 */
-.fold-btn.is-vert svg { transform: rotate(90deg); }
-.fold-btn.is-vert.is-open svg { transform: rotate(-90deg); }
+.fold-btn.is-vert .rb-caret { transform: none; }
+.fold-btn.is-vert.is-open .rb-caret { transform: rotate(180deg); }
+/* 原生 details 的开合标记也换成它 */
+summary { list-style: none; cursor: pointer; }
+summary::-webkit-details-marker { display: none; }
+summary::before { content: ''; display: inline-block; width: 0; height: 0; border: 3px solid transparent; border-top-color: currentColor; margin-right: 6px; vertical-align: 2px; transform: rotate(-90deg); transition: transform var(--base) var(--ease-spring); }
+details[open] > summary::before { transform: none; }
 /* 收放左栏的钮骑在左栏右边线上（VS Code 的做法），收起后滑到窗口左边，和列宽一起动；开着朝左、收起朝右 */
 .nav-toggle { position: absolute; z-index: 8; top: 10px; left: 1px; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 50%; background: var(--panel); box-shadow: var(--shadow-1); }
 .nav-toggle.is-open { left: calc(200px - 11px); }
 .nav-toggle:hover { border-color: var(--line-2); }
-.nav-toggle svg { width: 14px; height: 14px; }
-.nav-toggle.is-open svg { transform: rotate(180deg); }
+.nav-toggle.is-open .rb-caret { transform: rotate(90deg); }
 .splitter { cursor: col-resize; background: transparent; position: relative; }
 .splitter::before { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: var(--line); transform: translateX(-50%); transition: background-color var(--fast) var(--ease), width var(--fast) var(--ease); }
 .splitter::after { content: ''; position: absolute; top: 50%; left: 50%; width: 3px; height: 32px; border-radius: var(--r-pill); background: var(--line-2); opacity: 0.65; transform: translate(-50%, -50%); transition: background-color var(--fast) var(--ease), opacity var(--fast) var(--ease); }

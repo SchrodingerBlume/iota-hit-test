@@ -373,7 +373,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
           {collapsed && peek && !shortScreen && <Button size="small" appearance="primary" icon={<Pin20Regular />} className="rb-pin" onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(false)}>{tx("固定")}</Button>}
           {!minimal && !shortScreen && (
             <Tooltip content={collapsed ? tx("固定功能区（双击选项卡也行）") : tx("收起功能区（双击选项卡也行）")} relationship="label" positioning="below">
-              <button type="button" className={`fold-btn is-vert rb-collapse ${collapsed ? '' : 'is-open'}`} aria-expanded={!collapsed} aria-label={collapsed ? tx("固定功能区") : tx("收起功能区")} onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(!collapsed)}><ChevronRight20Regular /></button>
+              <button type="button" className={`fold-btn is-vert rb-collapse ${collapsed ? '' : 'is-open'}`} aria-expanded={!collapsed} aria-label={collapsed ? tx("固定功能区") : tx("收起功能区")} onMouseDown={(e) => e.preventDefault()} onClick={() => toggleCollapsed(!collapsed)}><i className="rb-caret" /></button>
             </Tooltip>
           )}
         </div>
