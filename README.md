@@ -135,8 +135,8 @@ npm run test:compile # 不开浏览器，在 Node 里用同一颗 wasm 编一份
 
 预览用的编译器 wasm 是 Typst 0.15.1 加上本机 fork `typst-with-msword-linebreaks` 的 `#set par(linebreaks: "msword")`：
 按 Word 的规则断行、排字符网格、压缩标点、标点悬挂。兼容模式可选：auto ＝ 11（学校范例是 Word 2003 的 .doc，老模式行末落在整格上、12.4543 步进比版心短 1.8pt，Word macOS 导出的博士范例 PDF 实测 508.0）；作者原稿是 2013+ 的 docx（行末贴版心）就选 15，杨文艺那份 JSON 显式写的 15；选老模式时行末不贴边是 Word 的真实行为，不是错；紧缩、右缩进按中文 Word 的默认写死。
-设置里是「断行引擎」（Word 式 / Typst 最优 / Typst 贪心）、「Word 兼容模式」，以及 fork 认的那几个 Word 开关：标点压缩（字符间距控制 `compress`）、
-字体紧缩（样式的 kern）、调整中西文字符宽度（`balance-widths`）、网格下自动调整右缩进、开了西文断字后的连续断字行数上限与大写单词断字
+设置里是「断行引擎」（Word 式 / Typst 最优 / Typst 贪心）、「兼容模式」，以及 fork 认的那几个 Word 开关（都照 Word 自己的叫法）：字符间距控制（不压缩 / 只压缩标点符号，`compress`）、
+为字体调整字间距（样式的 kern）、平衡 SBCS 字符和 DBCS 字符（`balance-widths`）、定义文档网格时自动调整右缩进、开了自动断字后的「连续断字次数限为」与「单词的字母全部大写时断字」
 （`consecutive-hyphens` / `hyphenate-caps`；msword 档的断字照 Word：0.25in 断字区、先整词后音节）。这些只进预览，**导出的 .typ 不带**，原版 Typst 照编；
 **导出 Word 时按 Word 的口写进 docx**：`compatSetting compatibilityMode`、`characterSpacingControl`、`balanceSingleByteDoubleByteWidth`、
 Normal 样式的 `w:kern` 与 `adjustRightInd`、`autoHyphenation / hyphenationZone / consecutiveHyphenLimit / doNotHyphenateCaps`，预览里怎么断，Word 里就怎么断。

@@ -58,11 +58,12 @@ export function SettingSwitch({ k, className }: { k: string; className?: string 
   return <TriSwitch def={def} settings={settings} onChange={(v) => setSettings({ [def.key]: v } as any)} className={className} />;
 }
 
+const onOffChoices = (def: SwitchDef<any>) => (def.choices.every((c: Choice<any>) => c.label === (c.value ? t("开") : t("关"))) ? def.choices : null);
 /** 论文设置里的开关：从登记表取档位与 auto 映射 */
 export function TriSwitch({ def, settings, onChange, className }: { def: SwitchDef<any>; settings: Settings; onChange: (value: 'auto' | any) => void; className?: string }) {
   const raw = settings[def.key] as 'auto' | any;
   const { auto } = resolveSwitch<any>(def, settings);
   const isBool = def.choices.length === 2 && def.choices.every((c) => typeof c.value === 'boolean');
-  const choices: SegChoice[] = isBool ? ON_OFF : (def.choices as Choice<any>[]).map((c) => ({ value: c.value, label: c.label, hint: c.hint, tone: 'accent' as const }));
+  const choices: SegChoice[] = isBool && def.choices === onOffChoices(def) ? ON_OFF : (def.choices as Choice<any>[]).map((c) => ({ value: c.value, label: c.label, hint: c.hint, tone: c.tone ?? (isBool ? (c.value ? 'on' : 'off') : 'accent') }));
   return <TriSeg label={def.label} hint={def.hint} choices={choices} value={raw} auto={auto} onChange={onChange} className={className} />;
 }

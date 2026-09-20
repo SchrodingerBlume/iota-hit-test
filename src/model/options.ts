@@ -10,6 +10,8 @@ export interface Choice<V = string> {
   value: V;
   label: string;
   hint?: string;
+  /** 布尔档也可以不叫「开 / 关」（Word 的单选组照它的叫法），色相照开关走 */
+  tone?: 'on' | 'off' | 'accent';
 }
 
 /** 下拉框（轴）：值不可能是 auto，模板对它们都有默认档但语义上必须选一个 */
@@ -324,8 +326,8 @@ export const SWITCHES: SwitchDef<any>[] = [
   },
   {
     key: 'hyphenate',
-    label: t("西文断字"),
-    hint: t("行尾的英文单词按音节断开加连字符（Typst 的 text.hyphenate）。模板默认关——两份范例的 Word 都没开自动断字；两端对齐下西文多时开了更匀"),
+    label: t("自动断字"),
+    hint: t("Word「布局 → 断字 → 自动」：行尾的英文单词按音节断开加连字符（Typst 的 text.hyphenate；Word 式断行下照 Word 的规则——0.25 英寸断字区、先整词后音节）。模板默认关——两份范例的 Word 都没开；两端对齐下西文多时开了更匀。导出 docx 写进 autoHyphenation"),
     choices: onOff,
     group: t("字体"),
     resolve: () => ({ value: false, reason: t("模板默认不断字（照 Word 的默认）") }),
@@ -384,22 +386,25 @@ SWITCHES.push({
   resolve: () => ({ value: 'msword', reason: t("照 Word 排，与范例的行末一致") }),
 }, {
   key: 'wordCompat',
-  label: t("Word 兼容模式"),
+  label: t("兼容模式"),
   hint: t("Word 式断行按哪一版 Word 的规则排。2013+ 行末贴版心；2003～2010 行末落在整格上，会比版心短一点。学校的 .doc 模板不转换直接另存，仍是老模式那一档"),
   choices: [
-    { value: '11', label: t("2003") },
-    { value: '12', label: t("2007") },
-    { value: '14', label: t("2010") },
-    { value: '15', label: t("2013+") },
+    { value: '11', label: 'Word 2003' },
+    { value: '12', label: 'Word 2007' },
+    { value: '14', label: 'Word 2010' },
+    { value: '15', label: 'Word 2013-2021' },
   ],
   group: t("排版引擎"),
   applies: (s) => (s.linebreaker === 'auto' ? 'msword' : s.linebreaker) === 'msword',
   resolve: () => ({ value: '11', reason: t("学校范例是 Word 2003 的 .doc") }),
 }, {
   key: 'wordCompress',
-  label: t("标点压缩"),
-  hint: t("Word「字符间距控制」：压缩标点（行末的闭标点压半格、挂出）还是不压缩（标点保持全宽、永不挂出，行末遇到开标点就把前一个字带下去）。预览按此断行，导出 docx 写进 characterSpacingControl"),
-  choices: onOff,
+  label: t("字符间距控制"),
+  hint: t("Word「选项 → 版式 → 字符间距控制」那组单选：只压缩标点符号（行末的闭标点压半格、挂出）还是不压缩（标点保持全宽、永不挂出，行末遇到开标点就把前一个字带下去）。预览按此断行，导出 docx 写进 characterSpacingControl"),
+  choices: [
+    { value: false, label: t("不压缩"), tone: 'off' },
+    { value: true, label: t("只压缩标点符号"), tone: 'on' },
+  ],
   group: t("排版引擎"),
   applies: (s) => (s.linebreaker === 'auto' ? 'msword' : s.linebreaker) === 'msword',
   resolve: () => ({ value: true, reason: t("中文 Word 默认「只压缩标点符号」") }),
@@ -413,24 +418,24 @@ SWITCHES.push({
   resolve: () => ({ value: true, reason: t("中文 Word 的默认样式开着") }),
 }, {
   key: 'wordBalanceWidths',
-  label: t("调整中西文字符宽度"),
-  hint: t("Word 兼容选项「调整单字节与双字节字符间距」（balanceSingleByteDoubleByteWidth）：开着时字符网格下西文字形只加网格余量的一半，关了加整份。预览按此断行，导出 docx 写进兼容选项"),
+  label: t("平衡 SBCS 字符和 DBCS 字符"),
+  hint: t("Word「选项 → 高级 → 兼容性选项」里的这一条（balanceSingleByteDoubleByteWidth，SBCS 单字节 = 西文，DBCS 双字节 = 中文）：开着时字符网格下西文字形只加网格余量的一半，关了加整份。预览按此断行，导出 docx 写进兼容选项"),
   choices: onOff,
   group: t("排版引擎"),
   applies: (s) => (s.linebreaker === 'auto' ? 'msword' : s.linebreaker) === 'msword',
   resolve: () => ({ value: true, reason: t("中文 Word 新建的文档都开着") }),
 }, {
   key: 'wordAdjustRightIndent',
-  label: t("网格下自动调整右缩进"),
-  hint: t("段落的「如果定义了文档网格，则自动调整右缩进」：只在 2003～2010 兼容档带字符网格时起作用。预览按此断行，导出 docx 写进正文样式"),
+  label: t("定义文档网格时自动调整右缩进"),
+  hint: t("Word「段落 → 中文版式」那一勾：只在 2003～2010 兼容档带字符网格时起作用。预览按此断行，导出 docx 写进正文样式（adjustRightInd）"),
   choices: onOff,
   group: t("排版引擎"),
   applies: (s) => (s.linebreaker === 'auto' ? 'msword' : s.linebreaker) === 'msword' && (s.wordCompat === 'auto' || s.wordCompat !== '15'),
   resolve: () => ({ value: true, reason: t("Word 段落的默认") }),
 }, {
   key: 'hyphenLimit',
-  label: t("连续断字行数上限"),
-  hint: t("开了西文断字时，最多几行连续以连字符结尾（Word 的「连续断字次数」）。预览按此断行，导出 docx 写进 consecutiveHyphenLimit"),
+  label: t("连续断字次数限为"),
+  hint: t("Word「布局 → 断字 → 断字选项」里的这一项：最多几行连续以连字符结尾。预览按此断行，导出 docx 写进 consecutiveHyphenLimit"),
   choices: [
     { value: '0', label: t("不限") },
     { value: '2', label: '2' },
@@ -441,8 +446,8 @@ SWITCHES.push({
   resolve: () => ({ value: '0', reason: t("Word 的默认不限") }),
 }, {
   key: 'hyphenateCaps',
-  label: t("大写单词也断字"),
-  hint: t("开了西文断字时，全大写的单词（缩写、机构名）断不断（Word 的「大写单词断字」）。预览按此断行，导出 docx 写进 doNotHyphenateCaps"),
+  label: t("单词的字母全部大写时断字"),
+  hint: t("Word「布局 → 断字 → 断字选项」里的这一勾：全大写的单词（缩写、机构名）断不断。预览按此断行，导出 docx 写进 doNotHyphenateCaps"),
   choices: onOff,
   group: t("排版引擎"),
   applies: (s) => s.hyphenate === true,
