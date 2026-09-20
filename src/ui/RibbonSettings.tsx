@@ -6,7 +6,7 @@ export function ChoiceMenu<V extends string>({ label, hint, choices, value, onCh
     <Menu checkedValues={{ v: [value] }} onCheckedValueChange={(_, d) => onChange(d.checkedItems[0] as V)} positioning="below-start">
       <MenuTrigger disableButtonEnhancement>
         <Tooltip content={hint ?? label} relationship="description" positioning="below" withArrow>
-          <MenuButton appearance="subtle" size="small" className="rb-tri" disabled={disabled} onMouseDown={(e) => e.preventDefault()}>
+          <MenuButton appearance="subtle" size="small" className="rb-tri" menuIcon={null} disabled={disabled} onMouseDown={(e) => e.preventDefault()}>
             <span className="rb-tri-name">{label}</span>
             <span className="rb-tri-val is-val">{cur}</span>
           </MenuButton>

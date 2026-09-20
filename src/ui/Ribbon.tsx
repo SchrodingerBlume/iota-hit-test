@@ -120,9 +120,9 @@ export function HistoryButtons() {
         <PopoverTrigger disableButtonEnhancement>
           {(trigger) => (
             <Tooltip content={undoTop ? tx("撤消 {{s}} (⌘Z)", { s: entryText(undoTop) }) : tx("无法撤消 (⌘Z)")} relationship="description" withArrow positioning="below" onVisibleChange={(_, d) => { if (d.visible) bump((n) => n + 1); }}>
-              <SplitButton appearance="subtle" size="small" icon={<ArrowUndo20Regular />} menuIcon={null} disabled={!undoTop}
+              <SplitButton appearance="subtle" size="small" className="rb-split" icon={<ArrowUndo20Regular />} menuIcon={null} disabled={!undoTop}
                 primaryActionButton={{ className: 'rb-btn', 'aria-label': tx("撤消"), onMouseDown: (e: React.MouseEvent) => e.preventDefault(), onClick: () => refocusPreviewAfter(() => ed!.chain().focus().undo().run()) }}
-                menuButton={{ ...(trigger as MenuButtonProps), className: 'rb-btn rb-menu rb-undo-arrow', 'aria-label': tx("撤消列表"), onMouseDown: (e: React.MouseEvent) => e.preventDefault() }} />
+                menuButton={{ ...(trigger as MenuButtonProps), className: 'rb-btn rb-menu', 'aria-label': tx("撤消列表"), onMouseDown: (e: React.MouseEvent) => e.preventDefault() }} />
             </Tooltip>
           )}
         </PopoverTrigger>
@@ -423,17 +423,19 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                   </Row>
                   <Row>
                     <B title={tx("空回车段：连续空段落会排成 #enter(n)，真占一行")} icon={<ArrowEnter20Regular />} disabled={none} run={() => chain().splitBlock().run()} />
-                    <B title={tx("显示 / 隐藏编辑标记（¶、空格、顶格符；只在编辑区与预览里画，PDF 不受影响）")} icon={<TextParagraph20Regular />} on={marksOn} run={toggleMarks} />
-                    <Menu checkedValues={{ k: (['paragraph', 'space', 'gutter'] as const).filter((k) => markKinds[k]) }} onCheckedValueChange={(_, d) => { for (const k of ['paragraph', 'space', 'gutter'] as const) usePreviewMarks.getState().setKind(k, d.checkedItems.includes(k)); }} positioning="below-start">
-                      <MenuTrigger disableButtonEnhancement>
-                        <span className="rb-keep"><B title={tx("选择显示哪些标记")} menu run={() => {}} /></span>
-                      </MenuTrigger>
-                      <MenuPopover><MenuList>
-                        <MenuItemCheckbox name="k" value="paragraph">{tx("段落标记 ¶")}</MenuItemCheckbox>
-                        <MenuItemCheckbox name="k" value="space">{tx("空格 ·")}</MenuItemCheckbox>
-                        <MenuItemCheckbox name="k" value="gutter">{tx("顶格符 ⇤")}</MenuItemCheckbox>
-                      </MenuList></MenuPopover>
-                    </Menu>
+                    <span className="rb-split">
+                      <B title={tx("显示 / 隐藏编辑标记（¶、空格、顶格符；只在编辑区与预览里画，PDF 不受影响）")} icon={<TextParagraph20Regular />} on={marksOn} run={toggleMarks} />
+                      <Menu checkedValues={{ k: (['paragraph', 'space', 'gutter'] as const).filter((k) => markKinds[k]) }} onCheckedValueChange={(_, d) => { for (const k of ['paragraph', 'space', 'gutter'] as const) usePreviewMarks.getState().setKind(k, d.checkedItems.includes(k)); }} positioning="below-start">
+                        <MenuTrigger disableButtonEnhancement>
+                          <span className="rb-keep"><B title={tx("选择显示哪些标记")} menu run={() => {}} /></span>
+                        </MenuTrigger>
+                        <MenuPopover><MenuList>
+                          <MenuItemCheckbox name="k" value="paragraph">{tx("段落标记 ¶")}</MenuItemCheckbox>
+                          <MenuItemCheckbox name="k" value="space">{tx("空格 ·")}</MenuItemCheckbox>
+                          <MenuItemCheckbox name="k" value="gutter">{tx("顶格符 ⇤")}</MenuItemCheckbox>
+                        </MenuList></MenuPopover>
+                      </Menu>
+                    </span>
                   </Row>
                 </Rows>
               </Group>
