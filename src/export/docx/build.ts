@@ -3,7 +3,7 @@
 // 不经过 Typst；编号用 numbering.ts 算，参考文献用 GB/T 7714 的 CSL 排。封面、内封、答辩决议、声明这些表单页在 pages.ts，
 // 位置照模板排出来的 PDF 逐行量的。页序照模板：封面、内封（中、英）、摘要、Abstract、符号及缩略语、目录、正文、结论、参考文献、附录、成果、答辩决议、声明、致谢、简历
 import {
-  Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, TabStopType, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle, SectionType,
+  Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, TabStopType, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle, SectionType, Bookmark,
   FootnoteReferenceRun, TableOfContents, PageBreak, PageNumber, Header, Footer, NumberFormat, CommentRangeStart, CommentRangeEnd, CommentReference,
   ImportedXmlComponent, LineRuleType, DocumentGridType, ExternalHyperlink, VerticalAlign, SimpleField, type ParagraphChild, type ISectionOptions,
 } from 'docx';
@@ -67,12 +67,18 @@ function applyLayout(L: Layout, d: LayoutDict | undefined, baseSize: number): La
     out.margin.top = pick('top', y) ?? out.margin.top; out.margin.bottom = pick('bottom', y) ?? out.margin.bottom;
     out.margin.left = pick('left', lengthPt(dict.inside) ?? x) ?? out.margin.left; out.margin.right = pick('right', lengthPt(dict.outside) ?? x) ?? out.margin.right;
   }
-  const size = lengthPt(d['base-size']) ?? baseSize;
+  const size = lengthPt(d['font-size'] ?? d['base-size']) ?? baseSize;
   const lp = lengthPt(d['line-pitch']);
   if (lp !== undefined) out.grid = { ...(out.grid ?? { linePitch: tw(lp) }), linePitch: tw(lp) };
   if ('char-pitch' in d) { const cp = lengthPt(d['char-pitch']); if (cp === undefined) { if (out.grid) delete out.grid.charSpace; } else out.grid = { ...(out.grid ?? { linePitch: L.grid?.linePitch ?? 391 }), charSpace: Math.round((cp - size) * 4096) }; }
   if ('char-excess' in d) { const ce = lengthPt(d['char-excess']); if (ce !== undefined) out.grid = { ...(out.grid ?? { linePitch: L.grid?.linePitch ?? 391 }), charSpace: Math.round(ce * 4096) }; }
   if (out.grid && lp !== undefined) out.line = tw(lp);
+  // grid 四档（模板 f466dce 起照 Word 对话框的词）：none 无网格、"lines" 只指定行网格、"lines-and-chars" 指定行和字符网格
+  if ('grid' in d) {
+    const g = d.grid;
+    if (g === null || g === 'none' || g === false) out.grid = undefined;
+    else if (g === 'lines') { if (out.grid) delete out.grid.charSpace; else out.grid = { linePitch: L.grid?.linePitch ?? 391 }; }
+  }
   for (const k of ['header', 'footer'] as const) {
     const h = d[k];
     if (h === false || h === 'none') { out[k] = false; continue; }
@@ -201,7 +207,19 @@ function inline(ctx: Ctx, nodes: PMNode[] = [], base: { size?: number; font?: st
       }
       case 'hardBreak': push(new TextRun({ break: 1 })); break;
       case 'mathInline': { const m = mathXml(String(n.attrs?.src ?? ''), String(n.attrs?.mode ?? 'latex'), ctx); push(m ?? new TextRun({ text: String(n.attrs?.src ?? ''), italics: true })); break; }
-      case 'ref': { const t = ctx.nums.get(String(n.attrs?.target ?? '')); push(new TextRun({ text: t ? tidy(t.ref) : '??', size: base.size })); break; }
+      case 'ref': {
+        const target = String(n.attrs?.target ?? '');
+        const t = ctx.nums.get(target);
+        if (!t) { push(new TextRun({ text: '??', size: base.size })); break; }
+        // 号那一段是 REF 域指着题注 / 标题里的书签，前后的「式」「节」照文字
+        const ref = tidy(t.ref), num = tidy(t.number);
+        const at = num ? ref.indexOf(num) : -1;
+        if (at < 0) { push(new TextRun({ text: ref, size: base.size })); break; }
+        if (at > 0) push(new TextRun({ text: ref.slice(0, at), size: base.size }));
+        push(new SimpleField(`REF ${bmName(target)} \\h`, num));
+        if (at + num.length < ref.length) push(new TextRun({ text: ref.slice(at + num.length), size: base.size }));
+        break;
+      }
       case 'cite': push(new TextRun({ text: citeText(ctx, String(n.attrs?.keys ?? '').split(/[,，;；\s]+/).filter(Boolean)), superScript: true })); break;
       case 'footnote': {
         const id = ctx.nextFootnote++;
@@ -238,11 +256,19 @@ const isNewPage = (b: Block): b is NewPage => b === NEW_PAGE;
 const centered = (children: ParagraphChild[], extra: object = {}) => new Paragraph({ alignment: AlignmentType.CENTER, indent: { firstLine: 0 }, children, ...extra });
 /** 题注串：[@key] 排成上标的文献号 */
 const captionRuns = (ctx: Ctx, s: string): TextRun[] => s.split(CAPTION_CITE).flatMap((piece, i) => (i % 2 ? [new TextRun({ text: citeText(ctx, piece.split(/[,，;；\s]+/).filter(Boolean)), superScript: true })] : piece ? [new TextRun({ text: piece })] : []));
-const captionPara = (ctx: Ctx, num: string, title: PMNode[] | string, en?: string, opts: { before?: number; after?: number } = {}) => {
+/** 书签名：Word 只认字母数字下划线、40 字以内 */
+const bmName = (label: string) => ('R' + label.replace(/[^A-Za-z0-9_]/g, '_')).slice(0, 40);
+/** 号套进书签：正文里的 REF 域指着它，Word 里 F9 能更新、Ctrl+点能跳 */
+const numRun = (ctx: Ctx, n: PMNode, prefix: string, text: string): ParagraphChild => {
+  const label = labelOf(n.attrs, prefix);
+  return label ? new Bookmark({ id: bmName(label), children: [new TextRun({ text })] }) : new TextRun({ text });
+};
+const captionPara = (ctx: Ctx, num: string, title: PMNode[] | string, en?: string, opts: { before?: number; after?: number; node?: PMNode; prefix?: string } = {}) => {
   const kids = typeof title === 'string' ? captionRuns(ctx, title) : inline(ctx, title);
   const bilingual = ctx.s.lang !== 'en' && !!en && sw<boolean>('captionBilingual', ctx.s);
   const sp = (first: boolean, last: boolean) => ({ before: first && opts.before ? Math.round(opts.before * ctx.L.line) : 0, after: last && opts.after ? Math.round(opts.after * ctx.L.line) : 0 });
-  const out = [new Paragraph({ style: 'Caption', spacing: sp(true, !bilingual), children: [new TextRun({ text: num ? `${num}  ` : '' }), ...kids] })];
+  const numKids: ParagraphChild[] = num ? [opts.node && opts.prefix ? numRun(ctx, opts.node, opts.prefix, num) : new TextRun({ text: num }), new TextRun({ text: '  ' })] : [];
+  const out = [new Paragraph({ style: 'Caption', spacing: sp(true, !bilingual), children: [...numKids, ...kids] })];
   if (bilingual) out.push(new Paragraph({ style: 'Caption', spacing: sp(false, true), children: captionRuns(ctx, en!) }));
   return out;
 };
@@ -264,7 +290,7 @@ function figure(ctx: Ctx, n: PMNode): Block[] {
   // 合成图配连排分图题：图照单图排，分图题在图题下一行「(a) … (b) …」
   if (subs.length && n.attrs?.image && !subs.some((s) => s.image)) {
     const img = image(ctx, String(n.attrs.image), cmOf(n.attrs?.width, 8));
-    return [centered(img ? [img] : [], { keepNext: true, spacing: { before: ctx.L.line } }), ...captionPara(ctx, num, String(n.attrs?.caption ?? ''), String(n.attrs?.captionEn ?? '')), new Paragraph({ style: 'Caption', spacing: { after: ctx.L.line }, children: [new TextRun({ text: subs.map((s, i) => `(${letter(i)}) ${s.caption ?? ''}`).join('  ') })] })];
+    return [centered(img ? [img] : [], { keepNext: true, spacing: { before: ctx.L.line } }), ...captionPara(ctx, num, String(n.attrs?.caption ?? ''), String(n.attrs?.captionEn ?? ''), { node: n, prefix: 'fig' }), new Paragraph({ style: 'Caption', spacing: { after: ctx.L.line }, children: [new TextRun({ text: subs.map((s, i) => `(${letter(i)}) ${s.caption ?? ''}`).join('  ') })] })];
   }
   if (subs.length) {
     const cols = Math.max(1, Math.min(4, Number(n.attrs?.columns) || 2));
@@ -274,11 +300,11 @@ function figure(ctx: Ctx, n: PMNode): Block[] {
       while (cells.length < cols) cells.push(new TableCell({ borders: NO_BORDERS, children: [new Paragraph('')] }));
       rows.push(new TableRow({ children: cells }));
     }
-    return [new Paragraph({ spacing: { before: 0, after: 0, line: ctx.L.line, lineRule: LineRuleType.EXACT }, children: [] }), new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE }, alignment: AlignmentType.CENTER }), ...captionPara(ctx, num, String(n.attrs?.caption ?? ''), String(n.attrs?.captionEn ?? ''), { after: 1 })];
+    return [new Paragraph({ spacing: { before: 0, after: 0, line: ctx.L.line, lineRule: LineRuleType.EXACT }, children: [] }), new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE }, alignment: AlignmentType.CENTER }), ...captionPara(ctx, num, String(n.attrs?.caption ?? ''), String(n.attrs?.captionEn ?? ''), { after: 1, node: n, prefix: 'fig' })];
   }
   const img = image(ctx, String(n.attrs?.image ?? ''), cmOf(n.attrs?.width, 8));
   // 模板 figure.image：above / below 各一行，题注本身没有段后——「段后一行」挂在最后一条题注上
-  return [centered(img ? [img] : [new TextRun({ text: `[图 ${n.attrs?.image ?? ''}]` })], { keepNext: true, spacing: { before: ctx.L.line } }), ...captionPara(ctx, num, String(n.attrs?.caption ?? ''), String(n.attrs?.captionEn ?? ''), { after: 1 })];
+  return [centered(img ? [img] : [new TextRun({ text: `[图 ${n.attrs?.image ?? ''}]` })], { keepNext: true, spacing: { before: ctx.L.line } }), ...captionPara(ctx, num, String(n.attrs?.caption ?? ''), String(n.attrs?.captionEn ?? ''), { after: 1, node: n, prefix: 'fig' })];
 }
 
 /** 三线表：顶线 1.5pt、表头下 1pt、底线 1.5pt */
@@ -300,7 +326,7 @@ function tableFigure(ctx: Ctx, n: PMNode): Block[] {
   const fit = String(n.attrs?.fit ?? 'content');
   // 模板 figure.table：above / below 各一行（above 在表题前）；表后那一行用一个定高空段——Word 的表自己不带段后距
   return [
-    ...captionPara(ctx, num, String(n.attrs?.caption ?? ''), String(n.attrs?.captionEn ?? ''), { before: 1 }),
+    ...captionPara(ctx, num, String(n.attrs?.caption ?? ''), String(n.attrs?.captionEn ?? ''), { before: 1, node: n, prefix: 'tab' }),
     new Table({ rows: trs, width: fit === 'window' ? { size: 100, type: WidthType.PERCENTAGE } : { size: 0, type: WidthType.AUTO }, alignment: AlignmentType.CENTER, margins: { top: 0, bottom: 0, left: Math.round(0.19 / 2.54 * 1440), right: Math.round(0.19 / 2.54 * 1440) } }),
     new Paragraph({ spacing: { before: 0, after: 0, line: ctx.L.line, lineRule: LineRuleType.EXACT }, children: [] }),
   ];
@@ -318,13 +344,13 @@ function equation(ctx: Ctx, n: PMNode): Block[] {
     return [new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [new TableRow({ children: [
       cell([new Paragraph({ indent: { firstLine: 0 }, children: [] })], 10),
       cell([new Paragraph({ indent: { firstLine: 0 }, alignment: AlignmentType.CENTER, children: [m] })], 80),
-      cell([new Paragraph({ indent: { firstLine: 0 }, alignment: AlignmentType.RIGHT, children: num ? [new TextRun({ text: num })] : [] })], 10),
+      cell([new Paragraph({ indent: { firstLine: 0 }, alignment: AlignmentType.RIGHT, children: num ? [numRun(ctx, n, 'eq', num)] : [] })], 10),
     ] })] })];
   }
   return [new Paragraph({
     indent: { firstLine: 0 }, alignment: AlignmentType.LEFT,
     tabStops: [{ type: TabStopType.CENTER, position: mid }, { type: TabStopType.RIGHT, position: ctx.textWidth }],
-    children: [new TextRun({ text: '\t' }), m ?? new TextRun({ text: String(n.attrs?.src ?? ''), italics: true }), ...(num ? [new TextRun({ text: `\t${num}` })] : [])],
+    children: [new TextRun({ text: '\t' }), m ?? new TextRun({ text: String(n.attrs?.src ?? ''), italics: true }), ...(num ? [new TextRun({ text: '\t' }), numRun(ctx, n, 'eq', num)] : [])],
   })];
 }
 
@@ -343,7 +369,7 @@ function algorithm(ctx: Ctx, n: PMNode): Block[] {
   const body: Paragraph[] = [];
   io.filter((t) => t.trim()).forEach((t, i) => body.push(new Paragraph({ style: 'Code', border: i === 0 ? top : undefined, children: [new TextRun({ text: t.trim(), font: fonts() })] })));
   lines.forEach((l, i) => body.push(new Paragraph({ style: 'Code', border: i === lines.length - 1 ? bottom : i === 0 && !io.length ? top : undefined, indent: { left: (l.level ?? 0) * 2 * 12 * PT, firstLine: 0 }, children: [new TextRun({ text: `${i + 1}: ${l.text.trim()}`, font: fonts() })] })));
-  return [...captionPara(ctx, num, String(n.attrs?.caption ?? '')), ...body];
+  return [...captionPara(ctx, num, String(n.attrs?.caption ?? ''), undefined, { node: n, prefix: 'alg' }), ...body];
 }
 
 function heading(ctx: Ctx, n: PMNode, part: 'body' | 'appendix', forceBreak = false): Block[] {
@@ -356,7 +382,7 @@ function heading(ctx: Ctx, n: PMNode, part: 'body' | 'appendix', forceBreak = fa
   const spread = level === 1 && !en && sw<boolean>('titleSpread', ctx.s) && /^[\u4e00-\u9fff]{2}$/.test(plain);
   const kids = en ? [new TextRun({ text: en })] : spread ? [new TextRun({ text: `${plain[0]}\u3000${plain[1]}` })] : inline(ctx, n.content);
   const pageBreak = forceBreak || (level === 1 && !(ctx.s.stage !== 'final' && !(ctx.s.campus === 'shenzhen' && ctx.s.degreeLevel === 'bachelor')) && sw<boolean>('heading1Pagebreak', ctx.s));
-  const para = new Paragraph({ heading: [HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3, HeadingLevel.HEADING_4][level - 1], children: [...(num ? [new TextRun({ text: `${num}  ` })] : []), ...kids] });
+  const para = new Paragraph({ heading: [HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3, HeadingLevel.HEADING_4][level - 1], children: [...(num ? [numRun(ctx, n, 'sec', num), new TextRun({ text: '  ' })] : []), ...kids] });
   return pageBreak ? [pageTop(), para] : [para];
 }
 
@@ -372,7 +398,7 @@ function blocks(ctx: Ctx, nodes: PMNode[] = [], part: 'body' | 'appendix' | 'oth
       case 'tableFigure': out.push(...tableFigure(ctx, n)); break;
       case 'equation': out.push(...equation(ctx, n)); break;
       case 'codeBlock': out.push(...codeLines(ctx, n)); break;
-      case 'codeFigure': { const code = (n.content ?? []).find((c) => c.type === 'codeBlock'); out.push(...captionPara(ctx, numOf(ctx, n, 'lst'), String(n.attrs?.caption ?? '')), ...(code ? codeLines(ctx, code) : [])); break; }
+      case 'codeFigure': { const code = (n.content ?? []).find((c) => c.type === 'codeBlock'); out.push(...captionPara(ctx, numOf(ctx, n, 'lst'), String(n.attrs?.caption ?? ''), undefined, { node: n, prefix: 'lst' }), ...(code ? codeLines(ctx, code) : [])); break; }
       case 'algorithm': out.push(...algorithm(ctx, n)); break;
       case 'bulletList': case 'orderedList': {
         (n.content ?? []).forEach((item, idx) => {
@@ -403,11 +429,12 @@ function abstractPages(ctx: Ctx): Block[] {
   const zh = doc.abstractZh as PMNode, en = doc.abstractEn as PMNode;
   if (text(zh).trim()) {
     out.push(...titlePara('摘\u3000要', false), ...blocks(ctx, zh.content, 'other'));
-    if (doc.info.keywords?.length) out.push(new Paragraph({ style: 'Normal', indent: { firstLine: 0 }, spacing: { before: ctx.L.line }, children: [new TextRun({ text: "关键词：", font: fonts(FONT.hei) }), new TextRun({ text: doc.info.keywords.join('；') })] }));
+    // 关键词前是真的一个空段（模板 enter(1, weak: true)，范例第 67 项也是空段），不是段前距
+    if (doc.info.keywords?.length) out.push(new Paragraph({ style: 'Normal', indent: { firstLine: 0 }, children: [] }), new Paragraph({ style: 'Normal', indent: { firstLine: 0 }, children: [new TextRun({ text: "关键词：", font: fonts(FONT.hei) }), new TextRun({ text: doc.info.keywords.join('；') })] }));
   }
   if (text(en).trim()) {
     out.push(...titlePara('Abstract', out.length > 0), ...blocks(ctx, en.content, 'other'));
-    if (doc.info.keywordsEn?.length) out.push(new Paragraph({ style: 'Normal', indent: { firstLine: 0 }, spacing: { before: ctx.L.line }, children: [new TextRun({ text: 'Keywords: ', bold: true }), new TextRun({ text: doc.info.keywordsEn.join(', ') })] }));
+    if (doc.info.keywordsEn?.length) out.push(new Paragraph({ style: 'Normal', indent: { firstLine: 0 }, children: [] }), new Paragraph({ style: 'Normal', indent: { firstLine: 0 }, children: [new TextRun({ text: 'Keywords: ', bold: true }), new TextRun({ text: doc.info.keywordsEn.join(', ') })] }));
   }
   void s;
   return out;
@@ -424,7 +451,7 @@ function nomenclature(ctx: Ctx): Block[] {
     const row = (a: ParagraphChild[], b: string) => new TableRow({ children: [new TableCell({ borders: NO_BORDERS, width: { size: 30, type: WidthType.PERCENTAGE }, children: [new Paragraph({ indent: { firstLine: 0 }, children: a })] }), new TableCell({ borders: NO_BORDERS, children: [new Paragraph({ indent: { firstLine: 0 }, children: [new TextRun({ text: b })] })] })] });
     const sub = (t: string) => new Paragraph({ indent: { firstLine: 0 }, spacing: { before: Math.round(ctx.L.line * 0.5) }, keepNext: true, children: [new TextRun({ text: t, bold: true })] });
     out.push(...titlePara("符号及缩略语"), sub("物理量名称及符号表"));
-    out.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: doc.symbols.map((e) => row([mathXml(e.symbol, e.mode === 'latex' ? 'latex' : 'typst', ctx) ?? new TextRun({ text: e.symbol })], e.meaning)) }));
+    out.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: doc.symbols.map((e) => row([mathXml(e.symbol, e.mode === 'typst' ? 'typst' : 'latex', ctx) ?? new TextRun({ text: e.symbol })], e.meaning)) }));
     out.push(sub("缩略语表"));
     out.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: doc.abbreviations.map((a) => row([new TextRun({ text: a.short || a.key })], ctx.s.lang === 'en' ? a.longEn || a.long : a.long + (a.longEn ? `（${a.longEn}）` : ''))) }));
     return out;
@@ -432,7 +459,7 @@ function nomenclature(ctx: Ctx): Block[] {
   const row = (a: ParagraphChild[], b: string) => new TableRow({ children: [new TableCell({ borders: NO_BORDERS, width: { size: 30, type: WidthType.PERCENTAGE }, children: [new Paragraph({ indent: { firstLine: 0 }, children: a })] }), new TableCell({ borders: NO_BORDERS, children: [new Paragraph({ indent: { firstLine: 0 }, children: [new TextRun({ text: b })] })] })] });
   if (wantSym) {
     out.push(...titlePara("物理量名称及符号表"));
-    out.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: doc.symbols.map((e) => row([mathXml(e.symbol, e.mode === 'latex' ? 'latex' : 'typst', ctx) ?? new TextRun({ text: e.symbol })], e.meaning)) }));
+    out.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: doc.symbols.map((e) => row([mathXml(e.symbol, e.mode === 'typst' ? 'typst' : 'latex', ctx) ?? new TextRun({ text: e.symbol })], e.meaning)) }));
   }
   if (wantAbbr) {
     out.push(...titlePara("缩略语表"));
@@ -503,7 +530,7 @@ async function renderTypstFormulas(ctx: Ctx) {
     for (const c of n.content ?? []) walk(c);
   };
   for (const k of ['abstractZh', 'abstractEn', 'body', 'conclusion', 'appendix', 'acknowledgement', 'resume'] as const) walk(ctx.doc[k] as PMNode);
-  for (const e of ctx.doc.symbols) { if (e.mode !== 'latex') jobs.set(`I${e.symbol}`, { src: e.symbol, display: false }); else latexJob(e.symbol, false); }
+  for (const e of ctx.doc.symbols) { if (e.mode === 'typst') jobs.set(`I${e.symbol}`, { src: e.symbol, display: false }); else latexJob(e.symbol, false); }
   for (const [key, j] of jobs) { try { const img = await renderTypstMath(j.src, j.display, !!j.latex); if (img) ctx.typstMath.set(key, img); } catch { /* 编不过就退成文字 */ } }
 }
 
@@ -532,7 +559,7 @@ const headerPara = (kids: ParagraphChild[]) => new Paragraph({ style: 'Header', 
   // 页码：前置罗马、主体阿拉伯，都写成「- X -」（模板的样子；docx 库的 NUMBER_IN_DASH 会连目录里的页码也带上短横）
   const footerFor = () => (L.footer ? new Footer({ children: [new Paragraph({ style: 'Footer', children: [new TextRun({ text: '- ' }), new TextRun({ children: [PageNumber.CURRENT] }), new TextRun({ text: ' -' })] })] }) : undefined);
   const lay = s.layout ?? {};
-  const baseSize = lengthPt(lay.doc?.['base-size']) ?? ZIHAO.xiaosi;
+  const baseSize = lengthPt(lay.doc?.['font-size'] ?? lay.doc?.['base-size']) ?? ZIHAO.xiaosi;
   const Ldoc = applyLayout(L, lay.doc, baseSize);
   const matter = (k: 'frontmatter' | 'mainmatter' | 'backmatter') => applyLayout(Ldoc, lay[k], baseSize);
   const pageLayout = (base: Layout, k: string) => applyLayout(base, lay.pages?.[k], baseSize);
@@ -635,7 +662,7 @@ const headerPara = (kids: ParagraphChild[]) => new Paragraph({ style: 'Header', 
   return postprocess(await Packer.toBlob(document), W, L.line);
 }
 
-// 段落对话框的「对齐到网格」：范例里除表格之外全都不勾（模板每条样式的 snap-to-docgrid: false），
+// 段落对话框的「对齐到网格」：范例里除表格之外全都不勾（模板每条样式的 snap-to-grid: false），
 // docx 库没有段落级的开关，包好之后往 styles.xml 里补 <w:snapToGrid w:val="0"/>（要放在 pPr 的 spacing 之前）
 const UNSNAP = ['Normal', 'Heading1', 'Heading2', 'Heading3', 'Heading4', 'Caption', 'Code', 'Reference', 'FootnoteText', 'Header', 'Footer', 'Abstract', 'TOC1', 'TOC2', 'TOC3', 'TOC4'];
 async function postprocess(blob: Blob, W: ReturnType<typeof wordLinebreakOptions>, linePitch: number): Promise<Blob> {

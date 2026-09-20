@@ -33,7 +33,7 @@ const inlineAtom = (name: string, attrs: Record<string, { default: any }>, View:
 function MathInlineView({ node, updateAttributes, selected, deleteNode, editor, getPos }: NodeViewProps) {
   const open = useOpenNonce(getPos);
   const src = String(node.attrs.src ?? '');
-  const mode = node.attrs.mode === 'latex' ? 'latex' : 'typst';
+  const mode = node.attrs.mode === 'typst' ? 'typst' : 'latex';
   return (
     <InlineChip onSelect={() => { const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }} kind="math" openNonce={open.nonce} text={src ? <MathPreview src={forPreview(src, mode)} mode={mode} /> : <em>{t("公式")}</em>} title={src || t("行内公式")} selected={selected} editable={editor.isEditable} autoOpen={!src} onDelete={deleteNode} wide>
       {(close) => (

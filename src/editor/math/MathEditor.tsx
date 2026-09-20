@@ -165,10 +165,11 @@ export function MathEditor({ value, mode, display, onChange, onMode, autoFocus, 
         />
       )}
       <div className="math-src-row">
-        <span className="seg" title={tx("公式语法")}>
-          <button type="button" className={latex ? 'on' : ''} onMouseDown={(e) => e.preventDefault()} onClick={() => onMode('latex')}>LaTeX</button>
-          <button type="button" className={!latex ? 'on' : ''} onMouseDown={(e) => e.preventDefault()} onClick={() => onMode('typst')}>Typst</button>
-        </span>
+        {/* 公式只走 LaTeX（模板侧 mitex）；老文档里 Typst 写法的公式还能编，这里只给一个改成 LaTeX 的口 */}
+        {!latex && <span className="seg" title={tx("这条公式是 Typst 写法（老版本存的）；新公式一律 LaTeX")}>
+          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => onMode('latex')}>{tx("改成 LaTeX")}</button>
+          <button type="button" className="on" onMouseDown={(e) => e.preventDefault()}>Typst</button>
+        </span>}
         {latex && <button type="button" className={`btn btn-xs btn-icon ${showSource ? 'on' : ''}`} title={tx("查看或编辑 LaTeX 源代码")} onMouseDown={(e) => e.preventDefault()} onClick={() => setShowSource((s) => !s)}><Code2 /></button>}
         {latex && <button type="button" className={`btn btn-xs btn-icon ${kbd ? 'on' : ''}`} title={tx("屏幕数学键盘")} onMouseDown={(e) => e.preventDefault()} onClick={toggleKeyboard}><Keyboard /></button>}
         <span className="spacer" />

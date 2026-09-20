@@ -243,7 +243,7 @@ layout/presets.typ 与 styles/presets.typ 量下来的数；编号用 numbering.
 表单页（封面、中英文内封、答辩决议表、原创性声明与使用权限）在 `src/export/docx/pages.ts`，每一行落在哪是照模板排出来的
 PDF 逐行量的；页序、页码样式（前置「- I -」、主体「- 1 -」）、符号与缩略语合页、目录不列自己、两字章名撑开、题注双语开关、
 参考文献全列且中文档用全角标点，都照模板的样子。工程 JSON 里的局部版面（`settings.layout` 的 doc / frontmatter /
-mainmatter / backmatter / pages.*：margin、line-pitch、char-pitch、char-excess、base-size、header / footer 的 shown 与 from-edge）
+mainmatter / backmatter / pages.*：margin、line-pitch、char-pitch、char-excess、font-size、grid、header / footer 的 shown 与 from-edge）
 折成 Word 的节属性，页级改写单独成节接着编页码。另起一页的标题走 Word 排版的正规做法「分页符 + 连续分节符」，标题是新一节的
 第一段——Word 2013+ 模式会把新页第一段的段前距吃掉（2003 模式不吃），只有分节符起的段落例外，章前间距在两种兼容模式下都在。
 按行给的段前段后（图前一行、题注后一行、章标题段前一行）写成 Word 的「N 行」（beforeLines / afterLines）而不是磅数；

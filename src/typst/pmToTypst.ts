@@ -141,8 +141,8 @@ function mathInline(attrs: Record<string, any> = {}): string {
   const src = String(attrs.src ?? '').trim();
   if (!src) return '';
   if (!mathReady(src)) return '#box[]';
-  if (attrs.mode === 'latex') return `#mi(${backtick(src)})`;
-  return `$${src}$`;
+  if (attrs.mode === 'typst') return `$${src}$`;
+  return `#mi(${backtick(src)})`;
 }
 
 /** 输入公式的过程中允许括号、引号和占位符暂时不完整；主文档先留空，由公式编辑器就地提示。 */
@@ -420,7 +420,7 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
       if (!mathReady(src)) return tag(opts, n, 'node', '#box[]');
       const unnumbered = n.attrs?.numbered === false;
       const label = unnumbered ? '' : labelOf(n.attrs, 'eq');
-      const body = n.attrs?.mode === 'latex' ? `#mitex(${backtick(src)})` : `$ ${src} $`;
+      const body = n.attrs?.mode === 'typst' ? `$ ${src} $` : `#mitex(${backtick(src)})`;
       // 不编号：模板给所有块公式编号，要在局部把 numbering 关掉
       if (unnumbered) return tag(opts, n, 'node', `#[#set math.equation(numbering: none)\n${body}]`);
       return tag(opts, n, 'node', body) + (label ? ` <${label}>` : '');
@@ -429,7 +429,7 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
       // 公式底下的「式中　x——…」：模板收原生 terms 语法，一行一个 / 符号: 说明
       const rows = parseDenoteRows(n.attrs?.rows);
       if (!rows.length) return '';
-      const term = (sym: string, mode: string) => sym.split(/[、,，]/).map((x) => x.trim()).filter(Boolean).map((x) => !mathReady(x) ? '#box[]' : mode === 'latex' ? `#mi(${backtick(x)})` : `$${x}$`).join('、');
+      const term = (sym: string, mode: string) => sym.split(/[、,，]/).map((x) => x.trim()).filter(Boolean).map((x) => !mathReady(x) ? '#box[]' : mode === 'typst' ? `$${x}$` : `#mi(${backtick(x)})`).join('、');
       const lines = rows.map((r, i) => {
         const meaning = r.meaning.trim();
         const body = opts.map ? mark('attr', opts.map.key, opts.map.posOf.get(n) ?? 0, (opts.map.posOf.get(n) ?? 0) + 1, escapeText(meaning), { attr: `rows.${i}.meaning`, raw: meaning }) : escapeText(meaning);

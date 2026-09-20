@@ -15,7 +15,7 @@ const body: RichDoc = {
     h(1, '绪论', 'Introduction', 'intro'),
     h(2, '课题背景及研究的目的和意义', 'Background, objective and significance of the subject', 'bg'),
     p(t('发展国防工业、微电子工业等尖端技术需要精密和超精密的仪器设备，精密仪器设备要求高速、高精度、低摩擦……这一段是普通正文：首行缩进两个字，行距、字号全由模板定，这里只管写字。')),
-    p(t('选中文字可以'), t('加粗', [{ type: 'bold' }]), t('、'), t('强调', [{ type: 'italic' }]), t('（排成楷体）、上标m'), t('2', [{ type: 'superscript' }]), t('，也可以插入行内公式'), { type: 'mathInline', attrs: { src: 'p = rho R T', mode: 'typst' } }, t('，引用文献'), { type: 'cite', attrs: { keys: 'willis1828' } }, t('，或者提一句缩略语'), { type: 'abbr', attrs: { key: 'FEM' } }, t('。缩略语首次出现时自动展开，后文只显示缩写。')),
+    p(t('选中文字可以'), t('加粗', [{ type: 'bold' }]), t('、'), t('强调', [{ type: 'italic' }]), t('（排成楷体）、上标m'), t('2', [{ type: 'superscript' }]), t('，也可以插入行内公式'), { type: 'mathInline', attrs: { src: 'p = \\rho R T', mode: 'latex' } }, t('，引用文献'), { type: 'cite', attrs: { keys: 'willis1828' } }, t('，或者提一句缩略语'), { type: 'abbr', attrs: { key: 'FEM' } }, t('。缩略语首次出现时自动展开，后文只显示缩写。')),
     h(2, '气体润滑轴承的分类', 'Classification of gas-lubricated bearing', 'cls'),
     p(t('根据间隙内气膜压力的产生原理，气体轴承可以分为四种基本形式，其结构如'), { type: 'ref', attrs: { target: 'fig:bearing' } }, t('所示。')),
     { type: 'figure', attrs: { image: SAMPLE_IMAGE, width: 7, caption: '气体静压轴承', captionEn: 'Externally pressurized gas bearing', uid: 'bearing', label: 'fig:bearing' } },
@@ -35,8 +35,8 @@ const body: RichDoc = {
     },
     h(2, '多孔质材料的渗透率', 'Permeability of porous materials', 'perm'),
     p(t('本文采用Ergun方程描述多孔质材料的渗透特性，黏性阻力系数由'), { type: 'ref', attrs: { target: 'eq:ergun' } }, t('求得：')),
-    { type: 'equation', attrs: { src: 'phi.alt = D_"p"^2/150 psi^3/(1 - psi)^2', mode: 'typst', uid: 'ergun', label: 'eq:ergun', numbered: true } },
-    p(t('式中'), { type: 'mathInline', attrs: { src: 'D_"p"', mode: 'typst' } }, t('为多孔质材料的平均粒子直径，'), { type: 'mathInline', attrs: { src: 'psi', mode: 'typst' } }, t('为孔隙度。公式也可以用LaTeX录入，由mitex转换为Typst：')),
+    { type: 'equation', attrs: { src: '\\phi = \\frac{D_{\\mathrm{p}}^2}{150} \\frac{\\psi^3}{(1 - \\psi)^2}', mode: 'latex', uid: 'ergun', label: 'eq:ergun', numbered: true } },
+    p(t('式中'), { type: 'mathInline', attrs: { src: 'D_{\\mathrm{p}}', mode: 'latex' } }, t('为多孔质材料的平均粒子直径，'), { type: 'mathInline', attrs: { src: '\\psi', mode: 'latex' } }, t('为孔隙度。公式一律 LaTeX 写法，由 mitex 转成 Typst 排：')),
     { type: 'equation', attrs: { src: 'C_2 = \\frac{3.5}{D_p}\\frac{1-\\psi}{\\psi^3}', mode: 'latex', uid: 'c2', label: 'eq:c2', numbered: true } },
     h(1, '基于FLUENT软件的轴承静态特性研究', 'Research on static characteristics of bearing based on FLUENT', 'fluent'),
     h(2, '引言', 'Introduction', 'fluent-intro'),
@@ -128,7 +128,7 @@ const englishFinalBody: RichDoc = { type: 'doc', content: [
   p(t('A mathematical model is established and verified through numerical simulation and experiments. The discussion focuses on static characteristics and stability.')),
   h(1, 'Model and Analysis', '', 'en-analysis'),
   p(t('The permeability coefficient is obtained from the porous-material model, and the pressure field is solved under several operating conditions.')),
-  { type: 'equation', attrs: { src: 'phi.alt = D_"p"^2/150 psi^3/(1 - psi)^2', mode: 'typst', uid: 'en-ergun', label: 'eq:en-ergun', numbered: true } },
+  { type: 'equation', attrs: { src: '\\phi = \\frac{D_{\\mathrm{p}}^2}{150} \\frac{\\psi^3}{(1 - \\psi)^2}', mode: 'latex', uid: 'en-ergun', label: 'eq:en-ergun', numbered: true } },
   h(2, 'Chapter Summary', '', 'en-summary'),
   p(t('The model provides the basis for the subsequent parameter study and experimental validation.')),
 ] };
@@ -150,7 +150,7 @@ const practiceBody: RichDoc = { type: 'doc', content: [
 const appendix: RichDoc = { type: 'doc', content: [
   h(1, '补充试验数据', 'Supplementary experimental data', 'appendix-data'),
   p(t('本附录列出正文分析所用的补充数据和计算说明。附录只有一章时，标题显示为“附录”，图、表和公式按附录规则编号。')),
-  { type: 'equation', attrs: { src: 'K = (Q mu L)/(A Delta p)', mode: 'typst', uid: 'appendix-k', label: 'eq:appendix-k', numbered: true } },
+  { type: 'equation', attrs: { src: 'K = \\frac{Q \\mu L}{A \\Delta p}', mode: 'latex', uid: 'appendix-k', label: 'eq:appendix-k', numbered: true } },
   h(2, '数据处理说明', 'Notes on data processing', 'appendix-notes'),
   p(t('原始测量值保留三位有效数字，重复试验取算术平均值。异常数据须结合实验记录说明原因，不直接删除。')),
 ] };
@@ -270,9 +270,9 @@ export function sampleDoc(settings?: Settings): ThesisDoc {
   d.abstractEn = s.category === 'hass' ? hassAbstractEn : abstractEn;
   d.abbreviations = [{ key: 'FEM', long: '有限元方法', longEn: 'Finite Element Method' }];
   d.symbols = [
-    { symbol: 'p', meaning: '气膜压力，Pa' },
-    { symbol: 'h', meaning: '气膜厚度，m' },
-    { symbol: 'eta', meaning: '气体动力黏度，Pa·s' },
+    { symbol: 'p', mode: 'latex', meaning: '气膜压力，Pa' },
+    { symbol: 'h', mode: 'latex', meaning: '气膜厚度，m' },
+    { symbol: '\\eta', mode: 'latex', meaning: '气体动力黏度，Pa·s' },
   ];
   d.body = s.stage === 'final' ? (s.lang === 'en' ? englishFinalBody : s.category === 'hass' ? hassBody : s.form === 'practice' ? practiceBody : body) : reportBody(s);
   d.conclusion = s.lang === 'en' ? englishConclusion : s.category === 'hass' ? hassConclusion : s.form === 'practice' ? practiceConclusion : conclusion;

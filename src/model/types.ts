@@ -100,10 +100,10 @@ export interface Settings {
   hyphenateCaps: TriBool;
   /**
    * 版面（Word「页面设置」：页边距、文档网格、页眉页脚）的局部改写。界面上不开，只从工程 JSON 里改：
-   * 键与模板 layout: 字典同名（margin、char-pitch、line-pitch、base-size、header、footer…），值照 Typst 原话写
+   * 键与模板 layout: 字典同名（margin、char-pitch、line-pitch、font-size、grid、header、footer…；模板 f466dce 起 base-size 改叫 font-size、snap-to-docgrid 改叫 snap-to-grid、keep-with-next 改叫 sticky），值照 Typst 原话写
    * （"12.71pt"、"zihao.xiaosi"、{"top": "3cm", "rest": "2.5cm"}）。doc 文档级；frontmatter / mainmatter / backmatter
    * 段级；pages 按页：cover、titlepage、abstract、toc、listOfFigures、listOfTables、listOfEquations、nomenclature、
-   * achievements、declarations、index；chapters 按正文章号（"1"），只认 char-pitch 与 base-size（模板没有章级版面，
+   * achievements、declarations、index；chapters 按正文章号（"1"），只认 char-pitch 与 font-size（模板没有章级版面，
    * 站内把它折成这一章的字距）。
    */
   layout?: LayoutOverrides;

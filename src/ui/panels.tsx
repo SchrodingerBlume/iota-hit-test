@@ -490,13 +490,13 @@ function SymbolTable({ rows, onChange }: { rows: SymbolEntry[]; onChange: (r: Sy
         <tbody>
           {rows.map((r, i) => (
             <tr key={i} className={editing === i ? 'is-editing' : ''}>
-              <td className="sym-preview"><button type="button" className="sym-btn" title={tx("点开可视化编辑")} onClick={() => setEditing(editing === i ? null : i)}><MathPreview src={r.symbol} mode={r.mode === 'latex' ? 'latex' : 'typst'} empty="…" /></button></td>
+              <td className="sym-preview"><button type="button" className="sym-btn" title={tx("点开可视化编辑")} onClick={() => setEditing(editing === i ? null : i)}><MathPreview src={r.symbol} mode={r.mode === 'typst' ? 'typst' : 'latex'} empty="…" /></button></td>
               <td className="sym-src">
-                <input className="mono" value={r.symbol} placeholder={r.mode === 'latex' ? '\\eta' : 'eta'} {...g.cell(i, 0)} onChange={(e) => set(i, { symbol: e.target.value })} />
-                <span className="seg sym-mode" title={tx("写法")}>
-                  <button type="button" className={r.mode === 'latex' ? 'on' : ''} onClick={() => set(i, { mode: 'latex' })}>LaTeX</button>
-                  <button type="button" className={r.mode !== 'latex' ? 'on' : ''} onClick={() => set(i, { mode: 'typst' })}>Typst</button>
-                </span>
+                <input className="mono" value={r.symbol} placeholder={r.mode === 'typst' ? 'eta' : '\\eta'} {...g.cell(i, 0)} onChange={(e) => set(i, { symbol: e.target.value })} />
+                {r.mode === 'typst' && <span className="seg sym-mode" title={tx("这一行是 Typst 写法（老版本存的）；新的一律 LaTeX")}>
+                  <button type="button" onClick={() => set(i, { mode: 'latex' })}>{tx("改成 LaTeX")}</button>
+                  <button type="button" className="on">Typst</button>
+                </span>}
               </td>
               <td><input value={r.meaning} placeholder={tx("气体动力黏度，Pa·s")} {...g.cell(i, 1)} onChange={(e) => set(i, { meaning: e.target.value })} /></td>
               <td className="def-x"><button type="button" title={tx("删除这一行")} onClick={() => { onChange(rows.filter((_, j) => j !== i)); setEditing(null); }}>✕</button></td>
@@ -507,12 +507,12 @@ function SymbolTable({ rows, onChange }: { rows: SymbolEntry[]; onChange: (r: Sy
       {editing !== null && rows[editing] && (
         <div className="card sym-editor">
           <h3>{tx("编辑符号 · 第")}{' '}{editing + 1} {' '}{tx("行")}</h3>
-          <MathEditor value={rows[editing].symbol} mode={rows[editing].mode === 'latex' ? 'latex' : 'typst'} display={false} onChange={(v) => set(editing, { symbol: v })} onMode={(m) => set(editing, { mode: m })} />
+          <MathEditor value={rows[editing].symbol} mode={rows[editing].mode === 'typst' ? 'typst' : 'latex'} display={false} onChange={(v) => set(editing, { symbol: v })} onMode={(m) => set(editing, { mode: m })} />
         </div>
       )}
       <div className="row def-add">
         <button type="button" className="btn btn-xs" onClick={() => { onChange([...rows, { symbol: '', mode: 'latex', meaning: '' }]); g.focus(rows.length, 0); }}>{tx("＋ 添加一行")}</button>
-        <span className="muted small">{tx("符号按 LaTeX 或 Typst 写；点预览可视化编辑")}</span>
+        <span className="muted small">{tx("符号按 LaTeX 写；点预览可视化编辑")}</span>
       </div>
     </>
   );

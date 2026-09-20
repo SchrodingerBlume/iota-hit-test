@@ -71,6 +71,8 @@ export function normalizeDoc(raw: Partial<ThesisDoc>): ThesisDoc {
   delete (doc.pages as any).nomenclature;
   doc.nomenclatureOptions = { ...base.nomenclatureOptions, ...(raw.nomenclatureOptions ?? {}) };
   doc.defense = { ...base.defense, ...(raw.defense ?? {}) };
+  // 老工程：符号表里没写写法的原来按 Typst 解（eta → η）；新的一律 LaTeX，老行写明 typst 免得变味
+  if (Array.isArray(doc.symbols)) doc.symbols = doc.symbols.map((e) => (e.mode ? e : { ...e, mode: 'typst' as const }));
   // 旧工程：主席、秘书各一条记录 → 一串
   for (const k of ['chair', 'secretary'] as const) if (!Array.isArray(doc.defense[k])) doc.defense[k] = [doc.defense[k] as unknown as DefensePerson];
   for (const k of ['abstractZh', 'abstractEn', 'body', 'conclusion', 'appendix', 'acknowledgement', 'resume'] as RichKey[]) {

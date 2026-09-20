@@ -209,7 +209,7 @@ function nomenclature(doc: ThesisDoc, openright = ''): string {
   // 符号：Typst 数学直接 $…$，LaTeX 走 mitex 的 #mi
   const term = (s: { symbol: string; mode?: string }) => {
     const src = s.symbol.trim();
-    if (s.mode === 'latex') { let f = '`'; while (src.includes(f)) f += '`'; return `#mi(${f}${src}${f})`; }
+    if (s.mode !== 'typst') { let f = '`'; while (src.includes(f)) f += '`'; return `#mi(${f}${src}${f})`; }
     return `$${src}$`;
   };
   const symbolLines = symbols.map((s) => `  / ${term(s)}: ${escapeText(s.meaning.trim())}`).join('\n');

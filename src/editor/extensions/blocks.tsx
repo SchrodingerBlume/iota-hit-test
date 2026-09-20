@@ -343,7 +343,7 @@ function EquationView({ node, updateAttributes, selected, deleteNode, editor, ge
   const src = String(node.attrs.src ?? '');
   const open = useOpenNonce(getPos);
   useEffect(() => { if (open.nonce) setEditing(true); }, [open]);
-  const mode = node.attrs.mode === 'latex' ? 'latex' : 'typst';
+  const mode = node.attrs.mode === 'typst' ? 'typst' : 'latex';
   const numbered = node.attrs.numbered !== false;
   const editable = editor.isEditable;
   const num = useNumbering().get(labelOf(node.attrs as any, 'eq'))?.number;
