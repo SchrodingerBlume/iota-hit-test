@@ -1195,6 +1195,8 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .tb-size-ico { width: 18px; height: 18px; color: var(--muted); margin-right: 2px; }
 .bubble .rb-btn { min-width: 28px; height: 28px; }
 .rb-drawer.rb-ghost .fui-Tooltip { display: none; }
+/* 提示只是看的，别挡住底下刚拉出来的菜单 */
+.fui-Tooltip__content { pointer-events: none; }
 
 /* 功能区里的设置页：下拉、三态菜单按钮 */
 .rb-axis { display: inline-flex; align-items: center; gap: 6px; margin-right: 8px; }

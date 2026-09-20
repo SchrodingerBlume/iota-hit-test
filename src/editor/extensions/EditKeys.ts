@@ -2,6 +2,7 @@
 // 代码块里 Tab 打两个空格（首行缩进模板自己管，Word 的「Tab 缩进」不需要）。
 // Home / End：macOS 的浏览器默认只滚页不动光标，Word 与 Typora 都是到行首 / 行尾，照它们
 import { Extension } from '@tiptap/core';
+import { cycleCase } from '../changeCase';
 
 const lineEdge = (dir: 'backward' | 'forward', extend: boolean) => () => {
   const sel = window.getSelection();
@@ -21,6 +22,7 @@ export const EditKeys = Extension.create({
       End: lineEdge('forward', false),
       'Shift-Home': lineEdge('backward', true),
       'Shift-End': lineEdge('forward', true),
+      'Shift-F3': () => cycleCase(this.editor),
     };
   },
 });

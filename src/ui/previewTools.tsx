@@ -27,7 +27,7 @@ export function PageIndicator({ current, total, onJump }: { current: number; tot
   );
 }
 
-export function WordCountBadge({ pages }: { pages: number }) {
+export function WordCountBadge({ pages, children }: { pages: number; children?: ReactElement }) {
   const doc = useStore((s) => s.doc);
   const stats = useMemo(() => countWords(RICH.map((k) => doc[k]).filter(Boolean)), [doc]);
   const rows: [string, number][] = [
@@ -37,7 +37,7 @@ export function WordCountBadge({ pages }: { pages: number }) {
   return (
     <Popover positioning="below-start" trapFocus={false}>
       <PopoverTrigger disableButtonEnhancement>
-        <button type="button" className="pv-link" title={tx("文档中的字数。单击可打开“字数统计”")}>{fmt(stats.words)} {tx("字")}</button>
+        {children ?? <button type="button" className="pv-link" title={tx("文档中的字数。单击可打开“字数统计”")}>{fmt(stats.words)} {tx("字")}</button>}
       </PopoverTrigger>
       <PopoverSurface className="pv-pop">
         <div className="pv-pop-title">{tx("字数统计")}</div>

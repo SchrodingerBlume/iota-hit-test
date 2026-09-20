@@ -9,7 +9,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 import type { Editor } from '@tiptap/core';
 import type { Mark } from '@tiptap/pm/model';
 import { create } from 'zustand';
-import { TabList, Tab, Button, SplitButton, Popover, PopoverTrigger, PopoverSurface, Tooltip, Input, Checkbox, Menu, MenuTrigger, MenuPopover, MenuList, MenuItemCheckbox, type MenuButtonProps } from '@fluentui/react-components';
+import { TabList, Tab, Button, SplitButton, Popover, PopoverTrigger, PopoverSurface, Tooltip, Input, Checkbox, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuItemCheckbox, MenuDivider, type MenuButtonProps } from '@fluentui/react-components';
 import {
   ArrowUndo20Regular, ArrowRedo20Regular, TextBold20Regular, TextItalic20Regular, TextUnderline20Regular, TextStrikethrough20Regular, TextSubscript20Regular, TextSuperscript20Regular,
   Code20Regular, ClearFormatting20Regular, PaintBrush20Regular, Cut20Regular, Copy20Regular, ClipboardPaste20Regular, TextBulletListLtr20Regular, TextNumberListLtr20Regular, TextIndentDecreaseLtr20Regular,
@@ -20,7 +20,7 @@ import {
   ChevronUp20Regular, ChevronDown20Regular, ChevronLeft20Regular, ChevronRight20Regular, Dismiss20Regular, Pin20Regular, Grid20Regular, TextParagraph20Regular,
   Translate20Regular, ImageEdit20Regular, Delete20Regular, TableSimple20Regular, ClipboardTextLtr20Regular,
   CommentAdd20Regular, CommentDismiss20Regular, Comment20Regular, TextBulletListSquare20Regular, TextEditStyle20Regular,
-  ZoomIn20Regular, AutoFitWidth20Regular, DocumentOnePage20Regular, DocumentMultiple20Regular,
+  ZoomIn20Regular, AutoFitWidth20Regular, DocumentOnePage20Regular, DocumentMultiple20Regular, TextChangeCase20Regular, TextWordCount20Regular, PanelLeftText20Regular,
 } from '@fluentui/react-icons';
 import { useStore } from '../model/store';
 import { getEditor, getEditorMeta, onRegistryChange } from '../editor/registry';
@@ -34,7 +34,9 @@ import { ChoiceMenu } from './RibbonSettings';
 import { useEditorEnv } from '../editor/env';
 import { useOpenRequest } from '../editor/openRequest';
 import { usePreviewZoom } from './previewZoom';
-import { ZoomMenu } from './previewTools';
+import { ZoomMenu, WordCountBadge } from './previewTools';
+import { changeCase, type CaseKind } from '../editor/changeCase';
+import { useCompileState } from '../compiler/client';
 import { useMedia, SHORT } from './useMedia';
 import { TableSizeDialog, TableTextDialog, readTableDefaults, type TableDialogKind } from './TableInsert';
 import { LengthInput } from './LengthInput';
@@ -233,6 +235,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const chain = () => ed!.chain().focus();
   const findOpen = useFindBar((s) => s.open);
   const pz = usePreviewZoom();
+  const pageCount = useCompileState((s) => s.pageCount);
 
   // 收起 / 展开：单击选项卡只切页（Word 也是），收起靠双击或右端的箭头
   const toggleCollapsed = (v: boolean) => { setCollapsed(v); setPeek(false); try { localStorage.setItem(COLLAPSE_KEY, v ? '1' : '0'); } catch { /* */ } };
@@ -248,6 +251,8 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
     return () => document.removeEventListener('mousedown', onDown);
   }, [peek]);
   const afterCommand = useCallback(() => { if (collapsed) setPeek(false); setPop(null); }, [collapsed]);
+  // 菜单关掉时 Fluent 会把焦点还给菜单钮，改完字得把焦点送回编辑器
+  const pickCase = (k: CaseKind) => refocusPreviewAfter(() => { if (!ed) return; changeCase(ed, k); setTimeout(() => ed.view.focus(), 0); });
   // 格式刷：记下选区的格式，下一次选中一段就刷上去
   useEffect(() => {
     if (!painter || !ed) return;
@@ -413,7 +418,20 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                   </Row>
                   <Row>
                     <B title={tx("等宽代码")} icon={<Code20Regular />} on={!!ed?.isActive('code')} disabled={none} run={() => chain().toggleCode().run()} />
-                    <B title={tx("清除格式")} icon={<ClearFormatting20Regular />} disabled={none} run={() => chain().unsetAllMarks().run()} />
+                    <Menu positioning="below-start">
+                      <MenuTrigger disableButtonEnhancement>
+                        <span className="rb-keep"><B title={tx("更改大小写（Shift+F3 在小写 / 大写 / 首字母大写间轮）")} menu icon={<TextChangeCase20Regular />} disabled={none} run={() => {}} /></span>
+                      </MenuTrigger>
+                      <MenuPopover><MenuList>
+                        {([['sentence', tx("句首字母大写")], ['lower', tx("小写")], ['upper', tx("大写")], ['title', tx("每个单词首字母大写")], ['toggle', tx("切换大小写")]] as [CaseKind, string][]).map(([k, label]) => (
+                          <MenuItem key={k} onClick={() => pickCase(k)}>{label}</MenuItem>
+                        ))}
+                        <MenuDivider />
+                        <MenuItem onClick={() => pickCase('half')}>{tx("半角")}</MenuItem>
+                        <MenuItem onClick={() => pickCase('full')}>{tx("全角")}</MenuItem>
+                      </MenuList></MenuPopover>
+                    </Menu>
+                    <B title={tx("清除所有格式")} icon={<ClearFormatting20Regular />} disabled={none} run={() => chain().unsetAllMarks().run()} />
                     <Sep />
                   </Row>
                 </Rows>
@@ -558,6 +576,9 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               <Group label={tx("面板")}>
                 <B title={tx("显示或隐藏批注窗格")} big icon={<Comment20Regular />} on={commentsOpen} run={() => useComments.getState().setOpen(!commentsOpen)}>{tx("批注窗格")}</B>
               </Group>
+              <Group label={tx("校对")}>
+                <WordCountBadge pages={pageCount}><span className="rb-keep"><B title={tx("字数统计")} big icon={<TextWordCount20Regular />} run={() => {}}>{tx("字数统计")}</B></span></WordCountBadge>
+              </Group>
               <Group label={tx("审阅者")}>
                 <span className="rb-keep rb-inline">
                   <Input size="small" value={reviewer} placeholder={tx("审阅者姓名")} onChange={(_, d) => useComments.getState().setAuthor(d.value)} style={{ width: 140 }} />
@@ -650,6 +671,9 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                 <B title={tx("只看编辑")} big icon={<PanelLeft20Regular />} on={layout.mode === 'editor'} run={() => layout.setMode('editor')}>{tx("编辑")}</B>
                 <B title={tx("编辑 + 预览")} big icon={<LayoutColumnTwo20Regular />} on={layout.mode === 'split'} run={() => layout.setMode('split')}>{tx("并排查看")}</B>
                 <B title={tx("只看预览")} big icon={<PanelRight20Regular />} on={layout.mode === 'preview'} run={() => layout.setMode('preview')}>{tx("预览")}</B>
+              </Group>
+              <Group label={tx("显示")}>
+                <B title={tx("导航窗格：左边的章节与大纲")} big icon={<PanelLeftText20Regular />} on={layout.navOpen} run={() => layout.setNavOpen(!layout.navOpen)}>{tx("导航窗格")}</B>
               </Group>
               <Group label={tx("缩放")}>
                 <ZoomMenu zoom={pz.zoom} zoomTo={pz.zoomTo} fitPage={pz.fitPage}><span className="rb-keep"><B title={tx("缩放：打开「缩放」菜单")} big menu icon={<ZoomIn20Regular />} run={() => {}}>{tx("缩放")}</B></span></ZoomMenu>
