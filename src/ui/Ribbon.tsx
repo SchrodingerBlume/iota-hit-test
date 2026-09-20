@@ -120,9 +120,9 @@ export function HistoryButtons() {
         <PopoverTrigger disableButtonEnhancement>
           {(trigger) => (
             <Tooltip content={undoTop ? tx("撤消 {{s}} (⌘Z)", { s: entryText(undoTop) }) : tx("无法撤消 (⌘Z)")} relationship="description" withArrow positioning="below" onVisibleChange={(_, d) => { if (d.visible) bump((n) => n + 1); }}>
-              <SplitButton appearance="subtle" size="small" icon={<ArrowUndo20Regular />} disabled={!undoTop}
+              <SplitButton appearance="subtle" size="small" icon={<ArrowUndo20Regular />} menuIcon={null} disabled={!undoTop}
                 primaryActionButton={{ className: 'rb-btn', 'aria-label': tx("撤消"), onMouseDown: (e: React.MouseEvent) => e.preventDefault(), onClick: () => refocusPreviewAfter(() => ed!.chain().focus().undo().run()) }}
-                menuButton={{ ...(trigger as MenuButtonProps), className: 'rb-btn rb-undo-arrow', 'aria-label': tx("撤消列表"), onMouseDown: (e: React.MouseEvent) => e.preventDefault() }} />
+                menuButton={{ ...(trigger as MenuButtonProps), className: 'rb-btn rb-menu rb-undo-arrow', 'aria-label': tx("撤消列表"), onMouseDown: (e: React.MouseEvent) => e.preventDefault() }} />
             </Tooltip>
           )}
         </PopoverTrigger>
