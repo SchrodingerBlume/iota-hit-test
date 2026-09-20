@@ -393,8 +393,9 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .comment-actions { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
 .comment-actions > :first-child { flex: 1; }
 @media (max-width: 900px) { .work.has-comments { grid-template-columns: 1fr; } .comments-pane { position: static; max-height: none; border-left: 0; border-top: 1px solid var(--line); padding: 8px 0 0; } }
-/* 强调：西文真斜体（Times 的斜体面），汉字换楷体不伪斜——与模板的排法一致（fake-italic 管的是没楷体时怎么办） */
-.rich em { font-style: italic; font-synthesis: none; font-family: "Times New Roman", "Kaiti SC", "STKaiti", KaiTi, "FandolKai", serif; }
+/* 强调：默认像 Word——西文真斜体、汉字合成斜切；「强调排楷体」开了才换楷体（不斜） */
+.rich em { font-style: italic; font-family: "Times New Roman", var(--serif); }
+[data-emph="kaishu"] .rich em { font-synthesis: none; font-family: "Times New Roman", "Kaiti SC", "STKaiti", KaiTi, "FandolKai", serif; }
 /* 行内换字族 / 字号：编辑区只是示意，以预览为准；字号按小四 12pt 折成倍数 */
 [data-font="songti"] { font-family: var(--serif); }
 [data-font="heiti"] { font-family: "Heiti SC", "SimHei", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }

@@ -62,6 +62,10 @@ export function normalizeDoc(raw: Partial<ThesisDoc>): ThesisDoc {
   const base = newDoc();
   const doc: ThesisDoc = { ...base, ...raw, version: 1 } as ThesisDoc;
   doc.settings = { ...base.settings, ...(raw.settings ?? {}) };
+  // 旧工程的「中文伪斜」极性反了过来：原来关（不斜切 = 排楷体）的改成开「强调排楷体」，其余走新默认（伪斜）
+  const rs: any = raw.settings ?? {};
+  if (rs.fakeItalic === false && rs.emphKaishu === undefined) doc.settings.emphKaishu = true;
+  delete (doc.settings as any).fakeItalic;
   doc.info = { ...base.info, ...(raw.info ?? {}) };
   doc.pages = { ...base.pages, ...(raw.pages ?? {}) };
   // 旧工程：一个总开关管符号表与缩略语表，拆开；关着的旧布尔照旧，开着的（原来是默认）改成 auto

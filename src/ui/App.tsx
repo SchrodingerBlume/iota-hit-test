@@ -315,7 +315,7 @@ export function App() {
     <EditorEnvContext.Provider value={env}>
       <FluentProvider theme={theme === 'dark' ? fluentDark : fluentLight} className="fluent-root">
       <FontRecovery />
-      <div className="app">
+      <div className="app" data-emph={doc.settings.emphKaishu === true ? 'kaishu' : 'italic'}>
         {/* 顶栏并进功能区那一行：左边品牌与「文件」菜单，右边状态、导出、主题 */}
         {(() => { const leading = (
           <span className="rb-leading">

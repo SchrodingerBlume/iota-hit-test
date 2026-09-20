@@ -429,7 +429,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                   </Row>
                   <Row>
                     <B title={tx("加粗 (⌘B)")} icon={<TextBold20Regular />} on={!!ed?.isActive('bold')} disabled={none} run={() => chain().toggleBold().run()} />
-                    <B title={tx("强调（排楷体）(⌘I)")} icon={<TextItalic20Regular />} on={!!ed?.isActive('italic')} disabled={none} run={() => chain().toggleItalic().run()} />
+                    <B title={tx("倾斜 (⌘I)")} icon={<TextItalic20Regular />} on={!!ed?.isActive('italic')} disabled={none} run={() => chain().toggleItalic().run()} />
                     <B title={tx("下划线 (⌘U)")} icon={<TextUnderline20Regular />} on={!!ed?.isActive('underline')} disabled={none} run={() => chain().toggleUnderline().run()} />
                     <B title={tx("删除线")} icon={<TextStrikethrough20Regular />} on={!!ed?.isActive('strike')} disabled={none} run={() => chain().toggleStrike().run()} />
                     <B title={tx("下标 (⌘,)")} icon={<TextSubscript20Regular />} on={!!ed?.isActive('subscript')} disabled={none} run={() => chain().toggleSubscript().run()} />
