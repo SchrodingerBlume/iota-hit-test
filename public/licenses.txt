@@ -94,6 +94,12 @@ iota-hit 在线编辑器 · 开源许可与声明
     来源：https://github.com/pmndrs/zustand
     修改：无
 
+· zhconv（简繁转换，zhconv-rs 编成的 wasm，第一次用才加载） 0.4.2
+    版权：Hung-I Wang（Gowee）
+    许可：MIT / Apache-2.0 双许可；内含 MediaWiki 转换表（GPL-2.0-or-later）与 OpenCC 词典（Apache-2.0）
+    来源：https://github.com/Gowee/zhconv-rs
+    修改：无
+
 · docx（生成 Word 文档） 9.7.1
     版权：Dolan Miu
     许可：MIT

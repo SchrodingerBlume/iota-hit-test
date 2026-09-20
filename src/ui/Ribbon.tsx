@@ -36,6 +36,8 @@ import { useOpenRequest } from '../editor/openRequest';
 import { usePreviewZoom } from './previewZoom';
 import { ZoomMenu, WordCountBadge } from './previewTools';
 import { changeCase, type CaseKind } from '../editor/changeCase';
+import { convertChinese } from '../editor/zhconvert';
+import { FontFamilyPicker, FontSizePicker, FontColorButton } from './FontTools';
 import { useCompileState } from '../compiler/client';
 import { useMedia, SHORT } from './useMedia';
 import { TableSizeDialog, TableTextDialog, readTableDefaults, type TableDialogKind } from './TableInsert';
@@ -409,15 +411,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               <Group label={tx("字体")}>
                 <Rows>
                   <Row>
-                    <B title={tx("加粗 (⌘B)")} icon={<TextBold20Regular />} on={!!ed?.isActive('bold')} disabled={none} run={() => chain().toggleBold().run()} />
-                    <B title={tx("强调（排楷体）(⌘I)")} icon={<TextItalic20Regular />} on={!!ed?.isActive('italic')} disabled={none} run={() => chain().toggleItalic().run()} />
-                    <B title={tx("下划线 (⌘U)")} icon={<TextUnderline20Regular />} on={!!ed?.isActive('underline')} disabled={none} run={() => chain().toggleUnderline().run()} />
-                    <B title={tx("删除线")} icon={<TextStrikethrough20Regular />} on={!!ed?.isActive('strike')} disabled={none} run={() => chain().toggleStrike().run()} />
-                    <B title={tx("下标 (⌘,)")} icon={<TextSubscript20Regular />} on={!!ed?.isActive('subscript')} disabled={none} run={() => chain().toggleSubscript().run()} />
-                    <B title={tx("上标 (⌘.)")} icon={<TextSuperscript20Regular />} on={!!ed?.isActive('superscript')} disabled={none} run={() => chain().toggleSuperscript().run()} />
-                  </Row>
-                  <Row>
-                    <B title={tx("等宽代码")} icon={<Code20Regular />} on={!!ed?.isActive('code')} disabled={none} run={() => chain().toggleCode().run()} />
+                    <span className="rb-keep rb-inline"><FontFamilyPicker ed={ed} /><FontSizePicker ed={ed} /></span>
                     <Menu positioning="below-start">
                       <MenuTrigger disableButtonEnhancement>
                         <span className="rb-keep"><B title={tx("更改大小写（Shift+F3 在小写 / 大写 / 首字母大写间轮）")} menu icon={<TextChangeCase20Regular />} disabled={none} run={() => {}} /></span>
@@ -432,7 +426,16 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                       </MenuList></MenuPopover>
                     </Menu>
                     <B title={tx("清除所有格式")} icon={<ClearFormatting20Regular />} disabled={none} run={() => chain().unsetAllMarks().run()} />
-                    <Sep />
+                  </Row>
+                  <Row>
+                    <B title={tx("加粗 (⌘B)")} icon={<TextBold20Regular />} on={!!ed?.isActive('bold')} disabled={none} run={() => chain().toggleBold().run()} />
+                    <B title={tx("强调（排楷体）(⌘I)")} icon={<TextItalic20Regular />} on={!!ed?.isActive('italic')} disabled={none} run={() => chain().toggleItalic().run()} />
+                    <B title={tx("下划线 (⌘U)")} icon={<TextUnderline20Regular />} on={!!ed?.isActive('underline')} disabled={none} run={() => chain().toggleUnderline().run()} />
+                    <B title={tx("删除线")} icon={<TextStrikethrough20Regular />} on={!!ed?.isActive('strike')} disabled={none} run={() => chain().toggleStrike().run()} />
+                    <B title={tx("下标 (⌘,)")} icon={<TextSubscript20Regular />} on={!!ed?.isActive('subscript')} disabled={none} run={() => chain().toggleSubscript().run()} />
+                    <B title={tx("上标 (⌘.)")} icon={<TextSuperscript20Regular />} on={!!ed?.isActive('superscript')} disabled={none} run={() => chain().toggleSuperscript().run()} />
+                    <B title={tx("等宽代码")} icon={<Code20Regular />} on={!!ed?.isActive('code')} disabled={none} run={() => chain().toggleCode().run()} />
+                    <span className="rb-keep"><FontColorButton ed={ed} /></span>
                   </Row>
                 </Rows>
               </Group>
@@ -578,6 +581,10 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               </Group>
               <Group label={tx("校对")}>
                 <WordCountBadge pages={pageCount}><span className="rb-keep"><B title={tx("字数统计")} big icon={<TextWordCount20Regular />} run={() => {}}>{tx("字数统计")}</B></span></WordCountBadge>
+              </Group>
+              <Group label={tx("中文简繁转换")}>
+                <B title={tx("简转繁：选中的文字，没选中就是这一节整篇（按词组语境转，「皇后」不会变「皇後」）")} big icon={<Translate20Regular />} disabled={none} run={() => void convertChinese(ed!, 'zh-Hant')}>{tx("简转繁")}</B>
+                <B title={tx("繁转简：选中的文字，没选中就是这一节整篇")} big icon={<Translate20Regular />} disabled={none} run={() => void convertChinese(ed!, 'zh-Hans')}>{tx("繁转简")}</B>
               </Group>
               <Group label={tx("审阅者")}>
                 <span className="rb-keep rb-inline">

@@ -395,6 +395,15 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 @media (max-width: 900px) { .work.has-comments { grid-template-columns: 1fr; } .comments-pane { position: static; max-height: none; border-left: 0; border-top: 1px solid var(--line); padding: 8px 0 0; } }
 /* 强调：西文真斜体（Times 的斜体面），汉字换楷体不伪斜——与模板的排法一致（fake-italic 管的是没楷体时怎么办） */
 .rich em { font-style: italic; font-synthesis: none; font-family: "Times New Roman", "Kaiti SC", "STKaiti", KaiTi, "FandolKai", serif; }
+/* 行内换字族 / 字号：编辑区只是示意，以预览为准；字号按小四 12pt 折成倍数 */
+[data-font="songti"] { font-family: var(--serif); }
+[data-font="heiti"] { font-family: "Heiti SC", "SimHei", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
+[data-font="kaishu"] { font-family: "Kaiti SC", "STKaiti", KaiTi, "FandolKai", "Noto Serif CJK SC", serif; }
+[data-font="fangsong"] { font-family: "STFangsong", FangSong, "Noto Serif CJK SC", serif; }
+[data-size="chuhao"] { font-size: 3.5em; } [data-size="xiaochu"] { font-size: 3em; } [data-size="yihao"] { font-size: 2.1667em; } [data-size="xiaoyi"] { font-size: 2em; }
+[data-size="erhao"] { font-size: 1.8333em; } [data-size="xiaoer"] { font-size: 1.5em; } [data-size="sanhao"] { font-size: 1.3333em; } [data-size="xiaosan"] { font-size: 1.25em; }
+[data-size="sihao"] { font-size: 1.1667em; } [data-size="xiaosi"] { font-size: 1em; } [data-size="wuhao"] { font-size: 0.875em; } [data-size="xiaowu"] { font-size: 0.75em; }
+[data-size="liuhao"] { font-size: 0.625em; } [data-size="xiaoliu"] { font-size: 0.5417em; }
 .rich code { background: var(--panel-2); padding: 0 4px; border-radius: var(--r-xs); font-size: 0.88em; }
 .rich .is-flash { animation: flash 1.2s var(--ease) both; }
 @keyframes flash { 0% { background: var(--orange-soft-2); box-shadow: 0 0 0 6px var(--orange-soft-2); } 100% { background: transparent; box-shadow: 0 0 0 6px transparent; } }
@@ -1155,6 +1164,19 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .rb-btn.rb-big { flex-direction: column; height: 60px; min-width: 56px; padding: 5px 8px 2px; gap: 3px; font-weight: 400; font-size: 12px; justify-content: flex-start; }
 .rb-btn.rb-big .fui-Button__icon, .rb-btn.rb-big .fui-ToggleButton__icon { margin: 0; }
 .rb-btn.rb-big svg { width: 24px; height: 24px; }
+/* 字体组：字体 / 字号下拉、字体颜色（拆分钮，下面一道色条是当前色） */
+.rb-font.fui-Dropdown, .rb-size.fui-Dropdown { min-width: 0; height: 26px; }
+.rb-font.fui-Dropdown { width: 92px; }
+.rb-size.fui-Dropdown { width: 68px; }
+.rb-font .fui-Dropdown__button, .rb-size .fui-Dropdown__button { padding: 0 6px; font-size: 12.5px; min-height: 0; }
+.rb-color-ico { position: relative; display: inline-flex; }
+.rb-color-ico i { position: absolute; left: 2px; right: 2px; bottom: -3px; height: 3px; border-radius: 1px; }
+.rb-colors.fui-PopoverSurface { min-width: 180px; }
+.rb-color-grid { display: grid; grid-template-columns: repeat(10, 18px); gap: 3px; padding: 4px 14px 8px; }
+.rb-color-cell { width: 18px; height: 18px; border: 1px solid rgba(0,0,0,0.25); border-radius: 2px; padding: 0; cursor: pointer; }
+.rb-color-cell:hover, .rb-color-cell.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rb-colors label.pv-row { justify-content: space-between; }
+.rb-colors input[type=color] { width: 28px; height: 20px; padding: 0; border: 1px solid var(--line-2); border-radius: var(--r-xs); background: none; }
 /* 展开钮的小三角：统一 6×3（按钮用 ::after，Fluent Dropdown 用 .rb-caret 元素） */
 .rb-menu::after, .rb-tri::after, .rb-caret { content: ''; display: inline-block; width: 0; height: 0; border: 3px solid transparent; border-top-color: currentColor; opacity: 0.6; }
 .rb-menu::after { margin-left: 2px; }

@@ -284,7 +284,7 @@ const PREVIEW_PRELUDE = `// 站内预览用：空回车段上各放一个隐形�
 /** 只编正文的一章（长文档打字时用）：chapter 是一级标题的序号（1 起），page 是这一章首页在上次整编里的页码（正文计数） */
 export interface Focus { chapter: number; page?: number }
 
-const PARA_MARKS = new Set(['bold', 'italic', 'underline', 'strike', 'subscript', 'superscript']);
+const PARA_MARKS = new Set(['bold', 'italic', 'underline', 'strike', 'subscript', 'superscript', 'fontFamily', 'fontSize', 'textColor']);
 /** 打字即时回显只认纯文字段：正文里的普通段落，里面只有文字与字符级格式（引用、脚注、公式、缩略语都不行——编号在片段里取不到） */
 export function paraEligible(node: PMNode | undefined | null): boolean {
   if (!node || node.type !== 'paragraph') return false;

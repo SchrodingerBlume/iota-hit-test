@@ -5,6 +5,7 @@
 // 参数；字体、字号、对齐、行距、段前段后是*一级一条*的样式表（iota-hit(styles:)），
 // 改了就是这一级所有标题一起变——这正是 Word「修改样式」的语义，也是模板刻意
 // 不给单条标题开字体口子的原因（局部 styles 只接表格）。
+import { ZIHAO } from '../model/zihao';
 import { useMemo, useState, type ReactNode } from 'react';
 import { create } from 'zustand';
 import {
@@ -40,15 +41,6 @@ export const useBlockMenu = create<State>((set) => ({
   closeStyle: () => set({ styleLevel: null }),
 }));
 
-const ZIHAO: { key: string; label: string; pt: number }[] = [
-  { key: 'chuhao', label: t("初号"), pt: 42 }, { key: 'xiaochu', label: t("小初"), pt: 36 },
-  { key: 'yihao', label: t("一号"), pt: 26 }, { key: 'xiaoyi', label: t("小一"), pt: 24 },
-  { key: 'erhao', label: t("二号"), pt: 22 }, { key: 'xiaoer', label: t("小二"), pt: 18 },
-  { key: 'sanhao', label: t("三号"), pt: 16 }, { key: 'xiaosan', label: t("小三"), pt: 15 },
-  { key: 'sihao', label: t("四号"), pt: 14 }, { key: 'xiaosi', label: t("小四"), pt: 12 },
-  { key: 'wuhao', label: t("五号"), pt: 10.5 }, { key: 'xiaowu', label: t("小五"), pt: 9 },
-  { key: 'liuhao', label: t("六号"), pt: 7.5 }, { key: 'xiaoliu', label: t("小六"), pt: 6.5 },
-];
 const FONTS: { key: string; label: string }[] = [
   { key: 'songti', label: t("宋体") }, { key: 'heiti', label: t("黑体") }, { key: 'kaishu', label: t("楷体") },
   { key: 'fangsong', label: t("仿宋") }, { key: 'lishu', label: t("隶书") }, { key: 'xinwei', label: t("新魏") }, { key: 'kaishu-gb2312', label: t("楷体_GB2312") },

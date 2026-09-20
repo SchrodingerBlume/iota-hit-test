@@ -127,6 +127,9 @@ function wrapMarks(text: string, marks: PMNode['marks'] = [], rawText?: string):
       case 'superscript': out = `#super[${out}]`; break;
       case 'subscript': out = `#sub[${out}]`; break;
       case 'link': out = `#link(${JSON.stringify(m.attrs?.href ?? '')})[${out}]`; break;
+      case 'fontFamily': out = `#${['songti', 'heiti', 'kaishu', 'fangsong'].includes(m.attrs?.role) ? m.attrs!.role : 'songti'}[${out}]`; break;
+      case 'fontSize': out = `#text(size: zihao.${/^[a-z]+$/.test(m.attrs?.size ?? '') ? m.attrs!.size : 'xiaosi'})[${out}]`; break;
+      case 'textColor': out = `#text(fill: rgb(${JSON.stringify(/^#[0-9a-f]{6}$/i.test(m.attrs?.color ?? '') ? m.attrs!.color : '#000000')}))[${out}]`; break;
     }
   }
   return out;
@@ -174,7 +177,7 @@ const INLINE_ATOM = new Set(['ref', 'cite', 'mathInline', 'footnote', 'abbr', 'c
 // 相邻文字节点共有的标记只包一层：编辑器里「H₂O」带下划线存成三个节点，逐个包成
 // #underline[H]#sub[#underline[2]]#underline[O]，模板的下划线就在上下标处断开、错位；
 // 合成 #underline[H#sub[2]O] 才是用户手写的样子。挑覆盖最长一段的那个标记先包，里面递归
-const GROUPABLE = ['link', 'underline', 'strike', 'bold', 'italic', 'superscript', 'subscript'];
+const GROUPABLE = ['link', 'fontFamily', 'fontSize', 'textColor', 'underline', 'strike', 'bold', 'italic', 'superscript', 'subscript'];
 type Mark = NonNullable<PMNode['marks']>[number];
 const sameMark = (a: Mark, b: Mark) => a.type === b.type && JSON.stringify(a.attrs ?? {}) === JSON.stringify(b.attrs ?? {});
 // 引用、公式这些行内原子也带标记（选中一句加下划线，里面的「表 1-2」一样带着），一段里连着的一起包

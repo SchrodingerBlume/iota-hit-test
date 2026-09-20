@@ -33,6 +33,7 @@ import { computeNumbering, type Part } from '../typst/numbering';
 import { useStore, type RichKey } from '../model/store';
 import { registerEditor, unregisterEditor, getEditor } from './registry';
 import { trackHistory } from './historyLog';
+import { FontFamily, FontSize, TextColor } from './extensions/fontMarks';
 import { B, useEditorTick, useInsertActions, useRichSize } from './tools';
 import { MirrorCaret, mirrorCaretKey } from './extensions/MirrorCaret';
 import { Search } from './extensions/Search';
@@ -121,6 +122,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
       Figure, TableFigure, CodeFigure, Algorithm, Equation, PageBreak, EqDenote, BlockCaptionKeys, MathInputRules,
       MathInline, Cite, Ref, Abbr, Footnote, Ccwd, Idx,
       UniqueId, MirrorCaret, Search, SpaceMarks, EditKeys,
+      FontFamily, FontSize, TextColor,
     ],
     content: value,
     onUpdate: ({ editor }) => {
