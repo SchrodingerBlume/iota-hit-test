@@ -272,7 +272,10 @@ export interface ThesisDoc {
   comments?: Comment[];
   /** 各部件从右手页起：auto 跟随所在部分（模板按学位定） */
   openright?: Partial<Record<OpenrightKey, TriBool>>;
+  /** 封面、内封上只改这一页的元信息（模板 #cover(title: …) 那几个参数）；空的用 info 那一份 */
+  localInfo?: Partial<Record<LocalInfoPage, Partial<Info>>>;
 }
+export type LocalInfoPage = 'cover' | 'titlepage';
 export type OpenrightKey = 'frontmatter' | 'mainmatter' | 'abstract' | 'nomenclature' | 'tableOfContents' | 'listOfFigures' | 'listOfTables' | 'listOfEquations' | 'conclusion' | 'achievements' | 'defense' | 'declarations' | 'index' | 'acknowledgement' | 'resume';
 
 export const emptyDoc = (): RichDoc => ({ type: 'doc', content: [{ type: 'paragraph' }] });

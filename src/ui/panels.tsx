@@ -12,6 +12,8 @@ import { useState } from 'react';
 import { indexPositions, type PMNode } from '../typst/pmToTypst';
 import { getEditor, whenEditorReady } from '../editor/registry';
 import { useOpenRequest } from '../editor/openRequest';
+import { INFO_FIELDS } from '../model/info';
+import { InfoField } from './InfoField';
 import { t as tx } from '../i18n';
 
 // ── 索引词登记：正文里 #idx[词] 标的都在这儿列着，改名、删除、跳过去 ──
@@ -138,6 +140,16 @@ export function PageSwitch({ pageKey }: { pageKey: keyof Pages }) {
   return <TriSeg label={def.label} hint={def.hint} choices={[{ value: false, label: tx("不显示") }, { value: true, label: tx("显示") }]} value={r.isAuto ? 'auto' : r.value} auto={r.auto} onChange={(v) => setPages({ [pageKey]: v } as any)} />;
 }
 
+/** 关键词跟着各自的摘要填：它印在摘要页底下，虽然存在 info 里（著录用的元数据，模板 keywords: 收） */
+function Keywords({ k }: { k: 'keywords' | 'keywordsEn' }) {
+  const info = useStore((s) => s.doc.info);
+  const settings = useStore((s) => s.doc.settings);
+  const setInfo = useStore((s) => s.setInfo);
+  const f = INFO_FIELDS.find((x) => x.key === k)!;
+  if (f.applies && !f.applies(settings)) return null;
+  return <div className="abstract-keywords"><InfoField f={f} value={info[k]} onChange={(v) => setInfo({ [k]: v })} /></div>;
+}
+
 export function AbstractPanel() {
   const zh = useStore((s) => s.doc.abstractZh);
   const en = useStore((s) => s.doc.abstractEn);
@@ -148,8 +160,10 @@ export function AbstractPanel() {
       <PageSettings pages={['abstract']}><SettingSwitch k="abstractKeywordsAbove" /></PageSettings>
       <h3>{tx("中文摘要")}</h3>
       <RichEditor instanceKey="abstractZh" richKey="abstractZh" value={zh} onChange={(v) => setRich('abstractZh', v)} headings={false} blocks={false} placeholder={tx("中文摘要……")} />
+      <Keywords k="keywords" />
       <h3 style={{ marginTop: 20 }}>Abstract</h3>
       <RichEditor instanceKey="abstractEn" richKey="abstractEn" value={en} onChange={(v) => setRich('abstractEn', v)} headings={false} blocks={false} placeholder="English abstract…" />
+      <Keywords k="keywordsEn" />
     </>
   );
 }

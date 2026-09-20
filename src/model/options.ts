@@ -101,7 +101,7 @@ export interface SwitchDef<V extends string | boolean = boolean> {
   applies?: (s: Settings) => boolean;
   group: string;
   /** 只关乎某一页的开关放到那一页去（摘要、缩略语、附录、页面设置、论文信息、论文类型），不在论文设置里列 */
-  place?: 'abstract' | 'nomenclature' | 'appendix' | 'toc' | 'info' | 'type';
+  place?: 'abstract' | 'nomenclature' | 'appendix' | 'toc' | 'cover' | 'titlepage' | 'type';
 }
 
 const isReport = (s: Settings) => s.stage !== 'final';
@@ -205,8 +205,8 @@ export const SWITCHES: SwitchDef<any>[] = [
     hint: t("封面的英文题目：自动是先按二号排、空行让步全用尽还装不下才降小二；开 = 主动缩，关 = 强制二号"),
     choices: onOff,
     group: t("标题与页面"),
-    place: 'info',
-    resolve: () => ({ value: false, reason: t("先按二号排，空行让步用尽还装不下才缩") }),
+    place: 'cover',
+    resolve: () => ({ value: false, mixed: t("按需缩"), reason: t("先按二号排，空行让步用尽还装不下才缩小二") }),
   },
   {
     key: 'titleEnXiaoerTitlepage',
@@ -214,8 +214,8 @@ export const SWITCHES: SwitchDef<any>[] = [
     hint: t("英文内封的英文题目：这一页是固定序列，没有空行让步，整页装不下才降小二"),
     choices: onOff,
     group: t("标题与页面"),
-    place: 'info',
-    resolve: () => ({ value: false, reason: t("先按二号排，整页装不下才缩") }),
+    place: 'titlepage',
+    resolve: () => ({ value: false, mixed: t("按需缩"), reason: t("先按二号排，整页装不下才缩小二") }),
   },
   {
     key: 'enumHanging',

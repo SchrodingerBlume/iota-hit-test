@@ -22,7 +22,7 @@ import { ProjectsView } from './ProjectsView';
 import { FontRecovery } from './FontRecovery';
 import { useFontState } from '../fonts/userFonts';
 import { SettingsPanel } from './SettingsPanel';
-import { InfoPanel } from './InfoPanel';
+import { InfoPanel, CoverPanel, TitlepagePanel } from './InfoPanel';
 import { AbstractPanel, NomenclaturePanel, RichSection, BibPanel, DefensePanel, TocPanel, IndexPanel, PageSettings, OpenrightSwitch } from './panels';
 import { Preview } from './Preview';
 import { usePreviewSurface } from './PreviewEditLayer';
@@ -41,6 +41,8 @@ import { t as tx } from '../i18n';
 const NAV: { key: Section; label: string; group: string; k?: string }[] = [
   { key: 'info', label: tx("论文信息"), group: tx("设置") },
   { key: 'settings', label: tx("论文设置"), group: tx("设置") },
+  { key: 'cover', label: tx("封面"), group: tx("前置") },
+  { key: 'titlepage', label: tx("内封"), group: tx("前置") },
   { key: 'abstract', label: tx("摘要"), group: tx("前置") },
   { key: 'nomenclature', label: tx("符号与缩略语"), group: tx("前置") },
   { key: 'toc', label: tx("目录"), group: tx("前置") },
@@ -217,7 +219,7 @@ export function App() {
   const reflowRef = useCallback((el: HTMLDivElement | null) => { reflowStop.current?.(); reflowStop.current = el && !el.querySelector('.editor') ? watchReflow(el, '.card, .card > *, .triseg > *, .axis > *') : null; }, []);
   const lastSection = useRef(section);
   useEffect(() => {
-    if (lastSection.current !== section && mode === 'preview' && ['info', 'settings', 'toc', 'bibliography', 'achievements', 'nomenclature', 'defense', 'index'].includes(section)) setMode('split');
+    if (lastSection.current !== section && mode === 'preview' && ['info', 'settings', 'cover', 'titlepage', 'toc', 'bibliography', 'achievements', 'nomenclature', 'defense', 'index'].includes(section)) setMode('split');
     lastSection.current = section;
   }, [section, mode, setMode]);
   const hasDocument = loaded && useStore.getState().projects.some((p) => p.id === doc.id);
@@ -316,6 +318,8 @@ export function App() {
     switch (section) {
       case 'settings': return <SettingsPanel />;
       case 'info': return <InfoPanel />;
+      case 'cover': return <CoverPanel />;
+      case 'titlepage': return <TitlepagePanel />;
       case 'toc': return <TocPanel />;
       case 'abstract': return <AbstractPanel />;
       case 'nomenclature': return <NomenclaturePanel />;
@@ -404,7 +408,7 @@ export function App() {
               <div key={g}>
                 <h4>{GROUP_ICON[g]}{g}</h4>
                 {NAV.filter((n) => n.group === g).map((n) => {
-                  const off = loaded && ((n.key === 'abstract' && !resolvePage(doc, 'abstract').value) || (n.key === 'nomenclature' && !resolvePage(doc, 'symbolsPage').value && !resolvePage(doc, 'abbreviationsPage').value) || (n.key === 'appendix' && !resolvePage(doc, 'appendix').value) || (n.key === 'achievements' && !resolvePage(doc, 'achievements').value) || (n.key === 'defense' && !resolvePage(doc, 'defense').value) || (n.key === 'resume' && !resolvePage(doc, 'resume').value) || (n.key === 'index' && !resolvePage(doc, 'index').value));
+                  const off = loaded && ((n.key === 'titlepage' && !resolvePage(doc, 'titlepage').value) || (n.key === 'abstract' && !resolvePage(doc, 'abstract').value) || (n.key === 'nomenclature' && !resolvePage(doc, 'symbolsPage').value && !resolvePage(doc, 'abbreviationsPage').value) || (n.key === 'appendix' && !resolvePage(doc, 'appendix').value) || (n.key === 'achievements' && !resolvePage(doc, 'achievements').value) || (n.key === 'defense' && !resolvePage(doc, 'defense').value) || (n.key === 'resume' && !resolvePage(doc, 'resume').value) || (n.key === 'index' && !resolvePage(doc, 'index').value));
                   const btn = <button key={n.key} type="button" className={`${section === n.key ? 'on' : ''} ${off ? 'off' : ''}`} aria-current={section === n.key ? 'page' : undefined} onClick={() => { setSection(n.key); if (mode === 'preview') setMode('split'); }}>{n.label}{off && <span className="k">{tx("不显示")}</span>}</button>;
                   // 正文与附录底下常驻大纲（Word 的导航窗格），可收起
                   if (n.key !== 'body' && n.key !== 'appendix') return btn;

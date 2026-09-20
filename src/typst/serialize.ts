@@ -1,7 +1,7 @@
 // 整份工程 → main.typ（以及要一起交给编译器的旁文件）。
 // 结构照 iota-hit/template/example.typ：前置 → 主体 → 附录 → 后置。
-import type { ThesisDoc, Settings, Info, StyleEntry, OpenrightKey, LayoutDict } from '../model/types';
-import { INFO_FIELDS } from '../model/info';
+import type { ThesisDoc, Settings, Info, StyleEntry, OpenrightKey, LayoutDict, LocalInfoPage } from '../model/types';
+import { INFO_FIELDS, localInfoFields, type InfoFieldDef } from '../model/info';
 import { serializeDoc, escapeText, collectImages, collectRefTargets, collectCiteKeys, indexPositions, type PMNode } from './pmToTypst';
 import { computeNumbering } from './numbering';
 import type { RichDoc } from '../model/types';
@@ -150,27 +150,28 @@ function stylesArg(styles: Settings['styles']): string {
   return `styles: (\n    ${entries.map(([k, a]) => `${k}: (${a.join(', ')})`).join(',\n    ')},\n  )`;
 }
 
-function infoArgs(info: Info, s: Settings): string[] {
-  const args: string[] = [];
-  for (const f of INFO_FIELDS) {
-    if (f.applies && !f.applies(s)) continue;
-    const v = info[f.key];
-    if (f.kind === 'keywords') {
-      const list = (v as string[]).map((k) => k.trim()).filter(Boolean);
-      if (list.length) args.push(`${f.param}: (${list.map((k, i) => `[${mark('info', 'info', i, i + 1, escapeText(k), { attr: f.key, raw: k })}]`).join(', ')},)`);
-      continue;
-    }
-    const str = String(v ?? '').trim();
-    if (!str) continue;
-    if (f.kind === 'month') {
-      // 模板收 "YYYY-MM" 字符串，自己按语言排成「2026 年 6 月」/「June, 2026」
-      if (/^\d{4}-\d{2}$/.test(str)) args.push(`${f.param}: "${mark('info', 'info', 0, str.length, str, { attr: f.key, raw: str })}"`);
-      else args.push(`${f.param}: ${infoContent(f.key, str)}`);
-      continue;
-    }
-    args.push(`${f.param}: ${f.kind === 'textarea' ? infoMultiline(f.key, str) : infoContent(f.key, str)}`);
+/** 一个元信息参数 `param: 值`，空的不发（返回 null）。attr 记进映射记号：预览里点到这个字就跳到 data-info 是它的输入框 */
+function infoArg(f: InfoFieldDef, v: string | string[] | undefined, attr: string): string | null {
+  if (f.kind === 'keywords') {
+    const list = ((v as string[] | undefined) ?? []).map((k) => k.trim()).filter(Boolean);
+    return list.length ? `${f.param}: (${list.map((k, i) => `[${mark('info', 'info', i, i + 1, escapeText(k), { attr, raw: k })}]`).join(', ')},)` : null;
   }
-  return args;
+  const str = String(v ?? '').trim();
+  if (!str) return null;
+  // 模板收 "YYYY-MM" 字符串，自己按语言排成「2026 年 6 月」/「June, 2026」
+  if (f.kind === 'month' && /^\d{4}-\d{2}$/.test(str)) return `${f.param}: "${mark('info', 'info', 0, str.length, str, { attr, raw: str })}"`;
+  return `${f.param}: ${f.kind === 'textarea' ? infoMultiline(attr, str) : infoContent(attr, str)}`;
+}
+const present = (xs: (string | null)[]): string[] => xs.filter((x): x is string => x !== null);
+
+function infoArgs(info: Info, s: Settings): string[] {
+  return present(INFO_FIELDS.filter((f) => !f.applies || f.applies(s)).map((f) => infoArg(f, info[f.key], f.key)));
+}
+/** 封面、内封只改这一页的那几项：#cover(title: …)。记号的 attr 带页名，点到跳回那一页的输入框 */
+function localInfoArgs(doc: ThesisDoc, page: LocalInfoPage): string[] {
+  const local = doc.localInfo?.[page];
+  if (!local) return [];
+  return present(localInfoFields(page, doc.settings).map((f) => infoArg(f, local[f.key], `${page}.${f.key}`)));
 }
 
 function abbrDictOf(abbrs: ThesisDoc['abbreviations']): string {
@@ -336,7 +337,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   const covers = (['cover', 'titlepage'] as const).filter((k) => resolvePage(doc, k).value);
   for (const k of covers) {
     const xiaoer = k === 'cover' ? s.titleEnXiaoer : s.titleEnXiaoerTitlepage;
-    parts.push(`#${k}(${[xiaoer !== 'auto' ? `title-en-xiaoer: ${tri(xiaoer)}` : '', pageLayout(k)].filter(Boolean).join(', ')})`);
+    parts.push(`#${k}(${[xiaoer !== 'auto' ? `title-en-xiaoer: ${tri(xiaoer)}` : '', ...localInfoArgs(doc, k), pageLayout(k)].filter(Boolean).join(', ')})`);
   }
 
   const rich = (key: RichKey, opts: { headings: boolean; headingBase?: number }) => serializeDoc(doc[key], { ...opts, knownLabels, preview, map: { key, posOf: indexPositions(doc[key] as any) } });

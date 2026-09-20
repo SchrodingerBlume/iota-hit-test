@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ThesisDoc, Settings, Info, RichDoc, Pages, Abbreviation, SymbolEntry, Defense, DefensePerson, ImageAsset, NomenclatureOptions, Comment, OpenrightKey, TriBool } from './types';
+import type { ThesisDoc, Settings, Info, RichDoc, Pages, Abbreviation, SymbolEntry, Defense, DefensePerson, ImageAsset, NomenclatureOptions, Comment, OpenrightKey, TriBool, LocalInfoPage } from './types';
 import { emptyDoc } from './types';
 import { defaultSettings } from './options';
 import { defaultInfo } from './info';
@@ -12,7 +12,7 @@ import { t } from '../i18n';
 export type RichKey = 'abstractZh' | 'abstractEn' | 'body' | 'conclusion' | 'appendix' | 'acknowledgement' | 'resume';
 
 export type Section =
-  | 'settings' | 'info' | 'abstract' | 'nomenclature' | 'body' | 'conclusion'
+  | 'settings' | 'info' | 'cover' | 'titlepage' | 'abstract' | 'nomenclature' | 'body' | 'conclusion'
   | 'bibliography' | 'appendix' | 'achievements' | 'defense' | 'acknowledgement' | 'resume' | 'toc' | 'index';
 
 const person = () => ({ name: '', title: '', affiliation: '', discipline: '' });
@@ -85,6 +85,7 @@ export function normalizeDoc(raw: Partial<ThesisDoc>): ThesisDoc {
   doc.abbreviations ??= [];
   if (!Array.isArray(doc.comments)) doc.comments = [];
   doc.openright ??= {};
+  doc.localInfo ??= {};
   doc.symbols ??= [];
   doc.images ??= [];
   return doc;
@@ -115,6 +116,7 @@ interface State {
   setComments: (comments: Comment[]) => void;
   setOpenright: (patch: Partial<Record<OpenrightKey, TriBool>>) => void;
   setInfo: (patch: Partial<Info>) => void;
+  setLocalInfo: (page: LocalInfoPage, patch: Partial<Info>) => void;
   setSourceDraft: (key: string, source: string | undefined) => void;
   setRich: (key: RichKey, value: RichDoc) => void;
   setPages: (patch: Partial<Pages>) => void;
@@ -185,6 +187,7 @@ export const useStore = create<State>((set, get) => {
     setComments: (comments) => update((d) => ({ ...d, comments })),
     setOpenright: (patch) => update((d) => ({ ...d, openright: { ...d.openright, ...patch } })),
     setInfo: (patch) => update((d) => ({ ...d, info: { ...d.info, ...patch } })),
+    setLocalInfo: (page, patch) => update((d) => ({ ...d, localInfo: { ...d.localInfo, [page]: { ...d.localInfo?.[page], ...patch } } })),
     setSourceDraft: (key, source) => update((d) => { const sourceDrafts = { ...d.sourceDrafts }; if (source === undefined) delete sourceDrafts[key]; else sourceDrafts[key] = source; return { ...d, sourceDrafts }; }),
     // Markdown 模式会在每次成功解析后同步富文本；草稿由模式切换显式清理，避免一次输入触发两次整篇保存与排版。
     setRich: (key, value) => update((d) => ({ ...d, [key]: value })),

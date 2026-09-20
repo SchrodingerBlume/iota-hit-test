@@ -10,6 +10,7 @@ import type { Editor } from '@tiptap/core';
 import { NodeSelection, Selection, TextSelection } from '@tiptap/pm/state';
 import { useCompileState } from '../compiler/client';
 import { useStore, type RichKey, type Section } from '../model/store';
+import { sectionOfInfo } from '../model/info';
 import { focusInfo, renderSnippetSvg } from '../compiler/renderer';
 import { getEditor, onRegistryChange, whenEditorReady } from '../editor/registry';
 import { docVersion, mappingBetween, mappingSince, toNewPos, toOldPos } from '../editor/versions';
@@ -406,7 +407,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     const offset = side === 'before' ? g.from : g.to;
     if (g.kind === 'info') {
       const st = useStore.getState();
-      st.setView('editor'); st.setSection('info');
+      st.setView('editor'); st.setSection(sectionOfInfo(g.seg.attr ?? ""));
       setTimeout(() => {
         const el = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[data-info="${g.seg.attr}"]`);
         if (!el) return;

@@ -1,19 +1,12 @@
 import { useStore } from '../model/store';
-import { INFO_FIELDS, INFO_GROUPS, type InfoFieldDef } from '../model/info';
-import type { Info } from '../model/types';
-import { TagInput } from './TagInput';
+import { INFO_FIELDS, INFO_GROUPS, localInfoFields } from '../model/info';
+import type { LocalInfoPage } from '../model/types';
+import { resolvePage } from '../model/pages';
+import { InfoField } from './InfoField';
 import { SettingSwitch } from './TriSwitch';
 import { PageSettings } from './panels';
 import { t } from '../i18n';
 const tx = t;
-
-function FieldInput({ f, info, setInfo }: { f: InfoFieldDef; info: Info; setInfo: (p: Partial<Info>) => void }) {
-  const v = info[f.key];
-  if (f.kind === 'keywords') return <TagInput value={v as string[]} onChange={(x) => setInfo({ [f.key]: x })} placeholder={f.key === 'keywords' ? t("输入一个关键词后回车") : 'keyword, then Enter'} dataInfo={f.key} />;
-  if (f.kind === 'textarea') return <textarea data-info={f.key} value={v as string} placeholder={f.placeholder} rows={2} onChange={(e) => setInfo({ [f.key]: e.target.value })} />;
-  if (f.kind === 'month') return <input data-info={f.key} type="month" value={v as string} onChange={(e) => setInfo({ [f.key]: e.target.value })} />;
-  return <input data-info={f.key} value={v as string} placeholder={f.placeholder} onChange={(e) => setInfo({ [f.key]: e.target.value })} />;
-}
 
 export function InfoPanel() {
   const info = useStore((s) => s.doc.info);
@@ -23,29 +16,59 @@ export function InfoPanel() {
     <>
       <h2>{t("论文信息")}</h2>
       {INFO_GROUPS.map((g) => {
-        const fields = INFO_FIELDS.filter((f) => f.group === g && (!f.applies || f.applies(settings)));
+        const fields = INFO_FIELDS.filter((f) => f.group === g && !f.place && (!f.applies || f.applies(settings)));
         if (!fields.length) return null;
         return (
           <div className="card" key={g}>
             <h3>{g}</h3>
             <div className="grid2">
-              {fields.map((f) => {
-                // 关键词那种带按钮的复合控件不能套 <label>：点标签任何地方都会转成点里面第一个按钮（第一个 ✕）
-                const Tag = f.kind === 'keywords' ? 'div' : 'label';
-                return (
-                  <Tag className="field" key={f.key} style={f.kind === 'textarea' ? { gridColumn: '1 / -1' } : undefined}>
-                    <span className="field-label">{f.label}</span>
-                    <FieldInput f={f} info={info} setInfo={setInfo} />
-                    {f.hint && <span className="field-hint">{f.hint}</span>}
-                    {f.key === 'titleEn' && <div className="field-switches"><SettingSwitch k="titleEnXiaoer" /><SettingSwitch k="titleEnXiaoerTitlepage" /></div>}
-                  </Tag>
-                );
-              })}
+              {fields.map((f) => <InfoField key={f.key} f={f} value={info[f.key]} onChange={(v) => setInfo({ [f.key]: v })} />)}
             </div>
           </div>
         );
       })}
-      <PageSettings pages={['cover', 'titlepage', 'declarations']} title={tx("封面、内封与声明")} />
+      <PageSettings pages={['declarations']} title={tx("声明")} />
+    </>
+  );
+}
+
+/** 只改这一页的元信息：留空印「论文信息」那一份（占位符里显示），填了只改这一页 */
+function LocalInfoCard({ page }: { page: LocalInfoPage }) {
+  const info = useStore((s) => s.doc.info);
+  const local = useStore((s) => s.doc.localInfo?.[page]);
+  const settings = useStore((s) => s.doc.settings);
+  const setLocalInfo = useStore((s) => s.setLocalInfo);
+  return (
+    <div className="card">
+      <h3>{tx("只在这一页改的信息")}</h3>
+      <p className="field-hint">{tx("留空就印「论文信息」里填的那一份；填了只改这一页，别处不动")}</p>
+      <div className="grid2">
+        {localInfoFields(page, settings).map((f) => (
+          <InfoField key={f.key} f={f} value={local?.[f.key] ?? (f.kind === 'keywords' ? [] : '')} onChange={(v) => setLocalInfo(page, { [f.key]: v })}
+            placeholder={String(info[f.key] || f.placeholder || '')} hint={f.kind === 'textarea' ? f.hint : undefined} attr={`${page}.${f.key}`} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function CoverPanel() {
+  return (
+    <>
+      <h2>{tx("封面")}</h2>
+      <PageSettings pages={['cover']}><SettingSwitch k="titleEnXiaoer" /></PageSettings>
+      <LocalInfoCard page="cover" />
+    </>
+  );
+}
+
+export function TitlepagePanel() {
+  const shown = useStore((s) => resolvePage(s.doc, 'titlepage').value);
+  return (
+    <>
+      <h2>{tx("内封")}</h2>
+      <PageSettings pages={['titlepage']}><SettingSwitch k="titleEnXiaoerTitlepage" /></PageSettings>
+      {shown && <LocalInfoCard page="titlepage" />}
     </>
   );
 }

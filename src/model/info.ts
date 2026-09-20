@@ -1,5 +1,6 @@
 // 元信息字段的登记表：标签、提示、在哪些档位下才印（不印的字段界面上折起来）。
-import type { Info, Settings } from './types';
+import type { Info, LocalInfoPage, Settings } from './types';
+import type { Section } from './store';
 import { t } from '../i18n';
 
 export interface InfoFieldDef {
@@ -13,6 +14,8 @@ export interface InfoFieldDef {
   applies?: (s: Settings) => boolean;
   group: string;
   placeholder?: string;
+  /** 不在「论文信息」里填而在别的节填的（关键词跟着摘要） */
+  place?: Extract<Section, 'abstract'>;
 }
 
 const graduate = (s: Settings) => s.degreeLevel !== 'bachelor';
@@ -24,8 +27,8 @@ export const INFO_FIELDS: InfoFieldDef[] = [
   { key: 'titleEn', label: t("英文题目"), param: 'title-en', kind: 'textarea', group: t("题目"), placeholder: 'RESEARCH ON KEY TECHNOLOGIES OF …' },
   { key: 'subtitle', label: t("中文副题目"), param: 'subtitle', kind: 'text', group: t("题目"), hint: t("选填"), applies: final },
   { key: 'subtitleEn', label: t("英文副题目"), param: 'subtitle-en', kind: 'text', group: t("题目"), applies: final },
-  { key: 'keywords', label: t("中文关键词"), param: 'keywords', kind: 'keywords', group: t("题目"), hint: t("按 Enter 添加关键词"), applies: final },
-  { key: 'keywordsEn', label: t("英文关键词"), param: 'keywords-en', kind: 'keywords', group: t("题目"), applies: final },
+  { key: 'keywords', label: t("中文关键词"), param: 'keywords', kind: 'keywords', group: t("题目"), place: 'abstract', hint: t("按 Enter 添加关键词"), applies: final },
+  { key: 'keywordsEn', label: t("英文关键词"), param: 'keywords-en', kind: 'keywords', group: t("题目"), place: 'abstract', applies: final },
 
   { key: 'author', label: t("作者"), param: 'author', kind: 'text', group: t("作者与导师") },
   { key: 'authorEn', label: t("作者（英文）"), param: 'author-en', kind: 'text', group: t("作者与导师"), hint: t("留空则内封英文页用中文名"), applies: final },
@@ -54,6 +57,23 @@ export const INFO_FIELDS: InfoFieldDef[] = [
 ];
 
 export const INFO_GROUPS = [t("题目"), t("作者与导师"), t("学位与单位"), t("其他信息")] as const;
+
+/** 封面、内封上能只改这一页的字段：模板 #cover / #titlepage 收的那几个参数。报告首页只收题目 */
+const LOCAL_INFO: Record<LocalInfoPage, (keyof Info)[]> = {
+  cover: ['title', 'titleEn', 'subtitle', 'subtitleEn', 'author', 'date', 'practiceType'],
+  titlepage: ['title', 'titleEn', 'subtitle', 'subtitleEn', 'secrecy', 'classifiedIndex', 'udc', 'schoolCode'],
+};
+export function localInfoFields(page: LocalInfoPage, s: Settings): InfoFieldDef[] {
+  const keys: (keyof Info)[] = page === 'cover' && s.stage !== 'final' ? ['title'] : LOCAL_INFO[page];
+  return INFO_FIELDS.filter((f) => keys.includes(f.key) && (!f.applies || f.applies(s)));
+}
+
+/** 预览里点到某个元信息字要切到哪一节。attr 是输入框的 data-info：只改这一页的带页名（cover.title） */
+export function sectionOfInfo(attr: string): Section {
+  const dot = attr.indexOf('.');
+  if (dot > 0) return attr.slice(0, dot) as LocalInfoPage;
+  return INFO_FIELDS.find((f) => f.key === attr)?.place ?? 'info';
+}
 
 export const defaultInfo = (): Info => ({
   title: '',
