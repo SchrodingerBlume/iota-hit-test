@@ -13,6 +13,8 @@ import { lengthTypst, ABS_UNITS } from '../model/length';
 import type { RichKey } from '../model/store';
 
 export const IOTA_HIT_VERSION = '0.1.0';
+/** 引用写 omni-gb7714 自己的 cite（盖掉原生的）：一次合并多条、页码、叙述式 / 只著者 / 只年份，原生 cite 的 form 它不认 */
+const CITE_IMPORT = '#import "@local/omni-gb7714:0.1.0": cite';
 
 // 数学字体三档统一用随站分发的 TeX Gyre Termes Math（模板的 windows / macos 档写的是 Cambria Math / STIX Two Math，
 // 那两副要本机有）；要换别的，用户自己读本机数学字体再选（settings.mathFont）
@@ -157,6 +159,8 @@ function gb7714Arg(s: Settings): string {
   if (s.bibVersion !== 'auto') d.version = s.bibVersion;
   if (s.citeForm !== 'auto' && s.bibStyle !== 'foot') d['cite-form'] = JSON.stringify(s.citeForm);
   if (s.bibBracket !== 'auto') { d['bib-numbering-style'] = s.bibBracket === 'full' ? '"fullwidth-bracket"' : '"bracket"'; d['mark-medium-bracket-style'] = JSON.stringify(s.bibBracket); }
+  // 著者-出版年制：表不编号（国标按著者字顺排，模板默认那个全角括号编号是给顺序编码制的）；页码放括号里（张三，2020：15）
+  if (s.bibStyle === 'author-date') { d['bib-numbering-style'] = 'none'; d['cite-supplement-style'] = '"compact"'; }
   if (s.bibAuthors === 'all') d['bib-et-al-min'] = '1000';
   else if (s.bibAuthors === 'three') { d['bib-et-al-min'] = '4'; d['bib-et-al-use-first'] = '3'; }
   if (s.bibUrls === 'online') d['show-url'] = '"online-only"';
@@ -430,7 +434,7 @@ export function serializePara(doc: ThesisDoc, index: number, live?: { node: PMNo
   const parts: string[] = [];
   const nodes = doc.body.content ?? [];
   const chapter = chapterRanges(doc.body).findIndex((r) => index >= r.from && index < r.to) + 1;
-  parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *`);
+  parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n${CITE_IMPORT}`);
   parts.push(HIGHLIGHT_RULE, TABLE_RULE);
   parts.push(PREVIEW_PRELUDE);
   parts.push(iotaHitShow(doc));
@@ -470,7 +474,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   // 正文与附录里所有能被引用的标签（取消编号的公式不在内）
   const knownLabels = new Set<string>([...collectRefTargets(doc.body), ...collectRefTargets(doc.appendix)].map((r) => r.label));
 
-  parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n// LaTeX 公式走 mitex 转成 Typst（包已随站内打包）\n#import "@preview/mitex:0.2.7": mitex, mi`);
+  parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n${CITE_IMPORT}\n// LaTeX 公式走 mitex 转成 Typst（包已随站内打包）\n#import "@preview/mitex:0.2.7": mitex, mi`);
   parts.push(HIGHLIGHT_RULE, TABLE_RULE);
   if (preview) parts.push(PREVIEW_PRELUDE);
   parts.push(iotaHitShow(doc));
@@ -607,7 +611,7 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   for (const [label, info] of computeNumbering(doc.body as any, s, 'body')) if (!knownLabels.has(label)) refText.set(label, info.ref);
   for (const [label, info] of computeNumbering(doc.appendix as any, s, 'appendix')) if (!knownLabels.has(label)) refText.set(label, info.ref);
 
-  parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n#import "@preview/mitex:0.2.7": mitex, mi`);
+  parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n${CITE_IMPORT}\n#import "@preview/mitex:0.2.7": mitex, mi`);
   parts.push(HIGHLIGHT_RULE, TABLE_RULE);
   parts.push(PREVIEW_PRELUDE);
   parts.push(iotaHitShow(doc));

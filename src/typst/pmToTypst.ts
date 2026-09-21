@@ -256,8 +256,12 @@ export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {
       } break;
       case 'cite': {
         const keys = String(n.attrs?.keys ?? '').split(/[,，;；\s]+/).map(safeLabel).filter(Boolean);
-        // 写成函数调用而不是 @key：Typst 0.15 的 @ 引用会把紧跟的汉字也吞进 label
-        atom(tag(opts, n, 'node', keys.map((k) => `#cite(<${k}>)`).join('')));
+        // 写成函数调用而不是 @key：Typst 0.15 的 @ 引用会把紧跟的汉字也吞进 label。cite 是 omni-gb7714 的（主文件里盖掉原生的）：
+        // 几个键一次合并，页码（supplement）与标注形式（叙述式 / 只著者 / 只年份）都是它的参数
+        if (!keys.length) break;
+        const form = ['prose', 'author', 'year'].includes(String(n.attrs?.form ?? '')) ? `, form: ${JSON.stringify(n.attrs!.form)}` : '';
+        const sup = String(n.attrs?.supplement ?? '').trim();
+        atom(tag(opts, n, 'node', `#cite(${keys.map((k) => `<${k}>`).join(', ')}${form}${sup ? `, supplement: [${escapeText(sup)}]` : ''})`));
         break;
       }
       case 'ref': {

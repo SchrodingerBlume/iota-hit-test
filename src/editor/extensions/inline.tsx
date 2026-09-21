@@ -9,6 +9,7 @@ import { MathEditor, forPreview } from '../math/MathEditor';
 import { MathPreview } from '../math/MathPreview';
 import { t } from '../../i18n';
 import { MirrorInput, MirrorTextarea } from '../mirror';
+import { t as tx } from '../../i18n';
 
 const inlineAtom = (name: string, attrs: Record<string, { default: any }>, View: (p: NodeViewProps) => ReactElement) =>
   Node.create({
@@ -63,8 +64,11 @@ function CiteView({ node, updateAttributes, selected, deleteNode, editor, getPos
     updateAttributes({ keys: next.join(',') });
   };
   const list = env.bibKeys.filter((b) => !q || b.key.toLowerCase().includes(q.toLowerCase()) || b.title.toLowerCase().includes(q.toLowerCase()));
+  const form = String(node.attrs.form ?? 'auto');
+  const supplement = String(node.attrs.supplement ?? '').trim();
+  const chip = keys.length ? `[${keys.join(', ')}${supplement ? `: ${supplement}` : ''}]${form === 'prose' ? tx("·叙") : form === 'author' ? tx("·著") : form === 'year' ? tx("·年") : ''}` : '';
   return (
-    <InlineChip onSelect={() => { const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }} kind="cite" openNonce={open.nonce} text={keys.length ? `[${keys.join(', ')}]` : <em>{t("引用")}</em>} title={t("参考文献引用")} selected={selected} editable={editor.isEditable} autoOpen={!keys.length} onDelete={deleteNode}>
+    <InlineChip onSelect={() => { const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }} kind="cite" openNonce={open.nonce} text={chip || <em>{t("引用")}</em>} title={t("参考文献引用")} selected={selected} editable={editor.isEditable} autoOpen={!keys.length} onDelete={deleteNode}>
       {() => (
         <>
           <Field label={t("文献")} hint={env.bibKeys.length ? t("选择一项或多项") : t("请先在“参考文献”中添加文献。")}>
@@ -88,12 +92,20 @@ function CiteView({ node, updateAttributes, selected, deleteNode, editor, getPos
           <Field label={t("手动输入引用键")}>
             <MirrorInput value={node.attrs.keys ?? ''} placeholder="key1,key2" onChange={(e) => updateAttributes({ keys: e.target.value })} />
           </Field>
+          <Field label={t("页码等")} hint={t("引文出处的页码（如 15 或 15-20），顺序编码制印在 [1] 外，著者-出版年制印在年后，脚注里接在条目末")}>
+            <MirrorInput value={node.attrs.supplement ?? ''} placeholder="15-20" onChange={(e) => updateAttributes({ supplement: e.target.value })} />
+          </Field>
+          <Field label={t("标注形式")} hint={t("叙述式把著者写进句子：张三（2020）认为…；只著者 / 只年份给自己拼句子用")}>
+            <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+              {(['auto', 'prose', 'author', 'year'] as const).map((f) => <button key={f} type="button" className={`bib-group-chip ${form === f ? 'on' : ''}`} onClick={() => updateAttributes({ form: f })}>{{ auto: t("默认"), prose: t("叙述式"), author: t("只著者"), year: t("只年份") }[f]}</button>)}
+            </div>
+          </Field>
         </>
       )}
     </InlineChip>
   );
 }
-export const Cite = inlineAtom('cite', { keys: { default: '' } }, CiteView);
+export const Cite = inlineAtom('cite', { keys: { default: '' }, form: { default: 'auto' }, supplement: { default: '' } }, CiteView);
 
 // ── 交叉引用 ────────────────────────────────────────────────────
 const KIND_NAME: Record<string, string> = { fig: t("图"), tab: t("表"), eq: t("式"), sec: t("节"), thm: t("定理") };

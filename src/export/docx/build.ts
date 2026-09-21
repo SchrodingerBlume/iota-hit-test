@@ -18,6 +18,7 @@ import { mathmlToOmml } from './omml';
 import { formatBibliography } from './bib';
 import { renderTypstMath, type MathImage } from './typstMath';
 import type { BibEntry } from '../../bib/bibtex';
+import { splitNames } from '../../bib/bibtex';
 
 import { fonts, fontsFor, NO_BORDERS, hasCJK } from './units';
 import { coverPage, titlepageZh, titlepageEn, defensePage, declarationsPage, pageBreak } from './pages';
@@ -128,7 +129,14 @@ function inline(ctx: Ctx, nodes: PMNode[] = [], base: { size?: number; font?: st
         if (at + num.length < ref.length) push(new TextRun({ text: ref.slice(at + num.length), size: base.size }));
         break;
       }
-      case 'cite': push(new TextRun({ text: citeText(ctx, String(n.attrs?.keys ?? '').split(/[,，;；\s]+/).filter(Boolean)), superScript: ctx.s.citeForm !== 'inline' || undefined })); break;
+      case 'cite': {
+        // Word 里只有顺序编码制：[1]，页码接在括号外（GB：序号外著录引文页码）；叙述式前面带首位责任者
+        const keys = String(n.attrs?.keys ?? '').split(/[,，;；\s]+/).filter(Boolean);
+        const sup = String(n.attrs?.supplement ?? '').trim();
+        if (n.attrs?.form === 'prose' && keys.length === 1) { const who = splitNames(ctx.doc.references.find((e) => e.key === keys[0])?.fields.author ?? '')[0]; if (who) push(new TextRun({ text: `${who.replace(/,.*$/, '')} `, size: base.size })); }
+        push(new TextRun({ text: citeText(ctx, keys) + sup, superScript: ctx.s.citeForm !== 'inline' || undefined }));
+        break;
+      }
       case 'footnote': {
         const id = ctx.nextFootnote++;
         ctx.footnotes[id] = { children: [new Paragraph({ style: 'FootnoteText', children: [new TextRun({ text: String(n.attrs?.text ?? '') })] })] };
