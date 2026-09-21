@@ -109,6 +109,9 @@ export interface Settings {
    */
   layout?: LayoutOverrides;
   localStyles?: LocalStyles;
+  /** 词条覆盖（只从工程 JSON 里改）：键按模板 overrides: 的「桶-词条-档」平铺（"titlepage-author-bachelor"、"theorem-remark"），
+   *  值是印出来的字；模板认不出的键会报错 */
+  overrides?: Record<string, string>;
   /** 页眉页脚（Word 页面设置 → 版式那张卡）：逐层的 layout.header / footer，与页眉文字的词条覆盖 */
   headerFooter?: HeaderFooterSettings;
 }

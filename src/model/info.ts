@@ -7,7 +7,7 @@ export interface InfoFieldDef {
   key: keyof Info;
   label: string;
   hint?: string;
-  /** 对应的 iota-hit 参数名 */
+  /** 对应的 iota-hit 参数名；-en 结尾的是那个参数英文的那半（模板 826caa9 起没有孪生参数，序列化时并成 [中#en[EN]]） */
   param: string;
   kind: 'text' | 'textarea' | 'keywords' | 'month';
   /** 多行：题目允许手写换行 \ */
@@ -28,7 +28,7 @@ export const INFO_FIELDS: InfoFieldDef[] = [
   { key: 'subtitle', label: t("中文副标题"), param: 'subtitle', kind: 'text', group: t("题目"), hint: t("选填"), applies: final },
   { key: 'subtitleEn', label: t("英文副标题"), param: 'subtitle-en', kind: 'text', group: t("题目"), applies: final },
   { key: 'keywords', label: t("中文关键词"), param: 'keywords', kind: 'keywords', group: t("题目"), place: 'abstract', hint: t("按 Enter 添加关键词"), applies: final },
-  { key: 'keywordsEn', label: t("英文关键词"), param: 'keywords-en', kind: 'keywords', group: t("题目"), place: 'abstract', applies: final },
+  { key: 'keywordsEn', label: t("英文关键词"), param: 'keywords-en', kind: 'keywords', group: t("题目"), place: 'abstract', hint: t("与中文关键词按顺序一一对应"), applies: final },
 
   { key: 'author', label: t("作者"), param: 'author', kind: 'text', group: t("作者与导师") },
   { key: 'authorEn', label: t("作者（英文）"), param: 'author-en', kind: 'text', group: t("作者与导师"), hint: t("留空时，英文内封使用中文姓名"), applies: final },

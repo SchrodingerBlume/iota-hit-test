@@ -71,7 +71,7 @@ async function main() {
 #show: frontmatter
 #cover()
 #titlepage()
-#abstract(en: [English abstract.])[中文摘要。]
+#abstract(keywords: ([关键词#en[keyword]],))[中文摘要。#en[English abstract.]]
 #table-of-contents()
 #show: mainmatter
 = 绪论#en[Introduction]

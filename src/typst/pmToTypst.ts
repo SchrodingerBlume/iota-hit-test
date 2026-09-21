@@ -393,14 +393,14 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
       const enRaw = String(n.attrs?.en ?? '').trim();
       const en = enRaw ? `#en[${tag(opts, n, 'attr', escapeText(enRaw), { attr: 'en', raw: enRaw })}]` : '';
       const label = labelOf(n.attrs, 'sec');
-      // 带参数的标题走模板的函数式写法 #chapter(numbering: none, openright: true, spread: false)[…]
+      // 带参数的标题走模板的函数式写法 #chapter(numbering: none, openright: true, two-hanzi: false)[…]
       // （section / subsection / subsubsection 同形，只收 numbering）；什么都不改就是 = 标题
       const fnArgs: string[] = [];
       if (n.attrs?.numbered === false) fnArgs.push('numbering: none');
       if (level === 1) {
-        for (const k of ['openright', 'spread'] as const) {
+        for (const [k, param] of [['openright', 'openright'], ['spread', 'two-hanzi']] as const) {
           const v = n.attrs?.[k];
-          if (v === 'true' || v === 'false' || v === true || v === false) fnArgs.push(`${k}: ${v}`);
+          if (v === 'true' || v === 'false' || v === true || v === false) fnArgs.push(`${param}: ${v}`);
         }
       }
       if (fnArgs.length) return `#${['chapter', 'section', 'subsection', 'subsubsection'][level - 1]}(${fnArgs.join(', ')})[${zh}${en}]${label ? ` <${label}>` : ''}` + paraEnd(opts, n);

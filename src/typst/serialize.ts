@@ -1,7 +1,7 @@
 // 整份工程 → main.typ（以及要一起交给编译器的旁文件）。
 // 结构照 iota-hit/template/example.typ：前置 → 主体 → 附录 → 后置。
 import { axisSuffix, headerSplit } from './hfTerms';
-import type { ThesisDoc, Settings, Info, StyleEntry, OpenrightKey, LayoutDict, LocalInfoPage, TriBool, HFRecord, HFLevel } from '../model/types';
+import type { ThesisDoc, Settings, Info, Lang, StyleEntry, OpenrightKey, LayoutDict, LocalInfoPage, TriBool, HFRecord, HFLevel } from '../model/types';
 import { INFO_FIELDS, localInfoFields, type InfoFieldDef } from '../model/info';
 import { serializeDoc, escapeText, collectImages, collectRefTargets, collectCiteKeys, indexPositions, type PMNode } from './pmToTypst';
 import { computeNumbering } from './numbering';
@@ -33,10 +33,10 @@ export interface Project {
 }
 
 const content = (s: string) => `[${escapeText(s.trim())}]`;
-/** 元信息字段：内容外面套映射记号，pmFrom/pmTo 记的是在字段值里的偏移 */
+/** 元信息字段（不带方括号）：内容外面套映射记号，pmFrom/pmTo 记的是在字段值里的偏移 */
 const infoContent = (field: string, s: string) => {
   const raw = s.trim();
-  return `[${mark('info', 'info', 0, raw.length, escapeText(raw), { attr: field, raw })}]`;
+  return mark('info', 'info', 0, raw.length, escapeText(raw), { attr: field, raw });
 };
 const infoMultiline = (field: string, s: string) => {
   const value = s.trim();
@@ -49,8 +49,16 @@ const infoMultiline = (field: string, s: string) => {
     if (!raw) continue;
     lines.push(mark('info', 'info', start, start + raw.length, escapeText(raw), { attr: field, raw }));
   }
-  return `[${lines.join(' \\ ')}]`;
+  return lines.join(' \\ ');
 };
+/** 双语并成一段带标记的内容（模板 826caa9 起没有 -en 孪生参数）：[中#en[EN]]；英文档反过来 [EN#zh[中]]；
+ *  只有一半就只发那一半，只有英文时 [#en[EN]]，中文那半模板回落到英文 */
+function bilingual(zh: string, en: string, lang: Lang): string | null {
+  if (!zh && !en) return null;
+  if (!zh) return `[#en[${en}]]`;
+  if (!en) return `[${zh}]`;
+  return lang === 'en' ? `[${en}#zh[${zh}]]` : `[${zh}#en[${en}]]`;
+}
 
 function tri(v: 'auto' | boolean | string): string {
   if (v === 'auto') return 'auto';
@@ -123,21 +131,20 @@ export function levelLayout(s: Settings, level: HFLevel): LayoutDict | undefined
   if (!header && !footer) return base;
   return { ...(base ?? {}), ...(header ? { header: { ...((base?.header as LayoutDict) ?? {}), ...header } } : {}), ...(footer ? { footer: { ...((base?.footer as LayoutDict) ?? {}), ...footer } } : {}) };
 }
-/** overrides:——页眉印的那一行 */
+/** overrides:——工程 JSON 里平铺的词条，加页眉印的那一行 */
 function overridesArg(s: Settings): string {
-  const hf = s.headerFooter;
-  if (!hf) return '';
-  const t = hf.text;
-  if (!t || t.auto) return '';
-  // 页眉那一行的词条是收料字典 p 的函数：用户给整句就发常函数，键带全轴、压过模板自带的各档（odd / even）。
-  // 不分奇偶：一句发两条（不发 even 的话偶数页回到模板拼的）；分奇偶：哪格填了换哪格，空着的留模板的
-  const ax = axisSuffix(s);
-  const split = t.split ?? headerSplit(s);
-  const line = (v: string) => `(..a) => [${escapeText(v.trim())}]`;
-  const out: string[] = [];
-  if (t.value.trim()) out.push(`header-odd${ax}: ${line(t.value)}`);
-  const even = split ? t.even : t.value;
-  if (even.trim()) out.push(`header-even${ax}: ${line(even)}`);
+  const out = Object.entries(s.overrides ?? {}).filter(([k, v]) => /^[a-z][a-z0-9-]*$/.test(k) && typeof v === 'string').map(([k, v]) => `${k}: ${content(v)}`);
+  const t = s.headerFooter?.text;
+  if (t && !t.auto) {
+    // 页眉那一行的词条是收料字典 p 的函数：用户给整句就发常函数，键带全轴、压过模板自带的各档（odd / even）。
+    // 不分奇偶：一句发两条（不发 even 的话偶数页回到模板拼的）；分奇偶：哪格填了换哪格，空着的留模板的
+    const ax = axisSuffix(s);
+    const split = t.split ?? headerSplit(s);
+    const line = (v: string) => `(..a) => [${escapeText(v.trim())}]`;
+    if (t.value.trim()) out.push(`header-odd${ax}: ${line(t.value)}`);
+    const even = split ? t.even : t.value;
+    if (even.trim()) out.push(`header-even${ax}: ${line(even)}`);
+  }
   return out.length ? `overrides: (${out.join(', ')})` : '';
 }
 const localStylesArg = (d: LayoutDict | undefined): string => (d && Object.keys(d).length ? `styles: ${typstDict(d)}` : '');
@@ -211,28 +218,42 @@ function stylesArg(styles: Settings['styles']): string {
   return `styles: (\n    ${entries.map(([k, a]) => `${k}: (${a.join(', ')})`).join(',\n    ')},\n  )`;
 }
 
-/** 一个元信息参数 `param: 值`，空的不发（返回 null）。attr 记进映射记号：预览里点到这个字就跳到 data-info 是它的输入框 */
-function infoArg(f: InfoFieldDef, v: string | string[] | undefined, attr: string): string | null {
-  if (f.kind === 'keywords') {
-    const list = ((v as string[] | undefined) ?? []).map((k) => k.trim()).filter(Boolean);
-    return list.length ? `${f.param}: (${list.map((k, i) => `[${mark('info', 'info', i, i + 1, escapeText(k), { attr, raw: k })}]`).join(', ')},)` : null;
-  }
+/** 一个元信息字段的内容（不带方括号），空的 null。attr 记进映射记号：预览里点到这个字就跳到 data-info 是它的输入框 */
+function infoInner(f: InfoFieldDef, v: string | undefined, attr: string): string {
   const str = String(v ?? '').trim();
-  if (!str) return null;
-  // 模板收 "YYYY-MM" 字符串，自己按语言排成「2026 年 6 月」/「June, 2026」
-  if (f.kind === 'month' && /^\d{4}-\d{2}$/.test(str)) return `${f.param}: "${mark('info', 'info', 0, str.length, str, { attr, raw: str })}"`;
-  return `${f.param}: ${f.kind === 'textarea' ? infoMultiline(attr, str) : infoContent(attr, str)}`;
+  return !str ? '' : f.kind === 'textarea' ? infoMultiline(attr, str) : infoContent(attr, str);
 }
 const present = (xs: (string | null)[]): string[] => xs.filter((x): x is string => x !== null);
+const enTwin = (f: InfoFieldDef, fields: InfoFieldDef[]) => fields.find((t) => t.param === `${f.param}-en`);
 
-function infoArgs(info: Info, s: Settings): string[] {
-  return present(INFO_FIELDS.filter((f) => !f.applies || f.applies(s)).map((f) => infoArg(f, info[f.key], f.key)));
+/** 元信息参数：中英两格并成一段（bilingual）；日期是 "YYYY-MM" 字符串，模板自己按语言排；关键词跟着摘要走（abstractArgs） */
+function infoArgs(info: Info, s: Settings, pick: (f: InfoFieldDef) => string | undefined = (f) => info[f.key] as string, attr = (f: InfoFieldDef) => f.key as string, fields = INFO_FIELDS): string[] {
+  const shown = fields.filter((f) => (!f.applies || f.applies(s)) && f.kind !== 'keywords');
+  return present(shown.filter((f) => !f.param.endsWith('-en')).map((f) => {
+    const str = String(pick(f) ?? '').trim();
+    if (f.kind === 'month') return /^\d{4}-\d{2}$/.test(str) ? `${f.param}: "${mark('info', 'info', 0, str.length, str, { attr: attr(f), raw: str })}"` : null;
+    const twin = enTwin(f, shown);
+    const v = bilingual(infoInner(f, str, attr(f)), twin ? infoInner(twin, pick(twin), attr(twin)) : '', s.lang);
+    return v ? `${f.param}: ${v}` : null;
+  }));
 }
-/** 封面、内封只改这一页的那几项：#cover(title: …)。记号的 attr 带页名，点到跳回那一页的输入框 */
+/** 封面、内封只改这一页的那几项：#cover(title: …)。记号的 attr 带页名，点到跳回那一页的输入框；
+ *  只改了一种语言那格时另一半仍取文档的（并进同一段内容，模板不再分格回落） */
 function localInfoArgs(doc: ThesisDoc, page: LocalInfoPage): string[] {
   const local = doc.localInfo?.[page];
   if (!local) return [];
-  return present(localInfoFields(page, doc.settings).map((f) => infoArg(f, local[f.key], `${page}.${f.key}`)));
+  const fields = localInfoFields(page, doc.settings);
+  const touched = (f: InfoFieldDef) => { const t = enTwin(f, fields); return !!(String(local[f.key] ?? '').trim() || (t && String(local[t.key] ?? '').trim())); };
+  const base = (f: InfoFieldDef) => fields.find((b) => `${b.param}-en` === f.param) ?? f;
+  return infoArgs(doc.info, doc.settings, (f) => touched(base(f)) ? (String(local[f.key] ?? '').trim() || (doc.info[f.key] as string)) : undefined, (f) => `${page}.${f.key}`, fields);
+}
+/** 关键词：中英按序配对成 ([中#en[EN]], …)，多出来的那些单边发（模板另一页回落印同一份） */
+function keywordsArg(info: Info, s: Settings): string {
+  const list = (k: 'keywords' | 'keywordsEn') => (INFO_FIELDS.find((f) => f.key === k)?.applies?.(s) ?? true) ? (info[k] ?? []).map((x) => x.trim()) : [];
+  const zh = list('keywords'), en = list('keywordsEn');
+  const item = (k: 'keywords' | 'keywordsEn', i: number, raw: string) => mark('info', 'info', i, i + 1, escapeText(raw), { attr: k, raw });
+  const pairs = present(Array.from({ length: Math.max(zh.length, en.length) }, (_, i) => bilingual(zh[i] ? item('keywords', i, zh[i]) : '', en[i] ? item('keywordsEn', i, en[i]) : '', s.lang)));
+  return pairs.length ? `keywords: (${pairs.join(', ')},)` : '';
 }
 
 function abbrDictOf(abbrs: ThesisDoc['abbreviations']): string {
@@ -420,12 +441,15 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   }
 
   const rich = (key: RichKey, opts: { headings: boolean; headingBase?: number }) => serializeDoc(doc[key], { ...opts, knownLabels, preview, map: { key, posOf: indexPositions(doc[key] as any) } });
-  const abstractZh = rich('abstractZh', { headings: false });
-  const abstractEn = rich('abstractEn', { headings: false });
-  if (resolvePage(doc, 'abstract').value && (abstractZh.trim() || abstractEn.trim())) {
+  const abstractZh = rich('abstractZh', { headings: false }).trim();
+  const abstractEn = rich('abstractEn', { headings: false }).trim();
+  if (resolvePage(doc, 'abstract').value && (abstractZh || abstractEn)) {
     // 关键词上方：模板 keywords-above——none 不空、v(1fr) 挤到页底、auto 空一行（默认，不写）
-    const ka = s.abstractKeywordsAbove === 'none' ? ', keywords-above: none' : s.abstractKeywordsAbove === 'bottom' ? ', keywords-above: v(1fr)' : '';
-    parts.push(`#abstract(en: [\n${indent(abstractEn, 2)}\n]${ka}${or('abstract') ? `, ${or('abstract')}` : ''}${pageLayout('abstract') ? `, ${pageLayout('abstract')}` : ''}${localStylesArg(s.localStyles?.pages?.abstract) ? `, ${localStylesArg(s.localStyles?.pages?.abstract)}` : ''})[\n${indent(abstractZh, 2)}\n]`);
+    const ka = s.abstractKeywordsAbove === 'none' ? 'keywords-above: none' : s.abstractKeywordsAbove === 'bottom' ? 'keywords-above: v(1fr)' : '';
+    // 英文那篇整块放在末尾的 #en[]（英文档反过来 #zh[]）；只有一种语言就只排那一页
+    const block = (m: string, body: string) => `#${m}[\n${indent(body, 2)}\n]`;
+    const body = !abstractEn ? abstractZh : !abstractZh ? block('en', abstractEn) : s.lang === 'en' ? `${abstractEn}\n\n${block('zh', abstractZh)}` : `${abstractZh}\n\n${block('en', abstractEn)}`;
+    parts.push(`#abstract(${[keywordsArg(doc.info, s), ka, or('abstract'), pageLayout('abstract'), localStylesArg(s.localStyles?.pages?.abstract)].filter(Boolean).join(', ')})[\n${indent(body, 2)}\n]`);
   }
 
   const nomen = nomenclature(doc, or('nomenclature'));
