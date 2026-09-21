@@ -38,7 +38,7 @@ function wrap(t: string, size: number, width: number, bold = false, latin = FONT
 // ── 封面与内封：照校方 Word 范例的段落序列抄 ──
 // 范例（Desktop/iota-对比/修正版docx/博士范例-修正.docx、本科范例-修正.docx）每一行的字号、加粗、字体、对齐、
 // 段距、贴不贴网格都照录；范例里说明文字（「↑（宋体小2号字加粗）」那些）占的行留成同字号的空段，版式才一模一样。
-// 页与页之间的分页符放在下一页第一段的开头（范例如此），不另起一个只有分页符的空段——那会在新页顶上多出一行。
+// 封面、内封各自一节（分节符折在上一页最后一段里），页与页之间不另起只有分页符的空段——那会在新页顶上多出一行。
 interface Line {
   t?: string;
   /** 字号（半磅）：空段也要给，段落标记的字号决定空行多高 */
@@ -52,8 +52,6 @@ interface Line {
   exact?: boolean;
   /** 贴文档网格（范例里 snapToGrid 没写 0 的那些） */
   grid?: boolean;
-  /** 这一段开头带分页符 */
-  br?: boolean;
   right?: boolean;
   firstLine?: number;
   /** 右边顶到版心右缘的那一截（制表位） */
@@ -64,7 +62,6 @@ const E = (sz: number, extra: Partial<Line> = {}): Line => ({ sz, ...extra });
 const C = (t: string, sz: number, extra: Partial<Line> = {}): Line => ({ t, sz, jc: AlignmentType.CENTER, ...extra });
 function linePara(l: Line): Paragraph {
   const kids: ParagraphChild[] = [];
-  if (l.br) kids.push(new PageBreak());
   if (l.t) l.t.split('\n').forEach((piece, i) => { if (i) kids.push(new TextRun({ break: 1 })); kids.push(run(piece, l.sz / HALF, { bold: l.b, zh: l.zh })); });
   if (l.tab) kids.push(new TextRun({ children: [new Tab()] }), run(l.tab, l.sz / HALF, { bold: l.b, zh: l.zh }));
   return new Paragraph({
@@ -113,12 +110,12 @@ export function titlepageZh(doc: ThesisDoc, width: number): (Paragraph | Table)[
   const title = lines(pick(doc, 'titlepage', 'title')).concat(pick(doc, 'titlepage', 'subtitle') ? [pick(doc, 'titlepage', 'subtitle')] : []).join('\n');
   const gap = '                ';
   const head: Line[] = grad ? [
-    { t: `国内图书分类号：${pick(doc, 'titlepage', 'classifiedIndex')}${gap}学校代码：${pick(doc, 'titlepage', 'schoolCode')}`, sz: 24, br: true, jc: AlignmentType.CENTER },
+    { t: `国内图书分类号：${pick(doc, 'titlepage', 'classifiedIndex')}${gap}学校代码：${pick(doc, 'titlepage', 'schoolCode')}`, sz: 24, jc: AlignmentType.CENTER },
     { t: `国际图书分类号：${pick(doc, 'titlepage', 'udc')}${gap}密级：${pick(doc, 'titlepage', 'secrecy') || '公开'}`, sz: 24, line: 300 },
     E(24, { grid: true }), E(44, { line: 300 }), E(24, { grid: true }), E(24, { grid: true }), E(24, { grid: true }),
   ] : [
     // 模板的本科内封头一行：☑毕业论文　☐毕业设计 …… 密级：公开（范例只有右边那截，左边勾选框是模板加的）
-    { t: `${s.form === 'practice' ? '☐' : '☑'}毕业论文  ${s.form === 'practice' ? '☑' : '☐'}毕业设计`, tab: `密级：${pick(doc, 'titlepage', 'secrecy') || '公开'}`, width, sz: 24, br: true, grid: true, jc: AlignmentType.LEFT },
+    { t: `${s.form === 'practice' ? '☐' : '☑'}毕业论文  ${s.form === 'practice' ? '☑' : '☐'}毕业设计`, tab: `密级：${pick(doc, 'titlepage', 'secrecy') || '公开'}`, width, sz: 24, grid: true, jc: AlignmentType.LEFT },
     E(24, { jc: AlignmentType.CENTER }), E(24, { grid: true }), E(24, { grid: true }),
   ];
   const seq: Line[] = [
@@ -159,7 +156,7 @@ export function titlepageEn(doc: ThesisDoc, _top: number): (Paragraph | Table)[]
   const s = doc.settings;
   const titleEn = lines(pick(doc, 'titlepage', 'titleEn')).concat(pick(doc, 'titlepage', 'subtitleEn') ? [`: ${pick(doc, 'titlepage', 'subtitleEn')}`] : []).join('\n');
   const seq: Line[] = [
-    { t: `Classified Index: ${pick(doc, 'titlepage', 'classifiedIndex')}`, sz: 24, br: true, grid: true },
+    { t: `Classified Index: ${pick(doc, 'titlepage', 'classifiedIndex')}`, sz: 24, grid: true },
     { t: `U.D.C: ${pick(doc, 'titlepage', 'udc')}`, sz: 24, grid: true },
     E(24, { grid: true }), E(24, { grid: true }), E(24, { grid: true }),
     C(DOC_TYPE_EN[s.degreeLevel], 36, { grid: true }),

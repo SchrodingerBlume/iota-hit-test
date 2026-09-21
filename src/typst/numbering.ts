@@ -21,6 +21,8 @@ export interface NumberInfo {
   ref: string;
   title: string;
   level?: number;
+  /** 标题各级的计数（导出 Word 的英文目录按它拼 Chapter 1 / 1.1） */
+  path?: number[];
 }
 
 const HANZI = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
@@ -180,7 +182,7 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
       if (level === 1) { fig = 0; tab = 0; eq = 0; alg = 0; lst = 0; for (const k in thm) thm[k] = 0; }
       const label = labelOf(n.attrs, 'sec');
       const num = headingNumber(level);
-      { const info: NumberInfo = { kind: 'sec', label, number: num, ref: level === 1 || /^(第|Chapter|Appendix|附录)/.test(num) ? num : en ? `Section ${num}` : `${num} 节`, title: text(n), level }; byNode?.set(n, info); if (label) out.set(label, info); }
+      { const info: NumberInfo = { kind: 'sec', label, number: num, ref: level === 1 || /^(第|Chapter|Appendix|附录)/.test(num) ? num : en ? `Section ${num}` : `${num} 节`, title: text(n), level, path: counters.slice(0, level) }; byNode?.set(n, info); if (label) out.set(label, info); }
       return;
     }
     if (n.type === 'figure') {

@@ -8,7 +8,7 @@ import { convertLatexToMathMl } from 'mathlive/ssr';
 import JSZip from 'jszip';
 import type { ThesisDoc, Settings, RichDoc, Comment } from '../../model/types';
 import type { PMNode } from '../../typst/pmToTypst';
-import { labelOf, CAPTION_CITE, captionCiteKeys } from '../../typst/pmToTypst';
+import { labelOf, CAPTION_CITE, captionCiteKeys, parseDenoteRows } from '../../typst/pmToTypst';
 import { computeNumbering, type NumberInfo } from '../../typst/numbering';
 import { resolvePage } from '../../model/pages';
 import { wordLinebreakOptions } from '../../typst/serialize';
@@ -47,6 +47,8 @@ interface Ctx {
   textWidth: number;
   /** Typst 写法的公式预先编成的图，键是 display + src */
   typstMath: Map<string, MathImage>;
+  /** 英文目录的条目（按出现顺序）：级、英文名、标题段上的书签；Word 的目录域只会照中文标题印，英文那份是静态条目 + PAGEREF 域 */
+  toc: { level: number; text: string; bm: string }[];
 }
 
 const text = (n: PMNode): string => (n.content ?? []).map((c) => (c.type === 'text' ? c.text ?? '' : c.type === 'hardBreak' ? '\n' : c.content ? text(c) : '')).join('');
@@ -168,11 +170,12 @@ function inline(ctx: Ctx, nodes: PMNode[] = [], base: { size?: number; font?: st
 }
 
 // ── 块 ───────────────────────────────────────────────────────────
-/** 另起一页的标记：组节时换成「分页符 + 连续分节符」，标题作为新一节的第一段，段前距在哪个兼容模式下都不会被吃掉 */
-const NEW_PAGE = { newPage: true } as const;
-type NewPage = typeof NEW_PAGE;
+/** 另起一页的标记：组节时从这里起新的一节（「下一页」分节符，节属性折进上一段的段落属性里，不多占一段——
+ *  上一页排满时多出的那一段会掉到新页上，凭空多出一张白纸）；标题作为新一节的第一段，段前距在哪个兼容模式下都不会被吃掉。
+ *  title：这一部分单页页眉印的名（摘要、结论那些没编号的部分）；没给的按 STYLEREF 1 取本章章标题 */
+interface NewPage { readonly newPage: true; readonly title?: string }
 type Block = Paragraph | Table | NewPage;
-const isNewPage = (b: Block): b is NewPage => b === NEW_PAGE;
+const isNewPage = (b: Block): b is NewPage => (b as NewPage).newPage === true;
 const centered = (children: ParagraphChild[], extra: object = {}) => new Paragraph({ alignment: AlignmentType.CENTER, indent: { firstLine: 0 }, children, ...extra });
 /** 题注串：[@key] 排成上标的文献号 */
 const captionRuns = (ctx: Ctx, s: string): TextRun[] => s.split(CAPTION_CITE).flatMap((piece, i) => (i % 2 ? [new TextRun({ text: citeText(ctx, piece.split(/[,，;；\s]+/).filter(Boolean)), superScript: true })] : piece ? [new TextRun({ text: piece })] : []));
@@ -220,6 +223,18 @@ function notePara(ctx: Ctx, n: PMNode): Paragraph[] {
     return new Paragraph({ style: 'Caption', alignment: AlignmentType.LEFT, keepNext: true, indent: { firstLine: 0, left: hang, hanging: hang }, children: [new TextRun({ text: head }), ...inline(ctx, [{ type: 'text', text: x.text.trim() }])] });
   });
 }
+/** 浮动体（figure(placement: top / bottom / auto)）：整块装进一个图文框（framePr），钉在版心顶 / 底（auto 当 top），与版心同宽，
+ *  与正文的间距照图 / 表块的上下行数。Word 里图文框是随文流的：钉着它的那一页放得下就在那页，放不下整块挪到下一页——与 Typst 一样；
+ *  （浮动表格 tblpPr 不行：放不下会被劈开跨页。）图文框只是段落属性，表格里每一段都要带同一份，所以这里只放起止记号，
+ *  包好后往 XML 里每个 pPr 补 framePr（postprocess 的 frameFloats） */
+function floatWrap(ctx: Ctx, n: PMNode, inner: Block[]): Block[] {
+  const p = String(n.attrs?.placement ?? '');
+  if (!['auto', 'top', 'bottom'].includes(p)) return inner;
+  const T = n.type === 'tableFigure' ? ctx.F.styles.figure.table : ctx.F.styles.figure.image;
+  const mark = (name: string) => new Paragraph({ children: [new Bookmark({ id: name, children: [] })] });
+  return [mark(`FLOAT_${p === 'bottom' ? 'bottom' : 'top'}_${gapTwips(T.above, ctx.P)}_${ctx.textWidth}`), ...inner, mark('FLOATEND')];
+}
+const subKey = (image: string, letter: string, n: PMNode) => `${image}#${letter}${n.attrs?.subLabel}${n.attrs?.subLabelFill}`;
 function figure(ctx: Ctx, n: PMNode): Block[] {
   const num = numOf(ctx, n, 'fig');
   let subs: { image: string; caption?: string; width?: unknown }[] = [];
@@ -234,7 +249,8 @@ function figure(ctx: Ctx, n: PMNode): Block[] {
     const cols = Math.max(1, Math.min(4, Number(n.attrs?.columns) || 2));
     const rows: TableRow[] = [];
     for (let r = 0; r < subs.length; r += cols) {
-      const cells = subs.slice(r, r + cols).map((s, k) => new TableCell({ borders: NO_BORDERS, verticalAlign: VerticalAlign.BOTTOM, children: [centered([image(ctx, s.image, cmOf(s.width, 6))].filter((x): x is ParagraphChild => !!x)), new Paragraph({ style: 'Caption', children: [new TextRun({ text: `(${letter(r + k)}) ${s.caption ?? ''}` })] })] }));
+      // 图上标签：预先把 (a) 画进图里的那一份（labelImages）
+      const cells = subs.slice(r, r + cols).map((s, k) => new TableCell({ borders: NO_BORDERS, verticalAlign: VerticalAlign.BOTTOM, children: [centered([image(ctx, ctx.images.has(subKey(s.image, letter(r + k), n)) ? subKey(s.image, letter(r + k), n) : s.image, cmOf(s.width, 6))].filter((x): x is ParagraphChild => !!x)), new Paragraph({ style: 'Caption', children: [new TextRun({ text: `(${letter(r + k)}) ${s.caption ?? ''}` })] })] }));
       while (cells.length < cols) cells.push(new TableCell({ borders: NO_BORDERS, children: [new Paragraph('')] }));
       rows.push(new TableRow({ children: cells }));
     }
@@ -255,13 +271,15 @@ function tableFigure(ctx: Ctx, n: PMNode): Block[] {
   const side = (k: string) => { const v = stroke[k]; return v ? { style: BorderStyle.SINGLE, size: Math.round(v * 8) } : { style: BorderStyle.NIL, size: 0 }; };
   const inset = typeof T.inset === 'number' ? { x: T.inset, y: T.inset } : (T.inset ?? {});
   const pad = (k: 'left' | 'right' | 'top' | 'bottom') => tw(inset[k] ?? (k === 'left' || k === 'right' ? inset.x : inset.y) ?? 0);
+  // 不许跨页的表（breakable: false）：行不拆、末行之前每一段都「与下段同页」——Word 里让整张表挪到下一页的正规做法
+  const whole = String(n.attrs?.breakable ?? 'auto') === 'false';
   const trs = rows.map((r, ri) => new TableRow({
-    tableHeader: ri === 0,
+    tableHeader: ri === 0, cantSplit: whole || undefined,
     children: (r.content ?? []).map((c) => new TableCell({
       columnSpan: Number(c.attrs?.colspan) > 1 ? Number(c.attrs?.colspan) : undefined, rowSpan: Number(c.attrs?.rowspan) > 1 ? Number(c.attrs?.rowspan) : undefined,
       borders: { top: ri === 0 ? side('top') : side('inside-h'), bottom: ri === rows.length - 1 ? side('bottom') : ri === 0 ? side('header') : side('inside-h'), left: side('left'), right: side('right') },
       verticalAlign: VerticalAlign.CENTER,
-      children: (c.content ?? []).map((p) => new Paragraph({ style: 'TableText', alignment: c.attrs?.align === 'left' ? AlignmentType.LEFT : c.attrs?.align === 'right' ? AlignmentType.RIGHT : AlignmentType.CENTER, children: inline(ctx, p.content) })),
+      children: (c.content ?? []).map((p) => new Paragraph({ style: 'TableText', keepNext: (whole && ri < rows.length - 1) || undefined, alignment: c.attrs?.align === 'left' ? AlignmentType.LEFT : c.attrs?.align === 'right' ? AlignmentType.RIGHT : AlignmentType.CENTER, children: inline(ctx, p.content) })),
     })),
   }));
   const fit = String(n.attrs?.fit ?? 'content');
@@ -295,23 +313,65 @@ function equation(ctx: Ctx, n: PMNode): Block[] {
   })];
 }
 
-function codeLines(ctx: Ctx, code: PMNode): Paragraph[] {
-  const lines = text(code).split('\n');
-  return lines.map((l) => new Paragraph({ style: 'Code', children: [new TextRun({ text: l || ' ' })] }));
+/** 公式底下的「式中　x——…」（模板 src/math/eqdenote.typ）：四栏——引导词（至少两字宽，后隔一字）、符号右对齐、破折号、说明；
+ *  符号照公式画（Typst 写法是引擎的图、LaTeX 是 Word 公式），一个符号栏里几个用「、」隔 */
+function eqdenote(ctx: Ctx, n: PMNode): Block[] {
+  const rows = parseDenoteRows(n.attrs?.rows).filter((r) => (r.symbol ?? '').trim() || (r.meaning ?? '').trim());
+  if (!rows.length) return [];
+  const lead = n.attrs?.lead === 'none' ? '' : n.attrs?.lead && n.attrs.lead !== 'auto' ? String(n.attrs.lead) : ctx.s.lang === 'en' ? 'where' : '式中';
+  const ch = tw(ctx.P['font-size']);
+  const leadW = Math.max(2 * ch, Math.round([...lead].reduce((w, c) => w + (hasCJK(c) ? 1 : 0.5), 0) * ch)) + ch;
+  // 符号栏的宽按最宽的符号估（命令算一个字、字母六成字宽、汉字一个字），Word 自动调整会把说明栏挤扁
+  const approx = (t: string) => [...t.replace(/\\[a-zA-Z]+/g, 'x').replace(/[{}^_\\$]/g, '')].reduce((w, c) => w + (hasCJK(c) ? 1 : 0.6), 0);
+  const symW = Math.round(Math.max(1, ...rows.map((r) => approx(r.symbol ?? ''))) * ch) + Math.round(0.5 * ch);
+  const widths = [leadW, symW, 2 * ch, Math.max(ch, ctx.textWidth - leadW - symW - 2 * ch)];
+  const cell = (kids: ParagraphChild[], jc: (typeof AlignmentType)[keyof typeof AlignmentType], w: number) => new TableCell({ borders: NO_BORDERS, margins: { top: 0, bottom: 0, left: 0, right: 0 }, width: { size: w, type: WidthType.DXA }, children: [new Paragraph({ indent: { firstLine: 0 }, alignment: jc, children: kids })] });
+  const sym = (r: { symbol: string; mode: string }) => r.symbol.split(/[、,，]/).map((x) => x.trim()).filter(Boolean).flatMap((x, i) => [...(i ? [new TextRun({ text: '、' })] : []), mathXml(x, r.mode === 'typst' ? 'typst' : 'latex', ctx) ?? new TextRun({ text: x, italics: true })]);
+  const trs = rows.map((r, i) => new TableRow({ children: [cell(i === 0 && lead ? [new TextRun({ text: lead })] : [], AlignmentType.LEFT, widths[0]), cell([...sym(r), new TextRun({ text: '\u200b' })], AlignmentType.RIGHT, widths[1]), cell([new TextRun({ text: '——' })], AlignmentType.CENTER, widths[2]), cell([new TextRun({ text: (r.meaning ?? '').trim() })], AlignmentType.LEFT, widths[3])] }));
+  return [new Table({ width: { size: ctx.textWidth, type: WidthType.DXA }, columnWidths: widths, layout: 'fixed' as any, borders: { ...NO_BORDERS, insideHorizontal: NO_BORDERS.top, insideVertical: NO_BORDERS.top }, rows: trs })];
 }
 
+/** 三线的线：模板 figure.table 的 stroke（top / header / bottom），伪代码与代码清单的框（tabular）借它 */
+function ruleOf(ctx: Ctx, k: 'top' | 'header' | 'bottom') {
+  const T = ctx.F.styles.figure.table;
+  const v = typeof T.stroke === 'number' ? T.stroke : (T.stroke ?? {})[k];
+  return v ? { style: BorderStyle.SINGLE, size: Math.round(v * 8) } : { style: BorderStyle.NIL, size: 0 };
+}
+/** 代码清单（模板 raw-style tabular）：行号悬在版心外（左缩进为负、制表位回到版心），上下各一条线；配色不搬 */
+function codeLines(ctx: Ctx, code: PMNode, numbered = true): Paragraph[] {
+  const lines = text(code).split('\n');
+  const numW = 2 * tw(ctx.P['font-size']);
+  return lines.map((l, i) => new Paragraph({
+    style: 'Code',
+    border: { ...(i === 0 ? { top: ruleOf(ctx, 'top') } : {}), ...(i === lines.length - 1 ? { bottom: ruleOf(ctx, 'bottom') } : {}) },
+    ...(numbered ? { indent: { left: -numW, firstLine: 0 }, tabStops: [{ type: TabStopType.LEFT, position: 0 }] } : {}),
+    children: numbered ? [new TextRun({ text: String(i + 1), color: '808080' }), new TextRun({ text: '\t' }), new TextRun({ text: l || ' ' })] : [new TextRun({ text: l || ' ' })],
+  }));
+}
+
+const ALG_KEYWORDS = /\b(input|output|if|then|else|for|to|do|while|repeat|until|each|return|end|function|procedure|break|continue)\b/gi;
+/** 伪代码（模板 lovelace 那一路，tabular 框）：两栏——号（1.5 字宽 + 半字间隔，输入输出行不编号）、行（按层缩进两字），
+ *  关键词加粗大写（模板 algorithm-style.keyword-case 默认 upper），框的三条线借表格的 */
 function algorithm(ctx: Ctx, n: PMNode): Block[] {
   const num = numOf(ctx, n, 'alg');
   let io: string[] = [];
   try { const v = n.attrs?.io; io = Array.isArray(v) ? v : typeof v === 'string' && v.startsWith('[') ? JSON.parse(v) : String(v ?? '').split('\n'); } catch { /* */ }
+  io = io.filter((t) => t.trim());
   const lines = parseLines(n.attrs?.lines).filter((l) => l.text.trim());
-  const top = { top: { style: BorderStyle.SINGLE, size: 12 } };
-  const bottom = { bottom: { style: BorderStyle.SINGLE, size: 12 } };
-  const body: Paragraph[] = [];
+  const ch = tw(ctx.P['font-size']);
   const serif = fonts(ctx.F.fonts.serif, ctx.F.fonts.serif);
-  io.filter((t) => t.trim()).forEach((t, i) => body.push(new Paragraph({ style: 'Code', border: i === 0 ? top : undefined, children: [new TextRun({ text: t.trim(), font: serif })] })));
-  lines.forEach((l, i) => body.push(new Paragraph({ style: 'Code', border: i === lines.length - 1 ? bottom : i === 0 && !io.length ? top : undefined, indent: { left: (l.level ?? 0) * 2 * tw(ctx.P['font-size']), firstLine: 0 }, children: [new TextRun({ text: `${i + 1}: ${l.text.trim()}`, font: serif })] })));
-  return [...captionPara(ctx, num, String(n.attrs?.caption ?? ''), undefined, { kind: 'plain', node: n, prefix: 'alg' }), ...body];
+  const runs = (t: string): TextRun[] => t.split(ALG_KEYWORDS).map((piece, i) => new TextRun({ text: i % 2 ? piece.toUpperCase() : piece, bold: i % 2 ? true : undefined, font: serif }));
+  const all = [...io.map((t) => ({ t: t.trim(), level: 0, num: '' })), ...lines.map((l, i) => ({ t: l.text.trim(), level: l.level ?? 0, num: String(i + 1) }))];
+  const cell = (kids: ParagraphChild[], w: number, o: { jc?: (typeof AlignmentType)[keyof typeof AlignmentType]; left?: number; right?: number; top?: boolean; header?: boolean; bottom?: boolean }) => new TableCell({
+    width: { size: w, type: WidthType.DXA }, margins: { top: 0, bottom: 0, left: 0, right: o.right ?? 0 },
+    borders: { left: { style: BorderStyle.NIL, size: 0 }, right: { style: BorderStyle.NIL, size: 0 }, top: o.top ? ruleOf(ctx, 'top') : { style: BorderStyle.NIL, size: 0 }, bottom: o.bottom ? ruleOf(ctx, 'bottom') : o.header ? ruleOf(ctx, 'header') : { style: BorderStyle.NIL, size: 0 } },
+    children: [new Paragraph({ style: 'Code', alignment: o.jc ?? AlignmentType.LEFT, indent: { left: o.left ?? 0, firstLine: 0 }, children: kids })],
+  });
+  const trs = all.map((l, i) => {
+    const flags = { top: i === 0, header: io.length > 0 && i === io.length - 1, bottom: i === all.length - 1 };
+    return new TableRow({ cantSplit: true, children: [cell(l.num ? [new TextRun({ text: l.num, font: serif, size: Math.round((ctx.F.styles.figure.caption.size ?? 10.5) * 2) - 2 })] : [], Math.round(2 * ch), { jc: AlignmentType.RIGHT, right: Math.round(0.5 * ch), ...flags }), cell(runs(l.t), ctx.textWidth - Math.round(2 * ch), { left: l.level * 2 * ch, ...flags })] });
+  });
+  return [...captionPara(ctx, num, String(n.attrs?.caption ?? ''), undefined, { kind: 'plain', node: n, prefix: 'alg' }), new Table({ rows: trs, layout: 'fixed' as any, width: { size: ctx.textWidth, type: WidthType.DXA }, columnWidths: [Math.round(2 * ch), ctx.textWidth - Math.round(2 * ch)], borders: { ...NO_BORDERS, insideHorizontal: NO_BORDERS.top, insideVertical: NO_BORDERS.top } }), gapPara(gapTwips(ctx.F.styles.figure.table.below, ctx.P))];
 }
 
 function heading(ctx: Ctx, n: PMNode, part: 'body' | 'appendix', forceBreak = false): Block[] {
@@ -327,7 +387,13 @@ function heading(ctx: Ctx, n: PMNode, part: 'body' | 'appendix', forceBreak = fa
   const latinBold = !!st['latin-bold'] && !st.bold;
   const kids = en ? [new TextRun({ text: en, bold: latinBold || undefined })] : spread ? [new TextRun({ text: `${plain[0]}\u3000${plain[1]}` })] : inline(ctx, n.content, { latinBold });
   const pageBreak = forceBreak || (level === 1 && !!ctx.F.styles[headingLevels(ctx.s)[0]]?.['page-break-before']);
-  const para = new Paragraph({ heading: [HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3, HeadingLevel.HEADING_4][level - 1], children: [...(num ? [numRun(ctx, n, 'sec', num), new TextRun({ text: '  ', bold: latinBold || undefined })] : []), ...kids] });
+  // 英文目录的条目：号照模板的英文式（Chapter 1 / 1.1；附录一级 Appendix、往下照中文的号），名取 #en 那半，没写的照中文
+  const path = info?.path ?? [];
+  const numEn = !info ? '' : part === 'appendix' ? num.replace(/^附录/, 'Appendix') : level === 1 ? `Chapter ${path[0]}` : path.join('.');
+  // 书签不能套书签（docx 库会把里面那个写坏），目录用的这个只套标题文字，号那一截归 REF 用的
+  const bm = `T${ctx.toc.length + 1}`;
+  ctx.toc.push({ level, text: `${numEn ? `${numEn}  ` : ''}${String(n.attrs?.en ?? '').trim() || plain}`, bm });
+  const para = new Paragraph({ heading: [HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3, HeadingLevel.HEADING_4][level - 1], children: [...(num ? [numRun(ctx, n, 'sec', num), new TextRun({ text: '  ', bold: latinBold || undefined })] : []), new Bookmark({ id: bm, children: kids })] });
   return pageBreak ? [pageTop(), para] : [para];
 }
 
@@ -359,10 +425,11 @@ function blocks(ctx: Ctx, nodes: PMNode[] = [], part: 'body' | 'appendix' | 'oth
     switch (n.type) {
       case 'paragraph': out.push(new Paragraph({ style: 'Normal', indent: n.attrs?.noIndent || depth ? { firstLine: 0, left: depth ? depth * 2 * tw(ctx.P['font-size']) : undefined } : undefined, children: inline(ctx, n.content) })); break;
       case 'heading': out.push(...heading(ctx, n, part === 'appendix' ? 'appendix' : 'body', breakFirst && !out.length)); break;
-      case 'figure': out.push(...figure(ctx, n)); break;
-      case 'tableFigure': out.push(...tableFigure(ctx, n)); break;
+      case 'figure': out.push(...floatWrap(ctx, n, figure(ctx, n))); break;
+      case 'tableFigure': out.push(...floatWrap(ctx, n, tableFigure(ctx, n))); break;
       case 'equation': out.push(...equation(ctx, n)); break;
-      case 'codeBlock': out.push(...codeLines(ctx, n)); break;
+      case 'eqdenote': out.push(...eqdenote(ctx, n)); break;
+      case 'codeBlock': out.push(...codeLines(ctx, n, false)); break;
       case 'codeFigure': { const code = (n.content ?? []).find((c) => c.type === 'codeBlock'); out.push(...captionPara(ctx, numOf(ctx, n, 'lst'), String(n.attrs?.caption ?? ''), undefined, { kind: 'plain', node: n, prefix: 'lst' }), ...(code ? codeLines(ctx, code) : [])); break; }
       case 'algorithm': out.push(...algorithm(ctx, n)); break;
       case 'theorem': out.push(...theorem(ctx, n, part, depth)); break;
@@ -387,19 +454,25 @@ function blocks(ctx: Ctx, nodes: PMNode[] = [], part: 'body' | 'appendix' | 'oth
 // ── 页 ───────────────────────────────────────────────────────────
 // 另起一页的标题：Word 2013+ 模式把新页第一段的段前距吃掉（2003 模式不吃），靠段前分页不稳——
 // 照 Word 排版的正规做法「分页符 + 连续分节符」：标题是新一节的第一段，段前距照留（组节见 pushParts）
-const pageTop = (): Block => NEW_PAGE;
-const titlePara = (t: string, newPage = true): Block[] => [...(newPage ? [pageTop()] : []), new Paragraph({ style: 'Abstract', children: [new TextRun({ text: t })] })];
+const pageTop = (title?: string): Block => ({ newPage: true, title });
+/** 没编号的部分的标题（摘要、结论、参考文献……）：另起一节、单页页眉印它；en 是英文目录里的名，标题段打书签给 PAGEREF 域 */
+const titlePara = (ctx: Ctx, zh: string, en: string, enTitle = en): Block[] => {
+  const bm = `T${ctx.toc.length + 1}`;
+  ctx.toc.push({ level: 1, text: en, bm });
+  const t = ctx.s.lang === 'en' ? enTitle : zh;
+  return [pageTop(t), new Paragraph({ style: 'Abstract', children: [new Bookmark({ id: bm, children: [new TextRun({ text: t })] })] })];
+};
 function abstractPages(ctx: Ctx): Block[] {
   const { doc, s } = ctx;
   const out: Block[] = [];
   const zh = doc.abstractZh as PMNode, en = doc.abstractEn as PMNode;
   if (text(zh).trim()) {
-    out.push(...titlePara('摘\u3000要', false), ...blocks(ctx, zh.content, 'other'));
+    out.push(...titlePara(ctx, '摘\u3000要', 'Abstract (In Chinese)', '摘\u3000要'), ...blocks(ctx, zh.content, 'other'));
     // 关键词前是真的一个空段（模板 enter(1, weak: true)，范例第 67 项也是空段），不是段前距
     if (doc.info.keywords?.length) out.push(new Paragraph({ style: 'Normal', indent: { firstLine: 0 }, children: [] }), new Paragraph({ style: 'Normal', indent: { firstLine: 0 }, children: [new TextRun({ text: "关键词：", font: fonts(ctx.F.fonts.heiti, ctx.F.fonts.serif) }), new TextRun({ text: doc.info.keywords.join('；') })] }));
   }
   if (text(en).trim()) {
-    out.push(...titlePara('Abstract', out.length > 0), ...blocks(ctx, en.content, 'other'));
+    out.push(...titlePara(ctx, 'Abstract', 'Abstract (In English)', 'Abstract'), ...blocks(ctx, en.content, 'other'));
     if (doc.info.keywordsEn?.length) out.push(new Paragraph({ style: 'Normal', indent: { firstLine: 0 }, children: [] }), new Paragraph({ style: 'Normal', indent: { firstLine: 0 }, children: [new TextRun({ text: 'Keywords: ', bold: true }), new TextRun({ text: doc.info.keywordsEn.join(', ') })] }));
   }
   void s;
@@ -426,7 +499,7 @@ function nomenclature(ctx: Ctx): Block[] {
     const row = termRow(ctx, [...doc.symbols.map((e) => e.symbol), ...doc.abbreviations.map((a) => a.short || a.key)]);
     // 合并页的小标题默认照成果页的组名（模板 nomenclature form: auto → "achievements"，group-heading）
     const sub = (t: string) => new Paragraph({ style: 'GroupHeading', keepNext: true, children: [new TextRun({ text: t })] });
-    out.push(...titlePara("符号及缩略语"), sub("物理量名称及符号表"));
+    out.push(...titlePara(ctx, "符号及缩略语", 'Nomenclature'), sub("物理量名称及符号表"));
     out.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: doc.symbols.map((e) => row([mathXml(e.symbol, e.mode === 'typst' ? 'typst' : 'latex', ctx) ?? new TextRun({ text: e.symbol })], e.meaning)) }));
     out.push(sub("缩略语表"));
     out.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: doc.abbreviations.map((a) => row([new TextRun({ text: a.short || a.key })], ctx.s.lang === 'en' ? a.longEn || a.long : a.long + (a.longEn ? `（${a.longEn}）` : ''))) }));
@@ -434,11 +507,11 @@ function nomenclature(ctx: Ctx): Block[] {
   }
   const row = termRow(ctx, [...doc.symbols.map((e) => e.symbol), ...doc.abbreviations.map((a) => a.short || a.key)]);
   if (wantSym) {
-    out.push(...titlePara("物理量名称及符号表"));
+    out.push(...titlePara(ctx, "物理量名称及符号表", 'List of Physical Quantities and Symbols'));
     out.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: doc.symbols.map((e) => row([mathXml(e.symbol, e.mode === 'typst' ? 'typst' : 'latex', ctx) ?? new TextRun({ text: e.symbol })], e.meaning)) }));
   }
   if (wantAbbr) {
-    out.push(...titlePara("缩略语表"));
+    out.push(...titlePara(ctx, "缩略语表", 'List of Abbreviations'));
     out.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: doc.abbreviations.map((a) => row([new TextRun({ text: a.short || a.key })], ctx.s.lang === 'en' ? a.longEn || a.long : a.long + (a.longEn ? `（${a.longEn}）` : ''))) }));
   }
   return out;
@@ -457,7 +530,7 @@ function references(ctx: Ctx): Block[] {
   const lang = ctx.s.lang === 'en' ? 'en' : 'zh';
   let lines: string[] = [];
   try { lines = formatBibliography(entries, lang); } catch { lines = entries.map((e, i) => `[${i + 1}] ${e.fields.title ?? e.key}`); }
-  return [...titlePara("参考文献"), ...lines.map((l) => new Paragraph({ style: 'Reference', children: [new TextRun({ text: gbPunct(l, lang) })] }))];
+  return [...titlePara(ctx, "参考文献", 'References'), ...lines.map((l) => new Paragraph({ style: 'Reference', children: [new TextRun({ text: gbPunct(l, lang) })] }))];
 }
 
 function achievements(ctx: Ctx): Block[] {
@@ -466,7 +539,7 @@ function achievements(ctx: Ctx): Block[] {
   let lines: string[] = [];
   try { lines = formatBibliography(entries.map((e) => ({ ...e, fields: Object.fromEntries(Object.entries(e.fields).filter(([k]) => k !== 'annote')) })), ctx.s.lang === 'en' ? 'en' : 'zh'); } catch { lines = entries.map((e, i) => `[${i + 1}] ${e.fields.title ?? e.key}`); }
   const degree = ctx.s.degreeLevel === 'doctor' ? "博士" : "硕士";
-  return [...titlePara(`攻读${degree}学位期间取得创新性成果`), ...lines.map((l, i) => new Paragraph({ style: 'Reference', children: [new TextRun({ text: l + (entries[i]?.fields.annote ? entries[i].fields.annote : '') })] }))];
+  return [...titlePara(ctx, `攻读${degree}学位期间取得创新性成果`, `Innovative achievements for ${ctx.s.degreeLevel === 'doctor' ? 'Ph.D' : 'Master'}`), ...lines.map((l, i) => new Paragraph({ style: 'Reference', children: [new TextRun({ text: l + (entries[i]?.fields.annote ? entries[i].fields.annote : '') })] }))];
 }
 
 // ── 引用序、图片 ───────────────────────────────────────────────────
@@ -493,6 +566,41 @@ async function loadImages(ctx: Ctx) {
   }
 }
 
+/** 分图的图上标签（模板 subs(numbering: (alignment: 角, fill:))）：Word 里没有叠在图上的字，把「(a)」直接画进图的一份拷贝里——
+ *  字号照题注（按图在版面上的宽换算成像素），角照 subLabel，黑字 / 白字照 subLabelFill，离边 3 磅 */
+async function labelImages(ctx: Ctx) {
+  const jobs: { node: PMNode; sub: { image: string; width?: unknown }; letter: string }[] = [];
+  const walk = (n: PMNode) => {
+    if (n.type === 'figure' && ['tl', 'tr', 'bl', 'br'].includes(String(n.attrs?.subLabel ?? 'none'))) {
+      let subs: { image: string; width?: unknown }[] = [];
+      try { subs = JSON.parse(String(n.attrs?.subs || '[]')); } catch { /* */ }
+      subs.forEach((sub, i) => { if (sub.image) jobs.push({ node: n, sub, letter: 'abcdefghijklmnopqrstuvwxyz'[i] ?? String(i + 1) }); });
+    }
+    for (const c of n.content ?? []) walk(c);
+  };
+  for (const k of ['body', 'appendix'] as const) walk(ctx.doc[k] as PMNode);
+  const size = ctx.F.styles.figure.caption.size ?? 10.5;
+  for (const j of jobs) {
+    const key = subKey(j.sub.image, j.letter, j.node);
+    const img = ctx.images.get(j.sub.image);
+    if (!img || ctx.images.has(key)) continue;
+    try {
+      const bmp = await createImageBitmap(new Blob([img.data]));
+      const canvas = document.createElement('canvas'); canvas.width = bmp.width; canvas.height = bmp.height;
+      const g = canvas.getContext('2d'); if (!g) continue;
+      g.drawImage(bmp, 0, 0);
+      const scale = bmp.width / (cmOf(j.sub.width, 6) / 2.54 * 72);
+      const corner = String(j.node.attrs?.subLabel), pad = 3 * scale;
+      g.font = `${size * scale}px "Times New Roman", "SimSun", serif`;
+      g.fillStyle = j.node.attrs?.subLabelFill === 'white' ? '#fff' : '#000';
+      g.textBaseline = corner.startsWith('t') ? 'top' : 'bottom'; g.textAlign = corner.endsWith('l') ? 'left' : 'right';
+      g.fillText(`(${j.letter})`, corner.endsWith('l') ? pad : bmp.width - pad, corner.startsWith('t') ? pad : bmp.height - pad);
+      const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/png'));
+      if (blob) ctx.images.set(key, { data: await blob.arrayBuffer(), type: 'png', width: bmp.width, height: bmp.height });
+    } catch { /* 画不了就用原图 */ }
+  }
+}
+
 /** Typst 写法的公式（行内、行间、符号表里的）先用引擎编成图 */
 async function renderTypstFormulas(ctx: Ctx) {
   const jobs = new Map<string, { src: string; display: boolean; latex?: boolean }>();
@@ -503,6 +611,7 @@ async function renderTypstFormulas(ctx: Ctx) {
       const src = String(n.attrs?.src ?? ''), display = n.type === 'equation';
       if (n.attrs?.mode === 'typst') jobs.set(`${display ? 'D' : 'I'}${src}`, { src, display }); else latexJob(src, display);
     }
+    if (n.type === 'eqdenote') for (const r of parseDenoteRows(n.attrs?.rows)) for (const x of (r.symbol ?? '').split(/[、,，]/).map((t) => t.trim()).filter(Boolean)) { if (r.mode === 'typst') jobs.set(`I${x}`, { src: x, display: false }); else latexJob(x, false); }
     for (const c of n.content ?? []) walk(c);
   };
   for (const k of ['abstractZh', 'abstractEn', 'body', 'conclusion', 'appendix', 'acknowledgement', 'resume'] as const) walk(ctx.doc[k] as PMNode);
@@ -517,9 +626,10 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
   const P = F.layout.doc;
   const byNode = new Map<PMNode, NumberInfo>();
   const nums = new Map<string, NumberInfo>([...computeNumbering(doc.body as PMNode, s, 'body', byNode), ...computeNumbering(doc.appendix as PMNode, s, 'appendix', byNode)]);
-  const ctx: Ctx = { doc, s, F, P, nums, byNode, cites: new Map(), footnotes: {}, nextFootnote: 1, comments: [], commentIds: new Map(), images: new Map(), abbrSeen: new Set(), textWidth: tw(P['paper-width'] - P.margin.left - P.margin.right), typstMath: new Map() };
+  const ctx: Ctx = { doc, s, F, P, nums, byNode, cites: new Map(), footnotes: {}, nextFootnote: 1, comments: [], commentIds: new Map(), images: new Map(), abbrSeen: new Set(), textWidth: tw(P['paper-width'] - P.margin.left - P.margin.right), typstMath: new Map(), toc: [] };
   collectCites(ctx, [doc.body, doc.conclusion, doc.appendix] as PMNode[]);
   await loadImages(ctx);
+  await labelImages(ctx);
   await renderTypstFormulas(ctx);
   (doc.comments ?? []).forEach((c: Comment, i) => {
     ctx.commentIds.set(c.id, i);
@@ -527,21 +637,22 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
   });
 
   const isReport = s.stage !== 'final';
-  // 页眉：范例里校名式「哈尔滨工业大学博士学位论文」；博士双面交替，奇数页排本章章标题（STYLEREF 1 取当前标题 1）
-  // 下边框在 Header 样式里（文档级版面的 header.border）；某一节的版面另给了边框才直接写在段上
+  // 页眉：范例里校名式「哈尔滨工业大学博士学位论文」；博士双面交替，奇数页排本部分的名——章是 STYLEREF 1 取当前标题 1，
+  // 摘要、结论那些没编号的部分照字印（它们各自成节）。下边框在 Header 样式里（文档级版面的 header.border）；某一节的版面另给了边框才直接写在段上
   const sameBorder = (LL: PageSetup) => JSON.stringify(LL.header.border) === JSON.stringify(P.header.border);
   const headerPara = (LL: PageSetup, kids: ParagraphChild[]) => new Paragraph({ style: 'Header', ...(sameBorder(LL) ? {} : { border: LL.header.border ? { bottom: { style: LL.header.border.style === 'thin-thick-small-gap' ? BorderStyle.THIN_THICK_SMALL_GAP : BorderStyle.SINGLE, size: Math.round(LL.header.border.thickness * 8), space: Math.round(LL.header.border['from-text']) } } : {} }), children: kids });
   const school = `哈尔滨工业大学${DOC_TYPE[s.degreeLevel]}`;
   const alternating = s.degreeLevel === 'doctor' && !isReport;
-  const oddHeader = (LL: PageSetup) => new Header({ children: [headerPara(LL, alternating ? [new SimpleField('STYLEREF 1 \\* MERGEFORMAT', school)] : [new TextRun({ text: school })])] });
+  const oddHeader = (LL: PageSetup, title?: string) => new Header({ children: [headerPara(LL, !alternating ? [new TextRun({ text: school })] : title ? [new TextRun({ text: title })] : [new SimpleField('STYLEREF 1 \\* MERGEFORMAT', school)])] });
   const plainHeader = (LL: PageSetup) => new Header({ children: [headerPara(LL, [new TextRun({ text: school })])] });
   // 页码：前置罗马、主体阿拉伯，都写成「- X -」（模板的样子；docx 库的 NUMBER_IN_DASH 会连目录里的页码也带上短横）
   const footerFor = () => new Footer({ children: [new Paragraph({ style: 'Footer', children: [new TextRun({ text: '- ' }), new TextRun({ children: [PageNumber.CURRENT] }), new TextRun({ text: ' -' })] })] });
   // 节属性：页面设置对话框那张表——纸张、页边距、页眉页脚距边界、文档网格（无 / 只指定行 / 行和字符，字符网格的增量写成 charSpace）
-  const props = (LL: PageSetup, roman: boolean, first: boolean) => {
+  const props = (LL: PageSetup, roman: boolean, first: boolean, odd = false) => {
     const g = LL.docgrid;
     const chars = LL.inputs.grid === 'lines-and-chars' || (LL.inputs.grid == null && g.tracking !== 0);
     return {
+      type: odd ? SectionType.ODD_PAGE : SectionType.NEXT_PAGE,
       page: {
         size: { width: tw(LL['paper-width']), height: tw(LL['paper-height']) },
         margin: { top: tw(LL.margin.top), bottom: tw(LL.margin.bottom), left: tw(LL.margin.left), right: tw(LL.margin.right), header: tw(LL.header['from-edge']), footer: tw(LL.footer['from-edge']) },
@@ -553,67 +664,55 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
   const pageLayout = (k: string, fallback: PageSetup) => F.pages[k] ?? fallback;
 
   const sections: ISectionOptions[] = [];
-  // 封面、内封：没有页眉页脚页码，各占一页；各自的页级版面单独成节
+  // 封面、内封：没有页眉页脚页码，各占一页、各自一节；博士的内封从奇数页起（模板 openright 只内封），后一节用「奇数页」分节符，Word 自己补白页
   const Lfront = F.layout.front;
+  const openright = sw<boolean>('openright', s);
   const coverSections: { L: PageSetup; blocks: Block[] }[] = [];
   if (resolvePage(doc, 'cover').value) { const LL = pageLayout('cover', Lfront); coverSections.push({ L: LL, blocks: coverPage(doc, LL.margin.top) }); }
-  // 内封的第一段自带分页符（照范例），页与页之间不另起只有分页符的空段
-  if (!isReport && resolvePage(doc, 'titlepage').value) { const LL = pageLayout('titlepage', Lfront); coverSections.push({ L: LL, blocks: [...titlepageZh(doc, tw(LL['paper-width'] - LL.margin.left - LL.margin.right)), ...(s.degreeLevel !== 'bachelor' ? titlepageEn(doc, LL.margin.top) : [])] }); }
-  for (let i = 0; i < coverSections.length; i++) {
-    const c = coverSections[i], prev = coverSections[i - 1];
-    // 版面相同的合成一节，页与页之间硬分页
-    if (prev && JSON.stringify(prev.L) === JSON.stringify(c.L)) { const last = sections[sections.length - 1]; (last.children as (Paragraph | Table)[]).push(...c.blocks.filter((b): b is Paragraph | Table => !isNewPage(b))); continue; }
-    sections.push({ properties: { ...props(c.L, false, false), titlePage: false }, children: c.blocks.filter((b): b is Paragraph | Table => !isNewPage(b)) });
+  if (!isReport && resolvePage(doc, 'titlepage').value) {
+    const LL = pageLayout('titlepage', Lfront);
+    coverSections.push({ L: LL, blocks: titlepageZh(doc, tw(LL['paper-width'] - LL.margin.left - LL.margin.right)) });
+    if (s.degreeLevel !== 'bachelor') coverSections.push({ L: LL, blocks: titlepageEn(doc, LL.margin.top) });
   }
-  // 开了奇偶页不同（博士）后每一节都要把 even 也给全，不然前置部分的偶数页页眉页脚是空的
-  // 这一节不要页眉 / 页脚的：得给一个空的，不然 Word 沿用上一节的
   const blank = () => new Header({ children: [new Paragraph({ children: [] })] });
   const blankF = () => new Footer({ children: [new Paragraph({ children: [] })] });
-  const hf = (LL: PageSetup, roman: boolean, first: boolean) => ({
-    properties: props(LL, roman, first),
-    headers: shown(LL.header, s) ? { default: roman ? plainHeader(LL) : oddHeader(LL), ...(alternating ? { even: plainHeader(LL) } : {}) } : { default: blank(), ...(alternating ? { even: blank() } : {}) },
+  coverSections.forEach((c, i) => sections.push({ properties: { ...props(c.L, false, false, openright && i > 0), titlePage: false }, headers: { default: blank(), ...(alternating ? { even: blank() } : {}) }, footers: { default: blankF(), ...(alternating ? { even: blankF() } : {}) }, children: c.blocks.filter((b): b is Paragraph | Table => !isNewPage(b)) }));
+  // 开了奇偶页不同（博士）后每一节都要把 even 也给全，不然前置部分的偶数页页眉页脚是空的
+  // 这一节不要页眉 / 页脚的：得给一个空的，不然 Word 沿用上一节的
+  const hf = (LL: PageSetup, roman: boolean, first: boolean, title?: string, odd = false) => ({
+    properties: props(LL, roman, first, odd),
+    headers: shown(LL.header, s) ? { default: oddHeader(LL, title), ...(alternating ? { even: plainHeader(LL) } : {}) } : { default: blank(), ...(alternating ? { even: blank() } : {}) },
     footers: shown(LL.footer, s) ? { default: footerFor(), ...(alternating ? { even: footerFor() } : {}) } : { default: blankF(), ...(alternating ? { even: blankF() } : {}) },
   });
-  /** 一串「页 / 块」组成节：另起一页的地方（NEW_PAGE）＝ 上一节末尾一个分页符、下一节是连续分节符（页眉页脚、版面沿用），
-   *  版面变了的另起「下一页」分节符并把页眉页脚重给；页码在一串里接着编 */
-  type Sec = ISectionOptions & { __L?: string };
-  const pushParts = (parts: { L: PageSetup; blocks: Block[] }[], roman: boolean) => {
+  /** 一串「页 / 块」组成节：另起一页的地方（NewPage）起新的一节（「下一页」分节符），页眉页脚重给（单页页眉按这一部分的名）；页码在一串里接着编 */
+  const pushParts = (parts: { L: PageSetup; blocks: Block[] }[], roman: boolean, oddFirst = false) => {
     let firstOfRun = true;
     for (const part of parts) {
-      const segs: (Paragraph | Table)[][] = [[]];
-      for (const b of part.blocks) { if (isNewPage(b)) segs.push([]); else segs[segs.length - 1].push(b); }
-      const key = JSON.stringify(part.L);
+      const segs: { title?: string; blocks: (Paragraph | Table)[] }[] = [{ blocks: [] }];
+      for (const b of part.blocks) {
+        if (!isNewPage(b)) { segs[segs.length - 1].blocks.push(b); continue; }
+        const last = segs[segs.length - 1];
+        if (last.blocks.length) segs.push({ title: b.title, blocks: [] }); else last.title = b.title;
+      }
       for (const seg of segs) {
-        if (!seg.length) continue;
-        const last = sections[sections.length - 1] as Sec | undefined;
-        if (last && last.__L === key && !firstOfRun) {
-          // 同版面：分页符 + 连续分节符
-          (last.children as (Paragraph | Table)[]).push(new Paragraph({ children: [new PageBreak()] }));
-          sections.push({ properties: { ...props(part.L, roman, false), type: SectionType.CONTINUOUS }, children: seg, __L: key } as Sec);
-        } else {
-          sections.push({ ...hf(part.L, roman, firstOfRun), children: seg, __L: key } as Sec);
-          firstOfRun = false;
-        }
+        if (!seg.blocks.length) continue;
+        sections.push({ ...hf(part.L, roman, firstOfRun, seg.title, firstOfRun && oddFirst), children: seg.blocks });
+        firstOfRun = false;
       }
     }
   };
-  // 前置：摘要、Abstract、符号及缩略语、目录（罗马页码；顺序照模板）
+  // 前置：摘要、Abstract、符号及缩略语、目录（罗马页码；顺序照模板）——目录的英文那份要等全篇的条目齐了再排，所以主体先建块、后组节
+  const front: { L: PageSetup; blocks: Block[] }[] = [];
   if (!isReport) {
-    const parts: { L: PageSetup; blocks: Block[] }[] = [];
-    parts.push({ L: pageLayout('abstract', Lfront), blocks: abstractPages(ctx) });
-    parts.push({ L: pageLayout('nomenclature', Lfront), blocks: nomenclature(ctx) });
-    if (resolvePage(doc, 'tableOfContents').value) {
-      const any = parts.some((x) => x.blocks.length);
-      parts.push({ L: pageLayout('toc', Lfront), blocks: [...(any ? [pageTop()] : []), new Paragraph({ style: 'FrontTitle', children: [new TextRun({ text: '目　录' })] }), new TableOfContents("目录", { hyperlink: true, headingStyleRange: '1-3', stylesWithLevels: [{ styleName: 'Abstract Title', level: 1 }] }) as unknown as Paragraph] });
-    }
-    pushParts(parts, true);
+    front.push({ L: pageLayout('abstract', Lfront), blocks: abstractPages(ctx) });
+    front.push({ L: pageLayout('nomenclature', Lfront), blocks: nomenclature(ctx) });
   }
 
   // 主体（阿拉伯页码）：正文、结论、参考文献、附录；后置：成果、答辩决议、声明、致谢、简历——顺序照模板
   const Lmain = F.layout.main, Lback = F.layout.back;
   const main: Block[] = [...blocks(ctx, (doc.body as PMNode).content, 'body')];
   const conclusion = doc.conclusion as PMNode;
-  if (text(conclusion).trim()) main.push(...titlePara(isReport ? "结论" : '结　论'), ...blocks(ctx, conclusion.content, 'other'));
+  if (text(conclusion).trim()) main.push(...titlePara(ctx, isReport ? "结论" : '结　论', 'Conclusions'), ...blocks(ctx, conclusion.content, 'other'));
   const refs = references(ctx);
   if (refs.length) main.push(...refs);
   const appendix = doc.appendix as PMNode;
@@ -621,14 +720,27 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
   const back: { L: PageSetup; blocks: Block[] }[] = [];
   const ach = achievements(ctx);
   if (ach.length) back.push({ L: pageLayout('achievements', Lback), blocks: ach });
-  if (!isReport && resolvePage(doc, 'defense').value) back.push({ L: Lback, blocks: defensePage(doc, titlePara("学位论文评阅人、答辩委员会名单及答辩决议")) });
-  if (!isReport && resolvePage(doc, 'declarations').value) back.push({ L: pageLayout(s.degreeLevel === 'bachelor' ? 'declarations' : 'declarations-graduate', Lback), blocks: declarationsPage(doc, titlePara("哈尔滨工业大学学位论文原创性声明和使用权限"), (t) => new Paragraph({ style: 'SubTitle', children: [new TextRun({ text: t })] })) });
+  if (!isReport && resolvePage(doc, 'defense').value) back.push({ L: Lback, blocks: defensePage(doc, titlePara(ctx, "学位论文评阅人、答辩委员会名单及答辩决议", 'List of Dissertation Reviewers and Defense Committee and Defense Resolution')) });
+  if (!isReport && resolvePage(doc, 'declarations').value) back.push({ L: pageLayout(s.degreeLevel === 'bachelor' ? 'declarations' : 'declarations-graduate', Lback), blocks: declarationsPage(doc, titlePara(ctx, "哈尔滨工业大学学位论文原创性声明和使用权限", 'Statement of copyright and Letter of authorization'), (t) => new Paragraph({ style: 'SubTitle', children: [new TextRun({ text: t })] })) });
   const ack = doc.acknowledgement as PMNode;
-  if (text(ack).trim()) back.push({ L: Lback, blocks: [...titlePara('致　谢'), ...blocks(ctx, ack.content, 'other')] });
+  if (text(ack).trim()) back.push({ L: Lback, blocks: [...titlePara(ctx, '致　谢', 'Acknowledgements'), ...blocks(ctx, ack.content, 'other')] });
   const resume = doc.resume as PMNode;
-  if (resolvePage(doc, 'resume').value && text(resume).trim()) back.push({ L: Lback, blocks: [...titlePara("个人简历"), ...blocks(ctx, resume.content, 'other')] });
+  if (resolvePage(doc, 'resume').value && text(resume).trim()) back.push({ L: Lback, blocks: [...titlePara(ctx, "个人简历", 'Resume'), ...blocks(ctx, resume.content, 'other')] });
+
+  // 目录：中文那份是 Word 的目录域（打开时更新）；英文那份（模板 lang: auto 博士两份）Word 没有，照条目静态排、页码用 PAGEREF 域指标题上的书签
+  if (!isReport && resolvePage(doc, 'tableOfContents').value) {
+    const want = sw<string>('tocLang', s);
+    const tocBlocks: Block[] = [];
+    // 英文档的标题本来就是英文，目录域照印；中文档只要英文那份时也得静态排
+    if (s.lang === 'en' || want !== 'en') tocBlocks.push(pageTop(s.lang === 'en' ? 'Contents' : '目　录'), new Paragraph({ style: 'FrontTitle', children: [new TextRun({ text: s.lang === 'en' ? 'Contents' : '目　录' })] }), new TableOfContents("目录", { hyperlink: true, headingStyleRange: '1-3', stylesWithLevels: [{ styleName: 'Abstract Title', level: 1 }] }) as unknown as Paragraph);
+    if (s.lang !== 'en' && want !== 'zh') {
+      tocBlocks.push(pageTop('Contents'), new Paragraph({ style: 'FrontTitle', children: [new TextRun({ text: 'Contents', bold: true })] }));
+      for (const e of ctx.toc) tocBlocks.push(new Paragraph({ style: `TOC${Math.min(3, e.level)}`, children: [new TextRun({ text: e.text, bold: e.level === 1 || undefined }), new TextRun({ text: '\t', bold: e.level === 1 || undefined }), new SimpleField(`PAGEREF ${e.bm} \\h`, '0')] }));
+    }
+    front.push({ L: pageLayout('toc', Lfront), blocks: tocBlocks });
+  }
+  pushParts(front, true, openright && coverSections.length > 0);
   pushParts([{ L: Lmain, blocks: main }, ...back], false);
-  for (const sec of sections) delete (sec as { __L?: string }).__L;
 
   // 断行引擎那几个 Word 开关照样写进 docx：兼容模式、调整中西文字符宽度、断字；字体紧缩在 Normal 样式的 kern 上，
   // 标点压缩（characterSpacingControl）docx 库没有口，包好后往 settings.xml 里补
@@ -654,6 +766,40 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
 /** 文献条目悬挂几个字：最宽的号「［12］」——全角方括号一个字一个、数字半个字（英文档半角方括号各三分之一）；模板（omni）是量号的宽 */
 const hangingChars = (n: number, lang: 'zh' | 'en') => Math.round(((lang === 'zh' ? 2 : 0.67) + 0.5 * String(n).length) * 100) / 100;
 
+/** 浮动体：起止记号（FLOAT_边_间距_宽 / FLOATEND 两个空书签段）之间每一段的 pPr 都补上同一份 framePr，记号段去掉。
+ *  framePr 在 pPr 里排在 pStyle / keepNext / keepLines / pageBreakBefore 之后 */
+function frameFloats(xml: string): string {
+  const re = /<w:p><w:bookmarkStart w:name="FLOAT_(top|bottom)_(\d+)_(\d+)" w:id="\d+"\/><w:bookmarkEnd w:id="\d+"\/><\/w:p>([\s\S]*?)<w:p><w:bookmarkStart w:name="FLOATEND" w:id="\d+"\/><w:bookmarkEnd w:id="\d+"\/><\/w:p>/g;
+  return xml.replace(re, (_, side, gap, width, body) => {
+    const fr = `<w:framePr w:w="${width}" w:h="200" w:hRule="auto" w:hSpace="0" w:vSpace="${gap}" w:wrap="notBeside" w:hAnchor="margin" w:vAnchor="margin" w:xAlign="center" w:yAlign="${side}"/>`;
+    return body
+      .replace(/<w:pPr>((?:<w:pStyle[^>]*\/>)?(?:<w:keepNext[^>]*\/>)?(?:<w:keepLines[^>]*\/>)?(?:<w:pageBreakBefore[^>]*\/>)?)/g, (m: string, head: string) => `<w:pPr>${head}${fr}`)
+      .replace(/<w:p>(?!<w:pPr>)/g, `<w:p><w:pPr>${fr}</w:pPr>`);
+  });
+}
+
+/** docx 库把每一节的节属性写在一个只有它的空段里：上一页正好排满时这一段掉到新页上，凭空多一张白纸。
+ *  节属性折进前一段的段落属性里（sectPr 是 pPr 的最后一项）；前面是表格的折不了，把那一段压到 1 缇高 */
+function foldSectPr(xml: string): string {
+  const re = /<w:p><w:pPr><w:sectPr>([\s\S]*?)<\/w:sectPr><\/w:pPr><\/w:p>/g;
+  let out = '', pos = 0, m: RegExpExecArray | null;
+  while ((m = re.exec(xml))) {
+    const before = xml.slice(pos, m.index);
+    const sect = `<w:sectPr>${m[1]}</w:sectPr>`;
+    if (before.endsWith('</w:p>')) {
+      const at = Math.max(before.lastIndexOf('<w:p>'), before.lastIndexOf('<w:p '));
+      const para = before.slice(at);
+      const ppr = para.indexOf('</w:pPr>');
+      const folded = ppr >= 0 ? para.slice(0, ppr) + sect + para.slice(ppr) : para.replace(/^<w:p(?: [^>]*)?>/, (t) => `${t}<w:pPr>${sect}</w:pPr>`);
+      out += before.slice(0, at) + folded;
+    } else {
+      out += before + `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="1" w:lineRule="exact"/><w:rPr><w:sz w:val="2"/></w:rPr>${sect}</w:pPr></w:p>`;
+    }
+    pos = m.index + m[0].length;
+  }
+  return out + xml.slice(pos);
+}
+
 /** 使用模板样式替换 docx 同名默认项，保留模板未提供的超链接、脚注引用和批注样式；
  *  同时在 settings.xml 中补充字符间距控制。 */
 async function postprocess(blob: Blob, W: ReturnType<typeof wordLinebreakOptions>, sx: { docDefaults: string; styles: string[] }): Promise<Blob> {
@@ -667,12 +813,20 @@ async function postprocess(blob: Blob, W: ReturnType<typeof wordLinebreakOptions
   zip.file(path, xml);
   // 首行缩进清零的段：Normal 写的是 firstLineChars（按字），直接格式里光写 firstLine=0 压不过它，Chars 也要清零
   const dp = 'word/document.xml';
-  zip.file(dp, (await zip.file(dp)!.async('string')).replace(/<w:ind w:firstLine="0"\/>/g, '<w:ind w:firstLineChars="0" w:firstLine="0"/>').replace(/<w:ind w:left="(\d+)" w:firstLine="0"\/>/g, '<w:ind w:left="$1" w:firstLineChars="0" w:firstLine="0"/>'));
+  let dx = (await zip.file(dp)!.async('string')).replace(/<w:ind w:firstLine="0"\/>/g, '<w:ind w:firstLineChars="0" w:firstLine="0"/>').replace(/<w:ind w:left="(\d+)" w:firstLine="0"\/>/g, '<w:ind w:left="$1" w:firstLineChars="0" w:firstLine="0"/>');
+  dx = frameFloats(dx);
+  dx = foldSectPr(dx);
+  // 脚注号画圈（模板用 quan 包画 ①②…）：Word 的 decimalEnclosedCircle，全文连续编号（模板不按页重编）；每一节的节属性里都写（settings.xml 里那份只是默认）
+  dx = dx.replace(/<w:sectPr>([\s\S]*?)(<w:(?:type|pgSz)\b)/g, (_, refs, tag) => `<w:sectPr>${refs}<w:footnotePr><w:numFmt w:val="decimalEnclosedCircle"/></w:footnotePr>${tag}`);
+  // docx 库给每个书签都写 id=1；Word 认得但不合规，按出现顺序重编
+  let bm = 0;
+  dx = dx.replace(/<w:bookmarkStart w:name="([^"]*)" w:id="\d+"\/>([\s\S]*?)<w:bookmarkEnd w:id="\d+"\/>/g, (_, name, body) => { bm++; return `<w:bookmarkStart w:name="${name}" w:id="${bm}"/>${body}<w:bookmarkEnd w:id="${bm}"/>`; });
+  zip.file(dp, dx);
   // settings.xml：字符间距控制。放在 <w:compat> 前面（schema 里 characterSpacingControl 在 compat 之前）
   const sp = 'word/settings.xml';
   let sxml = await zip.file(sp)!.async('string');
   if (!sxml.includes('w:characterSpacingControl')) {
-    const tag = `<w:characterSpacingControl w:val="${W.compress ? 'compressPunctuation' : 'doNotCompress'}"/>`;
+    const tag = `<w:characterSpacingControl w:val="${W.compress ? 'compressPunctuation' : 'doNotCompress'}"/><w:footnotePr><w:numFmt w:val="decimalEnclosedCircle"/></w:footnotePr>`;
     sxml = sxml.includes('<w:compat>') || sxml.includes('<w:compat/>') ? sxml.replace(/<w:compat\b/, tag + '<w:compat') : sxml.replace('</w:settings>', tag + '</w:settings>');
     zip.file(sp, sxml);
   }
