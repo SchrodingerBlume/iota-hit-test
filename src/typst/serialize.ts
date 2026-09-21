@@ -443,7 +443,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   // ── 主体 ──
   parts.push(withArgs('mainmatter', or('mainmatter'), layoutArg(levelLayout(s, 'mainmatter'))));
   const body = bodyByChapters(doc, s, (r) => serializeDoc({ type: 'doc', content: (doc.body.content ?? []).slice(r.from, r.to) } as any, { headings: true, headingBase: 1, knownLabels, preview, map: { key: 'body', posOf: indexPositions(doc.body as any) } }));
-  parts.push(body || '= 绪论');
+  if (body) parts.push(body);
 
   const conclusion = rich('conclusion', { headings: false });
   if (conclusion.trim()) parts.push(`#conclusion${or('conclusion') ? `(${or('conclusion')})` : ''}[\n${indent(conclusion, 2)}\n]`);
@@ -543,7 +543,7 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   // 章号从上一章数起；首页页码钉在上次整编的位置
   parts.push(`#counter(heading).update(${Math.max(0, focus.chapter - 1)})${focus.page && focus.page > 1 ? `\n#counter(page).update(${focus.page})` : ''}`);
   const body = chapterWrap(s.layout?.chapters?.[String(focus.chapter)], s.localStyles?.chapters?.[String(focus.chapter)], serializeDoc(chapterDoc as any, { headings: true, headingBase: 1, knownLabels, refText, preview: true, map: { key: 'body', posOf: indexPositions(doc.body as any) } }));
-  parts.push(body || '= 绪论');
+  if (body) parts.push(body);
   const cited = collectCiteKeys(chapterDoc as any);
   const refs = generateBibtex((doc.references ?? []).filter((e) => cited.has(e.key.trim())));
   // 旁文件也另起名字（worker 给只编一章的文件加 focus- 前缀）
