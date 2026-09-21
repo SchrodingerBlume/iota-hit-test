@@ -182,6 +182,8 @@ export function stylesXml(F: Facts, s: Settings, o: { hangingChars: number }): {
   const fig = S.figure;
   // 装图段贴网格：Word 把带图的那一行撑到整数个网格行、图在里面居中，模板 src/figure/caption.typ 模拟的正是这一条（探针 docx 量的）
   const image = { ...fig.image, 'first-line-indent': { chars: 0 } as Chars, align: 'center', sticky: true, below: undefined, 'snap-to-grid': true };
+  // 封面内封那些不贴网格的行（范例里 snapToGrid 0 的段）
+  styles.push(styleXml('NoGrid', 'No Grid', { basedOn: 'Normal', next: 'NoGrid', pPr: '<w:pPr><w:snapToGrid w:val="0"/></w:pPr>' }));
   styles.push(styleXml('Figure', 'Figure', { basedOn: 'Normal', next: 'Caption', pPr: pPr(image, P), rPr: rPr(fig.image, F, zh) }));
   // 题注本身不带段前段后；图题（在图下）的段后 = 图块之下，表题（在表上）的段前 = 表块之上——分成三条，
   // 段落上就不必再清零（*Lines 那几个属性从样式继承下来后，段上光写 before=0 压不住）

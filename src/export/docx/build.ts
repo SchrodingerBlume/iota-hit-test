@@ -21,7 +21,7 @@ import type { BibEntry } from '../../bib/bibtex';
 import { splitNames } from '../../bib/bibtex';
 
 import { fonts, fontsFor, NO_BORDERS, hasCJK, PT } from './units';
-import { coverPage, titlepageZh, titlepageEn, defensePage, declarationsPage, pageBreak } from './pages';
+import { coverPage, titlepageZh, titlepageEn, defensePage, declarationsPage } from './pages';
 import { resolveSwitch, SWITCHES } from '../../model/options';
 import { queryFacts, stylesXml, gapTwips, headingLevels, shown, tw, asianOf, type Facts, type PageSetup } from './template';
 import { THEOREM_NAMES, theoremKind, joinHead } from '../../typst/theorem';
@@ -557,11 +557,12 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
   const Lfront = F.layout.front;
   const coverSections: { L: PageSetup; blocks: Block[] }[] = [];
   if (resolvePage(doc, 'cover').value) { const LL = pageLayout('cover', Lfront); coverSections.push({ L: LL, blocks: coverPage(doc, LL.margin.top) }); }
-  if (!isReport && resolvePage(doc, 'titlepage').value) { const LL = pageLayout('titlepage', Lfront); coverSections.push({ L: LL, blocks: [...titlepageZh(doc, LL.margin.top), pageBreak(), ...titlepageEn(doc, LL.margin.top)] }); }
+  // 内封的第一段自带分页符（照范例），页与页之间不另起只有分页符的空段
+  if (!isReport && resolvePage(doc, 'titlepage').value) { const LL = pageLayout('titlepage', Lfront); coverSections.push({ L: LL, blocks: [...titlepageZh(doc, tw(LL['paper-width'] - LL.margin.left - LL.margin.right)), ...(s.degreeLevel !== 'bachelor' ? titlepageEn(doc, LL.margin.top) : [])] }); }
   for (let i = 0; i < coverSections.length; i++) {
     const c = coverSections[i], prev = coverSections[i - 1];
     // 版面相同的合成一节，页与页之间硬分页
-    if (prev && JSON.stringify(prev.L) === JSON.stringify(c.L)) { const last = sections[sections.length - 1]; (last.children as (Paragraph | Table)[]).push(pageBreak(), ...c.blocks.filter((b): b is Paragraph | Table => !isNewPage(b))); continue; }
+    if (prev && JSON.stringify(prev.L) === JSON.stringify(c.L)) { const last = sections[sections.length - 1]; (last.children as (Paragraph | Table)[]).push(...c.blocks.filter((b): b is Paragraph | Table => !isNewPage(b))); continue; }
     sections.push({ properties: { ...props(c.L, false, false), titlePage: false }, children: c.blocks.filter((b): b is Paragraph | Table => !isNewPage(b)) });
   }
   // 开了奇偶页不同（博士）后每一节都要把 even 也给全，不然前置部分的偶数页页眉页脚是空的

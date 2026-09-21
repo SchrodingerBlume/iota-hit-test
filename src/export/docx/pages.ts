@@ -1,37 +1,17 @@
-// 表单页：封面、中文内封、英文内封、答辩决议、声明。位置照模板排出来的 PDF 逐行量的（基线离页顶多少磅），
-// 这里用「上一行落在哪、这一行要落在哪」算段前距，行距钉死；字号字体照模板 src/pages/*.typ 的规定
-import { Paragraph, TextRun, AlignmentType, LineRuleType, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign, PageBreak, type ParagraphChild } from 'docx';
+// 表单页：封面、中英文内封照校方 Word 范例的段落序列抄（见下），答辩决议、声明按模板排出来的 PDF 逐行量的位置放
+import { Paragraph, TextRun, AlignmentType, LineRuleType, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign, PageBreak, HeightRule, TableLayoutType, Tab, TabStopType, type ParagraphChild } from 'docx';
 import type { ThesisDoc, Info, DefensePerson } from '../../model/types';
 import { PT, HALF, ZIHAO, FONT, fontsFor, hasCJK } from './units';
 
 const DOC_TYPE = { bachelor: "本科毕业论文（设计）", master: "硕士学位论文", doctor: "博士学位论文" } as const;
 const DOC_TYPE_EN = { bachelor: 'Graduation Thesis', master: "Dissertation for the Master's Degree", doctor: "Dissertation for the Doctoral Degree" } as const;
 
-/** 逐行落位：cursor 记着上一段的底，下一段的段前距 = 目标基线 − 基线在行里的位置 − cursor */
-class Flow {
-  cursor: number;
-  constructor(top: number) { this.cursor = top; }
-  /** y：基线离页顶（磅）；size：字号（磅）；行高钉在 1.3 倍字号 */
-  at(y: number, size: number, children: ParagraphChild[], extra: Partial<ConstructorParameters<typeof Paragraph>[0] & object> = {}): Paragraph {
-    const line = Math.round(size * 1.3);
-    const base = (line - size) / 2 + size * 0.86;
-    const top = y - base;
-    const before = Math.max(0, top - this.cursor);
-    this.cursor = top + line;
-    return new Paragraph({ alignment: AlignmentType.CENTER, indent: { firstLine: 0 }, spacing: { before: Math.round(before * PT), after: 0, line: line * PT, lineRule: LineRuleType.EXACT }, ...(extra as object), children });
-  }
-  /** 一个空段把游标推到 top（磅）：后面接表格这类没有段前距的东西 */
-  gapTo(top: number): Paragraph {
-    const h = Math.max(1, top - this.cursor);
-    this.cursor = top;
-    return new Paragraph({ spacing: { before: 0, after: 0, line: Math.round(h * PT), lineRule: LineRuleType.EXACT }, children: [] });
-  }
-}
 const run = (text: string, size: number, o: { bold?: boolean; zh?: string; en?: string; italics?: boolean } = {}) => new TextRun({ text, size: size * HALF, bold: o.bold, italics: o.italics, font: fontsFor(text, o.zh ?? FONT.zh, o.en ?? FONT.en) });
 const month = (iso: string | undefined, lang: 'zh' | 'en') => {
   const m = /^(\d{4})-(\d{2})/.exec(iso || '') ?? (() => { const d = new Date(); return ['', String(d.getFullYear()), String(d.getMonth() + 1).padStart(2, '0')]; })();
   const y = m[1], mo = Number(m[2]);
-  if (lang === 'zh') return `${y} 年 ${mo} 月`;
+  // 范例里年月之间没有空格（Word 自己在汉字与数字之间留一小段），Typst 那边是模板用空格模拟的
+  if (lang === 'zh') return `${y}年${mo}月`;
   return `${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][mo - 1]}, ${y}`;
 };
 const pick = (doc: ThesisDoc, page: 'cover' | 'titlepage', k: keyof Info): string => { const v = doc.localInfo?.[page]?.[k]; const base = doc.info[k]; return String((v as string) || (base as string) || ''); };
@@ -54,90 +34,156 @@ function wrap(t: string, size: number, width: number, bold = false, latin = FONT
   if (cur.trim()) out.push(cur.trim());
   return out.length ? out : [''];
 }
-const TEXT_W = 425; // 版心宽（磅）：A4 减左右各 3cm
 
-/** 封面：标签 / （学术学位论文）/ 中文题目 / 英文题目 / 姓名 / 校名 / 年月。基线位置量自模板（磅） */
-export function coverPage(doc: ThesisDoc, top: number): Paragraph[] {
-  const s = doc.settings;
-  const f = new Flow(top);
-  const out: Paragraph[] = [];
-  const title = lines(pick(doc, 'cover', 'title')), titleEn = lines(pick(doc, 'cover', 'titleEn'));
-  const sub = pick(doc, 'cover', 'subtitle'), subEn = pick(doc, 'cover', 'subtitleEn');
-  out.push(f.at(177, ZIHAO.xiaoyi, [run(DOC_TYPE[s.degreeLevel], ZIHAO.xiaoyi, { bold: true })]));
-  if (s.degreeLevel !== 'bachelor') {
-    const kind = s.degreeType === 'professional' ? '专业学位论文' : s.degreeType === 'none' ? '' : s.form === 'practice' ? '专业学位论文' : '学术学位论文';
-    if (kind) out.push(f.at(231, ZIHAO.xiaoer, [run(`（${kind}）`, ZIHAO.xiaoer, { bold: true })]));
-  }
-  let y = 308;
-  for (const t of [...title, ...(sub ? [sub] : [])].flatMap((x) => wrap(x, ZIHAO.erhao, TEXT_W))) { out.push(f.at(y, ZIHAO.erhao, [run(t, ZIHAO.erhao, { zh: FONT.hei, bold: !hasCJK(t) })])); y += 36; }
-  y = Math.max(y + 38, 381);
-  const enSize = s.titleEnXiaoer === true ? ZIHAO.xiaoer : ZIHAO.erhao;
-  const enAll = [...titleEn, ...(subEn ? [`: ${subEn}`] : [])].flatMap((x) => wrap(x, enSize, TEXT_W, true));
-  for (const t of enAll) { out.push(f.at(y, enSize, [run(t, enSize, { bold: true })])); y += Math.round(enSize * 1.43); }
-  out.push(f.at(Math.max(y + 60, 541), ZIHAO.xiaoer, [run(pick(doc, 'cover', 'author') || '□□□', ZIHAO.xiaoer, { bold: true })]));
-  out.push(f.at(687, ZIHAO.xiaoer, [run("哈尔滨工业大学", ZIHAO.xiaoer, { bold: true, zh: FONT.kai })]));
-  out.push(f.at(718, ZIHAO.xiaoer, [run(month(pick(doc, 'cover', 'date'), 'zh'), ZIHAO.xiaoer, { bold: true })]));
-  return out;
+// ── 封面与内封：照校方 Word 范例的段落序列抄 ──
+// 范例（Desktop/iota-对比/修正版docx/博士范例-修正.docx、本科范例-修正.docx）每一行的字号、加粗、字体、对齐、
+// 段距、贴不贴网格都照录；范例里说明文字（「↑（宋体小2号字加粗）」那些）占的行留成同字号的空段，版式才一模一样。
+// 页与页之间的分页符放在下一页第一段的开头（范例如此），不另起一个只有分页符的空段——那会在新页顶上多出一行。
+interface Line {
+  t?: string;
+  /** 字号（半磅）：空段也要给，段落标记的字号决定空行多高 */
+  sz: number;
+  b?: boolean;
+  zh?: string;
+  jc?: (typeof AlignmentType)[keyof typeof AlignmentType];
+  /** 段前（缇）、行距（缇；exact 钉死，否则倍数） */
+  before?: number;
+  line?: number;
+  exact?: boolean;
+  /** 贴文档网格（范例里 snapToGrid 没写 0 的那些） */
+  grid?: boolean;
+  /** 这一段开头带分页符 */
+  br?: boolean;
+  right?: boolean;
+  firstLine?: number;
+  /** 右边顶到版心右缘的那一截（制表位） */
+  tab?: string;
+  width?: number;
+}
+const E = (sz: number, extra: Partial<Line> = {}): Line => ({ sz, ...extra });
+const C = (t: string, sz: number, extra: Partial<Line> = {}): Line => ({ t, sz, jc: AlignmentType.CENTER, ...extra });
+function linePara(l: Line): Paragraph {
+  const kids: ParagraphChild[] = [];
+  if (l.br) kids.push(new PageBreak());
+  if (l.t) l.t.split('\n').forEach((piece, i) => { if (i) kids.push(new TextRun({ break: 1 })); kids.push(run(piece, l.sz / HALF, { bold: l.b, zh: l.zh })); });
+  if (l.tab) kids.push(new TextRun({ children: [new Tab()] }), run(l.tab, l.sz / HALF, { bold: l.b, zh: l.zh }));
+  return new Paragraph({
+    tabStops: l.tab ? [{ type: TabStopType.RIGHT, position: l.width ?? 0 }] : undefined,
+    style: l.grid ? 'Normal' : 'NoGrid',
+    alignment: l.jc ?? (l.right ? AlignmentType.RIGHT : AlignmentType.BOTH),
+    indent: { firstLine: l.firstLine ?? 0 },
+    spacing: { before: l.before ?? 0, after: 0, line: l.line ?? 240, lineRule: l.exact ? LineRuleType.EXACT : LineRuleType.AUTO },
+    run: { size: l.sz },
+    children: kids,
+  });
 }
 
+/** 封面：三个空行、文档类型、（学术学位论文）、中英文题目、姓名、校名、年月 */
+export function coverPage(doc: ThesisDoc, _top: number): Paragraph[] {
+  const s = doc.settings;
+  const grad = s.degreeLevel !== 'bachelor';
+  const title = lines(pick(doc, 'cover', 'title')).concat(pick(doc, 'cover', 'subtitle') ? [pick(doc, 'cover', 'subtitle')] : []).join('\n');
+  const titleEn = lines(pick(doc, 'cover', 'titleEn')).concat(pick(doc, 'cover', 'subtitleEn') ? [`: ${pick(doc, 'cover', 'subtitleEn')}`] : []).join('\n');
+  const enSize = s.titleEnXiaoer === true ? 36 : 44;
+  const kind = s.degreeType === 'professional' || (s.degreeType === 'auto' && s.form === 'practice') ? '专业' : '学术';
+  const seq: Line[] = [
+    E(24), E(24), E(24),
+    C(DOC_TYPE[s.degreeLevel], 48, { b: true }),
+    E(24, { jc: AlignmentType.CENTER }), E(24, { jc: AlignmentType.CENTER }),
+    ...(grad ? [C(`（${kind}学位论文）`, 36, { b: true }), E(24, { jc: AlignmentType.CENTER }), E(24, { jc: AlignmentType.CENTER })] : []),
+    C(title, 44, { zh: FONT.hei, before: 240, grid: true }),
+    E(24, { jc: AlignmentType.CENTER }), E(44, { jc: AlignmentType.CENTER }),
+    C(titleEn, enSize === 44 ? 36 : 36, { b: true, before: 240, line: 300 }),
+    E(24, { jc: AlignmentType.CENTER }), E(44, { jc: AlignmentType.CENTER }), E(44, { jc: AlignmentType.CENTER, line: 300 }),
+    C(pick(doc, 'cover', 'author'), 36, { b: true }),
+    E(24, { jc: AlignmentType.CENTER }), E(44, { jc: AlignmentType.CENTER }), E(36, { line: 300 }),
+    E(24), E(24), E(24), E(24), E(24), E(24),
+    C('哈尔滨工业大学', 36, { b: true, zh: FONT.kai, line: 324 }),
+    C(month(pick(doc, 'cover', 'date'), 'zh'), 36, { b: true }),
+    E(24, { jc: AlignmentType.CENTER }),
+  ];
+  return seq.map(linePara);
+}
 
-/** 中文内封 */
-export function titlepageZh(doc: ThesisDoc, top: number): (Paragraph | Table)[] {
-  const s = doc.settings; const f = new Flow(top);
-  const out: (Paragraph | Table)[] = [];
-  const corner = (l: string, r: string, y: number) => out.push(f.at(y, ZIHAO.xiaosi, [run(l, ZIHAO.xiaosi), new TextRun({ text: '\t' }), run(r, ZIHAO.xiaosi)], { alignment: AlignmentType.LEFT, tabStops: [{ type: 'right' as any, position: 8500 }] }));
-  corner(`国内图书分类号：${pick(doc, 'titlepage', 'classifiedIndex')}`, `学校代码：${pick(doc, 'titlepage', 'schoolCode')}`, 121);
-  corner(`国际图书分类号：${pick(doc, 'titlepage', 'udc')}`, `密级：${pick(doc, 'titlepage', 'secrecy') || '公开'}`, 136.5);
-  out.push(f.at(262, ZIHAO.xiaoer, [run(DOC_TYPE[s.degreeLevel], ZIHAO.xiaoer, { bold: true })]));
-  let y = 334;
-  for (const t of [...lines(pick(doc, 'titlepage', 'title')), ...(pick(doc, 'titlepage', 'subtitle') ? [pick(doc, 'titlepage', 'subtitle')] : [])].flatMap((x) => wrap(x, ZIHAO.erhao, TEXT_W))) { out.push(f.at(y, ZIHAO.erhao, [run(t, ZIHAO.erhao, { zh: FONT.hei })])); y += 36; }
-  const rows: [string, string][] = [
+const NO_B = { top: { style: BorderStyle.NIL, size: 0 }, bottom: { style: BorderStyle.NIL, size: 0 }, left: { style: BorderStyle.NIL, size: 0 }, right: { style: BorderStyle.NIL, size: 0 } } as const;
+/** 内封（中文）：分类号那两行、文档类型、题目、三行 39 磅的空行、信息表 */
+export function titlepageZh(doc: ThesisDoc, width: number): (Paragraph | Table)[] {
+  const s = doc.settings;
+  const grad = s.degreeLevel !== 'bachelor';
+  const title = lines(pick(doc, 'titlepage', 'title')).concat(pick(doc, 'titlepage', 'subtitle') ? [pick(doc, 'titlepage', 'subtitle')] : []).join('\n');
+  const gap = '                ';
+  const head: Line[] = grad ? [
+    { t: `国内图书分类号：${pick(doc, 'titlepage', 'classifiedIndex')}${gap}学校代码：${pick(doc, 'titlepage', 'schoolCode')}`, sz: 24, br: true, jc: AlignmentType.CENTER },
+    { t: `国际图书分类号：${pick(doc, 'titlepage', 'udc')}${gap}密级：${pick(doc, 'titlepage', 'secrecy') || '公开'}`, sz: 24, line: 300 },
+    E(24, { grid: true }), E(44, { line: 300 }), E(24, { grid: true }), E(24, { grid: true }), E(24, { grid: true }),
+  ] : [
+    // 模板的本科内封头一行：☑毕业论文　☐毕业设计 …… 密级：公开（范例只有右边那截，左边勾选框是模板加的）
+    { t: `${s.form === 'practice' ? '☐' : '☑'}毕业论文  ${s.form === 'practice' ? '☑' : '☐'}毕业设计`, tab: `密级：${pick(doc, 'titlepage', 'secrecy') || '公开'}`, width, sz: 24, br: true, grid: true, jc: AlignmentType.LEFT },
+    E(24, { jc: AlignmentType.CENTER }), E(24, { grid: true }), E(24, { grid: true }),
+  ];
+  const seq: Line[] = [
+    ...head,
+    C(DOC_TYPE[s.degreeLevel], 36, { b: true }),
+    E(24, { jc: AlignmentType.CENTER, grid: true }), E(44, { jc: AlignmentType.CENTER, line: 300 }),
+    C(title, 44, { zh: FONT.hei, grid: true }),
+    E(24, { jc: AlignmentType.CENTER, grid: true }), E(44, { jc: AlignmentType.CENTER, grid: true }),
+    E(44, { jc: AlignmentType.CENTER, line: 780, exact: true, grid: true }), E(44, { jc: AlignmentType.CENTER, line: 780, exact: true, grid: true }), E(grad ? 24 : 44, { jc: AlignmentType.CENTER, line: 780, exact: true, grid: true }),
+  ];
+  const rows: [string, string][] = grad ? [
     [s.degreeLevel === 'doctor' ? '博士研究生' : '硕士研究生', pick(doc, 'titlepage', 'author')],
     ['导师', pick(doc, 'titlepage', 'supervisor')],
     ...(doc.info.coSupervisor ? [['副导师', doc.info.coSupervisor] as [string, string]] : []),
+    ...(s.form === 'practice' && doc.info.industrySupervisor ? [['行业导师', doc.info.industrySupervisor] as [string, string]] : []),
     ['申请学位', pick(doc, 'titlepage', 'degreeApplied')],
     [s.form === 'practice' ? '类别' : '学科', s.form === 'practice' ? pick(doc, 'titlepage', 'practiceType') : pick(doc, 'titlepage', 'speciality')],
     ['所在单位', pick(doc, 'titlepage', 'affiliation')],
     ['答辩日期', month(doc.info.defenseDate || pick(doc, 'titlepage', 'date'), 'zh')],
     ['授予学位单位', '哈尔滨工业大学'],
+  ] : [
+    ['本科生', pick(doc, 'titlepage', 'author')],
+    ['学号', doc.info.studentId],
+    ['指导教师', pick(doc, 'titlepage', 'supervisor')],
+    ['专业', pick(doc, 'titlepage', 'speciality')],
+    ['学院', pick(doc, 'titlepage', 'affiliation')],
+    ['答辩日期', month(doc.info.defenseDate || pick(doc, 'titlepage', 'date'), 'zh')],
+    ['学校', '哈尔滨工业大学'],
   ];
-  y = Math.max(521, y + 150);
-  // 标签一列分散对齐（Word 的做法），值一列靠左；行高钉 29.6 磅
-  const cell = (children: Paragraph[], width: number) => new TableCell({ borders: { top: { style: BorderStyle.NIL, size: 0 }, bottom: { style: BorderStyle.NIL, size: 0 }, left: { style: BorderStyle.NIL, size: 0 }, right: { style: BorderStyle.NIL, size: 0 } }, width: { size: width, type: WidthType.DXA }, verticalAlign: VerticalAlign.CENTER, margins: { top: 0, bottom: 0, left: 0, right: 0 }, children });
-  const p = (children: ParagraphChild[], alignment: (typeof AlignmentType)[keyof typeof AlignmentType]) => new Paragraph({ alignment, indent: { firstLine: 0 }, spacing: { before: 0, after: 0, line: Math.round(29.6 * PT), lineRule: LineRuleType.EXACT }, children });
-  const trs = rows.map(([l, v]) => new TableRow({ children: [cell([p([run(l, ZIHAO.sihao)], AlignmentType.DISTRIBUTE)], 6 * ZIHAO.sihao * PT), cell([p([run('：', ZIHAO.sihao)], AlignmentType.LEFT)], Math.round(0.9 * ZIHAO.sihao * PT)), cell([p([run(v, ZIHAO.sihao)], AlignmentType.LEFT)], 220 * PT)] }));
-  // 表格第一行的基线 ≈ 行顶 + 20（29.6 的行、四号字居中）
-  out.push(f.gapTo(y - 20));
-  (out as (Paragraph | Table)[]).push(new Table({ rows: trs, alignment: AlignmentType.CENTER, width: { size: (6.9 * ZIHAO.sihao + 220) * PT, type: WidthType.DXA }, columnWidths: [6 * ZIHAO.sihao * PT, Math.round(0.9 * ZIHAO.sihao * PT), 220 * PT], layout: 'fixed' as any }));
-  return out;
+  // 范例的表：三列 1806 / 301 / 2951 缇，行高 540 缇，标签黑体四号分散对齐，冒号与值宋体四号，行距 1.5 倍，格子无边距
+  const cell = (children: ParagraphChild[], width: number, jc: (typeof AlignmentType)[keyof typeof AlignmentType]) => new TableCell({ borders: NO_B, width: { size: width, type: WidthType.DXA }, margins: { left: 0, right: 0, top: 0, bottom: 0 }, children: [new Paragraph({ style: 'Normal', alignment: jc, indent: { firstLine: 0 }, spacing: { before: 0, after: 0, line: 360, lineRule: LineRuleType.AUTO }, children })] });
+  const trs = rows.map(([l, v]) => new TableRow({ cantSplit: true, height: { value: 540, rule: HeightRule.ATLEAST }, children: [cell([run(l, ZIHAO.sihao, { zh: FONT.hei })], 1806, AlignmentType.DISTRIBUTE), cell([run('：', ZIHAO.sihao)], 301, AlignmentType.LEFT), cell([run(v, ZIHAO.sihao)], 2951, AlignmentType.LEFT)] }));
+  return [...seq.map(linePara), new Table({ rows: trs, layout: TableLayoutType.FIXED, alignment: AlignmentType.CENTER, width: { size: 0, type: WidthType.AUTO }, columnWidths: [1806, 301, 2951], borders: { ...NO_B, insideHorizontal: NO_B.top, insideVertical: NO_B.top }, margins: { left: 0, right: 0 } }), linePara(E(24, { grid: true }))];
 }
 
-/** 英文内封 */
-export function titlepageEn(doc: ThesisDoc, top: number): Paragraph[] {
-  const s = doc.settings; const f = new Flow(top);
-  const out: Paragraph[] = [];
-  out.push(f.at(122, ZIHAO.xiaosi, [run(`Classified Index: ${pick(doc, 'titlepage', 'classifiedIndex')}`, ZIHAO.xiaosi)], { alignment: AlignmentType.LEFT }));
-  out.push(f.at(142, ZIHAO.xiaosi, [run(`U.D.C: ${pick(doc, 'titlepage', 'udc')}`, ZIHAO.xiaosi)], { alignment: AlignmentType.LEFT }));
-  out.push(f.at(233, ZIHAO.xiaoer, [run(DOC_TYPE_EN[s.degreeLevel], ZIHAO.xiaoer)]));
-  const enSize = s.titleEnXiaoerTitlepage === true ? ZIHAO.xiaoer : ZIHAO.erhao;
-  let y = 338;
-  for (const t of [...lines(pick(doc, 'titlepage', 'titleEn')), ...(pick(doc, 'titlepage', 'subtitleEn') ? [`: ${pick(doc, 'titlepage', 'subtitleEn')}`] : [])].flatMap((x) => wrap(x, enSize, TEXT_W, true))) { out.push(f.at(y, enSize, [run(t, enSize, { bold: true })])); y += Math.round(enSize * 1.43); }
+/** 英文内封（硕博）：分类号两行、Dissertation for …、英文题目、两列信息表（标签黑体加粗、值 Times） */
+export function titlepageEn(doc: ThesisDoc, _top: number): (Paragraph | Table)[] {
+  const s = doc.settings;
+  const titleEn = lines(pick(doc, 'titlepage', 'titleEn')).concat(pick(doc, 'titlepage', 'subtitleEn') ? [`: ${pick(doc, 'titlepage', 'subtitleEn')}`] : []).join('\n');
+  const seq: Line[] = [
+    { t: `Classified Index: ${pick(doc, 'titlepage', 'classifiedIndex')}`, sz: 24, br: true, grid: true },
+    { t: `U.D.C: ${pick(doc, 'titlepage', 'udc')}`, sz: 24, grid: true },
+    E(24, { grid: true }), E(24, { grid: true }), E(24, { grid: true }),
+    C(DOC_TYPE_EN[s.degreeLevel], 36, { grid: true }),
+    E(24, { jc: AlignmentType.CENTER }), E(44, { jc: AlignmentType.CENTER }), E(36, { jc: AlignmentType.CENTER, grid: true }),
+    C(titleEn, 36, { b: true, line: 300 }),
+    E(24, { jc: AlignmentType.CENTER }), E(44, { jc: AlignmentType.CENTER }),
+    E(44, { jc: AlignmentType.CENTER, grid: true }), E(44, { jc: AlignmentType.CENTER, grid: true }),
+  ];
   const rows: [string, string][] = [
-    ['Candidate', doc.info.authorEn || pick(doc, 'titlepage', 'author')],
+    ['Candidate', pick(doc, 'titlepage', 'authorEn') || pick(doc, 'titlepage', 'author')],
     ['Supervisor', doc.info.supervisorEn || pick(doc, 'titlepage', 'supervisor')],
-    ...(doc.info.coSupervisorEn ? [['Associate Supervisor', doc.info.coSupervisorEn] as [string, string]] : []),
+    ...(doc.info.coSupervisorEn || doc.info.coSupervisor ? [['Associate Supervisor', doc.info.coSupervisorEn || doc.info.coSupervisor] as [string, string]] : []),
     ['Academic Degree Applied for', doc.info.degreeAppliedEn || pick(doc, 'titlepage', 'degreeApplied')],
-    ['Speciality', doc.info.specialityEn || pick(doc, 'titlepage', 'speciality')],
+    [s.form === 'practice' ? 'Category' : 'Speciality', s.form === 'practice' ? pick(doc, 'titlepage', 'practiceType') : (doc.info.specialityEn || pick(doc, 'titlepage', 'speciality'))],
     ['Affiliation', doc.info.affiliationEn || pick(doc, 'titlepage', 'affiliation')],
-    ['Date of Defence', doc.info.defenseDateEn || month(doc.info.defenseDate || pick(doc, 'titlepage', 'date'), 'en')],
+    ['Date of Defence', month(doc.info.defenseDate || pick(doc, 'titlepage', 'date'), 'en')],
     ['Degree-Conferring-Institution', 'Harbin Institute of Technology'],
   ];
-  y = Math.max(540, y + 130);
-  for (const [l, v] of rows) { out.push(f.at(y, ZIHAO.sihao, [run(`${l}: `, ZIHAO.sihao, { bold: true }), new TextRun({ text: '\t' }), run(v, ZIHAO.sihao)], { alignment: AlignmentType.LEFT, tabStops: [{ type: 'left' as any, position: 3400 }] })); y += 22; }
-  return out;
+  // 范例的表：两列 4262 / 4406 缇，标签行距 22 磅钉死、值同（长的那两行 18 磅）
+  const cell = (children: ParagraphChild[], width: number, line: number) => new TableCell({ borders: NO_B, width: { size: width, type: WidthType.DXA }, children: [new Paragraph({ style: 'Normal', alignment: AlignmentType.LEFT, indent: { firstLine: 0 }, spacing: { before: 0, after: 0, line, lineRule: LineRuleType.EXACT }, children })] });
+  const trs = rows.map(([l, v]) => { const long = wrap(v, ZIHAO.sihao, 4406 / PT - 10.8).length > 1; return new TableRow({ children: [cell([run(l, ZIHAO.sihao, { bold: true, zh: FONT.hei }), run('：', ZIHAO.sihao, { bold: true, zh: FONT.hei })], 4262, 440), cell([run(v, ZIHAO.sihao)], 4406, long ? 360 : 440)] }); });
+  return [...seq.map(linePara), new Table({ rows: trs, layout: TableLayoutType.FIXED, alignment: AlignmentType.CENTER, width: { size: 0, type: WidthType.AUTO }, columnWidths: [4262, 4406], borders: { ...NO_B, insideHorizontal: NO_B.top, insideVertical: NO_B.top } }), linePara(E(24, { jc: AlignmentType.CENTER })), linePara(E(24, { jc: AlignmentType.CENTER }))];
 }
 
-/** 答辩决议：一张六列表——评阅人块、竖排「答辩委员会成员」的委员会块、决议一格；列宽照模板 */
 type BlockLike = Paragraph | Table | { readonly newPage: true };
 export function defensePage(doc: ThesisDoc, title: BlockLike[]): BlockLike[] {
   const d = doc.defense;
