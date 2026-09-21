@@ -335,6 +335,8 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
   const warnings = diagnostics.filter((d) => d.severity !== 'error');
   // 序列化时发现的（引用目标不存在、文献没登记）：Typst 那边印的是 ??，警告在这里列
   const serWarnings = useSerializeWarnings((s) => s.warnings);
+  // 只有警告时不占页面顶上那块：工具条上一颗「n 条警告」，点开才列（错误照旧直接列）
+  const [diagOpen, setDiagOpen] = useState(false);
   // 警告也给（标签没挂上这类要用户处理）；只滤掉本机字体档缺字体那几条噪音
   const shown = [...errors, ...serWarnings.map((message) => ({ severity: 'warning', message, where: '' })), ...warnings.filter((w) => !/unknown font family: (kaiti_gb2312|lisu|stxinwei|simsun|simhei|kaiti|fangsong)/i.test(w.message))];
 
@@ -346,6 +348,8 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
         {status === 'ready' && lastMs !== null && pages > 0 && <span className="page-status"><PageIndicator current={Math.min(curPage, pages)} total={pages} onJump={jumpToPage} /></span>}
         {status === 'ready' && lastMs !== null && <span className="page-status"><WordCountBadge pages={pages} /></span>}
         {status === 'ready' && errors.length > 0 && <span className="err-badge" title={tx("错误位置如下")}>{errors.length} {' '}{tx("个错误")}</span>}
+        {status === 'ready' && !errors.length && shown.length > 0 && <button type="button" className={`warn-badge ${diagOpen ? 'on' : ''}`} title={tx("展开 / 收起警告")} onClick={() => setDiagOpen((v) => !v)}>{shown.length} {' '}{tx("条警告")}</button>}
+        {compiling && <span className="compiling-note muted">{tx("正在排版…")}</span>}
         <span className="spacer" />
         <BgMenu />
         <span className="join zoom-tools">
@@ -376,7 +380,7 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
             <div className="muted">{tx("请重新加载页面后重试。")}</div>
           </div>
         )}
-        {status === 'ready' && shown.length > 0 && (
+        {status === 'ready' && shown.length > 0 && (errors.length > 0 || diagOpen) && (
           <div className={`diag ${errors.length ? 'err' : ''}`} style={{ marginBottom: 12, borderRadius: 'var(--r-m)', border: '1px solid' }}>
             <ul>
               {shown.slice(0, 30).map((d, i) => {

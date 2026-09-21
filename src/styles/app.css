@@ -896,6 +896,9 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .layout-seg button { padding: 4px 8px; display: inline-flex; }
 .layout-seg svg { width: 15px; height: 15px; }
 .err-badge { font-size: 11px; padding: 1px 8px; border-radius: var(--r-pill); background: var(--danger-soft); color: var(--danger); font-weight: 600; }
+.warn-badge { font-size: 11px; padding: 1px 8px; border-radius: var(--r-pill); background: var(--warn-soft); color: var(--warn, #9a6700); font-weight: 600; border: 0; cursor: pointer; font-family: inherit; }
+.warn-badge.on { outline: 1px solid var(--warn, #9a6700); }
+.compiling-note { font-size: 11px; }
 /* 标签式输入（关键词） */
 .tags { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 6px; border: 1px solid var(--line-2); border-radius: var(--r-s); background: var(--panel); min-height: 34px; cursor: text; transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease); }
 .tags:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
@@ -1354,7 +1357,7 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .preview[data-bg="eye"] { --preview-bg: #a8cfb0; --paper: #c7edcc; }
 .preview[data-bg="parchment"] { --preview-bg: #c8ab7e; --paper: #f2e6d0; }
 .preview .pane-bar .btn { flex-shrink: 0; }
-.preview .pane-bar .preview-progress { top: auto; bottom: 0; }
+.preview .pane-bar .preview-progress { top: auto; bottom: -1px; height: 3px; z-index: 5; }
 
 .editor-mode { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
 .markdown-source { display: block; box-sizing: border-box; width: 100%; min-height: 55vh; padding: 14px; resize: vertical; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--panel); color: var(--ink); font: 14px/1.65 var(--mono); tab-size: 2; }
