@@ -114,7 +114,8 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   const compositionActive = useRef(false);
   const compositionCommit = useRef<string | null>(null);
   const [composing, setComposing] = useState<string | null>(null);
-  const [pending, setPending] = useState<{ key: RichKey; version: number; text: string; fading?: boolean } | null>(null);
+  /** 字形表追上来那一刻，刚才暂印的字淡出，与真字形交叉 */
+  const [fading, setFading] = useState<{ key: RichKey; text: string } | null>(null);
   const [geom, setGeom] = useState<PageGeom[]>([]);
   /** 自己数连击：pointerdown 的 detail 恒为 0，双击选词、三击选段得靠这个 */
   const clicks = useRef({ t: 0, x: 0, y: 0, n: 0 });
@@ -226,9 +227,19 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   const pageTo = (p: number, x: number, y: number) => { const g = geom[toDisplay(p)]; return g ? { left: g.left + x * g.scale, top: g.top + y * g.scale, scale: g.scale } : null; };
   const stale = index.version !== docVersion();
   const oldPos = (pos: number, assoc: -1 | 1) => (activeKey ? (stale ? toOldPos(activeKey, index.version, pos, assoc) : pos) : null);
-  /** 尚未进入排版结果的文字：光标锚定在输入起点；替换选区时使用原选区左端，
-   *  覆盖文字的宽度由 overlay 补偿。 */
-  const pendingLen = pending && pending.key === activeKey && !pending.fading && composing === null && index.version < pending.version ? pending.text.length : 0;
+  /** 尚未进入排版结果的文字：*从文档算，不靠记键*——字形表那一版的光标位置换到现在，到现在的光标之间就是这段
+   *  时间里在这儿敲进去的字（中间退掉的自然不在里面；上一次编辑没排完就增删也照样对）。光标锚定在输入起点，
+   *  覆盖文字的宽度由 overlay 补偿 */
+  const pendingText = useMemo(() => {
+    if (!editor || !activeKey || !sel || !sel.empty || !stale || composing !== null) return '';
+    const oldHead = toOldPos(activeKey, index.version, sel.head, -1);
+    if (oldHead === null) return '';
+    const from = toNewPos(activeKey, index.version, oldHead, -1);
+    if (from === null || from >= sel.head) return '';
+    return editor.state.doc.textBetween(from, sel.head, undefined, '\uFFFC');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, activeKey, sel, stale, index, composing]);
+  const pendingLen = pendingText.length;
   const caret = useMemo((): CaretRect | null => {
     if (!sel || !activeKey) return null;
     const head = sel.empty && pendingLen ? Math.max(0, sel.head - pendingLen) : sel.head;
@@ -261,17 +272,17 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, activeKey, index, stale, sel]);
 
-  // 字形表跟上了：暂印的字淡出，与真字形交叉
+  // 字形表跟上了（暂印的字没了）：刚才那段淡出，与真字形交叉
+  const lastPending = useRef('');
   useEffect(() => {
-    if (!pending || pending.fading || index.version < pending.version) return;
-    setPending({ ...pending, fading: true });
-  }, [index.version, pending]);
-  // 淡完就撤（定时器单独一个 effect：上面那个一 setPending 就重跑，会把自己的定时器清掉）
+    if (pendingText) { lastPending.current = pendingText; return; }
+    if (lastPending.current && activeKey) { setFading({ key: activeKey, text: lastPending.current }); lastPending.current = ''; }
+  }, [pendingText, activeKey]);
   useEffect(() => {
-    if (!pending?.fading) return;
-    const t = window.setTimeout(() => setPending((p) => (p && p.fading ? null : p)), 220);
+    if (!fading) return;
+    const t = window.setTimeout(() => setFading(null), 220);
     return () => window.clearTimeout(t);
-  }, [pending]);
+  }, [fading]);
   // 删除内容应在重排前隐藏：若旧字形映射到当前文档后已折叠为空，
   // 就盖一块纸色把它遮掉
   const gone = useMemo(() => {
@@ -369,9 +380,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     return ev.defaultPrevented;
   };
   const insertText = (ed: Editor, text: string) => {
-    const key = activeKey!;
     ed.view.dispatch(ed.state.tr.insertText(text).scrollIntoView());
-    setPending((p) => ({ key, version: docVersion(), text: p && p.key === key && index.version < p.version ? p.text + text : text }));
   };
 
   /** 点击命中的字形 → 现在这一版里的位置 */
@@ -641,7 +650,6 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
         ed.commands.setTextSelection(sel.to);
       }
       dispatchKey(ed, { key: k, code: k, shiftKey: e.shiftKey, altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey });
-      if (k === 'Enter') setPending(null);
       return;
     }
     // 其余可打印字符走 input 事件（输入法也从那儿来）
@@ -717,9 +725,9 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   useEffect(() => { if (import.meta.env.DEV) (window as unknown as { __pv?: unknown }).__pv = { index, geom, focusMap, merged, caret, sel: sel && { from: sel.from, to: sel.to }, ver: docVersion(), hitAt, activeKey, editor: !!editor }; }, [index, geom, focusMap, merged, caret, sel]);
   const caretPx = caret ? pageTo(caret.page, caret.x, caret.y) : null;
   const caretH = caret && caretPx ? caret.h * caretPx.scale : 0;
-  const pendingText = pending && pending.key === activeKey ? pending.text : '';
-  const overlayText = composing !== null ? composing : pendingText;
-  const overlayW = useMemo(() => (overlayText && caretH && !(composing === null && pending?.fading) ? measureText(overlayText, caretH * 0.92) : 0), [overlayText, caretH, composing, pending?.fading]);
+  const fadingText = !pendingText && composing === null && fading && fading.key === activeKey ? fading.text : '';
+  const overlayText = composing !== null ? composing : pendingText || fadingText;
+  const overlayW = useMemo(() => (overlayText && caretH && !fadingText ? measureText(overlayText, caretH * 0.92) : 0), [overlayText, caretH, fadingText]);
   const caretLeft = caretPx ? caretPx.left + overlayW : 0;
   // 隐形输入框跟着光标走，但别跑出纸的右边、也别在光标算不出来时跳回 (0,0)——浏览器会把滚动容器
   // 卷过去追焦点里的输入框，整个预览就横着 / 竖着飞走了
@@ -741,7 +749,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
       {commentRects.map((c) => c.rects.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <div key={`c${c.id}${i}`} className={`pv-comment ${activeComment === c.id ? 'is-active' : ''}`} style={{ left: p.left, top: p.top, width: r.w * p.scale, height: r.h * p.scale }} /> : null; }))}
       {marks.map((r, i) => { const p = pageTo(r.page, r.x, r.y); if (!p) return null; if (r.space) return <span key={`m${i}`} className="pv-mark is-space" style={{ left: p.left, top: p.top, width: (r.w ?? r.h * 0.3) * p.scale, height: r.h * p.scale, fontSize: r.h * p.scale * 0.8, lineHeight: `${r.h * p.scale}px` }}>·</span>; const gutter = r.noIndent && !r.blank; return <span key={`m${i}`} className={`pv-mark ${r.blank ? 'is-blank' : ''} ${gutter || (r.noIndent && r.blank) ? 'is-gutter' : ''}`} style={{ left: p.left - (r.noIndent ? r.h * p.scale * 1.2 : 0), top: p.top, height: r.h * p.scale, fontSize: r.h * p.scale * 0.8, lineHeight: `${r.h * p.scale}px` }}>{r.noIndent && !r.blank ? '⇤' : r.blank && r.noIndent ? '⇤¶' : '¶'}</span>; })}
       {caretPx && overlayText && (
-        <span className={`pv-overlay ${composing !== null ? 'is-composing' : ''} ${composing === null && pending?.fading ? 'is-fading' : ''}`} style={{ left: caretPx.left, top: caretPx.top, height: caretH, fontSize: caretH * 0.92, lineHeight: `${caretH}px` }}>{overlayText}</span>
+        <span className={`pv-overlay ${composing !== null ? 'is-composing' : ''} ${fadingText ? 'is-fading' : ''}`} style={{ left: caretPx.left, top: caretPx.top, height: caretH, fontSize: caretH * 0.92, lineHeight: `${caretH}px` }}>{overlayText}</span>
       )}
       {caretPx && sel?.empty !== false && (
         <div className={`pv-caret ${focused ? '' : 'is-idle'}`} style={{ left: caretLeft, top: caretPx.top, height: caretH }} />
