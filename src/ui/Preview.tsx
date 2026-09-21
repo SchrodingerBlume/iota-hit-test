@@ -40,6 +40,17 @@ function jumpTo(target: DiagTarget) {
 }
 
 const NO_VIRTUALIZE = { schedule: () => {}, snapshot: () => {}, apply: () => {} };
+/** on 连续保持 after 毫秒之后给出它开始的时刻，否则 0 */
+function useSlow(on: boolean, after: number): number {
+  const [since, setSince] = useState(0);
+  useEffect(() => {
+    if (!on) { setSince(0); return; }
+    const t0 = performance.now();
+    const timer = window.setTimeout(() => setSince(t0), after);
+    return () => window.clearTimeout(timer);
+  }, [on]);
+  return since;
+}
 
 export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () => void; refreshDisabled?: boolean }) {
   // 只订阅要画的几项：glyphs / segments 那些大数组换了不必重画这里
@@ -47,6 +58,9 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
   const progress = useCompileState((s) => s.progress);
   const fatal = useCompileState((s) => s.fatal);
   const compiling = useCompileState((s) => s.compiling);
+  const compilingFull = useCompileState((s) => s.compilingFull);
+  const bgCompiling = useCompileState((s) => s.bgCompiling);
+  const bgWarming = useCompileState((s) => s.bgWarming);
   const artifact = useCompileState((s) => s.artifact);
   const artifactFresh = useCompileState((s) => s.artifactFresh);
   const focusArtifact = useCompileState((s) => s.focusArtifact);
@@ -54,6 +68,7 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
   const main = useCompileState((s) => s.diagMain);
   const segments = useCompileState((s) => s.diagSegments);
   const lastMs = useCompileState((s) => s.lastMs);
+  const compileCount = useCompileState((s) => s.compileCount);
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
@@ -342,7 +357,12 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
   const shown = [...errors, ...serWarnings.map((message) => ({ severity: 'warning', message, where: '' })), ...warnings.filter((w) => !/unknown font family: (kaiti_gb2312|lisu|stxinwei|simsun|simhei|kaiti|fangsong)/i.test(w.message))];
   // 进工程后第一份整编还没回来（读图、排队、编译都算）：摆影子论文，别写「暂无内容」
   const first = status === 'ready' && !artifact && !errors.length && !refreshDisabled;
-
+  // 已有预览、这一次整编却迟迟不回来：前台整编（大文档改摘要、换设置这类，预览马上要整个换）等过 SLOW_AFTER 就把影子论文盖上去；
+  // 后台整编（长文档打字后的校准，预览照旧能用）只在角上摆一张小的。只编一章的不算
+  // 上一次就慢（≥ 3 s）的等 1.5 s 就盖，平时 2 s 上下的稿要等到 3 s——省得每改一字闪一下；头一份整编是冷的、不作数
+  const slowAfter = compileCount > 1 && lastMs !== null && lastMs >= 3000 ? 1500 : 3000;
+  const slowFg = useSlow(compilingFull && !!artifact, slowAfter);
+  const slowBg = useSlow(bgCompiling && !bgWarming && !!artifact && !compilingFull, slowAfter);
   return (
     <div className={`preview ${compiling ? 'is-compiling' : ''}`} data-bg={bg}>
       <div className="pane-bar">
@@ -403,7 +423,8 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
         )}
         {renderError && <div className="diag err" style={{ marginBottom: 12, padding: 8 }}>{tx("渲染失败：")}{renderError}</div>}
         {status === 'ready' && !artifact && !compiling && !errors.length && refreshDisabled && <div className="preview-empty">{tx("暂无内容")}</div>}
-        <FirstCompile show={first} />
+        <FirstCompile show={first || !!slowFg} variant={first ? 'first' : 'again'} since={slowFg} />
+        <FirstCompile show={!first && !slowFg && !!slowBg} variant="mini" since={slowBg} />
         {/* 渲染器会整个改写 preview-doc 的内容，编辑层只能做它的兄弟盖在上面 */}
         <div ref={canvasRef} className="preview-canvas">
           <div ref={stageRef} className="preview-stage" style={{ width: '100%' }}>

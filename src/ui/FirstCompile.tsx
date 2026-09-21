@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useStore } from '../model/store';
+import { useCompileState } from '../compiler/client';
 import type { RichDoc, ThesisDoc } from '../model/types';
 import { t as tx } from '../i18n';
 
@@ -45,29 +46,40 @@ function pages(doc: ThesisDoc): Line[][] {
 const readMs = (): Record<string, number> => { try { return JSON.parse(localStorage.getItem(MS_KEY) ?? '{}'); } catch { return {}; } };
 const saveMs = (id: string, ms: number) => { try { localStorage.setItem(MS_KEY, JSON.stringify({ ...readMs(), [id]: Math.round(ms) })); } catch { /* */ } };
 
-/** show 翻成 false 后淡出再卸掉；这一回等了多久记下来，下次进同一工程按它定节奏 */
-export function FirstCompile({ show }: { show: boolean }) {
-  const [mounted, setMounted] = useState(show);
+export type Variant = 'first' | 'again' | 'mini';
+/** show 翻成 false 后淡出再卸掉。first：进工程头一份整编，等了多久记下来，下次进同一工程按它定节奏；
+ *  again：大文档改一点也要整篇重排好几秒，盖在旧预览上；mini：整编在后台跑着、预览照旧能用，只在角上摆一张小的。
+ *  since 是这次排版开始的时刻 */
+export function FirstCompile({ show, variant = 'first', since = 0 }: { show: boolean; variant?: Variant; since?: number }) {
+  const [phase, setPhase] = useState<'in' | 'out' | 'gone'>(show ? 'in' : 'gone');
   const t0 = useRef(0);
+  const shownAt = useRef(0);
   const id = useStore((s) => s.doc.id);
   useEffect(() => {
-    if (show) { setMounted(true); t0.current = performance.now(); return; }
+    if (show) { setPhase('in'); shownAt.current = performance.now(); t0.current = variant === 'first' ? shownAt.current : 0; return; }
     if (t0.current) { saveMs(id, performance.now() - t0.current); t0.current = 0; }
-    const timer = window.setTimeout(() => setMounted(false), 600);
-    return () => window.clearTimeout(timer);
+    // 刚露面就撤会像闪了一下：至少留 MIN_SHOW 再淡出
+    const wait = Math.max(0, MIN_SHOW - (performance.now() - shownAt.current));
+    const a = window.setTimeout(() => setPhase('out'), wait);
+    const b = window.setTimeout(() => setPhase('gone'), wait + 600);
+    return () => { window.clearTimeout(a); window.clearTimeout(b); };
   }, [show]);
-  if (!mounted) return null;
-  return <div className={`first-compile ${show ? '' : 'fc-out'}`} onTransitionEnd={(e) => e.target === e.currentTarget && !show && setMounted(false)}><Stage key={id} /></div>;
+  if (phase === 'gone') return null;
+  return <div className={`first-compile fc-${variant} ${phase === 'out' ? 'fc-out' : ''}`} onTransitionEnd={(e) => e.target === e.currentTarget && phase === 'out' && setPhase('gone')}><Stage key={`${id}:${variant}`} variant={variant} since={since} /></div>;
 }
+const MIN_SHOW = 900;
 
-function Stage() {
+function Stage({ variant, since }: { variant: Variant; since: number }) {
+  const again = variant !== 'first';
   const doc = useStore((s) => s.doc);
+  const lastMs = useCompileState((s) => s.lastMs);
   const script = useMemo(() => pages(doc), []);
   const total = script.length;
   // 影子页只铺正文那几节；封面、目录、参考文献那些按经验补
   const about = Math.round(total * 1.3) + 8;
-  const est = useMemo(() => readMs()[doc.id] ?? 800 + total * 60, []);
-  const t0 = useRef(performance.now());
+  // 重排按上一次排版的耗时估；头一份按上次进这个工程实测的，没有就按页数
+  const est = useMemo(() => again ? Math.max(1500, lastMs ?? 3000) : readMs()[doc.id] ?? 800 + total * 60, []);
+  const t0 = useRef(again && since ? since : performance.now());
   const [now, setNow] = useState(0);
   useEffect(() => { const timer = window.setInterval(() => setNow(performance.now() - t0.current), 100); return () => window.clearInterval(timer); }, []);
   const p = 1 - Math.exp(-now / est * Math.log(10));
@@ -93,8 +105,8 @@ function Stage() {
   return (
     <>
       <div className="boot fc-caption">
-        <h3><Loader2 />{tx("初次排版中")}</h3>
-        <div className="muted">{tx("第一次要把整篇排一遍，之后每次只重排改动的那一部分。")}</div>
+        <h3><Loader2 />{variant === 'mini' ? tx("正在后台重排") : again ? tx("正在重新排版") : tx("初次排版中")}</h3>
+        <div className="muted">{again ? tx("这篇比较长，这处改动要整篇重排一遍；排好自动换上。") : tx("第一次要把整篇排一遍，之后每次只重排改动的那一部分。")}</div>
         <div className="bar"><i style={{ width: `${Math.max(2, p * 100)}%` }} /></div>
         <div className="detail">{tx("约 {{n}} 页 · 已用 {{s}} 秒", { n: about, s: (now / 1000).toFixed(1) })}</div>
       </div>

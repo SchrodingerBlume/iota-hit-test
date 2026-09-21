@@ -15,7 +15,11 @@ export interface CompileState {
   bootMs: number | null;
   /** 前台那条道在编（预览马上要换）；后台那条道在整编（全文在后台重排，预览照旧能用） */
   compiling: boolean;
+  /** 前台在编的是整篇（不是只编一章）：拖久了要盖影子论文的是这种 */
+  compilingFull: boolean;
   bgCompiling: boolean;
+  /** 后台在编的只是暖身（结果不上屏） */
+  bgWarming: boolean;
   /** 后台整编的那条道有没有起来（起来之后整编都走它，打字不再等整编） */
   bgReady: boolean;
   /** 最近一次成功的产物（与上一版的差；fresh 表示要整个 reset） */
@@ -63,7 +67,9 @@ export const useCompileState = create<CompileState>(() => ({
   fatal: null,
   bootMs: null,
   compiling: false,
+  compilingFull: false,
   bgCompiling: false,
+  bgWarming: false,
   bgReady: false,
   artifact: null,
   artifactFresh: true,
@@ -210,7 +216,7 @@ class Lane {
 }
 const fg = new Lane('fg');
 const bg = new Lane('bg');
-const compiling = () => ({ compiling: fg.inFlight !== null, bgCompiling: bg.inFlight !== null });
+const compiling = () => ({ compiling: fg.inFlight !== null, compilingFull: fg.inFlight !== null && !fg.inFlightInput?.focus, bgCompiling: bg.inFlight !== null, bgWarming: bg.inFlight !== null && !!bg.inFlightInput?.warm });
 
 /** 后台那条道起来后先拿上一次整编暖一遍缓存（几百页冷编要几十秒），但等前台那次整编落地再暖——两边同时冷编会互相拖慢 */
 function warmBg() {
