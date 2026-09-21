@@ -2,7 +2,7 @@
 // 两种接口各一个驱动，对话记录按接口各自的原样存（一个会话只用一家）
 import type Anthropic from '@anthropic-ai/sdk';
 import { webOf, webNativeOf, type AiConfig } from './config';
-import { runTool, toolsFor, setWebConfig, type ToolDef } from './tools';
+import { runTool, toolsFor, setWebConfig, serverSandboxOn, collectBytes, type ToolDef } from './tools';
 import { pdfText, type Attachment } from './files';
 
 export interface AgentEvents {
@@ -35,10 +35,22 @@ async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], us
     if (/opus-5|opus-4-[678]|sonnet-5|sonnet-4-6|fable|mythos/.test(c.model)) tools.push({ type: 'web_search_20260209', name: 'web_search', max_uses: 8 } as any, { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 8 } as any);
     else tools.push({ type: 'web_search_20250305', name: 'web_search', max_uses: 8 } as any);
   }
+  // 服务方沙盒：Anthropic 容器里跑 Python（bash + 文件编辑两个内置工具）；附件顺带传进容器，模型在里面能直接读
+  const server = serverSandboxOn();
+  if (server) tools.push({ type: 'code_execution_20260120', name: 'code_execution' } as any);
   const parts: Anthropic.ContentBlockParam[] = files.map((f) => f.kind === 'image'
     ? { type: 'image', source: { type: 'base64', media_type: f.type as 'image/png', data: f.data } }
     : f.kind === 'pdf' ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: f.data }, title: f.name }
     : { type: 'document', source: { type: 'text', media_type: 'text/plain', data: f.data }, title: f.name });
+  if (server) {
+    for (const f of files) {
+      try {
+        const blob = f.kind === 'text' ? new Blob([f.data], { type: 'text/plain' }) : new Blob([Uint8Array.from(atob(f.data), (ch) => ch.charCodeAt(0))], { type: f.type });
+        const up = await client.files.upload({ file: new File([blob], f.name, { type: blob.type }) });
+        parts.push({ type: 'container_upload', file_id: up.id } as any);
+      } catch (e) { console.warn('[agent] 附件没传进容器', f.name, e); }
+    }
+  }
   messages.push({ role: 'user', content: parts.length ? [...parts, { type: 'text', text: userText }] : userText });
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const stream = client.messages.stream({
@@ -49,6 +61,7 @@ async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], us
     stream.on('text', (delta) => ev.onText(delta));
     const msg = await stream.finalMessage();
     messages.push({ role: 'assistant', content: msg.content });
+    await reportServerTools(client, msg.content, ev);
     if (msg.stop_reason === 'refusal') { ev.onText("\n（模型拒绝了这次请求）"); return; }
     if (msg.stop_reason !== 'tool_use') return;
     const results: Anthropic.ToolResultBlockParam[] = [];
@@ -62,6 +75,36 @@ async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], us
     messages.push({ role: 'user', content: results });
   }
   ev.onText("\n（工具调用轮数到上限，先停在这儿）");
+}
+
+/** 服务方沙盒在这一条消息里干了什么：每次 bash / 文件编辑配成一张卡，产出的文件按 file_id 下回来收成附件 */
+async function reportServerTools(client: any, content: any[], ev: AgentEvents) {
+  const uses = new Map<string, any>();
+  for (const b of content) if (b.type === 'server_tool_use') uses.set(b.id, b);
+  for (const b of content) {
+    if (b.type !== 'bash_code_execution_tool_result' && b.type !== 'text_editor_code_execution_tool_result') continue;
+    const use = uses.get(b.tool_use_id);
+    const input = use?.input ?? {};
+    const r = b.content ?? {};
+    if (r.type === 'code_execution_tool_result_error' || r.type === 'bash_code_execution_tool_result_error' || r.type === 'text_editor_code_execution_tool_result_error') { ev.onTool('code_execution', input, `出错：${r.error_code ?? JSON.stringify(r)}`, true); continue; }
+    const parts: string[] = [];
+    if (r.stdout?.trim()) parts.push(`stdout：\n${String(r.stdout).slice(0, 12000)}`);
+    if (r.stderr?.trim()) parts.push(`stderr：\n${String(r.stderr).slice(0, 4000)}`);
+    if (r.return_code !== undefined) parts.push(`退出码 ${r.return_code}`);
+    if (r.type === 'text_editor_code_execution_view_result') parts.push(String(r.content ?? '').slice(0, 8000));
+    if (r.type === 'text_editor_code_execution_create_result' || r.type === 'text_editor_code_execution_str_replace_result') parts.push(r.is_file_update ? '改了文件' : '写了文件');
+    const files: { name: string; bytes: Uint8Array }[] = [];
+    for (const f of r.content ?? []) {
+      if (f.type !== 'bash_code_execution_output' || !f.file_id) continue;
+      try {
+        const meta = await client.files.retrieveMetadata(f.file_id);
+        const res = await client.files.download(f.file_id);
+        files.push({ name: String(meta.filename ?? f.file_id).split(/[\\/]/).pop()!, bytes: new Uint8Array(await res.arrayBuffer()) });
+      } catch (e) { parts.push(`有个产出文件没下回来（${(e as Error).message}）`); }
+    }
+    if (files.length) parts.push(`产出的文件（已收进对话）：${collectBytes(files).join('、')}`);
+    ev.onTool('code_execution', input, parts.join('\n') || '（没有输出）', false);
+  }
 }
 
 // ── OpenAI 兼容 chat/completions（DeepSeek、Kimi、通义、智谱、OpenRouter、Ollama…），SSE 自己解 ──

@@ -1,9 +1,9 @@
 // Agent 面板：宽屏上是最右一整列（Word 的 Copilot 窗格那种位置），窄屏盖在右边。跟模型对话，
 // 它读、改文档走 src/ai/tools.ts 那几件工具，每一步在对话里留一张卡；要改设置时弹授权卡等用户点
 import { useEffect, useRef, useState } from 'react';
-import { Button, Textarea, Tooltip, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuDivider } from '@fluentui/react-components';
-import { Settings20Regular, Dismiss20Regular, Send20Regular, Stop20Regular, Add20Regular, History20Regular, Delete16Regular, ChevronRight12Regular, ChevronDown12Regular, Attach20Regular, Dismiss12Regular, Image16Regular, DocumentPdf16Regular, DocumentText16Regular, BotSparkle20Regular, ShieldCheckmark20Regular } from '@fluentui/react-icons';
-import { useAgent, type ToolCard } from '../ai/state';
+import { Button, Textarea, Tooltip, Popover, PopoverTrigger, PopoverSurface, Input } from '@fluentui/react-components';
+import { Settings20Regular, Dismiss20Regular, Send20Regular, Stop20Regular, Add20Regular, History20Regular, Delete16Regular, Star16Regular, Star16Filled, Rename16Regular, Checkmark16Regular, ChevronRight12Regular, ChevronDown12Regular, Attach20Regular, Dismiss12Regular, Image16Regular, DocumentPdf16Regular, DocumentText16Regular, BotSparkle20Regular, ShieldCheckmark20Regular } from '@fluentui/react-icons';
+import { useAgent, type ToolCard, type ChatMeta } from '../ai/state';
 import { useStore } from '../model/store';
 import { configReady, providerLabel } from '../ai/config';
 import { PARTS } from '../ai/tools';
@@ -51,10 +51,44 @@ function cardTitle(c: ToolCard): string {
     case 'pdf_render': return tx("把 {{file}} 第 {{page}} 页画成了图", { file: i.file, page: i.page });
     case 'web_fetch': return tx("抓了网页 {{url}}", { url: String(i.url ?? '').replace(/^https?:\/\//, '').slice(0, 60) });
     case 'web_search': return tx("搜了「{{q}}」", { q: i.query });
+    case 'check_order': return tx("按排版结果查了图表顺序");
+    case 'guide': return i.section ? tx("读了指南 {{s}}", { s: i.section }) : i.query ? tx("在指南里查「{{q}}」", { q: i.query }) : tx("看了指南目录");
+    case 'run_python': return tx("跑了一段 Python");
+    case 'run_js': return tx("跑了一段 JavaScript");
+    case 'code_execution': return i.command ? tx("在服务方沙盒里运行：{{cmd}}", { cmd: String(i.command).slice(0, 60) }) : tx("在服务方沙盒里改了文件");
+    case 'bridge_run': return tx("在你的电脑上运行：{{cmd}}", { cmd: String(i.cmd ?? '').slice(0, 60) });
+    case 'bridge_ls': return tx("看了你电脑上的文件夹 {{p}}", { p: i.path ?? '/' });
+    case 'bridge_read': return tx("读了你电脑上的 {{p}}", { p: i.path });
+    case 'bridge_write': return tx("写了你电脑上的 {{p}}", { p: i.path });
+    case 'memory_read': return tx("看了记忆");
+    case 'memory_write': return tx("记了一条到记忆里");
     default: return c.name;
   }
 }
 const EDIT_TOOLS = new Set(['replace', 'insert', 'delete', 'table_write', 'figure_write', 'bib_add', 'info_write', 'abbreviations_add', 'settings_set', 'write_json']);
+
+function ChatList({ chats, current, onOpen, onDelete, onRename, onStar, onNew }: { chats: ChatMeta[]; current: string | null; onOpen: (id: string) => void; onDelete: (id: string) => void; onRename: (id: string, title: string) => void; onStar: (id: string, on: boolean) => void; onNew: () => void }) {
+  const [editing, setEditing] = useState<{ id: string; title: string } | null>(null);
+  const commit = () => { if (editing) onRename(editing.id, editing.title); setEditing(null); };
+  return (
+    <div className="ag-chatlist" role="list">
+      {chats.map((c) => (
+        <div key={c.id} role="listitem" className={`ag-chatrow ${c.id === current ? 'is-current' : ''} ${c.starred ? 'is-starred' : ''}`}>
+          <button type="button" className={`ag-chat-star ${c.starred ? 'on' : ''}`} aria-label={c.starred ? tx("取消星标") : tx("加星标")} title={c.starred ? tx("取消星标") : tx("加星标")} onClick={() => onStar(c.id, !c.starred)}>{c.starred ? <Star16Filled /> : <Star16Regular />}</button>
+          {editing?.id === c.id
+            ? <Input size="small" className="ag-chat-edit" autoFocus value={editing.title} onChange={(_, d) => setEditing({ id: c.id, title: d.value })} onBlur={commit} onKeyDown={(e) => { if (e.nativeEvent.isComposing) return; if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(null); }} contentAfter={<Checkmark16Regular onMouseDown={(e) => e.preventDefault()} onClick={commit} />} />
+            : <button type="button" className="ag-chat-title" title={c.title} onClick={() => onOpen(c.id)} onDoubleClick={() => setEditing({ id: c.id, title: c.title })}>{c.title}</button>}
+          <span className="ag-chat-side">
+            <span className="muted">{fmtWhen(c.updatedAt)}</span>
+            <button type="button" className="ag-chat-x" aria-label={tx("重命名")} title={tx("重命名（双击标题也行）")} onClick={() => setEditing({ id: c.id, title: c.title })}><Rename16Regular /></button>
+            <button type="button" className="ag-chat-x is-danger" aria-label={tx("删除这场对话")} title={tx("删除这场对话")} onClick={() => onDelete(c.id)}><Delete16Regular /></button>
+          </span>
+        </div>
+      ))}
+      <button type="button" className="ag-chatrow ag-chat-new" onClick={onNew}><Add20Regular />{tx("新对话")}</button>
+    </div>
+  );
+}
 
 function FileChip({ f, onRemove }: { f: Attachment; onRemove?: () => void }) {
   const Icon = f.kind === 'image' ? Image16Regular : f.kind === 'pdf' ? DocumentPdf16Regular : DocumentText16Regular;
@@ -83,7 +117,8 @@ function Card({ c }: { c: ToolCard }) {
 }
 
 export function AgentPane({ overlay }: { overlay?: boolean }) {
-  const { items, running, send, stop, config, setOpen, setSettingsOpen, pending, attach, detach, ask, answer, chats, chatId, newChat, openChat, deleteChat, settings, docProviderId } = useAgent();
+  const { items, running, send, stop, config, setOpen, setSettingsOpen, pending, attach, detach, ask, answer, chats, chatId, newChat, openChat, deleteChat, renameChat, starChat, settings, docProviderId } = useAgent();
+  const [chatsOpen, setChatsOpen] = useState(false);
   const provider = settings?.providers.find((p) => p.id === (docProviderId ?? settings.globalId)) ?? settings?.providers[0];
   const [draft, setDraft] = useState('');
   const [drag, setDrag] = useState(false);
@@ -109,20 +144,14 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
         <button type="button" className="ag-model" title={config ? `${config.baseUrl}${docProviderId ? tx("（本文档指定）") : ''}` : ''} onClick={() => setSettingsOpen(true)}>{ready && provider ? providerLabel(provider) : tx("还没接模型")}</button>
         <span className="spacer" />
         <Tooltip content={tx("新对话")} relationship="label"><Button size="small" appearance="subtle" icon={<Add20Regular />} disabled={!items.length && !chatId} onClick={() => void newChat()} /></Tooltip>
-        <Menu positioning="below-end">
-          <MenuTrigger disableButtonEnhancement>
+        <Popover positioning="below-end" open={chatsOpen} onOpenChange={(_, d) => setChatsOpen(d.open)}>
+          <PopoverTrigger disableButtonEnhancement>
             <Tooltip content={tx("这个文档的对话记录")} relationship="label"><Button size="small" appearance="subtle" icon={<History20Regular />} disabled={!chats.length} /></Tooltip>
-          </MenuTrigger>
-          <MenuPopover className="ag-chats">
-            <MenuList>
-              {chats.map((c) => (
-                <MenuItem key={c.id} className={c.id === chatId ? 'is-current' : ''} onClick={() => void openChat(c.id)} secondaryContent={<span className="ag-chat-side"><span className="muted">{fmtWhen(c.updatedAt)}</span><button type="button" className="ag-chat-x" aria-label={tx("删除这场对话")} onClick={(e) => { e.stopPropagation(); void deleteChat(c.id); }}><Delete16Regular /></button></span>}>{c.title}</MenuItem>
-              ))}
-              <MenuDivider />
-              <MenuItem icon={<Add20Regular />} onClick={() => void newChat()}>{tx("新对话")}</MenuItem>
-            </MenuList>
-          </MenuPopover>
-        </Menu>
+          </PopoverTrigger>
+          <PopoverSurface className="ag-chats">
+            <ChatList chats={chats} current={chatId} onOpen={(id) => { setChatsOpen(false); void openChat(id); }} onDelete={(id) => void deleteChat(id)} onRename={(id, t) => void renameChat(id, t)} onStar={(id, on) => void starChat(id, on)} onNew={() => { setChatsOpen(false); void newChat(); }} />
+          </PopoverSurface>
+        </Popover>
         <Tooltip content={tx("Agent 设置")} relationship="label"><Button size="small" appearance="subtle" icon={<Settings20Regular />} onClick={() => setSettingsOpen(true)} /></Tooltip>
         <Tooltip content={tx("关闭")} relationship="label"><Button size="small" appearance="subtle" icon={<Dismiss20Regular />} onClick={() => setOpen(false)} /></Tooltip>
       </div>
@@ -150,7 +179,7 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
         ))}
         {ask && (
           <div className="ag-ask">
-            <div className="ag-ask-head"><ShieldCheckmark20Regular />{tx("要改一项设置，需要你允许")}</div>
+            <div className="ag-ask-head"><ShieldCheckmark20Regular />{ask.ask.head ?? tx("要改一项设置，需要你允许")}</div>
             <b>{ask.ask.title}</b>
             {ask.ask.lines.map((l, i) => <p key={i} className="muted">{l}</p>)}
             {ask.ask.reason && <p>{tx("它的理由：")}{ask.ask.reason}</p>}

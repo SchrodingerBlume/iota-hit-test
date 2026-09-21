@@ -3,6 +3,7 @@
 // 能存好几套，一套是全局默认，每篇文档可以指定用另一套；密钥、记忆、预设提示词都存本机 IndexedDB（meta.ai），
 // 只从浏览器直连服务方
 import { kv } from '../model/persist';
+import { defaultBridge, type BridgeConfig } from './bridge';
 
 export type AiApi = 'anthropic' | 'openai';
 /** 联网：Anthropic 走服务方自带的搜索与抓取；其余接口走阅读代理抓网页（默认 r.jina.ai，不用密钥），搜索要 Jina 的密钥 */
@@ -18,6 +19,8 @@ export interface AiSettings {
   memory: { enabled: boolean; notes: string };
   /** 全局预设提示词，接在系统提示后面 */
   preset: string;
+  /** 沙盒：浏览器里跑 Python / JS；Anthropic 的服务端 code_execution；本机桥 */
+  sandbox: { browser: boolean; server: boolean; bridge: BridgeConfig };
 }
 /** webNative：这家接口自带联网搜索怎么开（kimi 的 $web_search 内置函数、dashscope 的 enable_search、智谱的 web_search 工具、openrouter 的 web 插件、anthropic 的服务端工具）；没有的走阅读代理 */
 export type WebNative = 'anthropic' | 'kimi' | 'dashscope' | 'zhipu' | 'openrouter';
@@ -43,7 +46,7 @@ export const defaultWeb = (): WebConfig => ({ enabled: true, reader: 'https://r.
 export const webOf = (c: AiConfig): WebConfig => ({ ...defaultWeb(), ...(c.web ?? {}) });
 const uid = () => Math.random().toString(36).slice(2, 9);
 export const newProvider = (presetKey = 'moonshot'): AiProvider => { const p = PRESETS.find((x) => x.key === presetKey) ?? PRESETS[0]; return { id: uid(), name: '', preset: p.key, api: p.api, baseUrl: p.baseUrl, apiKey: '', model: p.model }; };
-export const emptySettings = (): AiSettings => ({ providers: [], globalId: null, memory: { enabled: false, notes: '' }, preset: '' });
+export const emptySettings = (): AiSettings => ({ providers: [], globalId: null, memory: { enabled: false, notes: '' }, preset: '', sandbox: { browser: true, server: false, bridge: defaultBridge() } });
 /** 显示名：起了名用名，否则「服务方 · 模型」 */
 export const providerLabel = (p: AiProvider) => p.name.trim() || `${PRESETS.find((x) => x.key === p.preset)?.label ?? p.preset} · ${p.model}`;
 export const configReady = (c: AiConfig | null | undefined): c is AiConfig => !!c && !!c.baseUrl.trim() && !!c.model.trim() && (!!c.apiKey.trim() || /localhost|127\.0\.0\.1/.test(c.baseUrl));
@@ -52,7 +55,7 @@ export const configReady = (c: AiConfig | null | undefined): c is AiConfig => !!
 export async function loadSettings(): Promise<AiSettings> {
   const raw = await kv.get<any>('meta', 'ai');
   if (!raw) return emptySettings();
-  if (Array.isArray(raw.providers)) return { ...emptySettings(), ...raw };
+  if (Array.isArray(raw.providers)) { const e = emptySettings(); return { ...e, ...raw, sandbox: { ...e.sandbox, ...(raw.sandbox ?? {}), bridge: { ...e.sandbox.bridge, ...(raw.sandbox?.bridge ?? {}) } } }; }
   if (raw.baseUrl !== undefined) { const p: AiProvider = { id: uid(), name: '', ...raw }; const s: AiSettings = { ...emptySettings(), providers: [p], globalId: p.id }; await kv.set('meta', 'ai', s); return s; }
   return emptySettings();
 }

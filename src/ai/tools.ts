@@ -19,10 +19,13 @@ import { parseBibtex, splitNames, type BibEntry } from '../bib/bibtex';
 import { mergeEntries } from '../bib/csl';
 import { pdfRender, pdfImages, type Attachment } from './files';
 import { webOf, webNativeOf, type AiConfig, type AiSettings } from './config';
+import { pyBox, jsBox, type SandboxFile } from './sandbox';
+import { bridgeRun, bridgeLs, bridgeRead, bridgeWrite, defaultBridge, type BridgeConfig } from './bridge';
+import { GUIDES, guideFor, loadGuide, guideToc, guideSection, guideSearch } from './guides';
 
 export interface ToolDef { name: string; description: string; parameters: Record<string, unknown> }
 /** 要用户点头的改动：面板弹卡片，用户允许了才做 */
-export interface Ask { title: string; lines: string[]; reason?: string }
+export interface Ask { title: string; lines: string[]; reason?: string; head?: string }
 export let askUser: (q: Ask) => Promise<boolean> = async () => false;
 export const setAskUser = (f: typeof askUser) => { askUser = f; };
 /** 这一场对话里用户发过的附件，图片可以直接插成图 */
@@ -31,7 +34,9 @@ export const setAttachments = (a: Attachment[]) => { attachments = a; };
 /** 工具自己造出来的图片（PDF 里抽的），也算附件，figure_write 认名字；面板拿去显示缩略图 */
 export let onDerived: (a: Attachment) => void = () => {};
 export const setOnDerived = (f: typeof onDerived) => { onDerived = f; };
-const addDerived = (a: Attachment) => { attachments = [...attachments, a]; onDerived(a); };
+export const addDerived = (a: Attachment) => { attachments = [...attachments, a]; onDerived(a); };
+export const serverSandboxOn = () => sandboxCtx.server;
+export const collectBytes = (files: { name: string; bytes: Uint8Array }[]) => collectOutputs(files);
 
 export const PARTS: { key: RichKey; label: string; headings: boolean }[] = [
   { key: 'abstractZh', label: '中文摘要', headings: false },
@@ -58,21 +63,44 @@ const MEMORY_TOOLS: ToolDef[] = [
   { name: 'memory_read', description: '读用户的长期记忆（跨文档、跨模型的一段话：偏好、口味、常用说法）。系统提示里已经附了一份，通常不用再读。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'memory_write', description: '往长期记忆里记一条（用户明确说「记住」的偏好，或反复出现的要求）。mode=append 追加一行，replace 整段换掉（用来整理、删旧的）。写之前先说一声记什么。', parameters: { type: 'object', properties: { text: { type: 'string' }, mode: { type: 'string', enum: ['append', 'replace'] } }, required: ['text'], additionalProperties: false } },
 ];
+const SANDBOX_TOOLS: ToolDef[] = [
+  { name: 'run_python', description: '在浏览器里的 Python 沙盒（Pyodide，Python 3.14）跑一段代码：numpy / pandas / matplotlib / scipy / sympy / scikit-learn 等按 import 自动装，纯 Python 包用 `import micropip; await micropip.install("包名")`。对话里的附件在 /data/<文件名>；要交回的文件写到 /out/（matplotlib 用 plt.savefig("/out/名.png", dpi=200)），交回的 PNG 直接能 figure_write 插进论文（image 填文件名）。回 stdout、最后一个表达式的值、交回的文件。变量和装的包在这场对话里一直在。没有网络；首次用要下载十几 MB。', parameters: { type: 'object', properties: { code: { type: 'string' }, timeout: { type: 'integer', description: '秒，默认 120，最多 600' } }, required: ['code'], additionalProperties: false } },
+  { name: 'run_js', description: '在 Worker 里跑一段 JavaScript（写成 async 函数体：能 await、能 return 值）。files["文件名"] 是对话里的附件（文本是字符串、二进制是 Uint8Array），emit("名", 字符串或 Uint8Array) 交回文件，console.log 会收回来。没有 DOM；能 fetch 但受跨域限制。', parameters: { type: 'object', properties: { code: { type: 'string' }, timeout: { type: 'integer', description: '秒，默认 60' } }, required: ['code'], additionalProperties: false } },
+];
+const BRIDGE_TOOLS: ToolDef[] = [
+  { name: 'bridge_run', description: '在用户自己的电脑上跑一条命令（经本机桥，限定在用户指定的文件夹里；typst、python、git 等有没有见 bridge_ls 回的说明）。回 stdout / stderr / 退出码。默认每条命令先弹窗请用户允许。', parameters: { type: 'object', properties: { cmd: { type: 'string', description: 'shell 命令（macOS / Linux 是 sh，Windows 是 cmd）' }, cwd: { type: 'string', description: '相对文件夹的路径' }, timeout: { type: 'integer', description: '秒，默认 120' }, stdin: { type: 'string' }, reason: { type: 'string', description: '给用户看的一句话：为什么要跑' } }, required: ['cmd'], additionalProperties: false } },
+  { name: 'bridge_ls', description: '列用户电脑上那个文件夹里的文件（经本机桥）。第一次调会顺带回文件夹在哪、机器上有没有 typst / python / git。', parameters: { type: 'object', properties: { path: { type: 'string', description: '相对路径，默认根' } }, additionalProperties: false } },
+  { name: 'bridge_read', description: '读用户电脑上的一个文件（经本机桥）。文本直接回；图片 / PDF 会作为附件收进对话（图能 figure_write，PDF 能 pdf_images / pdf_render）。', parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'], additionalProperties: false } },
+  { name: 'bridge_write', description: '往用户电脑上写一个文本文件（经本机桥，只能在那个文件夹里）。', parameters: { type: 'object', properties: { path: { type: 'string' }, text: { type: 'string' } }, required: ['path', 'text'], additionalProperties: false } },
+];
+/** 沙盒开关与本机桥配置由 state 在每轮前塞进来 */
+let sandboxCtx: { browser: boolean; server: boolean; bridge: BridgeConfig } = { browser: true, server: false, bridge: defaultBridge() };
+export const setSandboxContext = (c: typeof sandboxCtx) => { sandboxCtx = c; };
+export const bridgeReady = (b: BridgeConfig) => b.enabled && !!b.url.trim() && !!b.token.trim();
 /** 记忆与预设由 state 在每轮前塞进来 */
 let memoryCtx: { enabled: boolean; notes: string; write: (notes: string) => Promise<void> } = { enabled: false, notes: '', write: async () => {} };
 export const setMemoryContext = (m: typeof memoryCtx) => { memoryCtx = m; };
 /** 这一家接口用哪些工具：Anthropic 的联网是服务方自带的（在 agent.ts 里加服务端工具），别家走阅读代理 */
 export function toolsFor(c: AiConfig): ToolDef[] {
-  const mem = memoryCtx.enabled ? MEMORY_TOOLS : [];
+  const extra = [...(memoryCtx.enabled ? MEMORY_TOOLS : []), ...(sandboxCtx.browser ? SANDBOX_TOOLS : []), ...(bridgeReady(sandboxCtx.bridge) ? BRIDGE_TOOLS : [])];
   const w = webOf(c);
-  if (!w.enabled || webNativeOf(c)) return [...TOOLS, ...mem];
-  return [...TOOLS, WEB_TOOLS[0], ...(w.searchKey.trim() ? [WEB_TOOLS[1]] : []), ...mem];
+  if (!w.enabled || webNativeOf(c)) return [...TOOLS, ...extra];
+  return [...TOOLS, WEB_TOOLS[0], ...(w.searchKey.trim() ? [WEB_TOOLS[1]] : []), ...extra];
 }
 /** 系统提示 = 固定那段 + 记忆 + 全局预设 + 这篇文档的预设 */
-export function systemPromptFor(s: AiSettings | undefined, docPreset: string): string {
+export async function systemPromptFor(s: AiSettings | undefined, docPreset: string): Promise<string> {
   const now = new Date();
   const parts = [SYSTEM_PROMPT, `今天是 ${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}（${'日一二三四五六'[now.getDay()]}），用户说「今天 / 这个月 / 明年」按它算。`];
   if (memoryCtx.enabled) parts.push(`用户的长期记忆（跨文档、跨模型，用户明确要你记住的偏好；有新的用 memory_write 记）：\n${memoryCtx.notes.trim() || '（还是空的）'}`);
+  try {
+    const g = await loadGuide(guideFor(useStore.getState().doc.settings));
+    parts.push(`这篇文档适用的学校规范：《${g.title}》。目录：${guideToc(g)}。凡是规范、格式、写法、该不该有某一页的问题，先用 guide 工具读相关条目再答，回答时点出条目号；改文档也照它。`);
+  } catch { /* 指南没取到就不提 */ }
+  const sb: string[] = [];
+  if (sandboxCtx.browser) sb.push('run_python / run_js 在浏览器里跑代码：算数据、画图（存到 /out 的 PNG 直接 figure_write 插进论文）、处理附件（在 /data）；结果要说明来自计算。');
+  if (sandboxCtx.server) sb.push('code_execution 是服务方的沙盒：pandas / matplotlib 齐全，产出的文件会作为附件回到对话里。');
+  if (bridgeReady(sandboxCtx.bridge)) sb.push('bridge_* 连着用户自己的电脑（限定在一个文件夹里）：能读写那里的文件、跑命令（typst、python、git 看 bridge_ls 回的说明）。跑命令前说清要做什么，破坏性的操作（删文件、覆盖）要先问。');
+  if (sb.length) parts.push(`你还能自己动手：\n- ${sb.join('\n- ')}`);
   if (s?.preset.trim()) parts.push(`用户的预设要求：\n${s.preset.trim()}`);
   if (docPreset.trim()) parts.push(`这篇文档的额外要求：\n${docPreset.trim()}`);
   return parts.join('\n\n');
@@ -92,6 +120,7 @@ export const TOOLS: ToolDef[] = [
   { name: 'pdf_images', description: '把用户发来的 PDF 附件里嵌的位图抽出来存成图片（file 是附件文件名，page 不给就整份、最多 60 页），回每张的名字与像素尺寸；矢量图抽不出来，用 pdf_render 截那一页。抽出来的图能直接 figure_write。', parameters: { type: 'object', properties: { file: { type: 'string' }, page: { type: 'integer', minimum: 1 } }, required: ['file'], additionalProperties: false } },
   { name: 'pdf_render', description: '把 PDF 附件的某一页画成图片（scale 1 约 72 dpi，默认 2），可以只截页面的一块：crop 是页面比例 [x, y, w, h]（0–1）。矢量图、公式截图用它。回图片名与尺寸，能直接 figure_write。', parameters: { type: 'object', properties: { file: { type: 'string' }, page: { type: 'integer', minimum: 1 }, scale: { type: 'number' }, crop: { type: 'array', items: { type: 'number' }, minItems: 4, maxItems: 4 } }, required: ['file', 'page'], additionalProperties: false } },
   { name: 'selection', description: '用户现在在编辑器里选中的是哪一部分的哪几块，以及选中的文字。用户说「这段」「选中的」时先调它。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+  { name: 'guide', description: '读学校写作指南的原文。不带参数：这篇文档适用的那份指南的目录；section 填条目号（如 2.14 或 2.14.1，人文社科版是 一 /（二）/ 1.）回整条；query 填关键词（几个词用空格隔开）回含这些词的句子并标出所在条目。which 可换一份指南（键：' + GUIDES.map((g) => g.key).join(' / ') + '）。', parameters: { type: 'object', properties: { section: { type: 'string' }, query: { type: 'string' }, which: { type: 'string' } }, additionalProperties: false } },
   { name: 'diagnostics', description: '最近一次排版编译的错误与警告。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'check_order', description: '按排版结果查图、表、算法、代码清单的实际先后：每张的编号、落在第几页、浮不浮动、正文第一次提到它在第几页；指出编号乱序（编号照正文顺序编，浮动块会漂到后面的页去，规范要求全文编号由小到大）、先图后文（规范要先见文后见图）、没被正文引用的。插了浮动图表、改了 placement、挪了图之后都查一遍。要等预览整编完，长文档要几秒。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'bib_list', description: '参考文献表（或成果表）里有哪些条目：引用键、类型、作者、年份、题名。正文里引用写 [@引用键]。', parameters: { type: 'object', properties: { which: { type: 'string', enum: ['references', 'achievements'] } }, additionalProperties: false } },
@@ -278,6 +307,109 @@ async function checkOrder(): Promise<string> {
     if (it.label && !it.mentions) problems.push(`没被引用：${it.num} <${it.label}>——正文里应先提到再出现（写 @${it.label}）`);
   }
   return `按页面先后（编号照正文顺序编；浮动块会漂）：\n${lines.join('\n')}\n\n${problems.length ? `问题：\n- ${problems.join('\n- ')}` : '没有问题：各类编号都由小到大，每张都在首次引用之后。'}`;
+}
+
+
+// ── 指南 ─────────────────────────────────────────────────────────────────────
+async function guideTool(input: Record<string, any>): Promise<string> {
+  const key = input.which && GUIDES.some((g) => g.key === input.which) ? String(input.which) : guideFor(useStore.getState().doc.settings);
+  const g = await loadGuide(key);
+  if (input.section) { const t = guideSection(g, String(input.section)); return t ?? `《${g.title}》里没有「${input.section}」这一条；目录：${guideToc(g, 3)}`; }
+  if (input.query) { const t = guideSearch(g, String(input.query)); return t || `《${g.title}》里没有同时含「${input.query}」的句子；换个词，或按目录读整条：${guideToc(g)}`; }
+  return `《${g.title}》目录（section 填条目号读整条）：\n${g.sections.map((x) => `${'  '.repeat(x.level - 1)}${x.num} ${x.title}`).join('\n')}`;
+}
+
+// ── 浏览器沙盒 ────────────────────────────────────────────────────────────────
+const b64ToBytes = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+const bytesToB64 = (u: Uint8Array) => { let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
+const sandboxFiles = (): SandboxFile[] => attachments.map((a) => (a.kind === 'text' ? { name: a.name, text: a.data } : { name: a.name, bytes: b64ToBytes(a.data) }));
+const MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', pdf: 'application/pdf', svg: 'image/svg+xml' };
+/** 沙盒交回的文件收成附件：图和 PDF 按字节，文本按字；别的只报个名 */
+function collectOutputs(files: { name: string; bytes: Uint8Array }[]): string[] {
+  return files.map((f) => {
+    const ext = (f.name.split('.').pop() ?? '').toLowerCase();
+    const mime = MIME[ext];
+    if (mime && ext !== 'svg') addDerived({ id: uid(), name: f.name, type: mime, size: f.bytes.length, kind: ext === 'pdf' ? 'pdf' : 'image', data: bytesToB64(f.bytes) });
+    else if (/^(txt|md|csv|tsv|json|tex|typ|bib|py|js|xml|html|svg)$/.test(ext) || f.bytes.length < 200000) addDerived({ id: uid(), name: f.name, type: 'text/plain', size: f.bytes.length, kind: 'text', data: new TextDecoder().decode(f.bytes) });
+    else return `${f.name}（${fmtKb(f.bytes.length)}，二进制，留在沙盒里）`;
+    return `${f.name}（${fmtKb(f.bytes.length)}）`;
+  });
+}
+const fmtKb = (n: number) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+const clip = (s: string, n = 12000) => (s.length > n ? `${s.slice(0, n)}\n…（截掉 ${s.length - n} 字）` : s);
+function sandboxReport(r: { ok: boolean; stdout: string; stderr: string; result: string; files: { name: string; bytes: Uint8Array }[]; error?: string; ms: number }): string {
+  const parts: string[] = [];
+  if (r.stdout.trim()) parts.push(`stdout：\n${clip(r.stdout.trim())}`);
+  if (r.stderr.trim()) parts.push(`stderr：\n${clip(r.stderr.trim(), 4000)}`);
+  if (r.result.trim()) parts.push(`返回值：${clip(r.result.trim(), 4000)}`);
+  if (r.files.length) parts.push(`交回的文件（已收进对话，图能直接 figure_write）：${collectOutputs(r.files).join('、')}`);
+  if (!r.ok) parts.push(`出错：${r.error}`);
+  if (!parts.length) parts.push('跑完了，没有输出');
+  return `${parts.join('\n')}\n（${(r.ms / 1000).toFixed(1)} 秒）`;
+}
+async function runPythonTool(input: Record<string, any>): Promise<string> {
+  if (!sandboxCtx.browser) return '浏览器沙盒没开，用户在 Agent 设置 › 沙盒里能打开';
+  const code = String(input.code ?? ''); if (!code.trim()) return 'code 是空的';
+  const r = await pyBox.run(code, sandboxFiles(), Math.min(600, Math.max(5, Number(input.timeout) || 120)) * 1000);
+  return sandboxReport(r);
+}
+async function runJsTool(input: Record<string, any>): Promise<string> {
+  if (!sandboxCtx.browser) return '浏览器沙盒没开，用户在 Agent 设置 › 沙盒里能打开';
+  const code = String(input.code ?? ''); if (!code.trim()) return 'code 是空的';
+  const r = await jsBox.run(code, sandboxFiles(), Math.min(600, Math.max(5, Number(input.timeout) || 60)) * 1000);
+  return sandboxReport(r);
+}
+
+// ── 本机桥 ────────────────────────────────────────────────────────────────────
+const bridgeOff = () => (bridgeReady(sandboxCtx.bridge) ? null : '本机桥没连上：用户要在 Agent 设置 › 沙盒里启动并填好地址与令牌');
+const bridgeErr = (e: unknown) => `本机桥出错：${(e as Error).message}`;
+let bridgeIntroduced = false;
+async function bridgeRunTool(input: Record<string, any>): Promise<string> {
+  const off = bridgeOff(); if (off) return off;
+  const cmd = String(input.cmd ?? '').trim(); if (!cmd) return 'cmd 是空的';
+  const b = sandboxCtx.bridge;
+  if (b.confirm) {
+    const ok = await askUser({ head: '要在你的电脑上运行一条命令，需要你允许', title: cmd, lines: [`目录：${input.cwd ? String(input.cwd) : '（本机桥的文件夹）'}`, '会用你的账号执行，能读写那个文件夹里的东西。'], reason: String(input.reason ?? '') });
+    if (!ok) return '用户没有允许运行这条命令';
+  }
+  try {
+    const r = await bridgeRun(b, cmd, input.cwd ? String(input.cwd) : undefined, Number(input.timeout) || undefined, input.stdin ? String(input.stdin) : undefined);
+    const parts = [];
+    if (r.stdout.trim()) parts.push(`stdout：\n${clip(r.stdout.trim())}`);
+    if (r.stderr.trim()) parts.push(`stderr：\n${clip(r.stderr.trim(), 6000)}`);
+    parts.push(r.timedOut ? '超时被杀掉了' : `退出码 ${r.code}`);
+    return parts.join('\n');
+  } catch (e) { return bridgeErr(e); }
+}
+async function bridgeLsTool(input: Record<string, any>): Promise<string> {
+  const off = bridgeOff(); if (off) return off;
+  try {
+    const b = sandboxCtx.bridge;
+    const r = await bridgeLs(b, input.path ? String(input.path) : undefined);
+    const rows = r.entries.map((e) => (e.dir ? `${e.name}/` : `${e.name}（${fmtKb(e.size)}）`));
+    let head = '';
+    if (!bridgeIntroduced) { bridgeIntroduced = true; try { const p = await (await import('./bridge')).bridgePing(b); head = `文件夹：${p.dir}（${p.platform}，Node ${p.node}）；机器上有：${Object.entries(p.tools).filter(([, v]) => v).map(([k]) => k).join('、') || '（typst / python / git 都没找到）'}\n`; } catch { /* */ } }
+    return `${head}${r.path}/ 里 ${rows.length} 项：\n${rows.join('\n') || '（空）'}`;
+  } catch (e) { return bridgeErr(e); }
+}
+async function bridgeReadTool(input: Record<string, any>): Promise<string> {
+  const off = bridgeOff(); if (off) return off;
+  const p = String(input.path ?? '').trim(); if (!p) return 'path 是空的';
+  try {
+    const r = await bridgeRead(sandboxCtx.bridge, p);
+    if (r.text !== undefined) return clip(r.text, 40000);
+    const ext = (p.split('.').pop() ?? '').toLowerCase();
+    const mime = MIME[ext];
+    if (!mime || ext === 'svg') return `${p} 是二进制文件（${fmtKb(r.size)}），这里只收图片和 PDF`;
+    const name = p.split(/[\\/]/).pop()!;
+    addDerived({ id: uid(), name, type: mime, size: r.size, kind: ext === 'pdf' ? 'pdf' : 'image', data: r.b64! });
+    return `${name}（${fmtKb(r.size)}）已收进对话，${ext === 'pdf' ? '能 pdf_images / pdf_render' : '能 figure_write 插进论文'}`;
+  } catch (e) { return bridgeErr(e); }
+}
+async function bridgeWriteTool(input: Record<string, any>): Promise<string> {
+  const off = bridgeOff(); if (off) return off;
+  const p = String(input.path ?? '').trim(); if (!p) return 'path 是空的';
+  try { const r = await bridgeWrite(sandboxCtx.bridge, p, { text: String(input.text ?? '') }); return `已写入 ${r.path}`; } catch (e) { return bridgeErr(e); }
 }
 
 function bibList(which: string): string {
@@ -562,6 +694,13 @@ async function dispatch(name: string, input: Record<string, any>): Promise<strin
     case 'selection': return selectionText();
     case 'diagnostics': return diagnosticsText();
     case 'check_order': return checkOrder();
+    case 'guide': return guideTool(input);
+    case 'run_python': return runPythonTool(input);
+    case 'run_js': return runJsTool(input);
+    case 'bridge_run': return bridgeRunTool(input);
+    case 'bridge_ls': return bridgeLsTool(input);
+    case 'bridge_read': return bridgeReadTool(input);
+    case 'bridge_write': return bridgeWriteTool(input);
     case 'bib_list': return bibList(String(input.which ?? 'references'));
     case 'bib_add': return bibAdd(String(input.which ?? 'references'), String(input.bibtex ?? ''));
     case 'info_read': return infoRead();
@@ -599,6 +738,7 @@ export const SYSTEM_PROMPT = `你是 HιT webapp 里的写作助手（名字读 
 - 行间公式：单独一段 $$ 一行 LaTeX $$（\\[…\\] 也认），收尾后可带 {#eq:标签} 或 {.unnumbered}。
 - 图：![题注](图片名){#fig:标签 width=8 en="Caption" placement=top}（宽度厘米；placement 是浮动：不写就就地排，auto / top / bottom 让它浮到页顶或页底）；分图（一张图里几个 (a)(b) 小图）写成 ::: {.figure #fig:x caption="总题" columns=2} 里放几行 ![子题](图){width=6} :::，模板自己排版、编 (a)(b)，不要自己在题注里写 (a)(b) 或把几张单图硬拼；columns=0 一行排完，小图不写 width 就自动等高，整组宽写 width="12cm"；subLabel=tl/tr/bl/br 把 (a)(b) 直接印在小图的那个角上（subLabelFill=white 印白字，深色图用）；subMode=inline 把分图题连排在总题注下面。引用某个小图写 @fig:x-a。
 - 表：GFM 表格（格内换行写 <br>），紧跟一行 Table: 题注 {#tab:标签 en="Caption" fit=window placement=top}（fit：content 按内容、window 撑满、fixed 定宽 colWidth=2.5；placement 同图）。
+- 图注 / 表注（表下、图题上那行说明）：紧跟在 Table: 行或图那一行的下一行写 Note: 说明文字；引导词默认「注：」，Note(资料来源): … 换引导词，Note(无): … 不印引导词；几条就写几行。不要把注另起一段写。
 - 代码块：\`\`\`语言；要编号带题注的代码清单：\`\`\`python {#lst:标签 .listing caption="题注"}。
 - 算法：::: {.algorithm #alg:x caption="题注"} 里先写 > 输入：… / > 输出：…，再每行一条 - 步骤，缩进两格是下一层 :::。
 - 定理族：::: {.theorem #thm:x note="Euler"} … :::，类名可换成 lemma / definition / proposition / corollary / axiom / assumption / example / remark / problem / conjecture / fact / exercise / proof。

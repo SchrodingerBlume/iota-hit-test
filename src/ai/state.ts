@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { loadSettings, saveSettings, type AiConfig, type AiSettings } from './config';
 import { runTurn, describeError, type Transcript } from './agent';
 import { readAttachment, type Attachment } from './files';
-import { setAskUser, setAttachments, setOnDerived, setMemoryContext, systemPromptFor, type Ask } from './tools';
+import { setAskUser, setAttachments, setOnDerived, setMemoryContext, setSandboxContext, systemPromptFor, type Ask } from './tools';
 import { kv } from '../model/persist';
 import { useStore } from '../model/store';
 
@@ -44,8 +44,10 @@ interface AgentState {
   newChat: () => Promise<void>;
   openChat: (id: string) => Promise<void>;
   deleteChat: (id: string) => Promise<void>;
+  renameChat: (id: string, title: string) => Promise<void>;
+  starChat: (id: string, on: boolean) => Promise<void>;
 }
-export interface ChatMeta { id: string; title: string; updatedAt: number }
+export interface ChatMeta { id: string; title: string; updatedAt: number; starred?: boolean; named?: boolean }
 
 let transcript: Transcript | null = null;
 let aborter: AbortController | null = null;
@@ -58,6 +60,8 @@ interface Index { chats: ChatMeta[]; current: string | null; providerId?: string
 const indexKey = (doc: string) => `agent:${doc}`;
 const chatKey = (doc: string, chat: string) => `agent:${doc}:${chat}`;
 let saveTimer = 0;
+/** 星标的在前，其余按最近 */
+const sortChats = (chats: ChatMeta[]) => [...chats].sort((a, b) => Number(!!b.starred) - Number(!!a.starred) || b.updatedAt - a.updatedAt);
 const titleOf = (items: ChatItem[]) => (items.find((i) => i.role === 'user')?.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 28) || '新对话';
 /** 读工程的对话清单；老版本那一份（键上直接是一场对话）折成清单里的第一场 */
 async function loadIndex(doc: string): Promise<Index> {
@@ -78,7 +82,7 @@ async function persistChat(doc: string, chat: string, items: ChatItem[], chats: 
   const size = JSON.stringify(saved).length;
   await kv.set('meta', chatKey(doc, chat), size > 40 * 1024 * 1024 ? { ...saved, transcript: null, sentFiles: [] } : saved);
   const meta = chats.find((c) => c.id === chat);
-  const next = [{ id: chat, title: meta?.title && meta.title !== '新对话' ? meta.title : titleOf(items), updatedAt: Date.now() }, ...chats.filter((c) => c.id !== chat)];
+  const next = sortChats([{ ...meta, id: chat, title: meta?.named || (meta?.title && meta.title !== '新对话') ? meta!.title : titleOf(items), updatedAt: Date.now() }, ...chats.filter((c) => c.id !== chat)]);
   const idx = await loadIndex(doc);
   await kv.set('meta', indexKey(doc), { ...idx, chats: next, current: chat } as Index);
   return next;
@@ -150,7 +154,8 @@ export const useAgent = create<AgentState>((set, get) => ({
     try {
       const st = get().settings;
       setMemoryContext({ enabled: !!st?.memory.enabled, notes: st?.memory.notes ?? '', write: async (notes) => { const cur = get().settings; if (cur) await get().setSettings({ ...cur, memory: { ...cur.memory, notes } }); } });
-      await runTurn(c, transcript, text || '（看附件）', files, systemPromptFor(st, get().docPreset), {
+      setSandboxContext(st?.sandbox ?? { browser: true, server: false, bridge: { enabled: false, url: '', token: '', confirm: true } });
+      await runTurn(c, transcript, text || '（看附件）', files, await systemPromptFor(st, get().docPreset), {
         onText: (d) => { buf += d; patch({ text: buf }); },
         onTool: (name, input, result, isError) => { const cur = get().items.find((it) => it.id === reply.id)!; patch({ tools: [...cur.tools, { name, input, result, isError, images: derived.length ? derived : undefined }] }); derived = []; },
       }, aborter.signal);
@@ -174,7 +179,7 @@ export const useAgent = create<AgentState>((set, get) => ({
     if (boundDoc && prev.chatId && prev.items.length) await persistChat(boundDoc, prev.chatId, prev.items, prev.chats);
     boundDoc = id;
     const index = await loadIndex(id);
-    set({ chats: index.chats, chatId: null, items: [], pending: [], ask: null, docProviderId: index.providerId ?? null, docPreset: index.preset ?? '' });
+    set({ chats: sortChats(index.chats), chatId: null, items: [], pending: [], ask: null, docProviderId: index.providerId ?? null, docPreset: index.preset ?? '' });
     refresh();
     transcript = null; sentFiles = []; setAttachments([]);
     if (index.current && index.chats.some((c) => c.id === index.current)) await get().openChat(index.current);
@@ -199,6 +204,17 @@ export const useAgent = create<AgentState>((set, get) => ({
     setAttachments(sentFiles);
     set({ chatId: id, items: saved?.items ?? [], pending: [], ask: null });
     await kv.set('meta', indexKey(boundDoc), { ...(await loadIndex(boundDoc)), chats: get().chats, current: id } as Index);
+  },
+  renameChat: async (id, title) => {
+    const t = title.replace(/\s+/g, ' ').trim();
+    const chats = get().chats.map((c) => (c.id === id ? { ...c, title: t || c.title, named: !!t } : c));
+    set({ chats });
+    if (boundDoc) await kv.set('meta', indexKey(boundDoc), { ...(await loadIndex(boundDoc)), chats } as Index);
+  },
+  starChat: async (id, on) => {
+    const chats = sortChats(get().chats.map((c) => (c.id === id ? { ...c, starred: on } : c)));
+    set({ chats });
+    if (boundDoc) await kv.set('meta', indexKey(boundDoc), { ...(await loadIndex(boundDoc)), chats } as Index);
   },
   deleteChat: async (id) => {
     if (!boundDoc) return;

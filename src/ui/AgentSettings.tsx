@@ -6,10 +6,11 @@ import { Add20Regular, Delete20Regular, Checkmark16Regular, Star16Filled, Docume
 import { useAgent } from '../ai/state';
 import { PRESETS, newProvider, listModels, configReady, webOf, webNativeOf, providerLabel, type AiProvider, type AiSettings } from '../ai/config';
 import { testConnection, describeError } from '../ai/agent';
+import { bridgePing, type BridgeInfo } from '../ai/bridge';
 import { t as tx } from '../i18n';
 
 const caret = <i className="rb-caret" />;
-type Page = 'models' | 'memory' | 'prompts';
+type Page = 'models' | 'memory' | 'prompts' | 'sandbox';
 const NATIVE_NOTE: Record<string, string> = {
   anthropic: tx("走 Anthropic 自带的网页搜索与抓取（按次计费，见其价目）。"),
   kimi: tx("走 Kimi 自带的联网搜索（$web_search，按其价目计费）。"),
@@ -34,6 +35,7 @@ export function AgentSettings() {
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [preset, setPreset] = useState(docPreset);
   const [docSel, setDocSel] = useState(docProviderId);
+  const [bridgeNote, setBridgeNote] = useState<{ ok: boolean; text: string } | null>(null);
   useEffect(() => {
     if (!open || !settings) return;
     const d: AiSettings = JSON.parse(JSON.stringify(settings));
@@ -91,6 +93,7 @@ export function AgentSettings() {
               <Tab value="models">{tx("模型")}</Tab>
               <Tab value="memory">{tx("记忆")}</Tab>
               <Tab value="prompts">{tx("提示词")}</Tab>
+              <Tab value="sandbox">{tx("沙盒")}</Tab>
             </TabList>
 
             {page === 'models' && (
@@ -188,6 +191,46 @@ export function AgentSettings() {
                 <h4>{tx("这篇文档的预设")}</h4>
                 <p className="field-hint muted">{tx("只对当前文档生效，跟着文档的对话记录存。")}</p>
                 <Textarea className="ag-area" resize="vertical" value={preset} placeholder={tx("例：这篇的研究对象是多孔质气体轴承，术语表见第 2 章……")} onChange={(_, d) => setPreset(d.value)} />
+              </div>
+            )}
+            {page === 'sandbox' && (
+              <div className="ag-page">
+                <Switch label={tx("浏览器里跑代码（Python / JavaScript）")} checked={draft.sandbox.browser} onChange={(_, d) => setDraft({ ...draft, sandbox: { ...draft.sandbox, browser: d.checked } })} />
+                <p className="field-hint muted">{tx("Python 走 Pyodide：numpy、pandas、matplotlib、scipy、sympy 按需自动装，画出的图能直接插进论文；全在你这台电脑的浏览器里跑，没有服务器。第一次用要从 jsDelivr 下载十几 MB，之后浏览器缓存着。")}</p>
+                <Switch label={tx("服务方沙盒（Anthropic 的 code_execution）")} checked={draft.sandbox.server} onChange={(_, d) => setDraft({ ...draft, sandbox: { ...draft.sandbox, server: d.checked } })} />
+                <p className="field-hint muted">{tx("只对 Anthropic 接口生效：模型在 Anthropic 的容器里跑 Python、读写文件，附件会传进容器，产出的文件回到对话里。按其价目计费（每月有免费时长）。OpenAI 兼容的接口一般没有这项。")}</p>
+                <h4>{tx("本机桥：让 Agent 用你的电脑")}</h4>
+                <p className="field-hint muted">{tx("网页碰不到你的硬盘和命令行。在你电脑上跑一个小脚本，它只听本机、只认一个令牌、只碰你指定的文件夹；网页里的 Agent 就能读写那里的文件、跑 typst / python / git。关掉脚本就断开。")}</p>
+                <Switch label={tx("启用本机桥")} checked={draft.sandbox.bridge.enabled} onChange={(_, d) => setDraft({ ...draft, sandbox: { ...draft.sandbox, bridge: { ...draft.sandbox.bridge, enabled: d.checked } } })} />
+                <div className="ag-form">
+                  <label>{tx("地址")}</label>
+                  <Input size="small" value={draft.sandbox.bridge.url} placeholder="http://127.0.0.1:7711" onChange={(_, d) => setDraft({ ...draft, sandbox: { ...draft.sandbox, bridge: { ...draft.sandbox.bridge, url: d.value } } })} />
+                  <label>{tx("令牌")}</label>
+                  <span className="ag-keyrow">
+                    <Input size="small" type="password" className="zt-key" value={draft.sandbox.bridge.token} placeholder={tx("脚本启动时打印的那串")} onChange={(_, d) => setDraft({ ...draft, sandbox: { ...draft.sandbox, bridge: { ...draft.sandbox.bridge, token: d.value } } })} />
+                    <Button size="small" disabled={!!busy || !draft.sandbox.bridge.url.trim() || !draft.sandbox.bridge.token.trim()} onClick={async () => {
+                      setBusy(tx("正在连本机桥…")); setBridgeNote(null);
+                      try { const p: BridgeInfo = await bridgePing(draft.sandbox.bridge); setBridgeNote({ ok: true, text: tx("连上了：文件夹 {{dir}}；机器上有 {{tools}}", { dir: p.dir, tools: Object.entries(p.tools).filter(([, v]) => v).map(([k]) => k).join('、') || tx("（没找到 typst / python / git）") }) }); }
+                      catch (e) { setBridgeNote({ ok: false, text: (e as Error).message }); }
+                      finally { setBusy(null); }
+                    }}>{tx("试连")}</Button>
+                  </span>
+                  <span />
+                  <Checkbox label={tx("每条命令运行前先问我")} checked={draft.sandbox.bridge.confirm} onChange={(_, d) => setDraft({ ...draft, sandbox: { ...draft.sandbox, bridge: { ...draft.sandbox.bridge, confirm: !!d.checked } } })} />
+                </div>
+                {bridgeNote && <p className={`ag-status ${bridgeNote.ok ? 'ag-ok' : 'zt-error'}`}>{bridgeNote.text}</p>}
+                <details className="ag-howto">
+                  <summary>{tx("怎么装、怎么开（三步）")}</summary>
+                  <ol>
+                    <li>{tx("装 Node.js（18 以上）：")}<a href="https://nodejs.org/" target="_blank" rel="noreferrer">nodejs.org</a>{tx("，装好后终端里 node -v 能打出版本号就行。")}</li>
+                    <li>{tx("下载桥脚本：")}<a href={new URL('bridge/hit-bridge.mjs', document.baseURI).href} download="hit-bridge.mjs">hit-bridge.mjs</a>{tx("（一个文件，零依赖），放到哪儿都行。")}</li>
+                    <li>{tx("在终端里运行，--dir 指到你放论文材料的文件夹：")}
+                      <pre className="ag-cmd">{`node hit-bridge.mjs --dir ~/thesis`}</pre>
+                      {tx("它会打印地址和令牌，填到上面两栏，点「试连」，再打开「启用本机桥」，保存。")}
+                    </li>
+                  </ol>
+                  <p className="field-hint muted">{tx("注意：桥只接受这个网站发来的请求（自己搭的站要加 --origin 你的地址），只在 127.0.0.1 上听，命令用你的账号执行、限定在 --dir 那个文件夹里。Safari 可能拦 https 页面连本机的请求，用 Chrome / Edge / Firefox。Windows 用 cmd 语法，路径写成 C:\\Users\\你\\thesis。想换令牌删掉 ~/.hit-bridge/token 再启动。")}</p>
+                </details>
               </div>
             )}
           </DialogContent>

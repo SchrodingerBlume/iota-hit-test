@@ -128,7 +128,7 @@ function block(n: Node): string {
         const groupWidth = typeof a.width === 'string' && a.width.trim() && a.width !== 'auto' ? a.width : undefined;
         return div(fmtAttrs({ caption: a.caption, en: a.captionEn, columns: a.columns !== 2 ? a.columns : undefined, width: groupWidth, subMode: a.subMode !== 'under' ? a.subMode : undefined, subLabel: a.subLabel && a.subLabel !== 'none' ? a.subLabel : undefined, subLabelFill: a.subLabelFill === 'white' ? 'white' : undefined, placement: a.placement !== 'none' ? a.placement : undefined }, { id: a.label ? String(a.label) : undefined, classes: ['figure'] }), inner);
       }
-      return `![${esc(String(a.caption ?? ''))}](${String(a.image ?? '')})${captionAttrs(a, { width: a.width !== 8 ? a.width : undefined })}`;
+      return `![${esc(String(a.caption ?? ''))}](${String(a.image ?? '')})${captionAttrs(a, { width: a.width !== 8 ? a.width : undefined })}${notesMd(a)}`;
     }
     case 'equation': {
       const attrs = fmtAttrs({ mode: a.mode === 'typst' ? 'typst' : undefined }, { id: a.label ? String(a.label) : undefined, classes: a.numbered === false ? ['unnumbered'] : [] });
@@ -136,7 +136,7 @@ function block(n: Node): string {
     }
     case 'tableFigure': {
       const caption = `Table: ${esc(String(a.caption ?? ''))}${captionAttrs(a, { fit: a.fit && a.fit !== 'content' ? a.fit : undefined, colWidth: a.fit === 'fixed' ? a.colWidth : undefined, cols: a.cols ?? undefined })}`;
-      return `${tableMd(n.content?.[0])}\n\n${caption}`;
+      return `${tableMd(n.content?.[0])}\n\n${caption}${notesMd(a)}`;
     }
     case 'codeBlock': { if (a.language === 'iota-node') return opaque(n); const text = (n.content ?? []).map((c: Node) => c.text ?? '').join(''); const f = fence(text); return `${f}${a.language ?? ''}\n${text}\n${f}`; }
     case 'codeFigure': {
@@ -287,6 +287,20 @@ function extractDivs(source: string): { text: string; divs: { attrs: string; bod
   return { text: out.join('\n'), divs };
 }
 
+const NOTE_RE = /^(?:Note|注)(?:[(（]([^)）]*)[)）])?[:：]\s*(.*)$/;
+/** 段落末尾的 Note 行拆出来：[{lead, text}]，lead 空 = 默认引导词 */
+function splitNotes(raw: string): { main: string; notes: { lead: string; text: string }[] } {
+  const lines = raw.split('\n');
+  const notes: { lead: string; text: string }[] = [];
+  while (lines.length > 1) {
+    const m = NOTE_RE.exec(lines[lines.length - 1].trim());
+    if (!m) break;
+    notes.unshift({ lead: (m[1] ?? '').trim(), text: m[2].trim() });
+    lines.pop();
+  }
+  return { main: lines.join('\n').trim(), notes };
+}
+const notesMd = (a: Attrs | undefined) => parseJsonList(a?.notes).filter((x: any) => (x.text ?? '').trim()).map((x: any) => `\nNote${(x.lead ?? '').trim() ? `(${x.lead.trim()})` : ''}: ${x.text.trim()}`).join('');
 function divNode(attrsSrc: string, body: string, headings: boolean): Node {
   const { id, classes, attrs } = parseAttrs(attrsSrc);
   const kind = classes[0] ?? '';
@@ -396,21 +410,23 @@ function tokensToBlocks(tokens: Token[], headings: boolean, divs: { attrs: strin
         push({ type: 'heading', attrs: ha, content }); break;
       }
       case 'paragraph': case 'text': {
-        const raw = String(t.raw ?? t.text ?? '').trim();
-        if (raw === '&nbsp;' || raw === '\u00a0') { push({ type: 'paragraph' }); break; }
-        if (raw === '\\newpage' || raw === '\\pagebreak') { push({ type: 'pageBreak' } as Node); break; }
-        const eq = new RegExp(`^${MATH_OPEN}(\\d+)${MATH_CLOSE}(?:\\s*\\{([^}\\n]*)\\})?$`).exec(raw);
+        const raw0 = String(t.raw ?? t.text ?? '').trim();
+        if (raw0 === '&nbsp;' || raw0 === '\u00a0') { push({ type: 'paragraph' }); break; }
+        if (raw0 === '\\newpage' || raw0 === '\\pagebreak') { push({ type: 'pageBreak' } as Node); break; }
+        const eq = new RegExp(`^${MATH_OPEN}(\\d+)${MATH_CLOSE}(?:\\s*\\{([^}\\n]*)\\})?$`).exec(raw0);
         if (eq && mathStash[Number(eq[1])]?.display) {
           const pa = eq[2] ? parseAttrs(eq[2]) : null;
           push({ type: 'equation', attrs: { src: mathStash[Number(eq[1])].src, mode: pa?.attrs.mode === 'typst' ? 'typst' : 'latex', ...(pa?.id ? { label: pa.id } : {}), ...(pa?.classes.includes('unnumbered') ? { numbered: false } : {}) } } as Node); break;
         }
+        // 图注 / 表注：紧跟在 Table: 行或图那一行后面的 Note: / Note(引导词): 行（引导词空 = 「注：」，无 = 不印）
+        const { main: raw, notes } = splitNotes(raw0);
         // 表题写在表下面一行：Table: 题注 {#tab:x …}
         const cap = /^Table:\s*(.*)$/s.exec(raw);
         if (cap && out[out.length - 1]?.type === 'tableFigure') {
           const { text: caption, attrs: as } = splitTrailing(cap[1]);
           const pa = as ? parseAttrs(as) : null;
           const prev = out[out.length - 1];
-          prev.attrs = { ...prev.attrs, caption: plain({ type: 'x', content: inlines(marked.Lexer.lexInline(caption.trim())) } as Node), ...(pa?.attrs.en ? { captionEn: pa.attrs.en } : {}), ...(pa?.id ? { label: pa.id } : {}), ...(pa?.attrs.fit ? { fit: pa.attrs.fit } : {}), ...(num(pa?.attrs.colWidth) !== undefined ? { colWidth: num(pa?.attrs.colWidth) } : {}), ...(pa?.attrs.cols ? { cols: pa.attrs.cols } : {}), ...(pa?.attrs.placement ? { placement: pa.attrs.placement } : {}), ...(pa?.attrs.breakable ? { breakable: pa.attrs.breakable } : {}) };
+          prev.attrs = { ...prev.attrs, ...(notes.length ? { notes: JSON.stringify(notes) } : {}), caption: plain({ type: 'x', content: inlines(marked.Lexer.lexInline(caption.trim())) } as Node), ...(pa?.attrs.en ? { captionEn: pa.attrs.en } : {}), ...(pa?.id ? { label: pa.id } : {}), ...(pa?.attrs.fit ? { fit: pa.attrs.fit } : {}), ...(num(pa?.attrs.colWidth) !== undefined ? { colWidth: num(pa?.attrs.colWidth) } : {}), ...(pa?.attrs.cols ? { cols: pa.attrs.cols } : {}), ...(pa?.attrs.placement ? { placement: pa.attrs.placement } : {}), ...(pa?.attrs.breakable ? { breakable: pa.attrs.breakable } : {}) };
           break;
         }
         const { text: body, attrs: as } = splitTrailing(raw);
@@ -419,12 +435,16 @@ function tokensToBlocks(tokens: Token[], headings: boolean, divs: { attrs: strin
         // 一段只有一张图：图 + 属性
         if (content.length === 1 && content[0].type === 'figure') {
           const f = content[0];
-          f.attrs = { ...f.attrs, ...(pa?.id ? { label: pa.id } : {}), ...(pa?.attrs.en ? { captionEn: pa.attrs.en } : {}), ...(len(pa?.attrs.width) !== undefined ? { width: len(pa?.attrs.width) } : {}), ...(pa?.attrs.placement ? { placement: pa.attrs.placement } : {}), ...(pa?.attrs.breakable ? { breakable: pa.attrs.breakable } : {}) };
+          f.attrs = { ...f.attrs, ...(notes.length ? { notes: JSON.stringify(notes) } : {}), ...(pa?.id ? { label: pa.id } : {}), ...(pa?.attrs.en ? { captionEn: pa.attrs.en } : {}), ...(len(pa?.attrs.width) !== undefined ? { width: len(pa?.attrs.width) } : {}), ...(pa?.attrs.placement ? { placement: pa.attrs.placement } : {}), ...(pa?.attrs.breakable ? { breakable: pa.attrs.breakable } : {}) };
           push(f); break;
         }
-        const node: Node = { type: 'paragraph', content: content.map((c) => (c.type === 'text' && c.text === '\u00a0' ? { ...c, text: '' } : c)).filter((c) => c.type !== 'text' || c.text) };
-        if (pa?.classes.includes('noindent')) node.attrs = { noIndent: true };
-        else if (pa && !pa.classes.length && !pa.id && !Object.keys(pa.attrs).length) { /* 空的 {}，当字 */ }
+        // 不是图也不是表题：拆出去的 Note 行还是正文，整段按原样重来
+        const sp = notes.length ? splitTrailing(raw0) : { text: body, attrs: as };
+        const pp = notes.length ? (sp.attrs ? parseAttrs(sp.attrs) : null) : pa;
+        const full = notes.length ? inlines(marked.Lexer.lexInline(pp ? sp.text.trim() : raw0)) : content;
+        const node: Node = { type: 'paragraph', content: full.map((c) => (c.type === 'text' && c.text === '\u00a0' ? { ...c, text: '' } : c)).filter((c) => c.type !== 'text' || c.text) };
+        if (pp?.classes.includes('noindent')) node.attrs = { noIndent: true };
+        else if (pp && !pp.classes.length && !pp.id && !Object.keys(pp.attrs).length) { /* 空的 {}，当字 */ }
         push(node); break;
       }
       case 'hr': push({ type: 'horizontalRule' }); break;
