@@ -135,6 +135,8 @@ const LONG_MAIN = 120_000;
 const imageStore = new Map<string, ArrayBuffer>();
 /** 用户字体（本机读的、选的文件）也留一份：哪条道起了新 worker 就先把它们发过去，就绪了才算就绪——不必再劳 FontRecovery 重读本机 */
 const fontStore = new Map<string, ArrayBuffer>();
+/** 用户授权读进来的字体字节（沙盒里画图也用这一套） */
+export const userFontBytes = () => [...fontStore.entries()].map(([id, data]) => ({ id, data }));
 
 /** 一条道 = 一个 worker：自己的编译队列、自己映射过的图、自己的等待者 */
 class Lane {

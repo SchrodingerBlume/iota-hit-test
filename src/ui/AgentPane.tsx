@@ -1,9 +1,9 @@
 // Agent 面板：宽屏上是最右一整列（Word 的 Copilot 窗格那种位置），窄屏盖在右边。跟模型对话，
 // 它读、改文档走 src/ai/tools.ts 那几件工具，每一步在对话里留一张卡；要改设置时弹授权卡等用户点
 import { useEffect, useRef, useState } from 'react';
-import { Button, Textarea, Tooltip, Popover, PopoverTrigger, PopoverSurface, Input } from '@fluentui/react-components';
+import { Button, Textarea, Tooltip, Popover, PopoverTrigger, PopoverSurface, Input, Spinner } from '@fluentui/react-components';
 import { Settings20Regular, Dismiss20Regular, Send20Regular, Stop20Regular, Add20Regular, History20Regular, Delete16Regular, Star16Regular, Star16Filled, Rename16Regular, Checkmark16Regular, ChevronRight12Regular, ChevronDown12Regular, Attach20Regular, Dismiss12Regular, Image16Regular, DocumentPdf16Regular, DocumentText16Regular, BotSparkle20Regular, ShieldCheckmark20Regular } from '@fluentui/react-icons';
-import { useAgent, type ToolCard, type ChatMeta } from '../ai/state';
+import { useAgent, type ToolCard, type ChatMeta, type ChatItem } from '../ai/state';
 import { useStore } from '../model/store';
 import { configReady, providerLabel } from '../ai/config';
 import { PARTS } from '../ai/tools';
@@ -64,6 +64,43 @@ function cardTitle(c: ToolCard): string {
     case 'memory_write': return tx("记了一条到记忆里");
     default: return c.name;
   }
+}
+/** 正在跑的工具：现在时的说法；没有的用过去时那句凑合 */
+function liveTitle(name: string, input: Record<string, any>): string {
+  const part = partLabel(input.part);
+  const rng = input.to !== undefined && input.to !== input.from ? `#${input.from}–${input.to}` : input.from !== undefined ? `#${input.from}` : '';
+  switch (name) {
+    case 'outline': return tx("在看文档结构…");
+    case 'read': case 'read_json': return tx("在读{{part}} {{rng}}…", { part, rng });
+    case 'replace': case 'write_json': return tx("在改{{part}} {{rng}}…", { part, rng });
+    case 'insert': return tx("在往{{part}}里插内容…", { part });
+    case 'delete': return tx("在删{{part}} {{rng}}…", { part, rng });
+    case 'table_write': return tx("在写表…");
+    case 'figure_write': return tx("在插图…");
+    case 'run_python': return tx("在跑 Python…");
+    case 'run_js': return tx("在跑 JavaScript…");
+    case 'check_order': return tx("在按排版结果查图表顺序…");
+    case 'guide': return tx("在查写作指南…");
+    case 'web_fetch': return tx("在抓网页 {{url}}…", { url: String(input.url ?? '').replace(/^https?:\/\//, '').slice(0, 50) });
+    case 'web_search': return tx("在搜「{{q}}」…", { q: input.query });
+    case 'bridge_run': return tx("在你的电脑上运行：{{cmd}}", { cmd: String(input.cmd ?? '').slice(0, 60) });
+    case 'bridge_ls': case 'bridge_read': case 'bridge_write': return tx("在访问你电脑上的文件…");
+    case 'pdf_images': case 'pdf_render': return tx("在处理 PDF…");
+    case 'bib_add': return tx("在加参考文献…");
+    case 'settings_set': return tx("在改设置…");
+    case 'diagnostics': return tx("在看编译诊断…");
+    default: return tx("在调用 {{name}}…", { name });
+  }
+}
+function Live({ live, hasText }: { live: ChatItem['live']; hasText: boolean }) {
+  const [, tick] = useState(0);
+  useEffect(() => { const t = window.setInterval(() => tick((n) => n + 1), 1000); return () => window.clearInterval(t); }, []);
+  const secs = live ? Math.max(0, Math.round((Date.now() - live.since) / 1000)) : 0;
+  const long = secs >= 4 ? tx("（{{s}} 秒）", { s: secs }) : '';
+  if (live?.tool) return <div className="ag-card is-live"><div className="ag-card-head"><Spinner size="extra-tiny" /><span>{liveTitle(live.tool.name, live.tool.input)}</span><span className="muted ag-live-secs">{long}</span></div>{live.status && <div className="ag-live-status muted">{live.status}</div>}</div>;
+  if (live?.status) return <div className="ag-thinking muted"><Spinner size="extra-tiny" />{live.status}{long}</div>;
+  if (!hasText) return <div className="ag-thinking muted"><Spinner size="extra-tiny" />{tx("正在想…")}{long}</div>;
+  return null;
 }
 const EDIT_TOOLS = new Set(['replace', 'insert', 'delete', 'table_write', 'figure_write', 'bib_add', 'info_write', 'abbreviations_add', 'settings_set', 'write_json']);
 
@@ -174,7 +211,7 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
             {!!it.files?.length && <div className="ag-files">{it.files.map((f) => <FileChip key={f.id} f={f} />)}</div>}
             {it.text && (it.role === 'user' ? <div className="ag-text">{it.text}</div> : <div className="ag-text"><ChatMarkdown text={it.text} /></div>)}
             {it.error && <div className="ag-error">{it.error}</div>}
-            {it.role === 'assistant' && running && it.id === last?.id && !it.text && !it.tools.length && !ask && <div className="ag-thinking muted">{tx("正在想…")}</div>}
+            {it.role === 'assistant' && running && it.id === last?.id && !ask && <Live live={it.live} hasText={!!it.text} />}
           </div>
         ))}
         {ask && (

@@ -1620,6 +1620,11 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .ag-chatrow .ag-chat-x { opacity: 0; transition: opacity var(--fast) var(--ease); }
 .ag-chatrow:hover .ag-chat-x, .ag-chatrow:focus-within .ag-chat-x { opacity: 1; }
 .ag-chat-new { border: 0; background: none; font: inherit; font-size: 13px; color: var(--accent-ink); cursor: pointer; gap: 6px; margin-top: 4px; border-top: 1px solid var(--line); border-radius: 0 0 var(--r-s) var(--r-s); padding-top: 8px; }
+.ag-card.is-live { border-style: dashed; }
+.ag-card.is-live .ag-card-head { cursor: default; display: flex; align-items: center; gap: 6px; }
+.ag-live-secs { font-size: 11px; margin-left: auto; }
+.ag-live-status { font-size: 11.5px; padding: 0 10px 6px; }
+.ag-thinking { display: flex; align-items: center; gap: 6px; }
 .ag-howto { border: 1px solid var(--line); border-radius: var(--r-s); padding: 6px 10px; font-size: 12.5px; }
 .ag-howto summary { cursor: pointer; font-weight: 500; color: var(--accent-ink); }
 .ag-howto ol { margin: 6px 0 0; padding-left: 1.4em; line-height: 1.6; }

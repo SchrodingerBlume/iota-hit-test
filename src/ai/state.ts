@@ -8,7 +8,7 @@ import { kv } from '../model/persist';
 import { useStore } from '../model/store';
 
 export interface ToolCard { name: string; input: Record<string, unknown>; result: string; isError: boolean; images?: Attachment[] }
-export interface ChatItem { id: string; role: 'user' | 'assistant'; text: string; tools: ToolCard[]; files?: Attachment[]; error?: string }
+export interface ChatItem { id: string; role: 'user' | 'assistant'; text: string; tools: ToolCard[]; files?: Attachment[]; error?: string; /** 正在干什么（只有最后一条、跑着的时候有）：在跑的工具、分步状态、从几点起 */ live?: { tool?: { name: string; input: Record<string, unknown> }; status: string; since: number } }
 /** 模型要改设置时弹的授权卡：用户点了才往下走 */
 export interface Pending { ask: Ask; resolve: (ok: boolean) => void }
 
@@ -88,7 +88,35 @@ async function persistChat(doc: string, chat: string, items: ChatItem[], chats: 
   return next;
 }
 
-/** 算出眼下生效的那一套；换了套就断掉续聊的原始记录（两家接口的消息形状不同） */
+/** 换了接口 / 模型之后接着聊：原始记录（两家接口的消息形状不同、各家的内置工具消息别家不认）不能直接带过去，
+ *  按面板上显示的对话重建一份——用户那句原文 + 图片附件，模型那句原文 + 工具记录折成几行字 */
+function rebuildTranscript(api: AiConfig['api'], items: ChatItem[]): Transcript {
+  const messages: any[] = [];
+  const brief = (v: unknown, n: number) => { const t = typeof v === 'string' ? v : JSON.stringify(v); return t.length > n ? `${t.slice(0, n)}…` : t; };
+  for (const it of items) {
+    if (it.role === 'user') {
+      const imgs = (it.files ?? []).filter((f) => f.kind === 'image');
+      const others = (it.files ?? []).filter((f) => f.kind !== 'image').map((f) => f.name);
+      const text = `${it.text || '（看附件）'}${others.length ? `\n（附件：${others.join('、')}）` : ''}`;
+      if (api === 'anthropic') messages.push({ role: 'user', content: [...imgs.map((f) => ({ type: 'image', source: { type: 'base64', media_type: f.type, data: f.data } })), { type: 'text', text }] });
+      else messages.push({ role: 'user', content: imgs.length ? [...imgs.map((f) => ({ type: 'image_url', image_url: { url: `data:${f.type};base64,${f.data}` } })), { type: 'text', text }] : text });
+    } else {
+      const log = it.tools.map((t) => `- ${t.name}(${brief(t.input, 160)}) → ${brief(t.result, 300).replace(/\n/g, ' ')}`).join('\n');
+      const text = `${it.text}${log ? `${it.text ? '\n\n' : ''}[之前调用过的工具]\n${log}` : ''}`.trim();
+      if (text) messages.push({ role: 'assistant', content: text });
+    }
+  }
+  // 两条同角色的挨在一起 Anthropic 不收：并成一条
+  const merged: any[] = [];
+  for (const m of messages) {
+    const prev = merged[merged.length - 1];
+    if (prev && prev.role === m.role) { const toArr = (c: any) => (typeof c === 'string' ? [{ type: 'text', text: c }] : c); prev.content = [...toArr(prev.content), ...toArr(m.content)]; }
+    else merged.push(m);
+  }
+  return { api, messages: merged } as Transcript;
+}
+
+/** 算出眼下生效的那一套；换了套就断掉续聊的原始记录（下一句发出去时按显示的对话重建） */
 function refresh() {
   const st = useAgent.getState();
   const s = st.settings;
@@ -134,7 +162,7 @@ export const useAgent = create<AgentState>((set, get) => ({
     const c = get().config;
     const files = get().pending;
     if (!c || get().running || (!text.trim() && !files.length)) return;
-    if (!transcript || transcript.api !== c.api) transcript = { api: c.api, messages: [] } as Transcript;
+    if (!transcript || transcript.api !== c.api) transcript = rebuildTranscript(c.api, get().items);
     const reply: ChatItem = { id: uid(), role: 'assistant', text: '', tools: [] };
     const save = () => { const st = get(); if (boundDoc && st.chatId) void persistChat(boundDoc, st.chatId, st.items, st.chats).then((chats) => set({ chats })); };
     if (!get().chatId) { const id = uid(); set({ chatId: id, chats: [{ id, title: '新对话', updatedAt: Date.now() }, ...get().chats] }); }
@@ -155,16 +183,20 @@ export const useAgent = create<AgentState>((set, get) => ({
       const st = get().settings;
       setMemoryContext({ enabled: !!st?.memory.enabled, notes: st?.memory.notes ?? '', write: async (notes) => { const cur = get().settings; if (cur) await get().setSettings({ ...cur, memory: { ...cur.memory, notes } }); } });
       setSandboxContext(st?.sandbox ?? { browser: true, server: false, bridge: { enabled: false, url: '', token: '', confirm: true } });
+      const liveOf = () => get().items.find((it) => it.id === reply.id)?.live;
+      patch({ live: { status: '准备系统提示…', since: Date.now() } });
       await runTurn(c, transcript, text || '（看附件）', files, await systemPromptFor(st, get().docPreset), {
         onText: (d) => { buf += d; patch({ text: buf }); },
-        onTool: (name, input, result, isError) => { const cur = get().items.find((it) => it.id === reply.id)!; patch({ tools: [...cur.tools, { name, input, result, isError, images: derived.length ? derived : undefined }] }); derived = []; },
+        onTool: (name, input, result, isError) => { const cur = get().items.find((it) => it.id === reply.id)!; patch({ tools: [...cur.tools, { name, input, result, isError, images: derived.length ? derived : undefined }], live: { status: '', since: Date.now() } }); derived = []; },
+        onToolStart: (name, input) => patch({ live: { tool: { name, input }, status: '', since: Date.now() } }),
+        onStatus: (status) => { const l = liveOf(); patch({ live: { tool: l?.tool, status, since: status && status !== l?.status ? Date.now() : l?.since ?? Date.now() } }); },
       }, aborter.signal);
     } catch (e) {
       transcript.messages.length = mark;
       if (!aborter.signal.aborted) patch({ error: describeError(e) });
     } finally {
       aborter = null;
-      set({ running: false });
+      set({ running: false, items: get().items.map((it) => (it.id === reply.id ? { ...it, live: undefined } : it)) });
       window.clearTimeout(saveTimer);
       save();
     }

@@ -2,12 +2,16 @@
 // 两种接口各一个驱动，对话记录按接口各自的原样存（一个会话只用一家）
 import type Anthropic from '@anthropic-ai/sdk';
 import { webOf, webNativeOf, type AiConfig } from './config';
-import { runTool, toolsFor, setWebConfig, serverSandboxOn, collectBytes, type ToolDef } from './tools';
+import { runTool, toolsFor, setWebConfig, serverSandboxOn, collectBytes, setReporter, type ToolDef } from './tools';
 import { pdfText, type Attachment } from './files';
 
 export interface AgentEvents {
   onText: (delta: string) => void;
   onTool: (name: string, input: Record<string, unknown>, result: string, isError: boolean) => void;
+  /** 工具开始跑了（结果还没回来）：面板先立一张转圈的卡 */
+  onToolStart: (name: string, input: Record<string, unknown>) => void;
+  /** 眼下在等什么（等模型回复、工具里的分步进度）；空串清掉 */
+  onStatus: (text: string) => void;
 }
 /** 一次会话的原始记录：两家接口的消息形状不同，装在各自的数组里 */
 export type Transcript = { api: 'anthropic'; messages: Anthropic.MessageParam[] } | { api: 'openai'; messages: any[] };
@@ -52,14 +56,18 @@ async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], us
     }
   }
   messages.push({ role: 'user', content: parts.length ? [...parts, { type: 'text', text: userText }] : userText });
+  setReporter(ev.onStatus);
   for (let round = 0; round < MAX_ROUNDS; round++) {
+    ev.onStatus(round ? '工具结果发回去了，等模型接着说…' : '等模型回复…');
     const stream = client.messages.stream({
       model: c.model, max_tokens: 16000,
       system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
       tools, messages,
     }, { signal });
-    stream.on('text', (delta) => ev.onText(delta));
+    let first = true;
+    stream.on('text', (delta) => { if (first) { first = false; ev.onStatus(''); } ev.onText(delta); });
     const msg = await stream.finalMessage();
+    ev.onStatus('');
     messages.push({ role: 'assistant', content: msg.content });
     await reportServerTools(client, msg.content, ev);
     if (msg.stop_reason === 'refusal') { ev.onText("\n（模型拒绝了这次请求）"); return; }
@@ -68,6 +76,7 @@ async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], us
     for (const block of msg.content) {
       if (block.type !== 'tool_use') continue;
       const input = (block.input ?? {}) as Record<string, unknown>;
+      ev.onToolStart(block.name, input);
       const { result, isError } = await exec(block.name, input);
       ev.onTool(block.name, input, result, isError);
       results.push({ type: 'tool_result', tool_use_id: block.id, content: result, is_error: isError || undefined });
@@ -131,7 +140,9 @@ async function openaiTurn(c: AiConfig, messages: any[], userText: string, files:
     else parts.push({ type: 'text', text: `${f.name}\n${f.data}` });
   }
   messages.push({ role: 'user', content: parts.length ? [...parts, { type: 'text', text: userText }] : userText });
+  setReporter(ev.onStatus);
   for (let round = 0; round < MAX_ROUNDS; round++) {
+    ev.onStatus(round ? '工具结果发回去了，等模型接着说…' : '等模型回复…');
     const r = await fetch(`${base(c.baseUrl)}/chat/completions`, {
       method: 'POST', signal,
       headers: { 'Content-Type': 'application/json', ...(c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {}) },
@@ -147,7 +158,7 @@ async function openaiTurn(c: AiConfig, messages: any[], userText: string, files:
       if (j.error) throw new Error(j.error.message ?? JSON.stringify(j.error));
       const ch = j.choices?.[0]; if (!ch) continue;
       const d = ch.delta ?? {};
-      if (typeof d.content === 'string' && d.content) { text += d.content; ev.onText(d.content); }
+      if (typeof d.content === 'string' && d.content) { if (!text) ev.onStatus(''); text += d.content; ev.onText(d.content); }
       for (const tc of d.tool_calls ?? []) {
         const i = tc.index ?? 0;
         const acc = calls.get(i) ?? { id: '', name: '', args: '' };
@@ -165,6 +176,7 @@ async function openaiTurn(c: AiConfig, messages: any[], userText: string, files:
       let input: Record<string, unknown> = {};
       try { input = JSON.parse(v.args || '{}'); } catch { /* 参数不是合法 JSON */ }
       if (v.name === '$web_search') { ev.onTool('web_search', { query: (input as any).search_query ?? (input as any).query ?? '' }, '（Kimi 自己搜的）', false); messages.push({ role: 'tool', tool_call_id: v.id || `call_${round}_${i}`, name: '$web_search', content: v.args || '{}' }); continue; }
+      ev.onToolStart(v.name, input);
       const { result, isError } = await exec(v.name, input);
       ev.onTool(v.name, input, result, isError);
       messages.push({ role: 'tool', tool_call_id: v.id || `call_${round}_${i}`, content: result });

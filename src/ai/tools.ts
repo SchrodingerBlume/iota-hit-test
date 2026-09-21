@@ -11,7 +11,8 @@ import { getEditor } from '../editor/registry';
 import { toMarkdown, fromMarkdown } from '../editor/markdown';
 import { inlineFromMarkdown } from '../editor/tableImport';
 import { putImage, safeImageName, imageDimensions } from '../editor/imageCache';
-import { useCompileState, queryDoc } from '../compiler/client';
+import { useCompileState, queryDoc, userFontBytes } from '../compiler/client';
+import { useFontState } from '../fonts/userFonts';
 import { useSerializeWarnings } from '../typst/serialize';
 import type { Diagnostic } from '../compiler/protocol';
 import { humanize, locateDiagnostic } from '../ui/diagnostics';
@@ -19,7 +20,7 @@ import { parseBibtex, splitNames, type BibEntry } from '../bib/bibtex';
 import { mergeEntries } from '../bib/csl';
 import { pdfRender, pdfImages, type Attachment } from './files';
 import { webOf, webNativeOf, type AiConfig, type AiSettings } from './config';
-import { pyBox, jsBox, type SandboxFile } from './sandbox';
+import { pyBox, jsBox, type SandboxFile, type SandboxFont } from './sandbox';
 import { bridgeRun, bridgeLs, bridgeRead, bridgeWrite, defaultBridge, type BridgeConfig } from './bridge';
 import { GUIDES, guideFor, loadGuide, guideToc, guideSection, guideSearch } from './guides';
 
@@ -27,6 +28,9 @@ export interface ToolDef { name: string; description: string; parameters: Record
 /** 要用户点头的改动：面板弹卡片，用户允许了才做 */
 export interface Ask { title: string; lines: string[]; reason?: string; head?: string }
 export let askUser: (q: Ask) => Promise<boolean> = async () => false;
+/** 工具里的分步进度报给面板（等排版、下载 Pyodide、装包……） */
+export let report: (text: string) => void = () => {};
+export const setReporter = (f: typeof report) => { report = f; };
 export const setAskUser = (f: typeof askUser) => { askUser = f; };
 /** 这一场对话里用户发过的附件，图片可以直接插成图 */
 let attachments: Attachment[] = [];
@@ -64,7 +68,7 @@ const MEMORY_TOOLS: ToolDef[] = [
   { name: 'memory_write', description: '往长期记忆里记一条（用户明确说「记住」的偏好，或反复出现的要求）。mode=append 追加一行，replace 整段换掉（用来整理、删旧的）。写之前先说一声记什么。', parameters: { type: 'object', properties: { text: { type: 'string' }, mode: { type: 'string', enum: ['append', 'replace'] } }, required: ['text'], additionalProperties: false } },
 ];
 const SANDBOX_TOOLS: ToolDef[] = [
-  { name: 'run_python', description: '在浏览器里的 Python 沙盒（Pyodide，Python 3.14）跑一段代码：numpy / pandas / matplotlib / scipy / sympy / scikit-learn 等按 import 自动装，纯 Python 包用 `import micropip; await micropip.install("包名")`。对话里的附件在 /data/<文件名>；要交回的文件写到 /out/（matplotlib 用 plt.savefig("/out/名.png", dpi=200)），交回的 PNG 直接能 figure_write 插进论文（image 填文件名）。回 stdout、最后一个表达式的值、交回的文件。变量和装的包在这场对话里一直在。没有网络；首次用要下载十几 MB。', parameters: { type: 'object', properties: { code: { type: 'string' }, timeout: { type: 'integer', description: '秒，默认 120，最多 600' } }, required: ['code'], additionalProperties: false } },
+  { name: 'run_python', description: '在浏览器里的 Python 沙盒（Pyodide，Python 3.14）跑一段代码：numpy / pandas / matplotlib / scipy / sympy / scikit-learn 等按 import 自动装，纯 Python 包用 `import micropip; await micropip.install("包名")`。matplotlib 已配好论文的字体（serif = Times New Roman + 宋体，sans-serif = Arial + 黑体，默认 serif），中文标签直接写，不要自己改 font.family 成系统里没有的字体；图用 plt.savefig("/out/名.png", dpi=200, bbox_inches="tight")。对话里的附件在 /data/<文件名>；要交回的文件写到 /out/（matplotlib 用 plt.savefig("/out/名.png", dpi=200)），交回的 PNG 直接能 figure_write 插进论文（image 填文件名）。回 stdout、最后一个表达式的值、交回的文件。变量和装的包在这场对话里一直在。没有网络；首次用要下载十几 MB。', parameters: { type: 'object', properties: { code: { type: 'string' }, timeout: { type: 'integer', description: '秒，默认 120，最多 600' } }, required: ['code'], additionalProperties: false } },
   { name: 'run_js', description: '在 Worker 里跑一段 JavaScript（写成 async 函数体：能 await、能 return 值）。files["文件名"] 是对话里的附件（文本是字符串、二进制是 Uint8Array），emit("名", 字符串或 Uint8Array) 交回文件，console.log 会收回来。没有 DOM；能 fetch 但受跨域限制。', parameters: { type: 'object', properties: { code: { type: 'string' }, timeout: { type: 'integer', description: '秒，默认 60' } }, required: ['code'], additionalProperties: false } },
 ];
 const BRIDGE_TOOLS: ToolDef[] = [
@@ -275,6 +279,7 @@ type Pos = { page: number; y: number };
 const before = (a: Pos, b: Pos) => a.page < b.page || (a.page === b.page && a.y < b.y);
 const cmpSeq = (a: number[], b: number[]) => { for (let i = 0; i < Math.max(a.length, b.length); i++) { const d = (a[i] ?? 0) - (b[i] ?? 0); if (d) return d; } return 0; };
 async function checkOrder(): Promise<string> {
+  report('等整编落地，再问排版结果里图表落在哪页…');
   const r = await queryDoc(ORDER_PROBE, '<iota-order>');
   if (r.error || !Array.isArray(r.result) || !r.result.length) return `查不了：${r.error ?? '模板没交回结果'}（预览要先整编成功一次）`;
   const { caps, figs, refs } = r.result[0] as { caps: (Pos & { kind: string; seq: number[]; chap: number; fn: boolean; text: string })[]; figs: (Pos & { kind: string; seq: number[]; chap: number; label: string; placement: string })[]; refs: (Pos & { target: string })[] };
@@ -347,15 +352,51 @@ function sandboxReport(r: { ok: boolean; stdout: string; stderr: string; result:
   if (!parts.length) parts.push('跑完了，没有输出');
   return `${parts.join('\n')}\n（${(r.ms / 1000).toFixed(1)} 秒）`;
 }
+/** 画图用论文那套字体：用户授权读进编译器的本机字体（宋体、黑体、Times…）原样给沙盒；一个中文字体都没有就先弹窗请用户授权，
+ *  还是没有就用站内的 Noto 兜底。只在代码用到 matplotlib 时才搬（本机那套上百 MB，一个 Worker 只搬一次） */
+const CJK_FONT = /song|hei|kai|fang|simsun|simhei|cjk|pingfang|han(s|d)?\b|ming|yahei|source han/i;
+const fontExt = (b: Uint8Array) => (b[0] === 0x4f && b[1] === 0x54 ? 'otf' : b[0] === 0x74 && b[1] === 0x74 && b[2] === 0x63 ? 'ttc' : 'ttf');
+const sentFonts = new Set<string>();
+async function sandboxFonts(): Promise<{ fonts: SandboxFont[]; note: string }> {
+  const fs = useFontState.getState();
+  const named = (id: string) => fs.fonts.find((f) => f.id === id)?.name ?? id;
+  let mine = userFontBytes();
+  let note = '';
+  if (!mine.some((f) => CJK_FONT.test(named(f.id))) && fs.canQuery && !fs.busy) {
+    const ok = await askUser({ head: '画图要用论文的字体，需要你允许读取本机字体', title: '读取本机的宋体、黑体、Times New Roman 等', lines: ['浏览器会弹一次授权；之后论文排版和图里的文字都用这一套。不允许就用站内的 Noto 字体画。'], reason: '图里的中文没有字体会显示成方块' });
+    if (ok) { await fs.readLocal(); mine = userFontBytes(); if (fs.error) note = `本机字体没读到（${useFontState.getState().error}）`; }
+  }
+  const fonts: SandboxFont[] = [];
+  for (const f of mine) {
+    const key = `u:${f.id}`;
+    if (sentFonts.has(key)) continue;
+    sentFonts.add(key);
+    const bytes = new Uint8Array(f.data.slice(0));
+    fonts.push({ name: `${named(f.id).replace(/[^\w.-]+/g, '_')}.${fontExt(bytes)}`, bytes });
+  }
+  if (!mine.some((f) => CJK_FONT.test(named(f.id)))) {
+    for (const file of ['NotoSerifCJKsc-Regular.otf', 'NotoSansCJKsc-Regular.otf', 'texgyretermes-regular.otf', 'texgyreheros-regular.otf']) {
+      if (sentFonts.has(file)) continue;
+      try { const r = await fetch(new URL(`fonts/${file}`, document.baseURI).href); if (!r.ok) continue; fonts.push({ name: file, bytes: new Uint8Array(await r.arrayBuffer()) }); sentFonts.add(file); } catch { /* 没取到就没有 */ }
+    }
+    note = note || '用的是站内的 Noto 字体（用户没有授权本机字体）';
+  }
+  return { fonts, note };
+}
 async function runPythonTool(input: Record<string, any>): Promise<string> {
   if (!sandboxCtx.browser) return '浏览器沙盒没开，用户在 Agent 设置 › 沙盒里能打开';
   const code = String(input.code ?? ''); if (!code.trim()) return 'code 是空的';
-  const r = await pyBox.run(code, sandboxFiles(), Math.min(600, Math.max(5, Number(input.timeout) || 120)) * 1000);
-  return sandboxReport(r);
+  let fonts: SandboxFont[] = [], fontNote = '';
+  if (/matplotlib/.test(code)) { report('准备论文字体给 matplotlib…'); ({ fonts, note: fontNote } = await sandboxFonts()); }
+  report(pyBox.worker ? 'Python 运行中…' : '首次启动：下载 Pyodide（十几 MB，之后有缓存）…');
+  const r = await pyBox.run(code, sandboxFiles(), Math.min(600, Math.max(5, Number(input.timeout) || 120)) * 1000, undefined, (p) => report(p === 'boot' ? '首次启动：下载 Pyodide（十几 MB，之后有缓存）…' : p === 'packages' ? '按 import 装 Python 包…' : p === 'fonts' ? '把论文字体装进 matplotlib…' : 'Python 运行中…'), fonts);
+  if (!r.ok && pyBox.worker === null) sentFonts.clear();
+  return sandboxReport(r) + (fontNote ? `\n字体：${fontNote}` : '');
 }
 async function runJsTool(input: Record<string, any>): Promise<string> {
   if (!sandboxCtx.browser) return '浏览器沙盒没开，用户在 Agent 设置 › 沙盒里能打开';
   const code = String(input.code ?? ''); if (!code.trim()) return 'code 是空的';
+  report('JavaScript 运行中…');
   const r = await jsBox.run(code, sandboxFiles(), Math.min(600, Math.max(5, Number(input.timeout) || 60)) * 1000);
   return sandboxReport(r);
 }
@@ -373,6 +414,7 @@ async function bridgeRunTool(input: Record<string, any>): Promise<string> {
     if (!ok) return '用户没有允许运行这条命令';
   }
   try {
+    report('在你的电脑上运行中…');
     const r = await bridgeRun(b, cmd, input.cwd ? String(input.cwd) : undefined, Number(input.timeout) || undefined, input.stdin ? String(input.stdin) : undefined);
     const parts = [];
     if (r.stdout.trim()) parts.push(`stdout：\n${clip(r.stdout.trim())}`);
@@ -643,9 +685,11 @@ async function afterWrite(msg: string, c0: { status: string; compileCount: numbe
   if (c0.status !== 'ready') return msg;
   const t0 = Date.now();
   let last = Date.now(), count = c0.compileCount;
+  report('写进去了，等排版看有没有报错…');
   while (Date.now() - t0 < 60000) {
     await new Promise((r) => setTimeout(r, 150));
     const s = useCompileState.getState();
+    if (s.compiling || s.bgCompiling) report(s.bgCompiling ? '写进去了，等整篇重排…' : '写进去了，等排版看有没有报错…');
     if (s.compileCount !== count) { count = s.compileCount; last = Date.now(); }
     if (s.compiling || s.bgCompiling) { last = Date.now(); continue; }
     if (Date.now() - last > (count === c0.compileCount ? 5000 : 3200)) break;
