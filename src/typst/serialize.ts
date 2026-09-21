@@ -386,6 +386,21 @@ const HIGHLIGHT_RULE = `#let iota-hl(fill, body) = context highlight(fill: fill,
 // 表格不超版心：Word 的三种「自动调整」都在版心里排，模板却把量出来比版心宽的表居中两边溢出（自动列按无限宽量，
 // 内容一长就不折行）。自动列按内容量宽，装不下就按比例压窄；给了绝对列宽（固定列宽、拖过的列）的超了也按比例压；
 // 有 fr 列的本来就撑满版心，原样。表里的字号与格的左右边距从两个探针表量出来（不碰模板的样式表）
+/** 章级版面（工程 JSON 的 layout.chapters）：模板不许某一段把字符网格开上或关掉（char-pitch / chars-per-line 与全文相反就 panic）——
+ *  终稿有网格、报告档没有，同一份工程改个阶段就撞上；这里先照模板的算法算一遍，会翻转的把网格那几键扔掉，只留字号 */
+const CHAPTER_LAYOUT = `#import "@local/banshi:0.1.0" as _banshi
+#let chapter-layout(d, body) = context {
+  let cur = _banshi.layout.page-setup-state.get()
+  let d = if cur == none { d } else {
+    let m = _banshi.layout.merge-page-setup(cur, d)
+    if (m.docgrid.tracking == 0pt) != (cur.docgrid.tracking == 0pt) {
+      let e = d
+      for k in ("char-pitch", "chars-per-line", "grid") { let _ = e.remove(k, default: none) }
+      e
+    } else { d }
+  }
+  if d.len() == 0 { body } else { new-layout(d, body) }
+}`;
 const TABLE_RULE = `#let iota-table(columns: 1, ..args) = layout(size => {
   let W = size.width
   let n = if type(columns) == int { columns } else { columns.len() }
@@ -451,7 +466,7 @@ export function serializePara(doc: ThesisDoc, index: number, live?: { node: PMNo
   const nodes = doc.body.content ?? [];
   const chapter = chapterRanges(doc.body).findIndex((r) => index >= r.from && index < r.to) + 1;
   parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n${CITE_IMPORT}`);
-  parts.push(HIGHLIGHT_RULE, TABLE_RULE);
+  parts.push(HIGHLIGHT_RULE, TABLE_RULE, CHAPTER_LAYOUT);
   parts.push(PREVIEW_PRELUDE);
   parts.push(iotaHitShow(doc));
   if (stockPrelude(s)) parts.push(stockPrelude(s));
@@ -493,7 +508,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   const known = { knownLabels, ...targets(doc, warnings) };
 
   parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n${CITE_IMPORT}\n// LaTeX 公式走 mitex 转成 Typst（包已随站内打包）\n#import "@preview/mitex:0.2.7": mitex, mi`);
-  parts.push(HIGHLIGHT_RULE, TABLE_RULE);
+  parts.push(HIGHLIGHT_RULE, TABLE_RULE, CHAPTER_LAYOUT);
   if (preview) parts.push(PREVIEW_PRELUDE);
   parts.push(iotaHitShow(doc));
   if (preview && stockPrelude(s)) parts.push(stockPrelude(s));
@@ -610,7 +625,7 @@ function bodyByChapters(doc: ThesisDoc, s: Settings, ser: (r: { from: number; to
 export const FOCUS_TAIL_WIDTH = 500;
 export function chapterWrap(d: LayoutDict | undefined, st: LayoutDict | undefined, body: string): string {
   if (st && Object.keys(st).length) body = `#show: new-styles.with(${typstDict(st)})\n${body}\n#show: restore-styles`;
-  return d && Object.keys(d).length ? `#show: new-layout.with(${typstDict(d)})\n${body}\n#show: restore-layout` : body;
+  return d && Object.keys(d).length ? `#show: chapter-layout.with(${typstDict(d)})\n${body}\n#show: restore-layout` : body;
 }
 
 /**
@@ -633,7 +648,7 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   for (const [label, info] of computeNumbering(doc.appendix as any, s, 'appendix')) if (!knownLabels.has(label)) refText.set(label, info.ref);
 
   parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n${CITE_IMPORT}\n#import "@preview/mitex:0.2.7": mitex, mi`);
-  parts.push(HIGHLIGHT_RULE, TABLE_RULE);
+  parts.push(HIGHLIGHT_RULE, TABLE_RULE, CHAPTER_LAYOUT);
   parts.push(PREVIEW_PRELUDE);
   parts.push(iotaHitShow(doc));
   if (stockPrelude(s)) parts.push(stockPrelude(s));
