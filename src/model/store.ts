@@ -3,7 +3,7 @@ import type { ThesisDoc, Settings, Info, RichDoc, Pages, Abbreviation, SymbolEnt
 import { emptyDoc } from './types';
 import { defaultSettings } from './options';
 import { defaultInfo } from './info';
-import { saveProject, loadProject, deleteProjectRecord, allProjects, getActiveProjectId, setActiveProjectId, loadLegacyDoc, clearLegacyDoc, setImageNamespace, saveImage, loadImage, listImageKeys, copyImageRaw, deleteImageKey } from './persist';
+import { kv, saveProject, loadProject, deleteProjectRecord, allProjects, getActiveProjectId, setActiveProjectId, loadLegacyDoc, clearLegacyDoc, setImageNamespace, saveImage, loadImage, listImageKeys, copyImageRaw, deleteImageKey } from './persist';
 import { clearImageCache } from '../editor/imageCache';
 import { sampleDoc, SAMPLE_IMAGE } from './sample';
 import { parseBibtex, type BibEntry } from '../bib/bibtex';
@@ -146,6 +146,8 @@ interface State {
   renameProject: (id: string, name: string) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
   duplicateProject: (id: string) => Promise<string>;
+  /** 打包成 .iota.json（工程 + 图片 base64），当前文档或列表里任一份 */
+  exportProject: (id: string) => Promise<{ name: string; json: string } | null>;
 }
 
 let saveTimer: number | undefined;
@@ -325,6 +327,17 @@ export const useStore = create<State>((set, get) => {
       for (const key of await listImageKeys()) if (key.startsWith(`${id}/`)) await copyImageRaw(key, `${copy.id}/${key.slice(id.length + 1)}`);
       await get().refreshProjects();
       return copy.id;
+    },
+    exportProject: async (id) => {
+      await flushSave();
+      const src = id === get().doc.id ? get().doc : await loadProject<ThesisDoc>(id);
+      if (!src) return null;
+      const images: Record<string, string> = {};
+      for (const img of src.images) {
+        const blob = await kv.get<Blob>('images', `${id}/${img.name}`);
+        if (blob) images[img.name] = btoa(Array.from(new Uint8Array(await blob.arrayBuffer()), (b) => String.fromCharCode(b)).join(''));
+      }
+      return { name: src.info.title.split('\n')[0] || src.name || t("论文"), json: JSON.stringify({ ...src, imageData: images }, null, 1) };
     },
   };
 });

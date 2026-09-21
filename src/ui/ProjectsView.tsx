@@ -1,9 +1,11 @@
-// 我的文档界面：左边新建（起名、选类型、空白或样例），右边最近使用的卡片。
-import { useRef, useState } from 'react';
+// 我的文档：照 Word 的「开始」页排——上面一排模板卡（点了弹出新建对话框起名、选档），下面「最近使用」
+// 一张可搜索、可排序的列表，每行悬停出操作；删除走对话框确认，重命名就地改
+import { useMemo, useRef, useState } from 'react';
+import { Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions, Button, Input, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuItemRadio, MenuDivider, Tooltip } from '@fluentui/react-components';
+import { Document20Regular, DocumentSparkle20Regular, FolderOpen20Regular, ArrowLeft20Regular, Search20Regular, MoreHorizontal20Regular, Rename20Regular, Copy20Regular, Delete20Regular, ArrowDownload20Regular, Open20Regular, ArrowSort20Regular } from '@fluentui/react-icons';
 import { useStore, type ProjectMeta } from '../model/store';
 import { AXES, defaultSettings } from '../model/options';
 import type { Settings } from '../model/types';
-import { FilePlus2, FolderOpen, Copy, Trash2, Pencil, Check, X, Sparkles, FileText, Clock, ArrowLeft } from 'lucide-react';
 import { t as tx } from '../i18n';
 
 const label = (s: Settings, key: keyof Settings) => AXES.find((a) => a.key === key)?.choices.find((c) => c.value === s[key])?.label ?? String(s[key]);
@@ -14,51 +16,79 @@ function fmtTime(iso: string) {
   if (diff < 60_000) return tx("刚刚");
   if (diff < 3_600_000) return tx("{{v0}} 分钟前", { v0: Math.round(diff / 60_000) });
   if (diff < 86_400_000) return tx("{{v0}} 小时前", { v0: Math.round(diff / 3_600_000) });
+  if (diff < 7 * 86_400_000) return tx("{{v0}} 天前", { v0: Math.round(diff / 86_400_000) });
   return d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'numeric', day: 'numeric' });
 }
 
-function ProjectCard({ p, active }: { p: ProjectMeta; active: boolean }) {
-  const { openProject, renameProject, deleteProject, duplicateProject } = useStore();
+const tagsOf = (s: Settings) => [
+  label(s, 'degreeLevel'), label(s, 'stage'), s.campus === 'shenzhen' ? tx("深圳") : tx("本部"),
+  s.form === 'practice' ? (s.degreeLevel === 'bachelor' ? tx("毕业设计") : tx("实践成果")) : null, s.lang === 'en' ? 'EN' : null,
+].filter(Boolean) as string[];
+
+function download(name: string, data: BlobPart, type: string) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([data], { type }));
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+function ProjectRow({ p, active, onDelete }: { p: ProjectMeta; active: boolean; onDelete: (p: ProjectMeta) => void }) {
+  const { openProject, renameProject, duplicateProject, exportProject } = useStore();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(p.name);
-  const s = p.settings;
-  const tags = [label(s, 'degreeLevel'), label(s, 'stage'), s.campus === 'shenzhen' ? tx("深圳") : tx("本部"), s.form === 'practice' ? (s.degreeLevel === 'bachelor' ? tx("毕业设计") : tx("实践成果")) : '', s.category === 'hass' ? tx("人文社科") : '', s.lang === 'en' ? 'English' : ''].filter(Boolean);
+  const commit = () => { const n = name.trim(); setEditing(false); if (n && n !== p.name) void renameProject(p.id, n); else setName(p.name); };
+  const save = async () => { const r = await exportProject(p.id); if (r) download(`${r.name}.iota.json`, r.json, 'application/json'); };
   return (
-    <div className={`proj ${active ? 'is-active' : ''}`}>
-      <div className="proj-head">
-        {editing ? (
-          <span className="row" style={{ flex: 1 }}>
-            <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { void renameProject(p.id, name); setEditing(false); } if (e.key === 'Escape') setEditing(false); }} />
-            <button type="button" className="btn btn-xs btn-icon" title={tx("确定")} onClick={() => { void renameProject(p.id, name); setEditing(false); }}><Check /></button>
-            <button type="button" className="btn btn-xs btn-icon" title={tx("取消")} onClick={() => { setName(p.name); setEditing(false); }}><X /></button>
-          </span>
-        ) : (
-          <button type="button" className="proj-name" onClick={() => void openProject(p.id)} title={tx("打开")}>{p.name}</button>
-        )}
-        {active && !editing && <span className="proj-badge">{tx("当前")}</span>}
+    <div className={`proj-row ${active ? 'is-active' : ''}`} onDoubleClick={() => { if (!editing) void openProject(p.id); }}>
+      <span className="proj-ico"><Document20Regular /></span>
+      <div className="proj-main">
+        {editing
+          ? <input className="input proj-rename" autoFocus value={name} onChange={(e) => setName(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setName(p.name); setEditing(false); } }} />
+          : <button type="button" className="proj-name" onClick={() => void openProject(p.id)}>{p.name}{active && <span className="proj-badge">{tx("当前")}</span>}</button>}
+        <div className="proj-tags">{tagsOf(p.settings).map((t) => <span key={t} className="tag">{t}</span>)}{p.blocks > 0 && <span className="muted proj-size">{tx("正文 {{n}} 段", { n: p.blocks })}</span>}</div>
       </div>
-      <div className="proj-tags">{tags.map((t) => <span key={t} className="tag">{t}</span>)}</div>
-      <div className="proj-meta muted"><Clock />{fmtTime(p.updatedAt)} {' '}{tx("修改时间")}</div>
+      <span className="proj-time muted" title={new Date(p.updatedAt).toLocaleString('zh-CN')}>{fmtTime(p.updatedAt)}</span>
       <div className="proj-actions">
-        <button type="button" className="btn btn-xs btn-primary" onClick={() => void openProject(p.id)}><FolderOpen />{tx("打开")}</button>
-        <button type="button" className="btn btn-xs btn-ghost" onClick={() => { setName(p.name); setEditing(true); }}><Pencil />{tx("重命名")}</button>
-        <button type="button" className="btn btn-xs btn-ghost" onClick={() => void duplicateProject(p.id)}><Copy />{tx("复制")}</button>
-        <button type="button" className="btn btn-xs btn-ghost btn-danger" onClick={() => { if (confirm(tx("删除「{{name}}」？文档及其图片将被永久删除。", { name: p.name }))) void deleteProject(p.id); }}><Trash2 />{tx("删除")}</button>
+        <Button size="small" appearance="primary" icon={<Open20Regular />} onClick={() => void openProject(p.id)}>{tx("打开")}</Button>
+        <Menu positioning="below-end">
+          <MenuTrigger disableButtonEnhancement>
+            <Tooltip content={tx("更多操作")} relationship="label" positioning="below"><Button size="small" appearance="subtle" icon={<MoreHorizontal20Regular />} /></Tooltip>
+          </MenuTrigger>
+          <MenuPopover>
+            <MenuList>
+              <MenuItem icon={<Rename20Regular />} onClick={() => { setName(p.name); setEditing(true); }}>{tx("重命名")}</MenuItem>
+              <MenuItem icon={<Copy20Regular />} onClick={() => void duplicateProject(p.id)}>{tx("创建副本")}</MenuItem>
+              <MenuItem icon={<ArrowDownload20Regular />} onClick={() => void save()}>{tx("下载副本（.iota.json）")}</MenuItem>
+              <MenuDivider />
+              <MenuItem icon={<Delete20Regular />} onClick={() => onDelete(p)}>{tx("删除")}</MenuItem>
+            </MenuList>
+          </MenuPopover>
+        </Menu>
       </div>
     </div>
   );
 }
 
 export function ProjectsView() {
-  const { projects, doc, createProject, importProject, setView, loaded } = useStore();
+  const { projects, doc, createProject, importProject, deleteProject, setView, loaded } = useStore();
+  const canBack = loaded && projects.some((p) => p.id === doc.id);
+  // 新建对话框
+  const [tpl, setTpl] = useState<'blank' | 'sample' | null>(null);
   const [name, setName] = useState('');
   const [settings, setSettings] = useState<Settings>(() => defaultSettings());
-  const [template, setTemplate] = useState<'blank' | 'sample'>('blank');
   const [creating, setCreating] = useState(false);
   const creatingRef = useRef(false);
-  const canBack = loaded && projects.some((p) => p.id === doc.id);
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<'time' | 'name'>('time');
+  const [pendingDelete, setPendingDelete] = useState<ProjectMeta | null>(null);
 
-  /** 打开下载过的副本（.iota.json） */
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = q ? projects.filter((p) => p.name.toLowerCase().includes(q)) : [...projects];
+    return list.sort((a, b) => (sort === 'name' ? a.name.localeCompare(b.name, 'zh-CN') : b.updatedAt.localeCompare(a.updatedAt)));
+  }, [projects, query, sort]);
+
   const onOpenProject = () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -87,63 +117,108 @@ export function ProjectsView() {
     input.click();
   };
   const onCreate = async () => {
-    if (!loaded || creatingRef.current) return;
+    if (!loaded || creatingRef.current || !tpl) return;
     creatingRef.current = true;
     setCreating(true);
-    try { await createProject({ name, settings, template }); } finally { creatingRef.current = false; setCreating(false); }
+    try { await createProject({ name, settings, template: tpl }); setTpl(null); setName(''); } finally { creatingRef.current = false; setCreating(false); }
   };
 
   return (
     <div className="projects work-inner">
-      <div className="projects-head">
-        <div>
-          <h2>{tx("我的文档")}</h2>
-          <p className="lead">{tx("文档保存在当前浏览器中。跨设备使用或长期保存时，请下载副本。")}</p>
+      <div className="projects-inner">
+        <div className="projects-head">
+          <div>
+            <h2>{tx("我的文档")}</h2>
+            <p className="lead">{tx("文档保存在当前浏览器中。跨设备使用或长期保存时，请下载副本。")}</p>
+          </div>
+          <div className="projects-actions">
+            <Button icon={<FolderOpen20Regular />} disabled={!loaded} onClick={onOpenProject}>{tx("打开文档…")}</Button>
+            {canBack && <Button appearance="primary" icon={<ArrowLeft20Regular />} onClick={() => setView('editor')}>{tx("回到「{{name}}」", { name: doc.name })}</Button>}
+          </div>
         </div>
-        <div className="projects-actions">
-          <button type="button" className="btn" disabled={!loaded} onClick={onOpenProject}><FolderOpen />{tx("打开文档…")}</button>
-          {canBack && <button type="button" className="btn" onClick={() => setView('editor')}><ArrowLeft />{tx("回到「")}{doc.name}」</button>}
-        </div>
+
+        <section className="proj-section">
+          <h3 className="proj-list-title">{tx("新建")}</h3>
+          <div className="tpl-cards">
+            <button type="button" className="tpl-card" disabled={!loaded} onClick={() => setTpl('blank')}>
+              <span className="tpl-thumb"><Document20Regular /></span>
+              <b>{tx("空白文档")}</b><small>{tx("从零开始写")}</small>
+            </button>
+            <button type="button" className="tpl-card" disabled={!loaded} onClick={() => setTpl('sample')}>
+              <span className="tpl-thumb is-sample"><DocumentSparkle20Regular /></span>
+              <b>{tx("示例论文")}</b><small>{tx("含正文、图表和公式示例")}</small>
+            </button>
+          </div>
+        </section>
+
+        <section className="proj-section">
+          <div className="proj-list-head">
+            <h3 className="proj-list-title">{tx("最近使用")} <span className="muted">{projects.length}</span></h3>
+            <span className="spacer" />
+            <Input size="small" className="proj-search" contentBefore={<Search20Regular />} placeholder={tx("搜索文档")} value={query} onChange={(_, d) => setQuery(d.value)} />
+            <Menu checkedValues={{ sort: [sort] }} onCheckedValueChange={(_, d) => setSort(d.checkedItems[0] as 'time' | 'name')} positioning="below-end">
+              <MenuTrigger disableButtonEnhancement>
+                <Button size="small" appearance="subtle" icon={<ArrowSort20Regular />}>{sort === 'time' ? tx("按修改时间") : tx("按名称")}</Button>
+              </MenuTrigger>
+              <MenuPopover><MenuList>
+                <MenuItemRadio name="sort" value="time">{tx("按修改时间")}</MenuItemRadio>
+                <MenuItemRadio name="sort" value="name">{tx("按名称")}</MenuItemRadio>
+              </MenuList></MenuPopover>
+            </Menu>
+          </div>
+          <div className="proj-table">
+            {shown.map((p) => <ProjectRow key={p.id} p={p} active={p.id === doc.id && loaded} onDelete={setPendingDelete} />)}
+            {!projects.length && <div className="proj-empty muted">{tx("暂无文档。从上面的模板新建一个，或打开下载过的副本。")}</div>}
+            {projects.length > 0 && !shown.length && <div className="proj-empty muted">{tx("没有匹配「{{q}}」的文档。", { q: query.trim() })}</div>}
+          </div>
+        </section>
+
+        <footer className="projects-foot muted">
+          {tx("排版引擎是基于 Typst 修改的非官方版本。")}<a href={`${import.meta.env.BASE_URL}licenses.txt`} target="_blank" rel="noopener">{tx("开源许可与声明")}</a>
+        </footer>
       </div>
-      <div className="projects-grid">
-        <div className="card new-proj">
-          <h3><FilePlus2 />{tx("新建文档")}</h3>
-          <label className="field">
-            <span className="field-label">{tx("文档名称")}</span>
-            <input autoFocus value={name} placeholder={tx("例如：张三的硕士学位论文")} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') void onCreate(); }} />
-          </label>
-          <div className="new-axes">
-            {AXES.filter((a) => !a.applies || a.applies(settings)).map((a) => (
-              <label className="field" key={a.key}>
-                <span className="field-label">{a.label}</span>
-                <select value={settings[a.key] as string} onChange={(e) => setSettings({ ...settings, [a.key]: e.target.value })}>
-                  {a.choices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-                </select>
+
+      <Dialog open={tpl !== null} onOpenChange={(_, d) => { if (!d.open) setTpl(null); }}>
+        <DialogSurface className="new-proj-dialog">
+          <DialogBody>
+            <DialogTitle>{tpl === 'sample' ? tx("新建示例论文") : tx("新建空白文档")}</DialogTitle>
+            <DialogContent>
+              <label className="field">
+                <span className="field-label">{tx("文档名称")}</span>
+                <input autoFocus value={name} placeholder={tx("例如：张三的硕士学位论文")} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') void onCreate(); }} />
               </label>
-            ))}
-          </div>
-          <div className="field-label" style={{ marginTop: 4 }}>{tx("模板")}</div>
-          <div className="tpl-row">
-            <label className={`tpl ${template === 'blank' ? 'on' : ''}`}>
-              <input type="radio" name="tpl" checked={template === 'blank'} onChange={() => setTemplate('blank')} />
-              <FileText /><span><b>{tx("空白文档")}</b></span>
-            </label>
-            <label className={`tpl ${template === 'sample' ? 'on' : ''}`}>
-              <input type="radio" name="tpl" checked={template === 'sample'} onChange={() => setTemplate('sample')} />
-              <Sparkles /><span><b>{tx("示例论文")}</b><small>{tx("包含正文、图表和公式示例")}</small></span>
-            </label>
-          </div>
-          <button type="button" className="btn btn-primary" disabled={creating || !loaded} onClick={() => void onCreate()}><FilePlus2 />{creating ? tx("正在创建…") : tx("创建")}</button>
-        </div>
-        <div className="proj-list">
-          <h3 className="proj-list-title">{tx("最近使用")}{' '}<span className="muted">{projects.length}</span></h3>
-          {!projects.length && <div className="muted">{tx("暂无文档。")}</div>}
-          {projects.map((p) => <ProjectCard key={p.id} p={p} active={p.id === doc.id && loaded} />)}
-        </div>
-      </div>
-      <footer className="projects-foot muted">
-        {tx("排版引擎是基于 Typst 修改的非官方版本。")}<a href={`${import.meta.env.BASE_URL}licenses.txt`} target="_blank" rel="noopener">{tx("开源许可与声明")}</a>
-      </footer>
+              <div className="new-axes">
+                {AXES.filter((a) => !a.applies || a.applies(settings)).map((a) => (
+                  <label className="field" key={a.key}>
+                    <span className="field-label">{a.label}</span>
+                    <select value={settings[a.key] as string} onChange={(e) => setSettings({ ...settings, [a.key]: e.target.value })}>
+                      {a.choices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                    </select>
+                  </label>
+                ))}
+              </div>
+              <p className="field-hint muted">{tx("这些都能在「论文设置」里再改。")}</p>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="secondary" onClick={() => setTpl(null)}>{tx("取消")}</Button>
+              <Button appearance="primary" disabled={creating || !loaded} onClick={() => void onCreate()}>{creating ? tx("正在创建…") : tx("创建")}</Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+
+      <Dialog open={!!pendingDelete} onOpenChange={(_, d) => { if (!d.open) setPendingDelete(null); }}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>{tx("删除文档")}</DialogTitle>
+            <DialogContent>{tx("删除「{{name}}」？文档及其图片将被永久删除，且无法撤消。", { name: pendingDelete?.name ?? '' })}</DialogContent>
+            <DialogActions>
+              <Button appearance="secondary" onClick={() => setPendingDelete(null)}>{tx("取消")}</Button>
+              <Button appearance="primary" className="btn-danger-fill" onClick={() => { const p = pendingDelete; setPendingDelete(null); if (p) void deleteProject(p.id); }}>{tx("删除")}</Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </div>
   );
 }

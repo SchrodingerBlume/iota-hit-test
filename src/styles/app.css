@@ -617,51 +617,68 @@ html.theme-anim :not(svg, svg *) { transition: background-color 320ms var(--ease
   .work { padding-top: 8px; }
 }
 
-/* ── 项目管理 ────────────────────────────────────── */
-.projects { overflow: auto; padding: 24px 32px 60px; background: var(--bg); }
-.projects-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; max-width: 1200px; margin: 0 auto 6px; }
-.projects-head h2 { margin: 0 0 4px; font-size: 22px; }
-.projects-actions { display: flex; align-items: center; gap: 8px; flex: none; }
-.projects-grid { display: grid; grid-template-columns: minmax(320px, 420px) minmax(0, 1fr); gap: 20px; max-width: 1200px; margin: 0 auto; align-items: start; }
-.new-proj { position: sticky; top: 0; }
+/* ── 我的文档（照 Word 的「开始」页）───────────────────────── */
+.projects { overflow: auto; padding: 28px 32px 60px; background: var(--bg); }
+.projects-inner { max-width: 1040px; margin: 0 auto; }
+.projects-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+.projects-head h2 { margin: 0 0 4px; font-size: 24px; font-weight: 650; }
+.projects-head .lead { margin: 0; }
+.projects-actions { display: flex; align-items: center; gap: 8px; flex: none; padding-top: 4px; }
+.proj-section { margin-bottom: 28px; }
+.proj-list-title { margin: 0 0 10px; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent-ink); }
+/* 模板卡：一排，像 Word 的新建模板格 */
+.tpl-cards { display: flex; flex-wrap: wrap; gap: 14px; }
+.tpl-card { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 200px; padding: 14px 16px 12px; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--panel); color: var(--ink); text-align: left; cursor: pointer; box-shadow: var(--shadow-1); transition: border-color var(--fast) var(--ease), box-shadow var(--base) var(--ease), transform var(--fast) var(--ease); }
+.tpl-card:hover { border-color: var(--accent); box-shadow: var(--shadow-2); transform: translateY(-1px); }
+.tpl-card:disabled { opacity: 0.5; cursor: default; transform: none; }
+.tpl-card b { font-size: 14px; font-weight: 600; margin-top: 10px; }
+.tpl-card small { color: var(--muted); font-size: 12px; }
+.tpl-thumb { display: grid; place-items: center; width: 44px; height: 56px; border-radius: var(--r-s); background: var(--accent-soft); color: var(--accent-ink); }
+.tpl-thumb svg { width: 24px; height: 24px; }
+.tpl-thumb.is-sample { background: var(--orange-soft); color: var(--orange-ink); }
+/* 最近使用：一张表，行悬停出操作 */
+.proj-list-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.proj-list-head .proj-list-title { margin: 0; }
+.proj-list-head .spacer { flex: 1; }
+.proj-search { width: 220px; }
+.proj-table { border: 1px solid var(--line); border-radius: var(--r-m); background: var(--panel); overflow: hidden; box-shadow: var(--shadow-1); }
+.proj-row { display: grid; grid-template-columns: 36px minmax(0, 1fr) 110px auto; align-items: center; gap: 10px; padding: 10px 14px 10px 12px; border-top: 1px solid var(--line); transition: background-color var(--fast) var(--ease); }
+.proj-row:first-child { border-top: 0; }
+.proj-row:hover { background: var(--panel-2); }
+.proj-row.is-active { background: var(--accent-soft); }
+.proj-ico { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-s); background: var(--accent-soft); color: var(--accent-ink); }
+.proj-row.is-active .proj-ico { background: var(--panel); }
+.proj-main { min-width: 0; }
+.proj-name { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; text-align: left; border: 0; background: none; padding: 0; font-size: 15px; font-weight: 600; color: var(--ink); cursor: pointer; transition: color var(--fast) var(--ease); }
+.proj-name:hover { color: var(--accent-ink); }
+.proj-rename { width: 100%; max-width: 420px; padding: 3px 8px; font-size: 15px; }
+.proj-badge { font-size: 11px; padding: 1px 7px; border-radius: var(--r-pill); background: var(--orange-soft); color: var(--orange-ink); font-weight: 600; }
+.proj-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 4px; }
+.tag { font-size: 11px; padding: 1px 7px; border-radius: var(--r-s); background: var(--accent-soft); color: var(--accent-ink); }
+.proj-row.is-active .tag { background: var(--panel); }
+.proj-size { font-size: 11px; margin-left: 2px; }
+.proj-time { font-size: 12px; white-space: nowrap; }
+.proj-actions { display: flex; align-items: center; gap: 4px; opacity: 0; transition: opacity var(--fast) var(--ease); }
+.proj-row:hover .proj-actions, .proj-row:focus-within .proj-actions, .proj-row.is-active .proj-actions { opacity: 1; }
+.proj-empty { padding: 28px 16px; text-align: center; font-size: 13px; }
+.new-proj-dialog { max-width: 560px; }
+.new-proj-dialog .field { margin-bottom: 10px; }
 .new-axes { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
 .new-axes select { padding: 6px 22px 6px 9px; border: 1px solid var(--line-2); border-radius: var(--r-s); background-color: var(--panel); appearance: none; color: var(--ink); }
-.tpl-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
-.tpl { display: flex; gap: 8px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--r-s); cursor: pointer; transition: border-color var(--fast) var(--ease), background-color var(--fast) var(--ease); }
-.tpl input { display: none; }
-.tpl svg { width: 18px; height: 18px; color: var(--orange); flex: none; }
-.tpl span { display: flex; flex-direction: column; line-height: 1.3; }
-.tpl small { color: var(--muted); font-size: 11px; }
-.tpl:hover { border-color: var(--muted); }
-.tpl.on { border-color: var(--accent); background: var(--accent-soft); }
-.proj-list-title { margin: 0 0 10px; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent-ink); }
-.proj-list { display: grid; gap: 10px; min-width: 0; }
-.proj { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); padding: 14px 16px; box-shadow: var(--shadow-1); transition: transform var(--fast) var(--ease), box-shadow var(--fast) var(--ease), border-color var(--fast) var(--ease); }
-.proj:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); }
-.proj.is-active { border-color: var(--accent); }
-.proj-head { display: flex; align-items: center; gap: 8px; }
-.proj-name { flex: 1; text-align: left; border: 0; background: none; font-size: 16px; font-weight: 650; color: var(--ink); padding: 0; cursor: pointer; transition: color var(--fast) var(--ease); }
-.proj-name:hover { color: var(--accent-ink); }
-.proj-badge { font-size: 11px; padding: 1px 7px; border-radius: var(--r-pill); background: var(--orange-soft); color: var(--orange-ink); font-weight: 600; }
-.proj-tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 6px; }
-.tag { font-size: 11px; padding: 1px 7px; border-radius: var(--r-s); background: var(--accent-soft); color: var(--accent-ink); }
-.proj-meta { display: flex; align-items: center; gap: 5px; font-size: 12px; }
-.proj-meta svg { width: 12px; height: 12px; }
-.proj-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
-.proj-btn { max-width: 260px; }
-.proj-btn > span, .proj-btn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.proj-btn.on { background: var(--accent-soft); color: var(--accent-ink); }
+.btn-danger-fill { background: var(--danger) !important; border-color: var(--danger) !important; color: #fff !important; }
 @media (max-width: 900px) {
   .projects { padding-inline: 24px; }
-  .projects-grid { grid-template-columns: 1fr; }
-  .new-proj { position: static; }
+  .proj-row { grid-template-columns: 36px minmax(0, 1fr) auto; }
+  .proj-time { display: none; }
+  .proj-actions { opacity: 1; }
 }
 @media (max-width: 560px) {
   .projects { padding: 20px 14px 48px; }
   .projects-head { display: block; margin-bottom: 14px; }
   .projects-actions { margin-top: 10px; flex-wrap: wrap; }
-  .new-axes, .tpl-row { grid-template-columns: 1fr; }
-  .proj-actions { gap: 4px; }
+  .new-axes { grid-template-columns: 1fr; }
+  .tpl-card { width: 100%; }
+  .proj-search { width: 140px; }
 }
 
 /* ── 文献录入 ────────────────────────────────────── */
