@@ -1613,7 +1613,7 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .ag-list { flex: 1; min-height: 0; overflow: auto; padding: 12px 12px 8px; display: flex; flex-direction: column; gap: 10px; background: var(--preview-bg); }
 .ag-empty { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 6px 2px; line-height: 1.5; }
 .ag-empty p { margin: 0 0 4px; }
-.ag-quick { border: 1px solid var(--line-2); background: var(--panel); color: var(--ink-2); border-radius: var(--r-pill); padding: 4px 10px; font-size: 12px; text-align: left; cursor: pointer; transition: background-color var(--fast) var(--ease), border-color var(--fast) var(--ease); }
+.ag-quick { border: 1px solid var(--line-2); background: var(--panel); color: var(--ink-2); border-radius: 14px; padding: 4px 10px; font-size: 12px; text-align: left; cursor: pointer; max-width: 100%; white-space: normal; line-height: 1.4; transition: background-color var(--fast) var(--ease), border-color var(--fast) var(--ease); }
 .ag-quick:hover { background: var(--accent-soft); border-color: var(--accent-soft-2); color: var(--accent-ink); }
 .ag-msg { display: flex; flex-direction: column; gap: 6px; max-width: 100%; }
 .ag-msg.is-user { align-items: flex-end; }
@@ -1730,3 +1730,5 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .ag-page .field-hint { margin: 0; line-height: 1.5; }
 .ag-area textarea { min-height: 120px; font-size: 13px; line-height: 1.5; }
 @media (max-width: 700px) { .ag-models { grid-template-columns: 1fr; } .ag-form > label { text-align: left; } }
+/* 手机上顶栏的 Agent 钮只剩图标（App 里 phone 时不传文字）：内边距两边一样，圆一点 */
+@media (max-width: 600px) { .agent-btn { padding: 2px 5px !important; } }
