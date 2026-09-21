@@ -2,8 +2,9 @@
 // 结构照 iota-hit/template/example.typ：前置 → 主体 → 附录 → 后置。
 import { axisSuffix, headerSplit } from './hfTerms';
 import type { ThesisDoc, Settings, Info, Lang, StyleEntry, OpenrightKey, LayoutDict, LocalInfoPage, TriBool, HFRecord, HFLevel } from '../model/types';
+import { create } from 'zustand';
 import { INFO_FIELDS, localInfoFields, type InfoFieldDef } from '../model/info';
-import { serializeDoc, escapeText, collectImages, collectRefTargets, collectCiteKeys, indexPositions, type PMNode } from './pmToTypst';
+import { serializeDoc, escapeText, collectImages, collectRefTargets, collectCiteKeys, indexPositions, type PMNode, type SerializeOptions } from './pmToTypst';
 import { computeNumbering } from './numbering';
 import type { RichDoc } from '../model/types';
 import { generateBibtex } from '../bib/bibtex';
@@ -32,6 +33,19 @@ export interface Project {
   images: string[];
   /** main.typ 里每段文字对应编辑器里的哪儿（预览区直接编辑用） */
   segments: Segment[];
+  /** 序列化时发现的问题（引用目标不存在这类）：不让 Typst 报错停排，印 ?? 之外在预览的诊断里列出来 */
+  warnings?: string[];
+}
+/** 最近一次序列化的警告，预览区的诊断列表跟这里合 */
+export const useSerializeWarnings = create<{ warnings: string[] }>(() => ({ warnings: [] }));
+/** 登记过的文献键与缩略语键：引到没有的印 ??，warn 记一笔（去重） */
+function targets(doc: ThesisDoc, warnings: string[]) {
+  const seen = new Set<string>();
+  return {
+    knownCites: new Set([...(doc.references ?? []), ...(doc.achievementEntries ?? [])].map((e) => e.key.trim()).filter(Boolean)),
+    knownAbbrs: new Set((doc.abbreviations ?? []).map((a) => a.key.trim()).filter(Boolean)),
+    warn: (m: string) => { if (!seen.has(m)) { seen.add(m); warnings.push(m); } },
+  };
 }
 
 const content = (s: string) => `[${escapeText(s.trim())}]`;
@@ -338,7 +352,7 @@ function nomenclature(doc: ThesisDoc, openright = ''): string {
   return parts.join('\n\n');
 }
 
-function defense(doc: ThesisDoc, knownLabels: Set<string>, openright = ''): string {
+function defense(doc: ThesisDoc, knownLabels: Set<string>, openright = '', extra: Partial<SerializeOptions> = {}): string {
   if (!resolvePage(doc, 'defense').value) return '';
   const d = doc.defense;
   const person = (p: { name: string; title: string; affiliation: string; discipline: string }) =>
@@ -347,7 +361,7 @@ function defense(doc: ThesisDoc, knownLabels: Set<string>, openright = ''): stri
     const kept = ps.filter((p) => p.name.trim() || p.title.trim() || p.affiliation.trim());
     return kept.length ? `(\n    ${kept.map(person).join(',\n    ')},\n  )` : '()';
   };
-  const resolution = serializeDoc(d.resolution, { headings: false, knownLabels });
+  const resolution = serializeDoc(d.resolution, { headings: false, knownLabels, ...extra });
   return `#defense(
 ${openright ? `  ${openright},\n` : ''}  reviewers: ${list(d.reviewers)},
   chair: ${list(d.chair)},
@@ -447,7 +461,7 @@ export function serializePara(doc: ThesisDoc, index: number, live?: { node: PMNo
   const one: RichDoc = { type: 'doc', content: [live ? live.node as any : nodes[index]] };
   const posOf = live ? indexPositions(one as any, live.pos) : indexPositions(doc.body as any);
   parts.push(chapterWrap(chapter ? s.layout?.chapters?.[String(chapter)] : undefined, chapter ? s.localStyles?.chapters?.[String(chapter)] : undefined,
-    serializeDoc(one as any, { headings: false, headingBase: 1, knownLabels: new Set(), refText: new Map(), preview: true, map: { key: 'body', posOf } })));
+    serializeDoc(one as any, { headings: false, headingBase: 1, knownLabels: new Set(), refText: new Map(), preview: true, map: { key: 'body', posOf }, ...targets(doc, []) })));
   const { text: main, segments } = stripMarks(parts.join('\n\n') + '\n');
   return { main, files: {}, images: [], segments };
 }
@@ -474,6 +488,8 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   const parts: string[] = [];
   // 正文与附录里所有能被引用的标签（取消编号的公式不在内）
   const knownLabels = new Set<string>([...collectRefTargets(doc.body), ...collectRefTargets(doc.appendix)].map((r) => r.label));
+  const warnings: string[] = [];
+  const known = { knownLabels, ...targets(doc, warnings) };
 
   parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n${CITE_IMPORT}\n// LaTeX 公式走 mitex 转成 Typst（包已随站内打包）\n#import "@preview/mitex:0.2.7": mitex, mi`);
   parts.push(HIGHLIGHT_RULE, TABLE_RULE);
@@ -501,7 +517,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
     parts.push(`#${k}(${[xiaoer !== 'auto' ? `title-en-xiaoer: ${tri(xiaoer)}` : '', ...localInfoArgs(doc, k), stockLayout(k)].filter(Boolean).join(', ')})`);
   }
 
-  const rich = (key: RichKey, opts: { headings: boolean; headingBase?: number }) => serializeDoc(doc[key], { ...opts, knownLabels, preview, map: { key, posOf: indexPositions(doc[key] as any) } });
+  const rich = (key: RichKey, opts: { headings: boolean; headingBase?: number }) => serializeDoc(doc[key], { ...opts, ...known, preview, map: { key, posOf: indexPositions(doc[key] as any) } });
   const abstractZh = rich('abstractZh', { headings: false }).trim();
   const abstractEn = rich('abstractEn', { headings: false }).trim();
   if (resolvePage(doc, 'abstract').value && (abstractZh || abstractEn)) {
@@ -528,7 +544,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
 
   // ── 主体 ──
   parts.push(withArgs('mainmatter', or('mainmatter'), layoutArg(levelLayout(s, 'mainmatter'))));
-  const body = bodyByChapters(doc, s, (r) => serializeDoc({ type: 'doc', content: (doc.body.content ?? []).slice(r.from, r.to) } as any, { headings: true, headingBase: 1, knownLabels, preview, map: { key: 'body', posOf: indexPositions(doc.body as any) } }));
+  const body = bodyByChapters(doc, s, (r) => serializeDoc({ type: 'doc', content: (doc.body.content ?? []).slice(r.from, r.to) } as any, { headings: true, headingBase: 1, ...known, preview, map: { key: 'body', posOf: indexPositions(doc.body as any) } }));
   if (body) parts.push(body);
 
   const conclusion = rich('conclusion', { headings: false });
@@ -553,7 +569,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
     parts.push(`#achievements(${orLead('achievements')}${pageLayout('achievements') ? `${pageLayout('achievements')}, ` : ''}read("achievements.bib"))`);
     }
 
-  const def = defense(doc, knownLabels, or('defense'));
+  const def = defense(doc, knownLabels, or('defense'), known);
   if (def) parts.push(def);
 
   if (resolvePage(doc, 'declarations').value) {
@@ -576,7 +592,8 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   }
 
   const { text: main, segments } = stripMarks(parts.join('\n\n') + '\n');
-  return { main, files, images: [...images], segments };
+  useSerializeWarnings.setState({ warnings });
+  return { main, files, images: [...images], segments, warnings };
 }
 
 /** 正文按章序列化；工程 JSON 里给了某章的版面就交给模板的 new-layout / restore-layout（网格、页边距、页眉页脚都收；
@@ -608,6 +625,8 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   const nodes = (doc.body.content ?? []).slice(r.from, r.to);
   const chapterDoc: RichDoc = { type: 'doc', content: nodes };
   const knownLabels = new Set<string>(collectRefTargets(chapterDoc).map((x) => x.label));
+  const warnings: string[] = [];
+  const known = { knownLabels, ...targets(doc, warnings) };
   const refText = new Map<string, string>();
   for (const [label, info] of computeNumbering(doc.body as any, s, 'body')) if (!knownLabels.has(label)) refText.set(label, info.ref);
   for (const [label, info] of computeNumbering(doc.appendix as any, s, 'appendix')) if (!knownLabels.has(label)) refText.set(label, info.ref);
@@ -628,7 +647,7 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   parts.push(mm.length ? `#show: mainmatter.with(${mm.join(', ')})` : '#show: mainmatter');
   // 章号从上一章数起；首页页码钉在上次整编的位置
   parts.push(`#counter(heading).update(${Math.max(0, focus.chapter - 1)})${focus.page && focus.page > 1 ? `\n#counter(page).update(${focus.page})` : ''}`);
-  const body = chapterWrap(s.layout?.chapters?.[String(focus.chapter)], s.localStyles?.chapters?.[String(focus.chapter)], serializeDoc(chapterDoc as any, { headings: true, headingBase: 1, knownLabels, refText, preview: true, map: { key: 'body', posOf: indexPositions(doc.body as any) } }));
+  const body = chapterWrap(s.layout?.chapters?.[String(focus.chapter)], s.localStyles?.chapters?.[String(focus.chapter)], serializeDoc(chapterDoc as any, { headings: true, headingBase: 1, ...known, refText, preview: true, map: { key: 'body', posOf: indexPositions(doc.body as any) } }));
   if (body) parts.push(body);
   const cited = collectCiteKeys(chapterDoc as any);
   const refs = generateBibtex((doc.references ?? []).filter((e) => cited.has(e.key.trim())));
@@ -636,5 +655,5 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   // 条目表得在（引文要能解析），但那几页不是这一章的：纸张改成一个认得出的宽度，渲染端按宽度剔掉
   if (refs.trim()) { files['refs.bib'] = refs; parts.push(`#set page(width: ${FOCUS_TAIL_WIDTH}pt)\n#bibliography(read("focus-refs.bib"), full: true)`); }
   const { text: main, segments } = stripMarks(parts.join('\n\n') + '\n');
-  return { main, files, images: [...collectImages(chapterDoc as any)], segments };
+  return { main, files, images: [...collectImages(chapterDoc as any)], segments, warnings };
 }

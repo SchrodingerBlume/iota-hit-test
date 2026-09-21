@@ -5,6 +5,7 @@ import { restoreLineShift } from './previewShift';
 import { flipBefore, flipAfter } from './flip';
 import { usePreviewZoom } from './previewZoom';
 import { humanize, locateDiagnostic, type DiagTarget } from './diagnostics';
+import { useSerializeWarnings } from '../typst/serialize';
 import { getEditor } from '../editor/registry';
 import { useStore, type RichKey } from '../model/store';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
@@ -332,8 +333,10 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
 
   const errors = diagnostics.filter((d) => d.severity === 'error');
   const warnings = diagnostics.filter((d) => d.severity !== 'error');
+  // 序列化时发现的（引用目标不存在、文献没登记）：Typst 那边印的是 ??，警告在这里列
+  const serWarnings = useSerializeWarnings((s) => s.warnings);
   // 警告也给（标签没挂上这类要用户处理）；只滤掉本机字体档缺字体那几条噪音
-  const shown = [...errors, ...warnings.filter((w) => !/unknown font family: (kaiti_gb2312|lisu|stxinwei|simsun|simhei|kaiti|fangsong)/i.test(w.message))];
+  const shown = [...errors, ...serWarnings.map((message) => ({ severity: 'warning', message, where: '' })), ...warnings.filter((w) => !/unknown font family: (kaiti_gb2312|lisu|stxinwei|simsun|simhei|kaiti|fangsong)/i.test(w.message))];
 
   return (
     <div className={`preview ${compiling ? 'is-compiling' : ''}`} data-bg={bg}>

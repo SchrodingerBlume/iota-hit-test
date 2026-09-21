@@ -44,6 +44,10 @@ export interface SerializeOptions {
   knownLabels?: Set<string>;
   /** 只编当前章时，章外的引用不在这份文档里：按上次算好的编号印成字面（图 2-1） */
   refText?: Map<string, string>;
+  /** 登记过的文献键、缩略语键：引到没有的不发 #cite / #ref（Typst 会当错误），印红色 ?? 并 warn 一声 */
+  knownCites?: Set<string>;
+  knownAbbrs?: Set<string>;
+  warn?: (message: string) => void;
   /** 打源码映射记号：这份富文本的 key，以及每个节点的 ProseMirror 位置 */
   map?: { key: RichKey; posOf: WeakMap<PMNode, number> };
   /**
@@ -95,6 +99,9 @@ function tag(opts: SerializeOptions, n: PMNode, kind: 'node' | 'attr', inner: st
 
 /** 行内任何位置都要转义的字符。斜线也转（// 与 /* 会开注释），一个字对一个转义，映射好算 */
 const INLINE_SPECIAL = /[\\*_`#$@<>\[\]~/]/g;
+/** 引用目标不存在：不像原生 Typst 那样报错停排，印红色 ?? 提醒，再记一条警告 */
+export const DANGLING = '#text(red)[??]';
+const dangling = (opts: SerializeOptions, what: string): string => { opts.warn?.(what); return DANGLING; };
 
 export function escapeText(s: string): string {
   // 控制字符和源码映射使用的私用字符不应进入生成的 Typst；普通换行由编辑器节点表示。
@@ -262,7 +269,7 @@ export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {
         if (!keys.length) break;
         const form = ['prose', 'author', 'year'].includes(String(n.attrs?.form ?? '')) ? `, form: ${JSON.stringify(n.attrs!.form)}` : '';
         const sup = String(n.attrs?.supplement ?? '').trim();
-        atom(tag(opts, n, 'node', keys.map((k, i) => `#cite(<${k}>${form}${sup && i === 0 ? `, supplement: [${escapeText(sup)}]` : ''})`).join('')));
+        atom(tag(opts, n, 'node', keys.map((k, i) => (opts.knownCites && !opts.knownCites.has(k) ? dangling(opts, `文献 ${k} 没有登记`) : `#cite(<${k}>${form}${sup && i === 0 ? `, supplement: [${escapeText(sup)}]` : ''})`)).join('')));
         break;
       }
       case 'ref': {
@@ -270,10 +277,10 @@ export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {
         if (!t) break;
         const outside = opts.knownLabels && !opts.knownLabels.has(t) ? opts.refText?.get(t) : undefined;
         if (outside !== undefined) { atom(tag(opts, n, 'node', `#[${escapeText(outside)}]`)); break; }
-        atom(tag(opts, n, 'node', opts.knownLabels && !opts.knownLabels.has(t) ? '#text(red)[??]' : `#ref(<${t}>)`));
+        atom(tag(opts, n, 'node', opts.knownLabels && !opts.knownLabels.has(t) ? dangling(opts, `引用目标 ${t} 不存在`) : `#ref(<${t}>)`));
         break;
       }
-      case 'abbr': { const key = safeLabel(n.attrs?.key); if (key) atom(tag(opts, n, 'node', `#ref(<${key}>)`)); break; }
+      case 'abbr': { const key = safeLabel(n.attrs?.key); if (key) atom(tag(opts, n, 'node', opts.knownAbbrs && !opts.knownAbbrs.has(key) ? dangling(opts, `缩略语 ${key} 没有登记`) : `#ref(<${key}>)`)); break; }
       case 'footnote': {
         const text = String(n.attrs?.text ?? '');
         atom(tag(opts, n, 'node', `#footnote[${tag(opts, n, 'attr', escapeText(text), { attr: 'text', raw: text })}]`));
@@ -303,16 +310,16 @@ export function captionCiteKeys(s: string): string[] {
   return [...s.matchAll(CAPTION_CITE)].flatMap((m) => m[1].split(/[,，;；\s]+/).map(safeLabel).filter(Boolean));
 }
 /** 题注文字 → Typst：转义之外把 [@key] 换成 #cite */
-export function captionText(raw: string): string {
-  return raw.split(CAPTION_CITE).map((piece, i) => (i % 2 ? piece.split(/[,，;；\s]+/).map(safeLabel).filter(Boolean).map((k) => `#cite(<${k}>)`).join('') : escapeText(piece))).join('');
+export function captionText(raw: string, opts: SerializeOptions = {}): string {
+  return raw.split(CAPTION_CITE).map((piece, i) => (i % 2 ? piece.split(/[,，;；\s]+/).map(safeLabel).filter(Boolean).map((k) => (opts.knownCites && !opts.knownCites.has(k) ? dangling(opts, `文献 ${k} 没有登记`) : `#cite(<${k}>)`)).join('') : escapeText(piece))).join('');
 }
 
 function caption(n: PMNode, opts: SerializeOptions): string {
   const attrs = n.attrs ?? {};
   const zhRaw = String(attrs.caption ?? '').trim();
   const enRaw = String(attrs.captionEn ?? '').trim();
-  const zh = tag(opts, n, 'attr', captionText(zhRaw), { attr: 'caption', raw: zhRaw });
-  const en = tag(opts, n, 'attr', captionText(enRaw), { attr: 'captionEn', raw: enRaw });
+  const zh = tag(opts, n, 'attr', captionText(zhRaw, opts), { attr: 'caption', raw: zhRaw });
+  const en = tag(opts, n, 'attr', captionText(enRaw, opts), { attr: 'captionEn', raw: enRaw });
   return enRaw ? `${zh}#en[${en}]` : zh;
 }
 
@@ -419,7 +426,7 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
       // 一张合成图（(a)(b) 画在图里）配连排分图题：分图条目都没有图、母图有图 → 单图 + 图题里的 #subs
       if (subs.length && n.attrs?.image && !subs.some((s) => s.image)) {
         const letter = (i: number) => 'abcdefghijklmnopqrstuvwxyz'[i] ?? String(i + 1);
-        const subsArg = `#subs(${subs.map((s, i) => `[${(s.caption ?? '').trim() ? captionText(s.caption ?? '') : '#box[]'}${label ? ` <${label}-${letter(i)}>` : ''}]`).join(', ')},)`;
+        const subsArg = `#subs(${subs.map((s, i) => `[${(s.caption ?? '').trim() ? captionText(s.caption ?? '', opts) : '#box[]'}${label ? ` <${label}-${letter(i)}>` : ''}]`).join(', ')},)`;
         const width = lengthTypst(n.attrs?.width ?? 8, 'cm', '8cm');
         return floatWrap(n, 'image', tag(opts, n, 'node', `#figure(\n  image(${JSON.stringify(`${opts.imageDir ?? 'images'}/${n.attrs.image}`)}, width: ${width}),\n  caption: [${caption(n, opts)}${subsArg}],${placementArg(n)}\n)`) + (label ? ` <${label}>` : ''));
       }
@@ -619,12 +626,27 @@ export interface RefTarget {
   index: number;
 }
 
+/** 这个节点序列化时真会带着标签排出来吗：空图、空表、还没写公式、没内容的定理都发不出去，标签也就不存在 */
+export function emitsLabel(n: PMNode): boolean {
+  switch (n.type) {
+    case 'figure': { const subs = parseSubs(n.attrs?.subs); return !!n.attrs?.image || subs.some((s) => s.image); }
+    case 'tableFigure': return !!(n.content ?? []).find((c) => c.type === 'table' && (c.content ?? []).some((r) => r.type === 'tableRow'));
+    case 'equation': { const src = String(n.attrs?.src ?? '').trim(); return n.attrs?.numbered !== false && !!src && mathReady(src); }
+    case 'codeFigure': return (n.content ?? []).some((c) => c.type === 'codeBlock');
+    case 'algorithm': return parseLines(n.attrs?.lines).some((l) => l.text.trim());
+    case 'theorem': return theoremKind(n.attrs?.kind) !== 'proof' && (n.content ?? []).some((c) => c.type !== 'paragraph' || (c.content ?? []).some((t) => (t.text ?? '').trim() || t.type !== 'text'));
+    case 'heading': return true;
+    default: return false;
+  }
+}
+
 export function collectRefTargets(doc: PMNode | undefined | null): RefTarget[] {
   const out: RefTarget[] = [];
   const counters = { fig: 0, tab: 0, eq: 0, sec: 0, alg: 0, lst: 0, thm: 0 };
   const walk = (n: PMNode) => {
     let kind: RefTarget['kind'] | null = null;
     let title = '';
+    if (!emitsLabel(n)) { for (const c of n.content ?? []) walk(c); return; }
     if (n.type === 'figure') {
       kind = 'fig'; title = n.attrs?.caption ?? '';
       // 分图各自也能引（fig:x-a）：模板印成「图 1-1(a)」
@@ -632,11 +654,11 @@ export function collectRefTargets(doc: PMNode | undefined | null): RefTarget[] {
       if (base) parseSubs(n.attrs?.subs).forEach((s, i) => { counters.fig++; out.push({ label: `${base}-${'abcdefghijklmnopqrstuvwxyz'[i] ?? i + 1}`, kind: 'fig', title: `(${'abcdefghijklmnopqrstuvwxyz'[i] ?? i + 1}) ${s.caption ?? ''}`, index: counters.fig }); });
     }
     else if (n.type === 'tableFigure') { kind = 'tab'; title = n.attrs?.caption ?? ''; }
-    else if (n.type === 'equation' && n.attrs?.numbered !== false) { kind = 'eq'; title = n.attrs?.src ?? ''; }
+    else if (n.type === 'equation') { kind = 'eq'; title = n.attrs?.src ?? ''; }
     else if (n.type === 'heading') { kind = 'sec'; title = (n.content ?? []).map((t) => t.text ?? '').join(''); }
     else if (n.type === 'algorithm') { kind = 'alg'; title = n.attrs?.caption ?? ''; }
     else if (n.type === 'codeFigure') { kind = 'lst'; title = n.attrs?.caption ?? ''; }
-    else if (n.type === 'theorem' && theoremKind(n.attrs?.kind) !== 'proof') { kind = 'thm'; title = (n.content ?? []).map((c) => (c.content ?? []).map((t) => t.text ?? '').join('')).join(' ').trim().slice(0, 60); }
+    else if (n.type === 'theorem') { kind = 'thm'; title = (n.content ?? []).map((c) => (c.content ?? []).map((t) => t.text ?? '').join('')).join(' ').trim().slice(0, 60); }
     if (kind) {
       const label = labelOf(n.attrs, kind);
       if (label) { counters[kind]++; out.push({ label, kind, title, index: counters[kind] }); }

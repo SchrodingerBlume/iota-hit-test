@@ -9,7 +9,6 @@ import { MathEditor, forPreview } from '../math/MathEditor';
 import { MathPreview } from '../math/MathPreview';
 import { t } from '../../i18n';
 import { MirrorInput, MirrorTextarea } from '../mirror';
-import { t as tx } from '../../i18n';
 
 const inlineAtom = (name: string, attrs: Record<string, { default: any }>, View: (p: NodeViewProps) => ReactElement) =>
   Node.create({
@@ -66,7 +65,9 @@ function CiteView({ node, updateAttributes, selected, deleteNode, editor, getPos
   const list = env.bibKeys.filter((b) => !q || b.key.toLowerCase().includes(q.toLowerCase()) || b.title.toLowerCase().includes(q.toLowerCase()));
   const form = String(node.attrs.form ?? 'auto');
   const supplement = String(node.attrs.supplement ?? '').trim();
-  const chip = keys.length ? `[${keys.join(', ')}${supplement ? `: ${supplement}` : ''}]${form === 'prose' ? tx("·叙") : form === 'author' ? tx("·著") : form === 'year' ? tx("·年") : ''}` : '';
+  const missing = keys.filter((k) => !env.bibKeys.some((b) => b.key === k));
+  const chipText = keys.length ? `[${keys.join(', ')}${supplement ? `: ${supplement}` : ''}]${form === 'prose' ? t("·叙") : form === 'author' ? t("·著") : form === 'year' ? t("·年") : ''}` : '';
+  const chip = chipText ? (missing.length ? <span className="ref-dangling" title={t("文献 {{keys}} 没有登记，排出来是 ??", { keys: missing.join(', ') })}>{chipText}</span> : chipText) : '';
   return (
     <InlineChip onSelect={() => { const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }} kind="cite" openNonce={open.nonce} text={chip || <em>{t("引用")}</em>} title={t("参考文献引用")} selected={selected} editable={editor.isEditable} autoOpen={!keys.length} onDelete={deleteNode}>
       {() => (
