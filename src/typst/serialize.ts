@@ -14,10 +14,13 @@ import type { RichKey } from '../model/store';
 
 export const IOTA_HIT_VERSION = '0.1.0';
 
+// 数学字体三档统一用随站分发的 TeX Gyre Termes Math（模板的 windows / macos 档写的是 Cambria Math / STIX Two Math，
+// 那两副要本机有）；要换别的，用户自己读本机数学字体再选（settings.mathFont）
+export const MATH_FONT = 'TeX Gyre Termes Math';
 export const FONTSET_ARG: Record<string, string> = {
   webapp: 'fontset: presets.webapp + (kaishu: "FandolKai")',
-  windows: 'fontset: presets.windows',
-  macos: 'fontset: presets.macos',
+  windows: `fontset: presets.windows + (math: ${JSON.stringify(MATH_FONT)})`,
+  macos: `fontset: presets.macos + (math: ${JSON.stringify(MATH_FONT)})`,
 };
 
 export interface Project {

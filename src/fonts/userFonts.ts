@@ -5,6 +5,7 @@
 // 主线程只留元数据（名字、大小、来路），字节一律住在 worker 里；本机那一套动辄三四百 MB。
 import { create } from 'zustand';
 import { updateUserFonts, useCompileState } from '../compiler/client';
+import { MATH_FONT } from '../typst/serialize';
 import { saveFontFile, loadFontFile, deleteFontFile, listFontFiles } from '../model/persist';
 import type { Fontset } from '../model/types';
 import { t } from '../i18n';
@@ -22,7 +23,7 @@ export const PRESET_ROLES: Record<Exclude<Fontset, 'webapp'>, { role: string; la
     { role: 'serif', label: t("西文衬线"), family: 'Times New Roman' },
     { role: 'sans', label: t("西文无衬线"), family: 'Arial' },
     { role: 'mono', label: t("等宽"), family: 'Consolas' },
-    { role: 'math', label: t("数学"), family: 'Cambria Math' },
+    { role: 'math', label: t("数学"), family: MATH_FONT },
   ],
   macos: [
     { role: 'songti', label: t("宋体"), family: 'Songti SC' },
@@ -35,7 +36,7 @@ export const PRESET_ROLES: Record<Exclude<Fontset, 'webapp'>, { role: string; la
     { role: 'serif', label: t("西文衬线"), family: 'Times New Roman' },
     { role: 'sans', label: t("西文无衬线"), family: 'Arial' },
     { role: 'mono', label: t("等宽"), family: 'Menlo' },
-    { role: 'math', label: t("数学"), family: 'STIX Two Math' },
+    { role: 'math', label: t("数学"), family: MATH_FONT },
   ],
 };
 

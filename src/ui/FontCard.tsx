@@ -3,19 +3,20 @@
 import { useStore } from '../model/store';
 import { useCompileState } from '../compiler/client';
 import { useFontState, roleAvailability } from '../fonts/userFonts';
+import { MATH_FONT } from '../typst/serialize';
 import type { Fontset } from '../model/types';
 import { t } from '../i18n';
 
 const CHOICES: { value: Fontset; label: string; hint: string }[] = [
   { value: 'webapp', label: t("内置字体"), hint: t("Noto CJK、FandolKai、TeX Gyre，无需另行安装") },
   { value: 'windows', label: t("Windows 字体"), hint: t("宋体、黑体、楷体、Times New Roman 等，需加载本机字体") },
-  { value: 'macos', label: t("macOS 字体"), hint: 'Songti / Heiti / Kaiti SC + STFangsong + Times New Roman / Arial / Menlo / STIX Two Math' },
+  { value: 'macos', label: t("macOS 字体"), hint: 'Songti / Heiti / Kaiti SC + STFangsong + Times New Roman / Arial / Menlo' },
 ];
 
 const fmtMB = (n: number) => (n / 1024 / 1024).toFixed(1);
 
-/** 各档默认的数学字体（抄 presets） */
-const PRESET_MATH: Record<Fontset, string> = { webapp: 'TeX Gyre Termes Math', windows: 'Cambria Math', macos: 'STIX Two Math' };
+/** 三档默认的数学字体都是随站分发的 Termes Math；要换别的先读本机数学字体再选 */
+const PRESET_MATH: Record<Fontset, string> = { webapp: MATH_FONT, windows: MATH_FONT, macos: MATH_FONT };
 
 export function FontCard() {
   const fontset = useStore((s) => s.doc.settings.fontset ?? 'webapp');

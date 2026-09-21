@@ -69,8 +69,10 @@ Markdown 模式支持 GFM 标题、强调、列表、表格、代码块和链接
 “论文设置 → 字体方案”提供以下选项：
 
 - 内置字体：Noto CJK、FandolKai、TeX Gyre 和 DejaVu Sans Mono。
-- Windows 字体：宋体、黑体、楷体、仿宋、Times New Roman、Arial、Consolas 和 Cambria Math 等。
-- macOS 字体：宋体-简、黑体-简、楷体-简、华文仿宋、Menlo 和 STIX Two Math 等。
+- Windows 字体：宋体、黑体、楷体、仿宋、Times New Roman、Arial、Consolas 等。
+- macOS 字体：宋体-简、黑体-简、楷体-简、华文仿宋、Menlo 等。
+
+三种方案的数学字体默认都是随站分发的 TeX Gyre Termes Math；要换 Cambria Math、STIX Two Math 这类本机字体，先在字体设置里读取本机数学字体，再从列表中选择。
 
 Chromium 浏览器可通过 Local Font Access API 读取系统字体；其他浏览器可选择 `.otf`、`.ttf` 或 `.ttc` 文件。字体数据只交给浏览器内的编译线程，并保存在当前浏览器中。
 
