@@ -123,8 +123,10 @@ function block(n: Node): string {
     case 'figure': {
       const subs = parseJsonList(a.subs);
       if (subs.length) {
-        const inner = subs.map((s: any) => `![${esc(String(s.caption ?? ''))}](${s.image ?? ''})${fmtAttrs({ width: s.width, en: s.captionEn })}`).join('\n\n');
-        return div(fmtAttrs({ caption: a.caption, en: a.captionEn, columns: a.columns !== 2 ? a.columns : undefined, subMode: a.subMode !== 'under' ? a.subMode : undefined, placement: a.placement !== 'none' ? a.placement : undefined }, { id: a.label ? String(a.label) : undefined, classes: ['figure'] }), inner);
+        const inner = subs.map((s: any) => `![${esc(String(s.caption ?? ''))}](${s.image ?? ''})${fmtAttrs({ width: s.width === '' || s.width === 'auto' ? undefined : s.width, en: s.captionEn })}`).join('\n\n');
+        // 整组宽只认带单位的字符串（数字是单图那档的像素折算，对整组没意义）；columns=0 一行排完
+        const groupWidth = typeof a.width === 'string' && a.width.trim() && a.width !== 'auto' ? a.width : undefined;
+        return div(fmtAttrs({ caption: a.caption, en: a.captionEn, columns: a.columns !== 2 ? a.columns : undefined, width: groupWidth, subMode: a.subMode !== 'under' ? a.subMode : undefined, subLabel: a.subLabel && a.subLabel !== 'none' ? a.subLabel : undefined, subLabelFill: a.subLabelFill === 'white' ? 'white' : undefined, placement: a.placement !== 'none' ? a.placement : undefined }, { id: a.label ? String(a.label) : undefined, classes: ['figure'] }), inner);
       }
       return `![${esc(String(a.caption ?? ''))}](${String(a.image ?? '')})${captionAttrs(a, { width: a.width !== 8 ? a.width : undefined })}`;
     }
@@ -172,22 +174,23 @@ const REF_PREFIX = /^(fig|tab|eq|sec|alg|lst|app|thm|sub):/;
 function inlineSyntax(text: string): Node[] {
   const out: Node[] = [];
   const bal = '(?:[^\\[\\]\\n]|\\[[^\\[\\]\\n]*\\])*';
-  const re = new RegExp(`\\$typst:\\s*([^$\\n]+?)\\$|\\$([^$\\n]+?)\\$|\\[(@[^\\]\\n]+)\\]\\{\\.index\\}|\\[(${bal})\\]\\{\\.index\\}|\\[(@[^\\]\\n]+)\\](?:\\{\\.(prose|author|year)\\})?|(?<![\\w@\\\\])@([A-Za-z][\\w:.-]*[\\w])|\\^\\[(${bal})\\]|<ccwd(?:\\s+n="?(\\d+)"?)?\\s*\\/?>`, 'g');
+  const re = new RegExp(`${MATH_OPEN}(\\d+)${MATH_CLOSE}|\\$typst:\\s*([^$\\n]+?)\\$|\\$([^$\\n]+?)\\$(?!\\d)|\\[(@[^\\]\\n]+)\\]\\{\\.index\\}|\\[(${bal})\\]\\{\\.index\\}|\\[(@[^\\]\\n]+)\\](?:\\{\\.(prose|author|year)\\})?|(?<![\\w@\\\\])@([A-Za-z][\\w:.-]*[\\w])|\\^\\[(${bal})\\]|<ccwd(?:\\s+n="?(\\d+)"?)?\\s*\\/?>`, 'g');
   let last = 0; let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
     out.push(...textNode(text.slice(last, m.index)));
-    if (m[1] !== undefined) out.push({ type: 'mathInline', attrs: { src: m[1].trim(), mode: 'typst' } } as Node);
-    else if (m[2] !== undefined) out.push({ type: 'mathInline', attrs: { src: m[2].trim(), mode: 'latex' } } as Node);
-    else if (m[3] !== undefined || m[4] !== undefined) out.push({ type: 'idx', attrs: { text: (m[3] ?? m[4]) } } as Node);
-    else if (m[5] !== undefined) {
+    if (m[1] !== undefined) out.push(mathNode(Number(m[1])));
+    else if (m[2] !== undefined) out.push({ type: 'mathInline', attrs: { src: m[2].trim(), mode: 'typst' } } as Node);
+    else if (m[3] !== undefined) out.push({ type: 'mathInline', attrs: { src: m[3].trim(), mode: 'latex' } } as Node);
+    else if (m[4] !== undefined || m[5] !== undefined) out.push({ type: 'idx', attrs: { text: (m[4] ?? m[5]) } } as Node);
+    else if (m[6] !== undefined) {
       const keys: string[] = []; const sups: string[] = [];
-      for (const part of m[5].split(';')) { const mm = /^\s*@([\w:.-]+)\s*(?:,\s*(.*))?$/.exec(part); if (mm) { keys.push(mm[1]); if (mm[2]?.trim()) sups.push(mm[2].trim()); } }
-      const form = m[6] ?? 'auto';
+      for (const part of m[6].split(';')) { const mm = /^\s*@([\w:.-]+)\s*(?:,\s*(.*))?$/.exec(part); if (mm) { keys.push(mm[1]); if (mm[2]?.trim()) sups.push(mm[2].trim()); } }
+      const form = m[7] ?? 'auto';
       out.push({ type: 'cite', attrs: { keys: keys.join(','), ...(sups.length ? { supplement: sups.join('; ') } : {}), ...(form !== 'auto' ? { form } : {}) } } as Node);
     }
-    else if (m[7] !== undefined) out.push(REF_PREFIX.test(m[7]) ? ({ type: 'ref', attrs: { target: m[7] } } as Node) : ({ type: 'abbr', attrs: { key: m[7] } } as Node));
-    else if (m[8] !== undefined) out.push({ type: 'footnote', attrs: { text: m[8] } } as Node);
-    else out.push({ type: 'ccwd', attrs: { n: Number(m[9] ?? 1) } } as Node);
+    else if (m[8] !== undefined) out.push(REF_PREFIX.test(m[8]) ? ({ type: 'ref', attrs: { target: m[8] } } as Node) : ({ type: 'abbr', attrs: { key: m[8] } } as Node));
+    else if (m[9] !== undefined) out.push({ type: 'footnote', attrs: { text: m[9] } } as Node);
+    else out.push({ type: 'ccwd', attrs: { n: Number(m[10] ?? 1) } } as Node);
     last = m.index + m[0].length;
   }
   out.push(...textNode(text.slice(last)));
@@ -290,8 +293,9 @@ function divNode(attrsSrc: string, body: string, headings: boolean): Node {
   const label = id ?? attrs.label ?? '';
   if (kind === 'figure') {
     const inner = blocks(body, false);
-    const subs = inner.filter((n) => n.type === 'figure').map((f) => ({ image: f.attrs?.image ?? '', width: f.attrs?.width ?? 6, caption: f.attrs?.caption ?? '', captionEn: f.attrs?.captionEn ?? '' }));
-    return { type: 'figure', attrs: { image: subs[0]?.image ?? '', caption: attrs.caption ?? '', captionEn: attrs.en ?? '', label, subs: JSON.stringify(subs), columns: num(attrs.columns) ?? 2, subMode: attrs.subMode ?? 'under', placement: attrs.placement ?? 'none' } } as Node;
+    const subs = inner.filter((n) => n.type === 'figure').map((f) => ({ image: f.attrs?.image ?? '', width: f.attrs?.width ?? '', caption: f.attrs?.caption ?? '', captionEn: f.attrs?.captionEn ?? '' }));
+    const corner = ['tl', 'tr', 'bl', 'br'].includes(String(attrs.subLabel)) ? attrs.subLabel : 'none';
+    return { type: 'figure', attrs: { image: subs[0]?.image ?? '', caption: attrs.caption ?? '', captionEn: attrs.en ?? '', label, subs: JSON.stringify(subs), columns: num(attrs.columns) ?? 2, subMode: attrs.subMode ?? 'under', subLabel: corner, subLabelFill: attrs.subLabelFill === 'white' ? 'white' : 'black', placement: attrs.placement ?? 'none', ...(typeof attrs.width === 'string' && attrs.width ? { width: attrs.width } : {}) } } as Node;
   }
   if (kind === 'algorithm') {
     const io: string[] = [], lines: { text: string; level: number }[] = [];
@@ -322,9 +326,47 @@ function divNode(attrsSrc: string, body: string, headings: boolean): Node {
   return { type: 'theorem', attrs: { kind: kind || 'theorem', note: attrs.note ?? '', label }, content: content.length ? content : [{ type: 'paragraph' }] } as Node;
 }
 
+// 公式先摘出来换成占位符再交给 marked：$x_1$ 里的 _、* 会被它当成强调切碎，\alpha 的反斜杠会被当转义，
+// 模型写的公式就原样印成了字。认 $…$、$$…$$、\(…\)、\[…\]、$typst: …$；围栏代码与行内代码里的不碰，\$ 是字面的
+const MATH_OPEN = '\uE000', MATH_CLOSE = '\uE001';
+let mathStash: { src: string; mode: 'latex' | 'typst'; display: boolean }[] = [];
+function stashMath(text: string): string {
+  let out = '';
+  let i = 0;
+  const put = (src: string, mode: 'latex' | 'typst', display: boolean) => { mathStash.push({ src: src.trim(), mode, display }); out += `${MATH_OPEN}${mathStash.length - 1}${MATH_CLOSE}`; };
+  while (i < text.length) {
+    const c = text[i];
+    const atLineStart = i === 0 || text[i - 1] === '\n';
+    if (atLineStart && /^ {0,3}(```|~~~)/.test(text.slice(i, i + 7))) {
+      const fence = /^ {0,3}(`{3,}|~{3,})/.exec(text.slice(i))![1];
+      const end = new RegExp(`\\n {0,3}${fence[0] === '`' ? '`' : '~'}{${fence.length},}[ \\t]*(?=\\n|$)`).exec(text.slice(i));
+      const j = end ? i + end.index + end[0].length : text.length;
+      out += text.slice(i, j); i = j; continue;
+    }
+    if (c === '`') {
+      const run = /^`+/.exec(text.slice(i))![0];
+      const close = text.indexOf(run, i + run.length);
+      const j = close < 0 ? i + run.length : close + run.length;
+      out += text.slice(i, j); i = j; continue;
+    }
+    if (c === '\\' && (text[i + 1] === '$' || text[i + 1] === '\\')) { out += text.slice(i, i + 2); i += 2; continue; }
+    let m: RegExpExecArray | null;
+    const rest = text.slice(i);
+    if (c === '$' && (m = /^\$\$([\s\S]+?)\$\$/.exec(rest))) { put(m[1], 'latex', true); i += m[0].length; continue; }
+    if (c === '$' && (m = /^\$typst:\s*([^$\n]+?)\$/.exec(rest))) { put(m[1], 'typst', false); i += m[0].length; continue; }
+    if (c === '$' && (m = /^\$([^$\n`]+?)\$(?!\d)/.exec(rest)) && mathLike(m[1])) { put(m[1], 'latex', false); i += m[0].length; continue; }
+    if (c === '\\' && (m = /^\\\(([\s\S]+?)\\\)/.exec(rest))) { put(m[1], 'latex', false); i += m[0].length; continue; }
+    if (c === '\\' && (m = /^\\\[([\s\S]+?)\\\]/.exec(rest))) { put(m[1], 'latex', true); i += m[0].length; continue; }
+    out += c; i++;
+  }
+  return out;
+}
+// $5 和 $10 这种不是公式：里面有汉字（除非带 \text 之类命令）不算；两头带空格的（模型爱写 $ x $）得有个像公式的符号
+const mathLike = (raw: string) => { const t = raw.trim(); if (!t) return false; if (/[\u3400-\u9fff]/.test(t) && !/\\[a-zA-Z]+/.test(t)) return false; return /^\s|\s$/.test(raw) ? /[\\^_=+\-*/(){}\[\]<>]/.test(t) : true; };
+const mathNode = (idx: number): Node => { const m = mathStash[idx]; return { type: 'mathInline', attrs: { src: m.src, mode: m.mode } } as Node; };
 function blocks(source: string, headings: boolean): Node[] {
   const { text, divs } = extractDivs(source);
-  return tokensToBlocks(marked.lexer(text, { gfm: true, breaks: false }), headings, divs);
+  return tokensToBlocks(marked.lexer(stashMath(text), { gfm: true, breaks: false }), headings, divs);
 }
 function tokensToBlocks(tokens: Token[], headings: boolean, divs: { attrs: string; body: string }[]): Node[] {
   const out: Node[] = [];
@@ -357,10 +399,10 @@ function tokensToBlocks(tokens: Token[], headings: boolean, divs: { attrs: strin
         const raw = String(t.raw ?? t.text ?? '').trim();
         if (raw === '&nbsp;' || raw === '\u00a0') { push({ type: 'paragraph' }); break; }
         if (raw === '\\newpage' || raw === '\\pagebreak') { push({ type: 'pageBreak' } as Node); break; }
-        const eq = /^\$\$\s*\n?([\s\S]*?)\n?\s*\$\$(?:\s*\{([^}\n]*)\})?$/.exec(raw);
-        if (eq) {
+        const eq = new RegExp(`^${MATH_OPEN}(\\d+)${MATH_CLOSE}(?:\\s*\\{([^}\\n]*)\\})?$`).exec(raw);
+        if (eq && mathStash[Number(eq[1])]?.display) {
           const pa = eq[2] ? parseAttrs(eq[2]) : null;
-          push({ type: 'equation', attrs: { src: eq[1].trim(), mode: pa?.attrs.mode === 'typst' ? 'typst' : 'latex', ...(pa?.id ? { label: pa.id } : {}), ...(pa?.classes.includes('unnumbered') ? { numbered: false } : {}) } } as Node); break;
+          push({ type: 'equation', attrs: { src: mathStash[Number(eq[1])].src, mode: pa?.attrs.mode === 'typst' ? 'typst' : 'latex', ...(pa?.id ? { label: pa.id } : {}), ...(pa?.classes.includes('unnumbered') ? { numbered: false } : {}) } } as Node); break;
         }
         // 表题写在表下面一行：Table: 题注 {#tab:x …}
         const cap = /^Table:\s*(.*)$/s.exec(raw);
@@ -422,6 +464,7 @@ function tokensToBlocks(tokens: Token[], headings: boolean, divs: { attrs: strin
   return out;
 }
 export function fromMarkdown(source: string, headings = true): RichDoc {
+  mathStash = [];
   const content = blocks(source, headings);
   return { type: 'doc', content: content.length ? content : [{ type: 'paragraph' }] };
 }

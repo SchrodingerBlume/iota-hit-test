@@ -92,9 +92,13 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
   const ready = configReady(config);
   const docId = useStore((s) => s.doc.id);
   useEffect(() => { void useAgent.getState().bind(); }, [docId]);
-  useEffect(() => { const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }, [items, ask]);
+  // 贴底才跟着滚：用户往上翻着看的时候，模型一边输出一边把列表拽到底是骚扰；自己发一句、换一场对话就回到底
+  const stick = useRef(true);
+  useEffect(() => { const el = listRef.current; if (!el) return; const onScroll = () => { stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48; }; el.addEventListener('scroll', onScroll, { passive: true }); return () => el.removeEventListener('scroll', onScroll); }, []);
+  useEffect(() => { const el = listRef.current; if (el && stick.current) el.scrollTop = el.scrollHeight; }, [items, ask]);
+  useEffect(() => { stick.current = true; const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }, [chatId]);
   useEffect(() => { if (settings === undefined) useAgent.getState().setOpen(true); }, [settings]);
-  const submit = () => { const t = draft.trim(); if ((!t && !pending.length) || running || !ready) return; setDraft(''); void send(t); };
+  const submit = () => { const t = draft.trim(); if ((!t && !pending.length) || running || !ready) return; setDraft(''); stick.current = true; void send(t); };
   const onFiles = (list: FileList | File[] | null | undefined) => { if (list?.length && ready) void attach(Array.from(list)); };
   const last = items[items.length - 1];
   return (
@@ -132,7 +136,7 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
         {ready && !items.length && (
           <div className="ag-empty">
             <p className="muted">{tx("它能读整篇、按段改、写表插图、加参考文献和缩略语、改论文信息，看编译错误；改设置会先问你。改动都能在撤消里回退。")}</p>
-            {QUICK.map((q) => <button key={q} type="button" className="ag-quick" onClick={() => void send(q)}>{q}</button>)}
+            {QUICK.map((q) => <button key={q} type="button" className="ag-quick" onClick={() => { stick.current = true; void send(q); }}>{q}</button>)}
           </div>
         )}
         {items.map((it) => (

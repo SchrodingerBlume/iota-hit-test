@@ -127,7 +127,7 @@ export function AgentSettings() {
                     <Input size="small" value={cur.baseUrl} placeholder={cur.api === 'anthropic' ? 'https://api.anthropic.com' : 'https://…/v1'} onChange={(_, d) => patchCur({ baseUrl: d.value })} />
                     <label>{tx("密钥")}</label>
                     <span className="ag-keyrow">
-                      <Input size="small" type="password" className="zt-key" value={cur.apiKey} placeholder={/localhost|127\.0\.0\.1/.test(cur.baseUrl) ? tx("本机服务一般不用") : 'sk-…'} onChange={(_, d) => patchCur({ apiKey: d.value })} />
+                      <Input size="small" type="password" className="zt-key" value={cur.apiKey} placeholder={/localhost|127\.0\.0\.1/.test(cur.baseUrl) ? tx("本机服务一般不用") : 'sk-…'} onChange={(_, d) => patchCur({ apiKey: d.value })} onBlur={() => { if (cur.apiKey.trim() && cur.baseUrl.trim() && !models.length && !busy) void fetchModels(); }} />
                       {presetOf?.keysUrl && <a href={presetOf.keysUrl} target="_blank" rel="noreferrer">{tx("去申请 ↗")}</a>}
                     </span>
                     <label>{tx("模型")}</label>

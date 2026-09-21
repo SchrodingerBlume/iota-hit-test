@@ -11,7 +11,10 @@ import { getEditor } from '../editor/registry';
 import { toMarkdown, fromMarkdown } from '../editor/markdown';
 import { inlineFromMarkdown } from '../editor/tableImport';
 import { putImage, safeImageName, imageDimensions } from '../editor/imageCache';
-import { useCompileState } from '../compiler/client';
+import { useCompileState, queryDoc } from '../compiler/client';
+import { useSerializeWarnings } from '../typst/serialize';
+import type { Diagnostic } from '../compiler/protocol';
+import { humanize, locateDiagnostic } from '../ui/diagnostics';
 import { parseBibtex, splitNames, type BibEntry } from '../bib/bibtex';
 import { mergeEntries } from '../bib/csl';
 import { pdfRender, pdfImages, type Attachment } from './files';
@@ -44,6 +47,7 @@ const partEnum = { type: 'string', enum: PART_KEYS, description: '哪一部分�
 // 论文信息的字段表就是编辑器那张（src/model/info.ts）：名、说明、哪一档才有、年月字段
 const INFO_FIELDS = () => INFO_DEFS.map((f) => ({ key: f.key as keyof Info, label: f.label, hint: [f.hint, f.placeholder ? `例：${f.placeholder}` : '', f.kind === 'month' ? '格式 YYYY-MM' : f.kind === 'keywords' ? '字符串数组' : f.kind === 'textarea' ? '可多行' : ''].filter(Boolean).join('；'), applies: f.applies }));
 const range = { from: { type: 'integer', minimum: 0 }, to: { type: 'integer', minimum: 0 } };
+const placement = { type: 'string', enum: ['none', 'auto', 'top', 'bottom'], description: '浮动：none 就地排、不浮动（默认）；auto 让排版引擎放到页顶或页底；top / bottom 指定。浮动块会漂到别的页，写完用 check_order 查一遍编号顺序' };
 const place = { part: partEnum, at: { type: 'integer', minimum: 0, description: '插在第几块之前（等于块数就是接在末尾）；给了 replace 就不用' }, replace: { type: 'array', items: { type: 'integer', minimum: 0 }, minItems: 2, maxItems: 2, description: '[from, to]：换掉这一段块' } };
 
 const WEB_TOOLS: ToolDef[] = [
@@ -66,7 +70,8 @@ export function toolsFor(c: AiConfig): ToolDef[] {
 }
 /** 系统提示 = 固定那段 + 记忆 + 全局预设 + 这篇文档的预设 */
 export function systemPromptFor(s: AiSettings | undefined, docPreset: string): string {
-  const parts = [SYSTEM_PROMPT];
+  const now = new Date();
+  const parts = [SYSTEM_PROMPT, `今天是 ${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}（${'日一二三四五六'[now.getDay()]}），用户说「今天 / 这个月 / 明年」按它算。`];
   if (memoryCtx.enabled) parts.push(`用户的长期记忆（跨文档、跨模型，用户明确要你记住的偏好；有新的用 memory_write 记）：\n${memoryCtx.notes.trim() || '（还是空的）'}`);
   if (s?.preset.trim()) parts.push(`用户的预设要求：\n${s.preset.trim()}`);
   if (docPreset.trim()) parts.push(`这篇文档的额外要求：\n${docPreset.trim()}`);
@@ -81,17 +86,18 @@ export const TOOLS: ToolDef[] = [
   { name: 'replace', description: '用 Markdown 换掉某一部分第 from 到 to 块（含两端）。块数可以变。只换需要改的那几块；标题的标签、引用键、公式照原样留着。表和图别用它，用 table_write / figure_write。', parameters: { type: 'object', properties: { part: partEnum, ...range, markdown: { type: 'string' } }, required: ['part', 'from', 'to', 'markdown'], additionalProperties: false } },
   { name: 'insert', description: '在某一部分第 at 块之前插入 Markdown（at 等于块数就是接在末尾）。', parameters: { type: 'object', properties: { part: partEnum, at: { type: 'integer', minimum: 0 }, markdown: { type: 'string' } }, required: ['part', 'at', 'markdown'], additionalProperties: false } },
   { name: 'delete', description: '删掉某一部分第 from 到 to 块（含两端）。', parameters: { type: 'object', properties: { part: partEnum, ...range }, required: ['part', 'from', 'to'], additionalProperties: false } },
-  { name: 'table_write', description: '插一张表或换掉现有的表（给 replace 就是换）。rows 是二维数组，第一行是表头（header 为 true 时）；单元格里写 \\n 就是格内换行，也认 **粗** *斜* `代码` $公式$。fit：content 按内容分列宽、window 撑满版心平分、fixed 每列都是 colWidth 厘米。', parameters: { type: 'object', properties: { ...place, rows: { type: 'array', items: { type: 'array', items: { type: 'string' } }, minItems: 1 }, header: { type: 'boolean' }, caption: { type: 'string', description: '中文题注（表题）' }, captionEn: { type: 'string' }, label: { type: 'string', description: '交叉引用用的标签，形如 tab:xxx' }, fit: { type: 'string', enum: ['content', 'window', 'fixed'] }, colWidth: { type: 'number', description: 'fixed 时每列宽，厘米' } }, required: ['part', 'rows'], additionalProperties: false } },
-  { name: 'figure_write', description: '插一张图或换掉现有的图。image 是工程里已有的图片名（见 images），或用户在对话里发来的图片附件的文件名——会先存进工程。', parameters: { type: 'object', properties: { ...place, image: { type: 'string' }, caption: { type: 'string', description: '中文题注（图题）' }, captionEn: { type: 'string' }, label: { type: 'string', description: '形如 fig:xxx' }, width: { type: 'number', description: '图宽，厘米（版心约 15 厘米）' } }, required: ['part', 'image'], additionalProperties: false } },
+  { name: 'table_write', description: '插一张表或换掉现有的表（给 replace 就是换）。rows 是二维数组，第一行是表头（header 为 true 时）；单元格里写 \\n 就是格内换行，也认 **粗** *斜* `代码` $公式$。fit：content 按内容分列宽、window 撑满版心平分、fixed 每列都是 colWidth 厘米。', parameters: { type: 'object', properties: { ...place, rows: { type: 'array', items: { type: 'array', items: { type: 'string' } }, minItems: 1 }, header: { type: 'boolean' }, caption: { type: 'string', description: '中文题注（表题）' }, captionEn: { type: 'string' }, label: { type: 'string', description: '交叉引用用的标签，形如 tab:xxx' }, fit: { type: 'string', enum: ['content', 'window', 'fixed'] }, colWidth: { type: 'number', description: 'fixed 时每列宽，厘米' } , placement }, required: ['part', 'rows'], additionalProperties: false } },
+  { name: 'figure_write', description: '插一张图或换掉现有的图。image 是工程里已有的图片名（见 images），或用户在对话里发来的图片附件的文件名——会先存进工程。', parameters: { type: 'object', properties: { ...place, image: { type: 'string' }, caption: { type: 'string', description: '中文题注（图题）' }, captionEn: { type: 'string' }, label: { type: 'string', description: '形如 fig:xxx' }, width: { type: 'number', description: '图宽，厘米（版心约 15 厘米）' }, placement }, required: ['part', 'image'], additionalProperties: false } },
   { name: 'images', description: '工程里有哪些图片，以及用户这场对话里发来的图片附件、从 PDF 里抽出来的图。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'pdf_images', description: '把用户发来的 PDF 附件里嵌的位图抽出来存成图片（file 是附件文件名，page 不给就整份、最多 60 页），回每张的名字与像素尺寸；矢量图抽不出来，用 pdf_render 截那一页。抽出来的图能直接 figure_write。', parameters: { type: 'object', properties: { file: { type: 'string' }, page: { type: 'integer', minimum: 1 } }, required: ['file'], additionalProperties: false } },
   { name: 'pdf_render', description: '把 PDF 附件的某一页画成图片（scale 1 约 72 dpi，默认 2），可以只截页面的一块：crop 是页面比例 [x, y, w, h]（0–1）。矢量图、公式截图用它。回图片名与尺寸，能直接 figure_write。', parameters: { type: 'object', properties: { file: { type: 'string' }, page: { type: 'integer', minimum: 1 }, scale: { type: 'number' }, crop: { type: 'array', items: { type: 'number' }, minItems: 4, maxItems: 4 } }, required: ['file', 'page'], additionalProperties: false } },
   { name: 'selection', description: '用户现在在编辑器里选中的是哪一部分的哪几块，以及选中的文字。用户说「这段」「选中的」时先调它。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'diagnostics', description: '最近一次排版编译的错误与警告。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+  { name: 'check_order', description: '按排版结果查图、表、算法、代码清单的实际先后：每张的编号、落在第几页、浮不浮动、正文第一次提到它在第几页；指出编号乱序（编号照正文顺序编，浮动块会漂到后面的页去，规范要求全文编号由小到大）、先图后文（规范要先见文后见图）、没被正文引用的。插了浮动图表、改了 placement、挪了图之后都查一遍。要等预览整编完，长文档要几秒。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'bib_list', description: '参考文献表（或成果表）里有哪些条目：引用键、类型、作者、年份、题名。正文里引用写 [@引用键]。', parameters: { type: 'object', properties: { which: { type: 'string', enum: ['references', 'achievements'] } }, additionalProperties: false } },
   { name: 'bib_add', description: '往参考文献表（或攻读学位期间的成果表）加条目：给 BibTeX，同一引用键的当作更新。字段名照 GB/T 7714：author、title、journal、year、volume、number、pages、booktitle、publisher、address、school、doi、url、urldate、langid。', parameters: { type: 'object', properties: { which: { type: 'string', enum: ['references', 'achievements'] }, bibtex: { type: 'string' } }, required: ['bibtex'], additionalProperties: false } },
   { name: 'info_read', description: '论文信息（题目、作者、导师、学科、关键词……）与档位（学位、阶段、校区、语言、文种）。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-  { name: 'info_write', description: '改论文信息里的字段。patch 是字段名到值的字典（字段名和说明见 info_read）；keywords / keywordsEn 是字符串数组，答辩日期 defenseDate 与封面日期 date 是年月「YYYY-MM」（如 2026-06）。', parameters: { type: 'object', properties: { patch: { type: 'object', additionalProperties: true } }, required: ['patch'], additionalProperties: false } },
+  { name: 'info_write', description: '改论文信息里的字段。patch 是字段名到值的字典（字段名和说明见 info_read）；keywords / keywordsEn 是字符串数组。答辩日期 defenseDate 与封面日期 date 只有年月，写「YYYY-MM」（如 2026-06；用户说「今天 / 这个月 / 下个月」按系统提示里给的今天算），写空串就是清掉、封面日期清掉表示用编译当天。', parameters: { type: 'object', properties: { patch: { type: 'object', additionalProperties: true } }, required: ['patch'], additionalProperties: false } },
   { name: 'abbreviations', description: '缩略语表与符号表。正文里 @缩略语键 首次出现会自动展开。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'abbreviations_add', description: '往缩略语表 / 符号表加条目（同键当作更新）。缩略语要 key（正文里 @key 用）、long（中文全称）、longEn（英文全称）；符号要 symbol（LaTeX 写法）和 meaning。', parameters: { type: 'object', properties: { abbreviations: { type: 'array', items: { type: 'object', properties: { key: { type: 'string' }, long: { type: 'string' }, longEn: { type: 'string' }, short: { type: 'string' } }, required: ['key', 'long'] } }, symbols: { type: 'array', items: { type: 'object', properties: { symbol: { type: 'string' }, meaning: { type: 'string' } }, required: ['symbol', 'meaning'] } } }, additionalProperties: false } },
   { name: 'schema', description: '编辑器节点的 JSON 结构：每种块 / 行内节点 / 标记的名字、属性及默认值、能装什么内容。Markdown 写不出的高级操作（表格合并格、图的浮动方式、批注……）用 read_json / write_json 直接改节点，改之前先看这个。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
@@ -177,7 +183,7 @@ function tableNode(input: Record<string, any>) {
   const width = Math.max(...rows.map((r) => r.length));
   const header = input.header !== false;
   const attrs: Record<string, unknown> = {};
-  for (const k of ['caption', 'captionEn', 'label', 'fit', 'colWidth']) if (input[k] !== undefined && input[k] !== '') attrs[k] = input[k];
+  for (const k of ['caption', 'captionEn', 'label', 'fit', 'colWidth', 'placement']) if (input[k] !== undefined && input[k] !== '') attrs[k] = input[k];
   return { type: 'tableFigure', attrs, content: [{ type: 'table', content: rows.map((r, ri) => ({ type: 'tableRow', content: Array.from({ length: width }, (_, ci) => cellNode(r[ci] ?? '', header && ri === 0)) })) }] };
 }
 
@@ -199,7 +205,7 @@ async function figureNode(input: Record<string, any>): Promise<any | string> {
   const px = asset?.width ?? dims.width;
   const width = Number(input.width) || (px ? Math.min(14, Math.max(4, Math.round((px / 96) * 2.54 * 10) / 10)) : 8);
   const attrs: Record<string, unknown> = { image: name, width };
-  for (const k of ['caption', 'captionEn', 'label']) if (input[k]) attrs[k] = input[k];
+  for (const k of ['caption', 'captionEn', 'label', 'placement']) if (input[k]) attrs[k] = input[k];
   return { type: 'figure', attrs };
 }
 
@@ -218,7 +224,60 @@ function selectionText(): string {
 function diagnosticsText(): string {
   const ds = useCompileState.getState().diagnostics;
   if (!ds.length) return '最近一次编译没有错误或警告';
-  return ds.slice(0, 40).map((d) => `[${d.severity}] ${d.message}${d.where ? `（${d.where}）` : ''}`).join('\n');
+  return ds.slice(0, 40).map((d) => describeDiag(d).slice(2)).join('\n');
+}
+
+// 图表落点探针：接在整编那份 main.typ 末尾。题注的位置才是浮动块真正排到的地方（figure 自己的位置是它在正文流里的
+// 占位），编号取 counter.at 在各自位置上的值——两处一样，都是正文顺序。章号从 heading 计数器在图的位置上取
+const ORDER_PROBE = `#context [#metadata({
+  let txt(x) = if x == none { "" } else if type(x) == str { x } else if type(x) == content {
+    if x.has("text") { x.text } else if x.has("children") { x.children.map(txt).join("") } else if x.has("body") { txt(x.body) } else if x.has("child") { txt(x.child) } else { "" }
+  } else { repr(x) }
+  let kind(k) = if type(k) == str { k } else { repr(k) }
+  let pos(l) = (page: l.page(), y: calc.round(l.position().y.pt()))
+  (
+    caps: query(figure.caption).map(c => (kind: kind(c.kind), seq: c.counter.at(c.location()), chap: counter(heading).at(c.location()).at(0, default: 0), fn: type(c.numbering) == function, text: txt(c.body)) + pos(c.location())),
+    figs: query(figure).map(f => (kind: kind(f.kind), seq: f.counter.at(f.location()), chap: counter(heading).at(f.location()).at(0, default: 0), label: if f.has("label") { str(f.label) } else { "" }, placement: repr(f.placement)) + pos(f.location())),
+    refs: query(ref).map(r => (target: str(r.target)) + pos(r.location())),
+  )
+}) <iota-order>]`;
+const KIND_NAMES: Record<string, string> = { image: '图', table: '表', algorithm: '算法', raw: '代码' };
+type Pos = { page: number; y: number };
+const before = (a: Pos, b: Pos) => a.page < b.page || (a.page === b.page && a.y < b.y);
+const cmpSeq = (a: number[], b: number[]) => { for (let i = 0; i < Math.max(a.length, b.length); i++) { const d = (a[i] ?? 0) - (b[i] ?? 0); if (d) return d; } return 0; };
+async function checkOrder(): Promise<string> {
+  const r = await queryDoc(ORDER_PROBE, '<iota-order>');
+  if (r.error || !Array.isArray(r.result) || !r.result.length) return `查不了：${r.error ?? '模板没交回结果'}（预览要先整编成功一次）`;
+  const { caps, figs, refs } = r.result[0] as { caps: (Pos & { kind: string; seq: number[]; chap: number; fn: boolean; text: string })[]; figs: (Pos & { kind: string; seq: number[]; chap: number; label: string; placement: string })[]; refs: (Pos & { target: string })[] };
+  const seen = new Set<string>();
+  const items = caps.filter((c) => KIND_NAMES[c.kind]).flatMap((c) => {
+    const key = `${c.kind}:${c.seq.join('.')}`;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    const f = figs.find((x) => x.kind === c.kind && !cmpSeq(x.seq, c.seq));
+    const chap = f?.chap ?? c.chap;
+    const num = `${KIND_NAMES[c.kind]}${c.fn && chap > 0 ? `${chap}-` : ''}${c.seq.join('.')}`;
+    const mentions = f?.label ? refs.filter((x) => x.target === f.label) : [];
+    const first = mentions.length ? mentions.reduce((a, b) => (before(b, a) ? b : a)) : null;
+    return [{ ...c, chap, num, label: f?.label ?? '', placement: f?.placement ?? 'none', first, mentions: mentions.length }];
+  }).sort((a, b) => (before(a, b) ? -1 : before(b, a) ? 1 : 0));
+  if (!items.length) return '排版结果里没有带题注的图表';
+  const floating = (it: typeof items[number]) => it.placement !== 'none' ? `，浮动 ${it.placement}` : '';
+  const lines = items.map((it) => `${it.num}${it.label ? ` <${it.label}>` : ''}：第 ${it.page} 页${floating(it)}；${it.first ? `正文首次引用在第 ${it.first.page} 页` : it.label ? '正文没有引用' : '没有标签'}${it.text ? `；${it.text.slice(0, 40)}` : ''}`);
+  const problems: string[] = [];
+  for (const kind of Object.keys(KIND_NAMES)) {
+    const seq = items.filter((it) => it.kind === kind);
+    for (let i = 1; i < seq.length; i++) {
+      const a = seq[i - 1], b = seq[i];
+      if (a.chap > b.chap || (a.chap === b.chap && cmpSeq(a.seq, b.seq) > 0)) problems.push(`乱序：${a.num}（第 ${a.page} 页${floating(a)}）排在了 ${b.num}（第 ${b.page} 页${floating(b)}）前面——规范要求编号由小到大。改法：把编号大的那张在正文里往前挪、去掉浮动或改成 placement=bottom，或让前面那张也浮动`);
+    }
+  }
+  for (const it of items) {
+    if (it.first && before(it, it.first)) problems.push(`先图后文：${it.num} 在第 ${it.page} 页，正文第一次引用它在第 ${it.first.page} 页——规范要先见文后见图`);
+    else if (it.first && it.page - it.first.page > 1) problems.push(`离得远：${it.num} 在第 ${it.page} 页，首次引用在第 ${it.first.page} 页，隔了 ${it.page - it.first.page} 页`);
+    if (it.label && !it.mentions) problems.push(`没被引用：${it.num} <${it.label}>——正文里应先提到再出现（写 @${it.label}）`);
+  }
+  return `按页面先后（编号照正文顺序编；浮动块会漂）：\n${lines.join('\n')}\n\n${problems.length ? `问题：\n- ${problems.join('\n- ')}` : '没有问题：各类编号都由小到大，每张都在首次引用之后。'}`;
 }
 
 function bibList(which: string): string {
@@ -244,6 +303,20 @@ function infoRead(): string {
   const lines = INFO_FIELDS().filter((f) => !f.applies || f.applies(s)).map(({ key, label, hint }) => { const v = doc.info[key]; const t = Array.isArray(v) ? v.join('、') : String(v ?? ''); return `${key}（${label}${hint ? `，${hint}` : ''}）：${t || '（空）'}`; });
   return [...axes, ...lines].join('\n');
 }
+/** 年月：2026-06、2026/6、2026年6月、2026.6、2026-06-15、June 2026、Jun. 2026、6/2026 都收成 YYYY-MM；认不出给 null */
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+function parseMonth(raw: string): string | null {
+  const v = raw.trim().toLowerCase();
+  if (!v) return null;
+  let m: RegExpExecArray | null;
+  if ((m = /^(\d{4})\D+(\d{1,2})/.exec(v))) return `${m[1]}-${m[2].padStart(2, '0')}`;
+  if ((m = /^(\d{1,2})\s*[/.-]\s*(\d{4})/.exec(v))) return `${m[2]}-${m[1].padStart(2, '0')}`;
+  if ((m = /^([a-z]{3})[a-z]*\.?\s+(\d{4})/.exec(v)) || (m = /^(\d{4})\s+([a-z]{3})[a-z]*/.exec(v))) {
+    const [name, year] = /^\d/.test(m[1]) ? [m[2], m[1]] : [m[1], m[2]];
+    const i = MONTHS.indexOf(name); if (i >= 0) return `${year}-${String(i + 1).padStart(2, '0')}`;
+  }
+  return null;
+}
 function infoWrite(patch: Record<string, unknown>): string {
   const out: Partial<Info> = {};
   const bad: string[] = [];
@@ -254,9 +327,9 @@ function infoWrite(patch: Record<string, unknown>): string {
     if (def.kind === 'keywords') (out as any)[k] = Array.isArray(v) ? v.map(String) : String(v).split(/[;；,，、\n]+/).map((x) => x.trim()).filter(Boolean);
     else if (def.kind === 'month') {
       // 年月：2026-06、2026/6、2026年6月、2026.6 都收成 YYYY-MM；空串清掉
-      const m = /^(\d{4})\D+(\d{1,2})/.exec(String(v ?? '').trim());
-      if (String(v ?? '').trim() && !m) { bad.push(`${k}（要写成 YYYY-MM）`); continue; }
-      (out as any)[k] = m ? `${m[1]}-${m[2].padStart(2, '0')}` : '';
+      const ym = parseMonth(String(v ?? ''));
+      if (String(v ?? '').trim() && !ym) { bad.push(`${k}（要写成 YYYY-MM，如 2026-06）`); continue; }
+      (out as any)[k] = ym ?? '';
     } else (out as any)[k] = String(v ?? '');
   }
   if (Object.keys(out).length) useStore.getState().setInfo(out);
@@ -421,7 +494,61 @@ async function webSearch(query: string): Promise<string> {
 }
 
 /** 跑一个工具，回给模型的是纯文本 */
+const WRITES = new Set(['replace', 'insert', 'delete', 'table_write', 'figure_write', 'write_json', 'bib_add', 'abbreviations_add', 'info_write']);
 export async function runTool(name: string, input: Record<string, any>): Promise<string> {
+  const d0 = useStore.getState().doc;
+  // 排版的计数与诊断要在动手之前记：短文档写完 0.1 秒就排完了，事后再记就错过了
+  const c0 = { ...useCompileState.getState(), ser: useSerializeWarnings.getState().warnings };
+  const out = await dispatch(name, input);
+  if (!WRITES.has(name)) return out;
+  // 编辑器 → store 有 100–150 ms 的节流，等它过去再看文档换没换
+  await new Promise((r) => setTimeout(r, 250));
+  return useStore.getState().doc === d0 ? out : afterWrite(out, c0);
+}
+/** 写完等排版落地（长文档先只编一章、停手一两秒后才整编，所以等到安静下来），新冒出来的错误接在结果后面
+ *  （定位到第几块、附那块现在的 Markdown），模型好自己改。序列化时查出的（引用目标不存在、文献没登记）也算 */
+async function afterWrite(msg: string, c0: { status: string; compileCount: number; diagnostics: Diagnostic[]; ser: string[] }): Promise<string> {
+  if (c0.status !== 'ready') return msg;
+  const t0 = Date.now();
+  let last = Date.now(), count = c0.compileCount;
+  while (Date.now() - t0 < 60000) {
+    await new Promise((r) => setTimeout(r, 150));
+    const s = useCompileState.getState();
+    if (s.compileCount !== count) { count = s.compileCount; last = Date.now(); }
+    if (s.compiling || s.bgCompiling) { last = Date.now(); continue; }
+    if (Date.now() - last > (count === c0.compileCount ? 5000 : 3200)) break;
+  }
+  if (count === c0.compileCount) return msg;
+  // 错误全报；警告只报这次写完新冒出来的（找不到的引用、重复的标签这类），先前就有的不算
+  const key = (d: Diagnostic) => `${d.severity}|${d.message}`;
+  const before = new Set([...c0.diagnostics.map(key), ...c0.ser.map((m) => `ser|${m}`)]);
+  const list = useCompileState.getState().diagnostics.filter((d) => d.severity === 'error' || !before.has(key(d))).map(describeDiag);
+  for (const m of useSerializeWarnings.getState().warnings) if (!before.has(`ser|${m}`)) list.push(`- [警告] ${m}`);
+  if (!list.length) return msg;
+  const head = list.some((l) => l.startsWith('- [错误]')) ? '写进去之后排版报错了，请看着改（改完会再排一次）' : '写进去之后排版多了警告，看看是不是写错了';
+  return `${msg}\n\n${head}：\n${list.join('\n')}`;
+}
+/** 一条诊断说给模型听：落在哪一部分第几块、人话 + Typst 原话、那一块现在的 Markdown */
+function describeDiag(d: Diagnostic): string {
+  const s = useCompileState.getState();
+  const h = humanize(d.message);
+  const at = locateDiagnostic(d.where, s.diagMain, s.diagSegments);
+  let loc = '', md = '';
+  if (at?.key === 'info') loc = '论文信息';
+  else if (at) {
+    const ed = getEditor(at.key);
+    const label = PARTS.find((p) => p.key === at.key)?.label ?? at.key;
+    if (ed) {
+      const idx = ed.state.doc.resolve(Math.min(at.pos, ed.state.doc.content.size)).index(0);
+      loc = `${label} 第 ${idx} 块`;
+      const node = ed.state.doc.maybeChild(idx);
+      if (node) md = toMarkdown({ type: 'doc', content: [node.toJSON()] } as RichDoc).slice(0, 400);
+    } else loc = label;
+  }
+  const text = h.text === d.message ? d.message : `${h.text}（Typst：${d.message}）`;
+  return `- [${d.severity === 'error' ? '错误' : '警告'}] ${loc ? `${loc}：` : ''}${text}${md ? `\n  这一块现在是：\n  ${md.replace(/\n/g, '\n  ')}` : ''}`;
+}
+async function dispatch(name: string, input: Record<string, any>): Promise<string> {
   const need = () => { const p = partOf(String(input.part ?? '')); if (!p) throw new Error(`part 得是 ${PART_KEYS.join(' / ')} 之一`); return p; };
   switch (name) {
     case 'outline': return outlineText();
@@ -434,6 +561,7 @@ export async function runTool(name: string, input: Record<string, any>): Promise
     case 'images': return imagesText();
     case 'selection': return selectionText();
     case 'diagnostics': return diagnosticsText();
+    case 'check_order': return checkOrder();
     case 'bib_list': return bibList(String(input.which ?? 'references'));
     case 'bib_add': return bibAdd(String(input.which ?? 'references'), String(input.bibtex ?? ''));
     case 'info_read': return infoRead();
@@ -462,14 +590,15 @@ export async function runTool(name: string, input: Record<string, any>): Promise
   }
 }
 
-export const SYSTEM_PROMPT = `你是 iota4web 里的写作助手。iota4web 是哈尔滨工业大学学位论文的所见即所得编辑器，排版由 iota-hit 模板按学校规范自动完成，用户只管内容。
+export const SYSTEM_PROMPT = `你是 HιT webapp 里的写作助手（名字读 iota hit，hit 就念英文 hit 那个词；谐音 I ought hit——iota hit thesis 即 I ought hit thesis，「我该写论文了」）。HιT webapp 是哈尔滨工业大学学位论文的所见即所得编辑器，排版由 iota-hit 模板按学校规范自动完成，用户只管内容。
 文档分成几部分（摘要、正文、结论、附录、致谢、简历），每部分是一串块（标题、段落、公式、图、表、列表……），用工具按「部分 + 段号」读和改。读回来、写回去的都是下面这种 Markdown，每种节点都有写法：
 - 标题：# 到 ####，尾巴可带属性 {#sec:标签 en="English title" .unnumbered}。
 - 段落：普通 Markdown；**粗** *斜* ~~删~~ \`代码\` [链接](url)；<u>下划线</u> <sub>下标</sub> <sup>上标</sup> <mark>突出</mark> <span color="#ff0000">红字</span> <span font="heiti">黑体</span>（中文角色 songti/heiti/kaishu/fangsong，西文角色 serif/sans——西文标点、弯引号归西文字体）<span size="sanhao">三号</span>；段尾 {.noindent} 不缩进；行尾两个空格换行。
-- 行内：$…$ 公式（LaTeX），[@key] 引参考文献（多条 [@a; @b]，带页码 [@key, p. 15]，叙述式 [@key]{.prose}、只印作者 {.author}、只印年份 {.year}），@fig:x / @tab:x / @eq:x / @sec:x / @alg:x / @lst:x / @thm:x 交叉引用，@缩略语键 缩略语（如 @FEM，首次出现自动展开为全称），^[脚注文字] 脚注，[词]{.index} 索引项，<ccwd/> 一个汉字宽的空格。
-- 行间公式：$$ 一行 LaTeX $$，收尾后可带 {#eq:标签} 或 {.unnumbered}。
-- 图：![题注](图片名){#fig:标签 width=8 en="Caption"}（宽度厘米）；分图写成 ::: {.figure #fig:x caption="总题" columns=2} 里放几行 ![子题](图){width=6} :::。
-- 表：GFM 表格（格内换行写 <br>），紧跟一行 Table: 题注 {#tab:标签 en="Caption" fit=window}（fit：content 按内容、window 撑满、fixed 定宽 colWidth=2.5）。
+- 行内公式：$…$ 里写 LaTeX（如 $p = \\rho R T$、$x_1^2$；\\(…\\) 也认），紧贴着写、里面不放汉字；变量、上下标、希腊字母一律进公式，不要用 Unicode 上下标（x₁、m²）或纯文字冒充。
+- 行内：[@key] 引参考文献（多条 [@a; @b]，带页码 [@key, p. 15]，叙述式 [@key]{.prose}、只印作者 {.author}、只印年份 {.year}），@fig:x / @tab:x / @eq:x / @sec:x / @alg:x / @lst:x / @thm:x 交叉引用，@缩略语键 缩略语（如 @FEM，首次出现自动展开为全称），^[脚注文字] 脚注，[词]{.index} 索引项，<ccwd/> 一个汉字宽的空格。
+- 行间公式：单独一段 $$ 一行 LaTeX $$（\\[…\\] 也认），收尾后可带 {#eq:标签} 或 {.unnumbered}。
+- 图：![题注](图片名){#fig:标签 width=8 en="Caption" placement=top}（宽度厘米；placement 是浮动：不写就就地排，auto / top / bottom 让它浮到页顶或页底）；分图（一张图里几个 (a)(b) 小图）写成 ::: {.figure #fig:x caption="总题" columns=2} 里放几行 ![子题](图){width=6} :::，模板自己排版、编 (a)(b)，不要自己在题注里写 (a)(b) 或把几张单图硬拼；columns=0 一行排完，小图不写 width 就自动等高，整组宽写 width="12cm"；subLabel=tl/tr/bl/br 把 (a)(b) 直接印在小图的那个角上（subLabelFill=white 印白字，深色图用）；subMode=inline 把分图题连排在总题注下面。引用某个小图写 @fig:x-a。
+- 表：GFM 表格（格内换行写 <br>），紧跟一行 Table: 题注 {#tab:标签 en="Caption" fit=window placement=top}（fit：content 按内容、window 撑满、fixed 定宽 colWidth=2.5；placement 同图）。
 - 代码块：\`\`\`语言；要编号带题注的代码清单：\`\`\`python {#lst:标签 .listing caption="题注"}。
 - 算法：::: {.algorithm #alg:x caption="题注"} 里先写 > 输入：… / > 输出：…，再每行一条 - 步骤，缩进两格是下一层 :::。
 - 定理族：::: {.theorem #thm:x note="Euler"} … :::，类名可换成 lemma / definition / proposition / corollary / axiom / assumption / example / remark / problem / conjecture / fact / exercise / proof。
@@ -484,7 +613,8 @@ export const SYSTEM_PROMPT = `你是 iota4web 里的写作助手。iota4web 是�
 - 做不到的事直说做不到、为什么，不要绕弯子也不要假装做了；用户可以自己在编辑器里做的，告诉他在哪儿做。
 - 行文照学位论文的规范：客观、书面、不用第一人称口语；中文用全角标点。
 - 引号：中文一律用弯引号“ ”‘ ’，禁止「」『』；英文一律用直引号 " 和 '，模板的智能引号会把成对的直引号排成弯的、走西文字体。非要写不成对的英文引号（’90s 这种）就手打弯引号 ’ 或 ”，并套上 <span font="serif">…</span> 让它用西文字体。
-- Markdown 写不出的（合并单元格、图的浮动方式、批注、某个属性），用 schema 看节点结构，再 read_json / write_json 直接改节点 JSON；平常改文字还是用 Markdown。
+- 图表善用浮动（placement）：大图、整页的表让它浮到页顶或页底，正文就不会留大片空白。但编号是照正文顺序编的，浮动块会漂到后面的页，规范要求全文编号由小到大、先见文后见图——插了浮动图表、改了 placement 或挪了图之后，用 check_order 按排版结果查一遍，乱了就调（往前挪、去浮动、改 bottom）。
+- Markdown 写不出的（合并单元格、批注、某个属性），用 schema 看节点结构，再 read_json / write_json 直接改节点 JSON；平常改文字还是用 Markdown。
 - 中文与西文、数字之间不加空格（不要「盘古之白」，间距由模板排版时自动加）：「采用 Ergun 方程」是错的，要写「采用Ergun方程」；也别把原文里没有的空格加上。
 - 每次改完用一两句话说明改了什么；不确定用户想要什么就先问。
 - 回答用用户的语言，简短；代码和公式用 Markdown 的写法（\`\`\` 围栏、$…$）。`;

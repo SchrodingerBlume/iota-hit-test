@@ -348,10 +348,13 @@ ${body}
 async function query(msg: Extract<ToWorker, { type: 'query' }>) {
   if (!compiler) return;
   compiler.addSource('/query.typ', msg.main);
+  for (const [name, text] of Object.entries(msg.files ?? {})) compiler.mapShadow(`/${name}`, enc.encode(text));
+  for (const img of msg.images ?? []) { compiler.mapShadow(`/images/${img.name}`, new Uint8Array(img.data)); mappedImages.set(img.name, img.data.byteLength); }
+  for (const name of msg.removeImages ?? []) if (mappedImages.delete(name)) compiler.unmapShadow(`/images/${name}`);
   const raw = (compiler as any).compiler;
   let w: any = null;
   try {
-    w = raw.snapshot(undefined, '/query.typ', []);
+    w = raw.snapshot(undefined, '/query.typ', Object.entries(msg.inputs ?? {}));
     const res: any = w.compile(0, 3);
     const errors = normalizeDiagnostics(res?.diagnostics).filter((d) => d.severity === 'error');
     if (errors.length) { post({ type: 'query', id: msg.id, result: null, error: errors.map((e) => `${e.where} ${e.message}`).join('；') }); return; }

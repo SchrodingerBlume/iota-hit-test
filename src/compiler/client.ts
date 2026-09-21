@@ -187,11 +187,16 @@ class Lane {
     const { segments: _s, version: _v, focus, images: _i, removeImages: _r, warm: _w, ...msg } = input;
     if (this.name === 'bg' && input.warm) this.warmVersion = input.version ?? -2;
     if (this.name === 'bg' && !input.warm && !this.baselined) { if (this.warmVersion !== appliedFullVersion) msg.force = true; this.baselined = true; }
+    const { images, removeImages } = this.imageDelta();
+    this.send({ type: 'compile', id: this.inFlight, ...msg, focus: focus?.id, images, removeImages }, images.map((i) => i.data));
+  }
+  /** 这条道缺哪些图、多了哪些图 */
+  imageDelta() {
     const images: { name: string; data: ArrayBuffer }[] = [];
     for (const [name, data] of imageStore) if (!this.images.has(name)) { images.push({ name, data: data.slice(0) }); this.images.add(name); }
     const removeImages = [...this.images].filter((n) => !imageStore.has(n));
     for (const n of removeImages) this.images.delete(n);
-    this.send({ type: 'compile', id: this.inFlight, ...msg, focus: focus?.id, images, removeImages }, images.map((i) => i.data));
+    return { images, removeImages };
   }
   flushPara() {
     if (!this.worker || !this.ready || this.fontsPending || this.paraInFlight || !this.paraPending) return;
@@ -429,6 +434,21 @@ export function queryTypst(main: string, selector: string): Promise<{ result: un
       fg.send({ type: 'query', id, main, selector });
     };
     go();
+  });
+}
+
+/** 在最近一次整编的那份文档末尾接一段探针再 query：图表实际落在哪页之类的问题只有排完版才知道。
+ *  走有整编热缓存的那条道，等它空下来（编辑器里最新的那版整编落地）再问；还没整编过就 error */
+export async function queryDoc(probe: string, selector: string): Promise<{ result: unknown; error?: string }> {
+  const lane = bg.ready ? bg : fg;
+  await whenIdle(lane);
+  if (!lastFull) return { result: null, error: 'no full compile yet' };
+  const { main, files, inputs } = lastFull;
+  const { images, removeImages } = lane.imageDelta();
+  return new Promise((resolve) => {
+    const id = nextId++;
+    lane.queryWaiters.set(id, resolve);
+    lane.send({ type: 'query', id, main: `${main}\n${probe}\n`, selector, files, inputs: { preview: '1', ...(inputs ?? {}) }, images, removeImages }, images.map((i) => i.data));
   });
 }
 
