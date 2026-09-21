@@ -14,7 +14,7 @@ import {
   ChevronUp20Regular, ChevronDown20Regular, ChevronLeft20Regular, ChevronRight20Regular, Dismiss20Regular, Pin20Regular, Grid20Regular, TextParagraph20Regular,
   Translate20Regular, ImageEdit20Regular, Delete20Regular, TableSimple20Regular, ClipboardTextLtr20Regular,
   CommentAdd20Regular, CommentDismiss20Regular, Comment20Regular, TextBulletListSquare20Regular, TextEditStyle20Regular,
-  Lightbulb20Regular, ZoomIn20Regular, AutoFitWidth20Regular, DocumentOnePage20Regular, DocumentMultiple20Regular, TextChangeCase20Regular, TextWordCount20Regular, PanelLeftText20Regular, ChevronDoubleRight16Regular, DocumentHeader20Regular, DocumentFooter20Regular,
+  Lightbulb20Regular, History20Regular, BranchFork20Regular, ZoomIn20Regular, AutoFitWidth20Regular, DocumentOnePage20Regular, DocumentMultiple20Regular, TextChangeCase20Regular, TextWordCount20Regular, PanelLeftText20Regular, ChevronDoubleRight16Regular, DocumentHeader20Regular, DocumentFooter20Regular,
 } from '@fluentui/react-icons';
 import { useStore } from '../model/store';
 import { getEditor, getEditorMeta, onRegistryChange } from '../editor/registry';
@@ -22,6 +22,9 @@ import { historyLog, entryText } from '../editor/historyLog';
 import { usePreviewSurface, usePreviewMarks } from './PreviewEditLayer';
 import { useBlockMenu } from '../editor/BlockMenu';
 import { THEOREM_KINDS, THEOREM_NAMES } from '../typst/theorem';
+import { HistoryDialog, useHistoryDialog } from './HistoryDialog';
+import { GitDialog, useGitDialog } from './GitDialog';
+import { startAutoHistory } from '../history/history';
 import { B, Sep, useEditorTick, useInsertActions, TableAlignTools, FontSizeTool, refocusPreviewAfter } from '../editor/tools';
 import { searchKey, selectCurrentMatch } from '../editor/extensions/Search';
 import { levelLabels } from '../typst/numbering';
@@ -162,6 +165,7 @@ export function HistoryButtons() {
 
 export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonLayout; leading?: ReactNode; trailing?: ReactNode; minimal?: boolean }) {
   const activeKey = usePreviewSurface((s) => s.activeKey);
+  useEffect(() => startAutoHistory(() => (useStore.getState().view === 'editor' ? useStore.getState().doc : null)), []);
   const settings = useStore((s) => s.doc.settings);
   const docName = useStore((s) => s.doc.name);
   const section = useStore((s) => s.section);
@@ -401,6 +405,8 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
     <div ref={root} className={`ribbon ${none ? 'is-idle' : ''} ${collapsed ? 'is-collapsed' : ''} ${peek ? 'is-peek' : ''}`} onClick={(e) => { const t = e.target as HTMLElement; if (t.closest('.rb-btn') && !t.closest('.rb-keep')) afterCommand(); }}>
       <SymbolPicker onPick={(ch) => { chain().insertContent(ch).run(); }} />
       <HeaderFooterDialog />
+      <HistoryDialog />
+      <GitDialog />
       <div className="rb-tabs">
         <div className="rb-tabs-left">
           {leading}
@@ -643,6 +649,10 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                 <span className="rb-keep rb-inline">
                   <Input size="small" value={reviewer} placeholder={tx("审阅者姓名")} onChange={(_, d) => useComments.getState().setAuthor(d.value)} style={{ width: 140 }} />
                 </span>
+              </Group>
+              <Group label={tx("版本")}>
+                <B title={tx("本地历史：每 5 分钟自动存一份快照，能看差异、整份恢复")} big icon={<History20Regular />} run={() => useHistoryDialog.getState().set(true)}>{tx("本地历史")}</B>
+                <B title={tx("Git：有名称的提交、差异、恢复，连上 GitHub 能推能拉")} big icon={<BranchFork20Regular />} run={() => useGitDialog.getState().set(true)}>Git</B>
               </Group>
             </>
           )}

@@ -3,18 +3,20 @@
 //   images    `${项目 id}/${文件名}` → Blob
 //   fonts     用户自己选的字体文件（文件名 → Blob），跨项目共用
 //   meta      activeProject 等零碎
+//   history   `${项目 id}/${时间}` → 本地历史快照（gzip 过的工程 JSON）
+//   git       `${项目 id}/repo` 提交链、`${项目 id}/blob/${sha}` 文件内容
 // 不用 localStorage：论文正文的 JSON 轻易过 5 MB。
-// v1/v2 时只有一份工程存在 doc/current，v3 迁成一个项目。
+// v1/v2 时只有一份工程存在 doc/current，v3 迁成一个项目，v4 加本地历史与 Git。
 
 const DB = 'iota4web';
-const VERSION = 3;
+const VERSION = 4;
 
 function open(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB, VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
-      for (const name of ['doc', 'images', 'cache', 'fonts', 'projects', 'meta']) {
+      for (const name of ['doc', 'images', 'cache', 'fonts', 'projects', 'meta', 'history', 'git']) {
         if (!db.objectStoreNames.contains(name)) db.createObjectStore(name);
       }
     };
