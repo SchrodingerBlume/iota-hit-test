@@ -137,7 +137,7 @@ code { font-family: var(--mono); font-size: 0.92em; }
 .status .dot.busy { background: var(--orange); animation: pulse 1s infinite; }
 .status .dot.err { background: var(--danger); }
 
-.main { display: grid; grid-template-columns: 200px minmax(420px, 1fr) minmax(360px, 46%); min-height: 0; }
+.main { display: grid; grid-template-columns: 200px minmax(360px, 54fr) 4px minmax(320px, 46fr); min-height: 0; }
 
 /* 导航：左侧一根主色竖条随选中项滑动 */
 .nav { position: relative; min-width: 0; border-right: 1px solid var(--line); background: var(--panel); overflow: auto; overflow-x: hidden; padding: 8px; contain: layout; }

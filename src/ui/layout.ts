@@ -7,6 +7,10 @@ const KEY = 'iota4web-layout';
 const NAV_W = 200;
 const SPLIT_W = 4;
 
+// 两栏按比例分：fr 的系数写成整数、不写成 0.2fr / 0.8fr——一栏碰到 minmax 的下限退成定宽后，
+// 剩下那栏的 fr 之和不到 1，网格按规范把 1fr 当成整段剩余空间、只分给它 0.8 份，右边空出一截
+const splitTracks = (ratio: number, minA: number, minB: number) => `minmax(${minA}px, ${Math.round(ratio * 100)}fr) ${SPLIT_W}px minmax(${minB}px, ${Math.round((1 - ratio) * 100)}fr)`;
+
 function load(): { navOpen: boolean; mode: Mode; ratio: number } {
   try { const v = JSON.parse(localStorage.getItem(KEY) ?? '{}'); return { navOpen: v.navOpen ?? true, mode: v.mode ?? 'split', ratio: Math.min(0.8, Math.max(0.2, v.ratio ?? 0.54)) }; }
   catch { return { navOpen: true, mode: 'split', ratio: 0.54 }; }
@@ -70,10 +74,10 @@ export function useLayoutPrefs() {
       raf = 0;
       if (stacked) {
         el.style.gridTemplateColumns = 'minmax(0, 1fr)';
-        el.style.gridTemplateRows = `minmax(0, ${nextRatio}fr) ${SPLIT_W}px minmax(0, ${1 - nextRatio}fr)`;
+        el.style.gridTemplateRows = splitTracks(nextRatio, 0, 0);
       } else {
         const nav = compact ? '' : `${prefs.navOpen ? NAV_W : 0}px `;
-        el.style.gridTemplateColumns = `${nav}minmax(${compact ? 0 : 360}px, ${nextRatio}fr) ${SPLIT_W}px minmax(${compact ? 0 : 320}px, ${1 - nextRatio}fr)`;
+        el.style.gridTemplateColumns = nav + splitTracks(nextRatio, compact ? 0 : 360, compact ? 0 : 320);
       }
     };
     const move = (ev: PointerEvent) => {
@@ -98,9 +102,9 @@ export function useLayoutPrefs() {
   const gridColumns = stacked
     ? 'minmax(0, 1fr)'
     : prefs.mode === 'split'
-      ? `${nav}minmax(${compact ? 0 : 360}px, ${prefs.ratio}fr) ${SPLIT_W}px minmax(${compact ? 0 : 320}px, ${1 - prefs.ratio}fr)`
+      ? nav + splitTracks(prefs.ratio, compact ? 0 : 360, compact ? 0 : 320)
       : `${nav}minmax(0, 1fr)`;
-  const gridRows = stacked ? `minmax(0, ${prefs.ratio}fr) ${SPLIT_W}px minmax(0, ${1 - prefs.ratio}fr)` : undefined;
+  const gridRows = stacked ? splitTracks(prefs.ratio, 0, 0) : undefined;
 
   return {
     navOpen: compact ? drawer : prefs.navOpen,
