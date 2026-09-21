@@ -14,6 +14,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import * as tar from 'tar';
 import { execFileSync } from 'node:child_process';
+import { templateRev } from './template-rev.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -28,13 +29,9 @@ const cacheDir = path.join(home, 'Library', 'Caches', 'typst', 'packages');
 const EXCLUDE_DIRS = new Set(['tests', '.git', '.github', '__pycache__', 'bench', 'ci', '_probe', '.backup', 'easy-zh-manual', 'docs', 'examples', 'gallery', 'thumbnail', 'thumbnails', 'test', 'assets/test']);
 const EXCLUDE_EXT = new Set(['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.DS_Store', '.pyc', '.py', '.sh', '.zip']);
 
-// 打包时模板的提交号（工作区有未提交改动就加 -dirty），给「模板更新了没」的检查用
+// 打包时模板的版本号（提交号，工作区有未提交改动再接内容哈希），给「模板更新了没」的检查用
 function gitHead(dir) {
-  try {
-    const head = execFileSync('git', ['-C', dir, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim();
-    const dirty = execFileSync('git', ['-C', dir, 'status', '--porcelain'], { encoding: 'utf8' }).trim() ? '-dirty' : '';
-    return head + dirty;
-  } catch { return null; }
+  try { return templateRev(dir); } catch { return null; }
 }
 
 function walk(dir, base = dir, out = []) {
