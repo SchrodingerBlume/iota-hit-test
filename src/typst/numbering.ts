@@ -7,7 +7,7 @@
 import type { Settings, StyleKey } from '../model/types';
 import { SWITCHES, resolveSwitch } from '../model/options';
 import type { PMNode } from './pmToTypst';
-import { labelOf } from './pmToTypst';
+import { labelOf, parseJsonArr } from './pmToTypst';
 import { THEOREM_NAMES, theoremKind, joinHead } from './theorem';
 
 export type Part = 'body' | 'appendix' | 'other';
@@ -188,6 +188,7 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
       const label = labelOf(n.attrs, 'fig');
       const num = figLike('图 ', 'Fig. ', figByChapter, fig);
       { const info: NumberInfo = { kind: 'fig', label, number: num, ref: num, title: n.attrs?.caption ?? '' }; byNode?.set(n, info); if (label) out.set(label, info); }
+      if (label) parseJsonArr<{ caption?: string }>(n.attrs?.subs).forEach((s, i) => { const l = 'abcdefghijklmnopqrstuvwxyz'[i] ?? String(i + 1); out.set(`${label}-${l}`, { kind: 'fig', label: `${label}-${l}`, number: `${num}(${l})`, ref: `${num}(${l})`, title: `(${l}) ${s.caption ?? ''}` }); });
       return;
     }
     if (n.type === 'tableFigure') {

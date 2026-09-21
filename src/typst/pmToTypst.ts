@@ -19,7 +19,7 @@ import { theoremKind } from './theorem';
 import { lengthTypst } from '../model/length';
 
 /** 分图 / 伪代码的属性都是 JSON 串（与 eqdenote 的 rows 同一套路） */
-function parseJsonArr<T>(v: unknown): T[] { if (Array.isArray(v)) return v as T[]; if (typeof v !== 'string' || !v) return []; try { const a = JSON.parse(v); return Array.isArray(a) ? a : []; } catch { return []; } }
+export function parseJsonArr<T>(v: unknown): T[] { if (Array.isArray(v)) return v as T[]; if (typeof v !== 'string' || !v) return []; try { const a = JSON.parse(v); return Array.isArray(a) ? a : []; } catch { return []; } }
 const parseSubs = (v: unknown) => parseJsonArr<{ image: string; width: string | number; caption: string }>(v);
 const parseIo = (v: unknown) => parseJsonArr<string>(v);
 const parseLines = (v: unknown) => parseJsonArr<{ text: string; level: number }>(v);
@@ -424,16 +424,30 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
         return floatWrap(n, 'image', tag(opts, n, 'node', `#figure(\n  image(${JSON.stringify(`${opts.imageDir ?? 'images'}/${n.attrs.image}`)}, width: ${width}),\n  caption: [${caption(n, opts)}${subsArg}],${placementArg(n)}\n)`) + (label ? ` <${label}>` : ''));
       }
       if (subs.length) {
-        // 分图：grid 里一张张排，分图题两档（模板：#subfigure 排在分图之下，#subs 连排在图题之下）
-        const cols = Math.max(1, Math.min(4, Number(n.attrs?.columns) || 2));
+        // 分图交给模板的 subs() 排：一行里各图等高、整组撑到 width（默认版心 90%），columns 定每行几张（0 = 一行排完）；
+        // 写了宽的那张钉死，其余自动。分图题两档：#subfigure 排在分图之下（captions:），或 #subs 连排在图题之下；
+        // 图上标签（numbering:）把 (a)(b) 直接印在图角上，样式跟 subcaption-numbering
+        const cols = Number(n.attrs?.columns);
         const under = n.attrs?.subMode !== 'caption';
         const letter = (i: number) => 'abcdefghijklmnopqrstuvwxyz'[i] ?? String(i + 1);
         const subLabel = (i: number) => (label ? ` <${label}-${letter(i)}>` : '');
-        const img = (s: { image: string; width: string | number }) => `image(${JSON.stringify(`${opts.imageDir ?? 'images'}/${s.image}`)}, width: ${lengthTypst(s.width, 'cm', '6cm')})`;
-        const cells = subs.filter((s) => s.image).map((s, i) => (under ? `    [#subfigure(${img(s)}, caption: [${escapeText(s.caption ?? '')}])${subLabel(i)}],` : `    ${img(s)},`));
-        // 分图题连排那一档标签写在条目里（模板 README 的写法）；题空着时标签得有东西可挂，给个空盒
-        const subsArg = under ? '' : `#subs(${subs.map((s, i) => `[${(s.caption ?? '').trim() ? escapeText(s.caption ?? '') : '#box[]'}${subLabel(i)}]`).join(', ')},)`;
-        const body = `#figure(\n  grid(\n    columns: ${cols}, column-gutter: 1cm, row-gutter: 12pt,\n${cells.join('\n')}\n  ),\n  caption: [${caption(n, opts)}${subsArg}],${placementArg(n)}\n)`;
+        const shown = subs.filter((s) => s.image);
+        // 图给字节不给路径：模板量图时拿 image.source 再造一次 image，包里的文件读不到工程目录的路径，字节就没这一层
+        const img = (s: { image: string; width: string | number }) => { const w = s.width !== undefined && s.width !== '' && s.width !== 'auto' ? lengthTypst(s.width, 'cm', '') : ''; return `image(read(${JSON.stringify(`${opts.imageDir ?? 'images'}/${s.image}`)}, encoding: none)${w ? `, width: ${w}` : ''})`; };
+        const capItem = (s: { caption?: string }, i: number) => `[${(s.caption ?? '').trim() ? escapeText(s.caption ?? '') : '#box[]'}${subLabel(i)}]`;
+        const corner = String(n.attrs?.subLabel ?? 'none');
+        const mark = { tl: 'top + left', tr: 'top + right', bl: 'bottom + left', br: 'bottom + right' }[corner];
+        const numbering = mark ? `(alignment: ${mark}${corner.includes('r') ? ', dx: -5pt' : ''}${corner.startsWith('b') ? ', dy: -5pt' : ''}${n.attrs?.subLabelFill === 'white' ? ', fill: white' : ''})` : '';
+        const args = [
+          ...shown.map(img),
+          `columns: ${cols >= 1 ? Math.min(6, Math.round(cols)) : 'auto'}`,
+          // 整组的宽：只认用户在工具条上设过的（带单位的字符串）；数字是插图时按像素算的单图默认宽，对整组没意义，交给模板的 90%
+          typeof n.attrs?.width === 'string' && n.attrs.width.trim() && n.attrs.width !== 'auto' ? `width: ${lengthTypst(n.attrs.width, 'cm', '90%')}` : '',
+          numbering ? `numbering: ${numbering}` : '',
+          under ? `captions: (${shown.map(capItem).join(', ')},)` : '',
+        ].filter(Boolean);
+        const subsArg = under ? '' : `#subs(${subs.map(capItem).join(', ')},)`;
+        const body = `#figure(\n  subs(\n    ${args.join(',\n    ')},\n  ),\n  caption: [${caption(n, opts)}${subsArg}],${placementArg(n)}\n)`;
         return floatWrap(n, 'image', tag(opts, n, 'node', body) + (label ? ` <${label}>` : ''));
       }
       const img = String(n.attrs?.image ?? '');
@@ -611,7 +625,12 @@ export function collectRefTargets(doc: PMNode | undefined | null): RefTarget[] {
   const walk = (n: PMNode) => {
     let kind: RefTarget['kind'] | null = null;
     let title = '';
-    if (n.type === 'figure') { kind = 'fig'; title = n.attrs?.caption ?? ''; }
+    if (n.type === 'figure') {
+      kind = 'fig'; title = n.attrs?.caption ?? '';
+      // 分图各自也能引（fig:x-a）：模板印成「图 1-1(a)」
+      const base = labelOf(n.attrs, 'fig');
+      if (base) parseSubs(n.attrs?.subs).forEach((s, i) => { counters.fig++; out.push({ label: `${base}-${'abcdefghijklmnopqrstuvwxyz'[i] ?? i + 1}`, kind: 'fig', title: `(${'abcdefghijklmnopqrstuvwxyz'[i] ?? i + 1}) ${s.caption ?? ''}`, index: counters.fig }); });
+    }
     else if (n.type === 'tableFigure') { kind = 'tab'; title = n.attrs?.caption ?? ''; }
     else if (n.type === 'equation' && n.attrs?.numbered !== false) { kind = 'eq'; title = n.attrs?.src ?? ''; }
     else if (n.type === 'heading') { kind = 'sec'; title = (n.content ?? []).map((t) => t.text ?? '').join(''); }

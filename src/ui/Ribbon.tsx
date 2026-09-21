@@ -716,8 +716,9 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               <Group label={tx("分图")}>
                 <span className="rb-keep rb-inline">
                   <Rows>
-                    <Row><ChoiceMenu label={tx("每行")} choices={[1, 2, 3, 4].map((n) => ({ value: String(n), label: tx("{{n}} 张", { n: n }) }))} value={String(Math.max(1, Math.min(4, Number(a.columns) || 2)))} onChange={(v) => chain().updateAttributes('figure', { columns: Number(v) }).run()} /></Row>
+                    <Row><ChoiceMenu label={tx("每行")} choices={[{ value: '0', label: tx("一行排完") }, ...[1, 2, 3, 4].map((n) => ({ value: String(n), label: tx("{{n}} 张", { n: n }) }))]} value={String(Math.max(0, Math.min(4, Number(a.columns) ?? 2)))} onChange={(v) => chain().updateAttributes('figure', { columns: Number(v) }).run()} /></Row>
                     <Row><ChoiceMenu label={tx("分图题注")} hint={tx("分图题注位置")} choices={[{ value: 'under', label: tx("分图之下") }, { value: 'caption', label: tx("图题之下连排") }]} value={(a.subMode as string) || 'under'} onChange={(v) => chain().updateAttributes('figure', { subMode: v }).run()} /></Row>
+                    <Row><ChoiceMenu label={tx("图上标签")} hint={tx("(a)(b) 直接印在图角上")} choices={[{ value: 'none', label: tx("不印") }, { value: 'tl', label: tx("左上") }, { value: 'tr', label: tx("右上") }, { value: 'bl', label: tx("左下") }, { value: 'br', label: tx("右下") }]} value={(a.subLabel as string) || 'none'} onChange={(v) => chain().updateAttributes('figure', { subLabel: v }).run()} /><ChoiceMenu label={tx("标签色")} choices={[{ value: 'black', label: tx("黑") }, { value: 'white', label: tx("白（深色图）") }]} value={(a.subLabelFill as string) || 'black'} onChange={(v) => chain().updateAttributes('figure', { subLabelFill: v }).run()} /></Row>
                   </Rows>
                 </span>
               </Group>

@@ -120,6 +120,9 @@ function inline(ctx: Ctx, nodes: PMNode[] = [], base: { size?: number; font?: st
         const target = String(n.attrs?.target ?? '');
         const t = ctx.nums.get(target);
         if (!t) { push(new TextRun({ text: '??', size: base.size })); break; }
+        // 分图（fig:x-b）没有自己的书签：域指母图的号，(b) 照文字接在后面
+        const sub = /-([a-z])$/.exec(target);
+        if (sub && ctx.nums.has(target.slice(0, -2)) && t.number.endsWith(`(${sub[1]})`)) { push(new SimpleField(`REF ${bmName(target.slice(0, -2))} \\h`, tidy(t.number.slice(0, -3)))); push(new TextRun({ text: `(${sub[1]})`, size: base.size })); break; }
         // 号那一段是 REF 域指着题注 / 标题里的书签，前后的「式」「节」照文字
         const ref = tidy(t.ref), num = tidy(t.number);
         const at = num ? ref.indexOf(num) : -1;

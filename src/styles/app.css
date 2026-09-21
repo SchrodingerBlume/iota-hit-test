@@ -1118,6 +1118,11 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .subfig-grid { display: grid; gap: 10px 14px; align-items: end; }
 .subfig { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
 .subfig img { display: block; }
+/* 图上的 (a)(b) 标签：跟模板 numbering: 的样子——五号无衬线，贴角半个字 */
+.subfig-img { position: relative; display: block; max-width: 100%; }
+.subfig-mark { position: absolute; font-family: var(--sans); font-size: 12px; line-height: 1; padding: 2px 3px; pointer-events: none; }
+.subfig-mark.is-black { color: #000; } .subfig-mark.is-white { color: #fff; }
+.subfig-mark.is-tl { top: 4px; left: 4px; } .subfig-mark.is-tr { top: 4px; right: 4px; } .subfig-mark.is-bl { bottom: 4px; left: 4px; } .subfig-mark.is-br { bottom: 4px; right: 4px; }
 .subcaps { display: flex; flex-wrap: wrap; gap: 4px 14px; justify-content: center; margin-top: 2px; }
 .subcaps .subfig-cap { display: inline-flex; align-items: center; gap: 4px; }
 .subfig-cap { display: flex; align-items: baseline; gap: 4px; font-family: var(--serif); font-size: 14px; }
