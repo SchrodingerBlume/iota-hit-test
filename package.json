@@ -41,6 +41,7 @@
     "lucide-react": "^1.46.0",
     "marked": "^18.0.13",
     "mathlive": "^0.109.2",
+    "pdfjs-dist": "^6.3.289",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "zhconv": "^0.4.2",

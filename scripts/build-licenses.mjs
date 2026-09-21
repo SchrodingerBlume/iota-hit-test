@@ -54,6 +54,7 @@ const rows = [
   ['zustand', pkgVersion('zustand'), 'Paul Henschel', 'MIT', 'https://github.com/pmndrs/zustand', '无'],
   ['zhconv（简繁转换，zhconv-rs 编成的 wasm，第一次用才加载）', pkgVersion('zhconv'), 'Hung-I Wang（Gowee）', 'MIT / Apache-2.0 双许可；内含 MediaWiki 转换表（GPL-2.0-or-later）与 OpenCC 词典（Apache-2.0）', 'https://github.com/Gowee/zhconv-rs', '无'],
   ['@anthropic-ai/sdk（Agent 面板接 Anthropic 接口，第一次用才加载）', pkgVersion('@anthropic-ai/sdk'), 'Anthropic', 'MIT', 'https://github.com/anthropics/anthropic-sdk-typescript', '无'],
+  ['pdfjs-dist（Agent 面板读 PDF 附件的文字，第一次用才加载）', pkgVersion('pdfjs-dist'), 'Mozilla', 'Apache-2.0', 'https://github.com/mozilla/pdf.js', '无'],
   ['docx（生成 Word 文档）', pkgVersion('docx'), 'Dolan Miu', 'MIT', 'https://github.com/dolanmiu/docx', '无'],
   ['citation-js（core、plugin-bibtex、plugin-csl，含 citeproc-js）', pkgVersion('@citation-js/core'), 'Lars Willighagen 等；citeproc-js: Frank Bennett', 'MIT；citeproc-js: CPAL-1.0 / AGPL-3.0 双许可（本站按 CPAL 使用）', 'https://citation.js.org', '无'],
   ['CSL 样式 china-national-standard-gb-t-7714-2015-numeric 与 zh-CN 区域文件', '', 'Citation Style Language 项目贡献者', 'CC BY-SA 3.0', 'https://github.com/citation-style-language/styles', '无（随站分发，见 scripts/data/）'],

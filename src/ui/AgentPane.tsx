@@ -1,10 +1,11 @@
 // Agent 面板：在编辑区右边跟模型对话，它读、改文档走 src/ai/tools.ts 那几件工具，每一步在对话里留一张卡
 import { useEffect, useRef, useState } from 'react';
 import { Button, Textarea, Tooltip } from '@fluentui/react-components';
-import { Settings20Regular, Dismiss20Regular, Send20Regular, Stop20Regular, Broom20Regular, ChevronRight12Regular, ChevronDown12Regular } from '@fluentui/react-icons';
+import { Settings20Regular, Dismiss20Regular, Send20Regular, Stop20Regular, Broom20Regular, ChevronRight12Regular, ChevronDown12Regular, Attach20Regular, Dismiss12Regular, Image16Regular, DocumentPdf16Regular, DocumentText16Regular } from '@fluentui/react-icons';
 import { useAgent, type ToolCard } from '../ai/state';
 import { configReady, PRESETS } from '../ai/config';
 import { PARTS } from '../ai/tools';
+import { fmtSize, type Attachment } from '../ai/files';
 import { AgentSettings } from './AgentSettings';
 import { t as tx } from '../i18n';
 
@@ -32,6 +33,17 @@ function cardTitle(c: ToolCard): string {
   }
 }
 
+function FileChip({ f, onRemove }: { f: Attachment; onRemove?: () => void }) {
+  const Icon = f.kind === 'image' ? Image16Regular : f.kind === 'pdf' ? DocumentPdf16Regular : DocumentText16Regular;
+  return (
+    <span className="ag-file" title={`${f.name} · ${fmtSize(f.size)}`}>
+      {f.kind === 'image' ? <img src={`data:${f.type};base64,${f.data}`} alt="" /> : <Icon />}
+      <span className="ag-file-name">{f.name}</span>
+      {onRemove && <button type="button" className="ag-file-x" aria-label={tx("去掉")} onClick={onRemove}><Dismiss12Regular /></button>}
+    </span>
+  );
+}
+
 function Card({ c }: { c: ToolCard }) {
   const [open, setOpen] = useState(false);
   const edit = ['replace', 'insert', 'delete'].includes(c.name);
@@ -44,16 +56,19 @@ function Card({ c }: { c: ToolCard }) {
 }
 
 export function AgentPane() {
-  const { items, running, send, stop, clear, config, setOpen, setSettingsOpen } = useAgent();
+  const { items, running, send, stop, clear, config, setOpen, setSettingsOpen, pending, attach, detach } = useAgent();
   const [draft, setDraft] = useState('');
+  const [drag, setDrag] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const ready = configReady(config);
   useEffect(() => { const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }, [items]);
   useEffect(() => { if (config === undefined) useAgent.getState().setOpen(true); }, [config]);
-  const submit = () => { const t = draft.trim(); if (!t || running || !ready) return; setDraft(''); void send(t); };
+  const submit = () => { const t = draft.trim(); if ((!t && !pending.length) || running || !ready) return; setDraft(''); void send(t); };
+  const onFiles = (list: FileList | File[] | null | undefined) => { if (list?.length && ready) void attach(Array.from(list)); };
   const preset = PRESETS.find((p) => p.key === config?.preset);
   return (
-    <aside className="agent-pane">
+    <aside className={`agent-pane ${drag ? 'is-drop' : ''}`} onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDrag(true); } }} onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDrag(false); }} onDrop={(e) => { if (!e.dataTransfer.files.length) return; e.preventDefault(); setDrag(false); onFiles(e.dataTransfer.files); }}>
       <div className="ag-head">
         <b>Agent</b>
         <span className="muted ag-model" title={config ? `${config.baseUrl}` : ''}>{ready ? `${preset?.label ?? config!.preset} · ${config!.model}` : tx("还没接模型")}</span>
@@ -78,17 +93,21 @@ export function AgentPane() {
         {items.map((it) => (
           <div key={it.id} className={`ag-msg is-${it.role}`}>
             {it.tools.map((c, i) => <Card key={i} c={c} />)}
+            {!!it.files?.length && <div className="ag-files">{it.files.map((f) => <FileChip key={f.id} f={f} />)}</div>}
             {it.text && <div className="ag-text">{it.text}</div>}
             {it.error && <div className="ag-error">{it.error}</div>}
             {it.role === 'assistant' && running && it.id === items[items.length - 1]?.id && !it.text && !it.tools.length && <div className="ag-thinking muted">{tx("正在想…")}</div>}
           </div>
         ))}
       </div>
+      {!!pending.length && <div className="ag-files ag-pending">{pending.map((f) => <FileChip key={f.id} f={f} onRemove={() => detach(f.id)} />)}</div>}
       <div className="ag-input">
-        <Textarea resize="vertical" value={draft} placeholder={ready ? tx("要它做什么？Enter 发送，Shift+Enter 换行") : tx("先在设置里接一个模型")} disabled={!ready} onChange={(_, d) => setDraft(d.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }} />
+        <Tooltip content={tx("附件：图片、PDF、文本文件；也可以拖进来或粘贴")} relationship="label"><Button size="small" appearance="subtle" icon={<Attach20Regular />} disabled={!ready || running} onClick={() => fileInput.current?.click()} /></Tooltip>
+        <input ref={fileInput} type="file" multiple hidden accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.txt,.md,.bib,.csv,.json,.tex,.typ" onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} />
+        <Textarea resize="vertical" value={draft} placeholder={ready ? tx("要它做什么？Enter 发送，Shift+Enter 换行") : tx("先在设置里接一个模型")} disabled={!ready} onChange={(_, d) => setDraft(d.value)} onPaste={(e) => { const fs = Array.from(e.clipboardData.files); if (fs.length) { e.preventDefault(); onFiles(fs); } }} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }} />
         {running
           ? <Button appearance="secondary" icon={<Stop20Regular />} onClick={stop}>{tx("停止")}</Button>
-          : <Button appearance="primary" icon={<Send20Regular />} disabled={!ready || !draft.trim()} onClick={submit}>{tx("发送")}</Button>}
+          : <Button appearance="primary" icon={<Send20Regular />} disabled={!ready || (!draft.trim() && !pending.length)} onClick={submit}>{tx("发送")}</Button>}
       </div>
       <AgentSettings />
     </aside>

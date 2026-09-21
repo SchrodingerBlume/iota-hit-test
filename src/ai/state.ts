@@ -3,9 +3,10 @@ import { create } from 'zustand';
 import type { AiConfig } from './config';
 import { loadConfig } from './config';
 import { runTurn, describeError, type Transcript } from './agent';
+import { readAttachment, type Attachment } from './files';
 
 export interface ToolCard { name: string; input: Record<string, unknown>; result: string; isError: boolean }
-export interface ChatItem { id: string; role: 'user' | 'assistant'; text: string; tools: ToolCard[]; error?: string }
+export interface ChatItem { id: string; role: 'user' | 'assistant'; text: string; tools: ToolCard[]; files?: Attachment[]; error?: string }
 
 interface AgentState {
   open: boolean;
@@ -16,6 +17,9 @@ interface AgentState {
   setSettingsOpen: (v: boolean) => void;
   items: ChatItem[];
   running: boolean;
+  pending: Attachment[];
+  attach: (files: File[]) => Promise<void>;
+  detach: (id: string) => void;
   send: (text: string) => Promise<void>;
   stop: () => void;
   clear: () => void;
@@ -34,19 +38,28 @@ export const useAgent = create<AgentState>((set, get) => ({
   setSettingsOpen: (v) => set({ settingsOpen: v }),
   items: [],
   running: false,
+  pending: [],
+  attach: async (files) => {
+    for (const f of files) {
+      try { const a = await readAttachment(f); set({ pending: [...get().pending, a] }); }
+      catch (e) { set({ items: [...get().items, { id: uid(), role: 'assistant', text: '', tools: [], error: (e as Error).message }] }); }
+    }
+  },
+  detach: (id) => set({ pending: get().pending.filter((a) => a.id !== id) }),
   send: async (text) => {
     const c = get().config;
-    if (!c || get().running || !text.trim()) return;
+    const files = get().pending;
+    if (!c || get().running || (!text.trim() && !files.length)) return;
     if (!transcript || transcript.api !== c.api) transcript = { api: c.api, messages: [] } as Transcript;
     const reply: ChatItem = { id: uid(), role: 'assistant', text: '', tools: [] };
-    set({ items: [...get().items, { id: uid(), role: 'user', text, tools: [] }, reply], running: true });
+    set({ items: [...get().items, { id: uid(), role: 'user', text, tools: [], files }, reply], running: true, pending: [] });
     const patch = (p: Partial<ChatItem>) => set({ items: get().items.map((it) => (it.id === reply.id ? { ...it, ...p } : it)) });
     let buf = '';
     aborter = new AbortController();
     // 中途停了或出错：这一轮的记录整个撤掉，不然下一轮会带着没回结果的工具调用
     const mark = transcript.messages.length;
     try {
-      await runTurn(c, transcript, text, {
+      await runTurn(c, transcript, text || '（看附件）', files, {
         onText: (d) => { buf += d; patch({ text: buf }); },
         onTool: (name, input, result, isError) => { const cur = get().items.find((it) => it.id === reply.id)!; patch({ tools: [...cur.tools, { name, input, result, isError }] }); },
       }, aborter.signal);

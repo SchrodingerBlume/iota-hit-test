@@ -106,6 +106,12 @@ iota-hit 在线编辑器 · 开源许可与声明
     来源：https://github.com/anthropics/anthropic-sdk-typescript
     修改：无
 
+· pdfjs-dist（Agent 面板读 PDF 附件的文字，第一次用才加载） 6.3.289
+    版权：Mozilla
+    许可：Apache-2.0
+    来源：https://github.com/mozilla/pdf.js
+    修改：无
+
 · docx（生成 Word 文档） 9.7.1
     版权：Dolan Miu
     许可：MIT

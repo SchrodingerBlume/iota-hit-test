@@ -3,6 +3,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import type { AiConfig } from './config';
 import { TOOLS, SYSTEM_PROMPT, runTool, type ToolDef } from './tools';
+import { pdfText, type Attachment } from './files';
 
 export interface AgentEvents {
   onText: (delta: string) => void;
@@ -19,17 +20,21 @@ function exec(name: string, input: Record<string, unknown>): { result: string; i
   catch (e) { return { result: `工具出错：${(e as Error).message}`, isError: true }; }
 }
 
-export async function runTurn(c: AiConfig, t: Transcript, userText: string, ev: AgentEvents, signal: AbortSignal): Promise<void> {
-  if (t.api === 'anthropic') return anthropicTurn(c, t.messages, userText, ev, signal);
-  return openaiTurn(c, t.messages, userText, ev, signal);
+export async function runTurn(c: AiConfig, t: Transcript, userText: string, files: Attachment[], ev: AgentEvents, signal: AbortSignal): Promise<void> {
+  if (t.api === 'anthropic') return anthropicTurn(c, t.messages, userText, files, ev, signal);
+  return openaiTurn(c, t.messages, userText, files, ev, signal);
 }
 
 // ── Anthropic Messages（官方 SDK，浏览器里直连要 dangerouslyAllowBrowser）────────────────────
-async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], userText: string, ev: AgentEvents, signal: AbortSignal) {
+async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], userText: string, files: Attachment[], ev: AgentEvents, signal: AbortSignal) {
   const { default: Client } = await import('@anthropic-ai/sdk');
   const client = new Client({ apiKey: c.apiKey, baseURL: base(c.baseUrl), dangerouslyAllowBrowser: true, maxRetries: 1 });
   const tools: Anthropic.Tool[] = TOOLS.map((d) => ({ name: d.name, description: d.description, input_schema: d.parameters as Anthropic.Tool.InputSchema }));
-  messages.push({ role: 'user', content: userText });
+  const parts: Anthropic.ContentBlockParam[] = files.map((f) => f.kind === 'image'
+    ? { type: 'image', source: { type: 'base64', media_type: f.type as 'image/png', data: f.data } }
+    : f.kind === 'pdf' ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: f.data }, title: f.name }
+    : { type: 'document', source: { type: 'text', media_type: 'text/plain', data: f.data }, title: f.name });
+  messages.push({ role: 'user', content: parts.length ? [...parts, { type: 'text', text: userText }] : userText });
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const stream = client.messages.stream({
       model: c.model, max_tokens: 16000,
@@ -57,10 +62,16 @@ async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], us
 // ── OpenAI 兼容 chat/completions（DeepSeek、Kimi、通义、智谱、OpenRouter、Ollama…），SSE 自己解 ──
 interface ToolCallAcc { id: string; name: string; args: string }
 
-async function openaiTurn(c: AiConfig, messages: any[], userText: string, ev: AgentEvents, signal: AbortSignal) {
+async function openaiTurn(c: AiConfig, messages: any[], userText: string, files: Attachment[], ev: AgentEvents, signal: AbortSignal) {
   const tools = TOOLS.map((d: ToolDef) => ({ type: 'function', function: { name: d.name, description: d.description, parameters: d.parameters } }));
   if (!messages.length) messages.push({ role: 'system', content: SYSTEM_PROMPT });
-  messages.push({ role: 'user', content: userText });
+  const parts: any[] = [];
+  for (const f of files) {
+    if (f.kind === 'image') parts.push({ type: 'image_url', image_url: { url: `data:${f.type};base64,${f.data}` } });
+    else if (f.kind === 'pdf') parts.push({ type: 'text', text: await pdfText(f.data, f.name) });
+    else parts.push({ type: 'text', text: `${f.name}\n${f.data}` });
+  }
+  messages.push({ role: 'user', content: parts.length ? [...parts, { type: 'text', text: userText }] : userText });
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const r = await fetch(`${base(c.baseUrl)}/chat/completions`, {
       method: 'POST', signal,
