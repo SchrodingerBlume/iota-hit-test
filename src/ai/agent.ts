@@ -1,8 +1,8 @@
 // 跟模型来回：发对话与工具表，流式收字；模型要调工具就在本地跑、把结果回给它，直到它不再调。
 // 两种接口各一个驱动，对话记录按接口各自的原样存（一个会话只用一家）
 import type Anthropic from '@anthropic-ai/sdk';
-import type { AiConfig } from './config';
-import { TOOLS, SYSTEM_PROMPT, runTool, type ToolDef } from './tools';
+import { webOf, type AiConfig } from './config';
+import { TOOLS, SYSTEM_PROMPT, runTool, toolsFor, setWebConfig, type ToolDef } from './tools';
 import { pdfText, type Attachment } from './files';
 
 export interface AgentEvents {
@@ -29,7 +29,12 @@ export async function runTurn(c: AiConfig, t: Transcript, userText: string, file
 async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], userText: string, files: Attachment[], ev: AgentEvents, signal: AbortSignal) {
   const { default: Client } = await import('@anthropic-ai/sdk');
   const client = new Client({ apiKey: c.apiKey, baseURL: base(c.baseUrl), dangerouslyAllowBrowser: true, maxRetries: 1 });
-  const tools: Anthropic.Tool[] = TOOLS.map((d) => ({ name: d.name, description: d.description, input_schema: d.parameters as Anthropic.Tool.InputSchema }));
+  const tools: Anthropic.ToolUnion[] = TOOLS.map((d) => ({ name: d.name, description: d.description, input_schema: d.parameters as Anthropic.Tool.InputSchema }));
+  // 联网走 Anthropic 自带的服务端工具：新一代模型用带动态过滤的那版，老模型只有基础搜索
+  if (webOf(c).enabled) {
+    if (/opus-5|opus-4-[678]|sonnet-5|sonnet-4-6|fable|mythos/.test(c.model)) tools.push({ type: 'web_search_20260209', name: 'web_search', max_uses: 8 } as any, { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 8 } as any);
+    else tools.push({ type: 'web_search_20250305', name: 'web_search', max_uses: 8 } as any);
+  }
   const parts: Anthropic.ContentBlockParam[] = files.map((f) => f.kind === 'image'
     ? { type: 'image', source: { type: 'base64', media_type: f.type as 'image/png', data: f.data } }
     : f.kind === 'pdf' ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: f.data }, title: f.name }
@@ -63,7 +68,9 @@ async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], us
 interface ToolCallAcc { id: string; name: string; args: string }
 
 async function openaiTurn(c: AiConfig, messages: any[], userText: string, files: Attachment[], ev: AgentEvents, signal: AbortSignal) {
-  const tools = TOOLS.map((d: ToolDef) => ({ type: 'function', function: { name: d.name, description: d.description, parameters: d.parameters } }));
+  const w = webOf(c);
+  setWebConfig({ reader: w.reader, searchKey: w.searchKey });
+  const tools = toolsFor(c).map((d: ToolDef) => ({ type: 'function', function: { name: d.name, description: d.description, parameters: d.parameters } }));
   if (!messages.length) messages.push({ role: 'system', content: SYSTEM_PROMPT });
   const parts: any[] = [];
   for (const f of files) {

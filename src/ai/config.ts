@@ -5,7 +5,11 @@ import { kv } from '../model/persist';
 import { t } from '../i18n';
 
 export type AiApi = 'anthropic' | 'openai';
-export interface AiConfig { preset: string; api: AiApi; baseUrl: string; apiKey: string; model: string }
+/** 联网：Anthropic 走服务方自带的搜索与抓取；其余接口走阅读代理抓网页（默认 r.jina.ai，不用密钥），搜索要 Jina 的密钥 */
+export interface WebConfig { enabled: boolean; reader: string; searchKey: string }
+export interface AiConfig { preset: string; api: AiApi; baseUrl: string; apiKey: string; model: string; web?: WebConfig }
+export const defaultWeb = (): WebConfig => ({ enabled: true, reader: 'https://r.jina.ai/', searchKey: '' });
+export const webOf = (c: AiConfig): WebConfig => ({ ...defaultWeb(), ...(c.web ?? {}) });
 export interface AiPreset { key: string; label: string; api: AiApi; baseUrl: string; model: string; keysUrl?: string; note?: string }
 
 export const PRESETS: AiPreset[] = [

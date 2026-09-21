@@ -42,6 +42,8 @@ function cardTitle(c: ToolCard): string {
     case 'abbreviations_add': return tx("加了缩略语 / 符号");
     case 'settings_list': return tx("看了论文设置");
     case 'settings_set': return tx("改设置：{{key}}", { key: i.key });
+    case 'web_fetch': return tx("抓了网页 {{url}}", { url: String(i.url ?? '').replace(/^https?:\/\//, '').slice(0, 60) });
+    case 'web_search': return tx("搜了「{{q}}」", { q: i.query });
     default: return c.name;
   }
 }

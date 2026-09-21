@@ -14,6 +14,7 @@ import { useCompileState } from '../compiler/client';
 import { parseBibtex, splitNames, type BibEntry } from '../bib/bibtex';
 import { mergeEntries } from '../bib/csl';
 import type { Attachment } from './files';
+import { webOf, type AiConfig } from './config';
 
 export interface ToolDef { name: string; description: string; parameters: Record<string, unknown> }
 /** 要用户点头的改动：面板弹卡片，用户允许了才做 */
@@ -44,6 +45,20 @@ const INFO_FIELDS: { key: keyof Info; label: string }[] = ([
 ] as [keyof Info, string][]).map(([key, label]) => ({ key, label }));
 const range = { from: { type: 'integer', minimum: 0 }, to: { type: 'integer', minimum: 0 } };
 const place = { part: partEnum, at: { type: 'integer', minimum: 0, description: '插在第几块之前（等于块数就是接在末尾）；给了 replace 就不用' }, replace: { type: 'array', items: { type: 'integer', minimum: 0 }, minItems: 2, maxItems: 2, description: '[from, to]：换掉这一段块' } };
+
+const WEB_TOOLS: ToolDef[] = [
+  { name: 'web_fetch', description: '抓一个网页的正文（转成 Markdown）。用户给了网址、或搜索结果里有要细看的页面时用。', parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'], additionalProperties: false } },
+  { name: 'web_search', description: '联网搜索，返回前几条结果的标题、网址、摘要。查文献、查数据、核对说法时用；引用时要写出处。', parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false } },
+];
+/** 这一家接口用哪些工具：Anthropic 的联网是服务方自带的（在 agent.ts 里加服务端工具），别家走阅读代理 */
+export function toolsFor(c: AiConfig): ToolDef[] {
+  if (c.api === 'anthropic') return TOOLS;
+  const w = webOf(c);
+  if (!w.enabled) return TOOLS;
+  return [...TOOLS, WEB_TOOLS[0], ...(w.searchKey.trim() ? [WEB_TOOLS[1]] : [])];
+}
+let webConfig: { reader: string; searchKey: string } = { reader: '', searchKey: '' };
+export const setWebConfig = (w: { reader: string; searchKey: string }) => { webConfig = w; };
 
 export const TOOLS: ToolDef[] = [
   { name: 'outline', description: '看整篇的结构：各部分有多少块，正文与附录的标题树（带段号），图表清单。改之前先看这个。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
@@ -297,6 +312,27 @@ function imagesText(): string {
   return [`工程里的图片 ${imgs.length} 张${imgs.length ? '：\n' + imgs.map((i) => `${i.name}${i.width ? `（${i.width}×${i.height}）` : ''}`).join('\n') : ''}`, `对话里发来的图片附件 ${att.length} 张${att.length ? '：\n' + att.map((a) => a.name).join('\n') : ''}`].join('\n');
 }
 
+async function webFetch(url: string): Promise<string> {
+  const u = String(url ?? '').trim();
+  if (!/^https?:\/\//i.test(u)) return '网址得以 http:// 或 https:// 开头';
+  const reader = webConfig.reader.trim().replace(/\/+$/, '') + '/';
+  const r = await fetch(reader + u, { headers: { Accept: 'text/plain' } });
+  if (!r.ok) return `抓不到（http ${r.status}）：${u}`;
+  const text = (await r.text()).trim();
+  return text.length > 20000 ? text.slice(0, 20000) + '\n…（太长，截到 2 万字）' : text || '（页面没有可读的正文）';
+}
+async function webSearch(query: string): Promise<string> {
+  const q = String(query ?? '').trim();
+  if (!q) return '要搜什么？';
+  if (!webConfig.searchKey.trim()) return '没有搜索密钥，只能抓用户给的网址（web_fetch）；在 Agent 设置里填 Jina 的密钥才能搜';
+  const r = await fetch(`https://s.jina.ai/?q=${encodeURIComponent(q)}`, { headers: { Accept: 'application/json', Authorization: `Bearer ${webConfig.searchKey.trim()}` } });
+  if (!r.ok) return `搜索失败（http ${r.status}）`;
+  const j = await r.json();
+  const rows: any[] = j.data ?? [];
+  if (!rows.length) return '没搜到';
+  return rows.slice(0, 6).map((x, i) => `${i + 1}. ${x.title ?? ''}\n${x.url ?? ''}\n${String(x.description ?? x.content ?? '').slice(0, 400)}`).join('\n\n');
+}
+
 /** 跑一个工具，回给模型的是纯文本 */
 export async function runTool(name: string, input: Record<string, any>): Promise<string> {
   const need = () => { const p = partOf(String(input.part ?? '')); if (!p) throw new Error(`part 得是 ${PART_KEYS.join(' / ')} 之一`); return p; };
@@ -319,6 +355,8 @@ export async function runTool(name: string, input: Record<string, any>): Promise
     case 'abbreviations_add': return abbreviationsAdd(input);
     case 'settings_list': return settingsList();
     case 'settings_set': return settingsSet(input);
+    case 'web_fetch': return webFetch(input.url);
+    case 'web_search': return webSearch(input.query);
     default: throw new Error(`没有这个工具：${name}`);
   }
 }
@@ -326,7 +364,7 @@ export async function runTool(name: string, input: Record<string, any>): Promise
 export const SYSTEM_PROMPT = `你是 iota4web 里的写作助手。iota4web 是哈尔滨工业大学学位论文的所见即所得编辑器，排版由 iota-hit 模板按学校规范自动完成，用户只管内容。
 文档分成几部分（摘要、正文、结论、附录、致谢、简历），每部分是一串块（标题、段落、公式、图、表、列表……），用工具按「部分 + 段号」读和改。
 读回来的是 Markdown：# 是标题（正文按章节层级），$…$ 是行内公式、$$…$$ 是行间公式，[@key] 是引参考文献，@fig:xx / @tab:xx / @eq:xx 是交叉引用，@缩略语键 是缩略语，^[…] 是脚注；\`\`\`iota-node 围起来的 JSON 块和 <!--iota-inline:…--> 注释是编辑器专有的节点，用 replace 时原样保留。
-你能做的：读改各部分的文字；用 table_write 写表（单元格里 \\n 换行，能定列宽方式）、figure_write 插图（工程里的图或用户发来的图片附件）；往参考文献表 / 成果表加 BibTeX 条目（bib_add）；改论文信息（info_write）；加缩略语和符号；看编译诊断；改论文设置（settings_set，每次都会弹窗请用户允许）。
+你能做的：读改各部分的文字；用 table_write 写表（单元格里 \\n 换行，能定列宽方式）、figure_write 插图（工程里的图或用户发来的图片附件）；往参考文献表 / 成果表加 BibTeX 条目（bib_add）；改论文信息（info_write）；加缩略语和符号；看编译诊断；改论文设置（settings_set，每次都会弹窗请用户允许）。工具表里有 web_search / web_fetch 时能联网：查来的东西要给出处（网址），没有就不要说查过。
 规矩：
 - 先 outline 或 read 看清楚再改，改动尽量小，只换需要改的那几块；不要改标题的标签、引用键。
 - 引用文献要先有条目：表里没有就用 bib_add 加进去再在正文里写 [@key]，不要编造文献；拿不准的出处要向用户确认。

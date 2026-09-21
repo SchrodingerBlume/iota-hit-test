@@ -1,8 +1,8 @@
 // Agent 设置：选服务方（或自定义地址）、贴密钥、挑模型、试连。存本机
 import { useEffect, useState } from 'react';
-import { Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions, Button, Input, Dropdown, Option, Combobox } from '@fluentui/react-components';
+import { Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions, Button, Input, Dropdown, Option, Combobox, Checkbox } from '@fluentui/react-components';
 import { useAgent } from '../ai/state';
-import { PRESETS, emptyConfig, saveConfig, listModels, configReady, type AiConfig } from '../ai/config';
+import { PRESETS, emptyConfig, saveConfig, listModels, configReady, webOf, type AiConfig } from '../ai/config';
 import { testConnection, describeError } from '../ai/agent';
 import { t as tx } from '../i18n';
 import { t as tr } from '../i18n';
@@ -74,6 +74,24 @@ export function AgentSettings() {
               </span>
             </div>
             {preset.note && <p className="field-hint muted">{preset.note}</p>}
+            <div className="ag-web">
+              <Checkbox label={tx("允许联网")} checked={webOf(c).enabled} onChange={(_, d) => setC({ ...c, web: { ...webOf(c), enabled: !!d.checked } })} />
+              {webOf(c).enabled && (c.api === 'anthropic'
+                ? <p className="field-hint muted">{tx("走 Anthropic 自带的网页搜索与抓取（按次计费，见其价目）。")}</p>
+                : (
+                  <div className="ag-grid">
+                    <span className="zt-lab">{tx("抓网页")}</span>
+                    <Input size="small" value={webOf(c).reader} placeholder="https://r.jina.ai/" onChange={(_, d) => setC({ ...c, web: { ...webOf(c), reader: d.value } })} />
+                    <span className="zt-lab">{tx("搜索密钥")}</span>
+                    <span className="ag-keyrow">
+                      <Input size="small" type="password" className="zt-key" value={webOf(c).searchKey} placeholder={tx("Jina 的密钥，不填就只能抓网址不能搜")} onChange={(_, d) => setC({ ...c, web: { ...webOf(c), searchKey: d.value } })} />
+                      <a href="https://jina.ai/api-dashboard/" target="_blank" rel="noreferrer">{tx("去申请 ↗")}</a>
+                    </span>
+                    <span />
+                    <p className="field-hint muted">{tx("这类接口自己不联网：抓网页经阅读代理（网址前面接上它，默认 r.jina.ai，不用密钥），搜索用 Jina 的搜索接口。改成你自己的代理也行。")}</p>
+                  </div>
+                ))}
+            </div>
             <div className="zt-row" style={{ marginTop: 8 }}>
               <Button size="small" disabled={!!busy || !configReady(c)} onClick={test}>{tx("试连")}</Button>
               {busy && <span className="muted">{busy}</span>}
