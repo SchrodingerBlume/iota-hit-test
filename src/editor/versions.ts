@@ -14,6 +14,12 @@ const log: { v: number; key: RichKey; mapping: Mapping }[] = [];
 
 export const docVersion = () => version;
 
+/** 回灌进 store 的那份 JSON 是在哪一版截的：编译按它记版本——回灌是节流的，编译发出去那一刻编辑器可能又走了几笔，
+ *  拿编辑器的现版当产物的版本，字形表就会把没编进去的那几笔当成已经排上了，光标与暂印的字全错位 */
+const stamps = new WeakMap<object, number>();
+export function stampVersion(json: object, v = version) { stamps.set(json, v); }
+export const versionOf = (json: object | undefined | null): number | undefined => (json ? stamps.get(json) : undefined);
+
 export function recordTransaction(key: RichKey, tr: Transaction) {
   if (!tr.docChanged) return;
   version++;

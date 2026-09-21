@@ -51,8 +51,6 @@ export interface CompileState {
   focusGen: number;
   /** 排版引擎重启了几次：wasm 里 panic 一次（unreachable）整个实例就废了，只能换一个；下一次整编要 force、图要重发 */
   engineGen: number;
-  /** 哪条道起了新 worker 就加一：用户字体要重发给它（FontRecovery 看这个） */
-  lanesGen: number;
   /** 编译器 wasm 的线性内存（字节），看它离 4 GB 还有多远 */
   wasmMem: number;
   /** 只编一段（打字即时回显）：产物、字形表、这一段在编辑器里的区间（按 version）；整编或只编一章追上来就清 */
@@ -90,7 +88,6 @@ export const useCompileState = create<CompileState>(() => ({
   focusGen: 0,
   para: null,
   engineGen: 0,
-  lanesGen: 0,
   wasmMem: 0,
 }));
 
@@ -136,6 +133,8 @@ let appliedFullVersion = -1;
 const LONG_MAIN = 120_000;
 /** 图片字节留一份：起后台那条道、或哪条道重启时照样能补齐（发给 worker 的是拷贝） */
 const imageStore = new Map<string, ArrayBuffer>();
+/** 用户字体（本机读的、选的文件）也留一份：哪条道起了新 worker 就先把它们发过去，就绪了才算就绪——不必再劳 FontRecovery 重读本机 */
+const fontStore = new Map<string, ArrayBuffer>();
 
 /** 一条道 = 一个 worker：自己的编译队列、自己映射过的图、自己的等待者 */
 class Lane {
@@ -147,6 +146,9 @@ class Lane {
   paraInFlight: { id: number; input: ParaInput } | null = null;
   paraPending: ParaInput | null = null;
   images = new Set<string>();
+  /** 起来时先补发用户字体，字体表建好前不接编译 */
+  fontsPending = false;
+  bootMs = 0;
   /** 后台那条道的差分基线立了没有：暖身那一遍不算，第一次真整编要 force 一次让渲染端从整份起 */
   baselined = false;
   warmed = false;
@@ -176,7 +178,7 @@ class Lane {
   }
   /** 发一次编译：图按这条道缺什么补什么 */
   flush() {
-    if (!this.worker || !this.ready || this.inFlight !== null || !this.pending) return;
+    if (!this.worker || !this.ready || this.fontsPending || this.inFlight !== null || !this.pending) return;
     const input = this.pending;
     this.pending = null;
     this.inFlight = nextId++;
@@ -192,7 +194,7 @@ class Lane {
     this.send({ type: 'compile', id: this.inFlight, ...msg, focus: focus?.id, images, removeImages }, images.map((i) => i.data));
   }
   flushPara() {
-    if (!this.worker || !this.ready || this.paraInFlight || !this.paraPending) return;
+    if (!this.worker || !this.ready || this.fontsPending || this.paraInFlight || !this.paraPending) return;
     const input = this.paraPending;
     this.paraPending = null;
     this.paraInFlight = { id: nextId++, input };
@@ -201,7 +203,6 @@ class Lane {
 }
 const fg = new Lane('fg');
 const bg = new Lane('bg');
-const lanes = () => [fg, bg].filter((l) => l.worker);
 const compiling = () => ({ compiling: fg.inFlight !== null, bgCompiling: bg.inFlight !== null });
 
 /** 后台那条道起来后先拿上一次整编暖一遍缓存（几百页冷编要几十秒），但等前台那次整编落地再暖——两边同时冷编会互相拖慢 */
@@ -226,6 +227,7 @@ function restartLane(lane: Lane, reason: string) {
   lane.images.clear();
   lane.baselined = false;
   lane.warmed = false;
+  lane.fontsPending = false;
   lane.fail(reason);
   if (lane.name === 'fg') {
     useCompileState.setState((s) => ({ status: 'booting', progress: null, ...compiling(), engineGen: s.engineGen + 1, families: [], focusArtifact: null, focusAt: null, focusGlyphs: null, para: null }));
@@ -262,12 +264,9 @@ function onMessage(lane: Lane, m: FromWorker) {
       break;
     case 'ready':
       lane.ready = true;
-      if (lane.name === 'fg') useCompileState.setState({ status: 'ready', bootMs: m.ms, progress: null, families: m.families });
-      else useCompileState.setState({ bgReady: true });
-      useCompileState.setState((s) => ({ lanesGen: s.lanesGen + 1 }));
-      warmBg();
-      lane.flush();
-      lane.flushPara();
+      // 有用户字体就先补发，字体表建好（fontsSet）才对外算就绪
+      if (fontStore.size) { lane.fontsPending = true; lane.bootMs = m.ms; sendFonts(lane, [...fontStore.keys()], []); break; }
+      laneUp(lane, m.ms, m.families);
       break;
     case 'fatal':
       if (TRAPPED.test(m.message)) { restartLane(lane, m.message); break; }
@@ -344,12 +343,29 @@ function onMessage(lane: Lane, m: FromWorker) {
       break;
     }
     case 'fontsSet': {
-      if (lane.name === 'fg') { const s = useCompileState.getState(); useCompileState.setState({ fontsVersion: s.fontsVersion + 1, families: m.families }); }
+      if (lane.fontsPending) { lane.fontsPending = false; laneUp(lane, lane.bootMs, m.families); }
+      else if (lane.name === 'fg') { const s = useCompileState.getState(); useCompileState.setState({ fontsVersion: s.fontsVersion + 1, families: m.families }); }
       lane.fontWaiters.get(m.id)?.({ families: m.families, error: m.error });
       lane.fontWaiters.delete(m.id);
       break;
     }
   }
+}
+
+/** 一条道就绪（字体也补齐了）：前台的对外就是引擎就绪，后台的可以接整编了 */
+function laneUp(lane: Lane, bootMs: number, families: string[]) {
+  if (lane.name === 'fg') useCompileState.setState({ status: 'ready', bootMs, progress: null, families });
+  else useCompileState.setState({ bgReady: true });
+  warmBg();
+  lane.flush();
+  lane.flushPara();
+}
+/** 把字体表发给一条道（增删都是相对它现有的表）：字节各发一份拷贝 */
+function sendFonts(lane: Lane, add: string[], remove: string[], waiter?: (r: { families: string[]; error?: string }) => void) {
+  const id = nextId++;
+  if (waiter) lane.fontWaiters.set(id, waiter);
+  const copies = add.flatMap((k) => { const d = fontStore.get(k); return d ? [{ id: k, data: d.slice(0) }] : []; });
+  lane.send({ type: 'setFonts', id, add: copies, remove }, copies.map((a) => a.data));
 }
 
 export function startCompiler() { fg.start(); }
@@ -388,23 +404,19 @@ export async function exportPdf(main: string): Promise<{ pdf: ArrayBuffer | null
   });
 }
 
-/** 增删用户字体：两条道都要换；等到就绪、且没有在编的那一刻再换，字节各发一份拷贝 */
+/** 增删用户字体：记进字体表，前台那条道等它没在编的那一刻换、等它换完；后台那条道有的话也换，但不等它
+ *  （它可能正在几十秒的整编里）。哪条道之后重启 / 新起，起来时自己从表里补 */
 export async function updateUserFonts(add: { id: string; data: ArrayBuffer }[], remove: string[]): Promise<{ families: string[]; error?: string }> {
+  for (const a of add) fontStore.set(a.id, a.data);
+  for (const k of remove) fontStore.delete(k);
   await new Promise<void>((resolve) => {
     const check = () => { if (useCompileState.getState().status === 'ready') resolve(); else setTimeout(check, 200); };
     check();
   });
-  const targets = lanes().filter((l) => l.ready);
-  const results = await Promise.all(targets.map(async (lane) => {
-    await whenIdle(lane);
-    return new Promise<{ families: string[]; error?: string }>((resolve) => {
-      const id = nextId++;
-      lane.fontWaiters.set(id, resolve);
-      const copies = add.map((a) => ({ id: a.id, data: a.data.slice(0) }));
-      lane.send({ type: 'setFonts', id, add: copies, remove }, copies.map((a) => a.data));
-    });
-  }));
-  return results.find((r) => r.error) ?? results[0] ?? { families: [] };
+  const ids = add.map((a) => a.id);
+  if (bg.ready && !bg.fontsPending) void whenIdle(bg).then(() => sendFonts(bg, ids, remove));
+  await whenIdle(fg);
+  return new Promise((resolve) => sendFonts(fg, ids, remove, resolve));
 }
 
 /** 编一份小文档、读它的 metadata（selector 是标签）：导出 Word 时问模板要样式表与版面 */

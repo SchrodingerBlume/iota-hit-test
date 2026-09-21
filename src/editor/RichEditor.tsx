@@ -38,7 +38,7 @@ import { MirrorCaret, mirrorCaretKey } from './extensions/MirrorCaret';
 import { Search } from './extensions/Search';
 import { fromMarkdown, toMarkdown } from './markdown';
 import { useFindBar } from '../ui/Ribbon';
-import { recordTransaction, invalidatePositions } from './versions';
+import { recordTransaction, invalidatePositions, stampVersion } from './versions';
 import { useInputState } from './inputState';
 import { usePreviewSurface, usePreviewMarks } from '../ui/PreviewEditLayer';
 import { MathFormula20Regular, Book20Regular, BookmarkAdd20Regular, TextBold20Regular, TextItalic20Regular, TextUnderline20Regular, TextSuperscript20Regular, TextSubscript20Regular } from '@fluentui/react-icons';
@@ -103,6 +103,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     changeTimer.current = 0;
     pendingChange.current = null;
     const json = ed.getJSON() as RichDoc;
+    stampVersion(json);
     lastEmitted.current = json;
     onChange(json);
   };

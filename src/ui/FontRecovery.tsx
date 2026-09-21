@@ -12,8 +12,7 @@ export function FontRecovery() {
   const docId = useStore((s) => s.doc.id);
   const editing = useStore((s) => s.loaded && s.view === 'editor');
   const status = useCompileState((s) => s.status);
-  // 哪条道起了新 worker（前台重启、后台整编那条道起来）都要把用户字体再发一遍
-  const engineGen = useCompileState((s) => s.lanesGen);
+  const engineGen = useCompileState((s) => s.engineGen);
   const families = useCompileState((s) => s.families);
   const { busy, error, canQuery, readLocal, addFiles, restoring } = useFontState();
   const [restored, setRestored] = useState('');
@@ -22,7 +21,7 @@ export function FontRecovery() {
   const input = useRef<HTMLInputElement>(null);
   // 带上引擎代数：重启后 status 一变 ready 那一帧字体表还是空的，老的 restored 不能算数，不然对话框闪一下
   const key = `${docId}:${preset}:${mathFont}:${engineGen}`;
-  // 引擎重启过：新 worker 里没有字体，本机 / 文件字体都重发一遍
+  // 引擎重启过：新 worker 起来时 client 自己把字体表补发过去（就绪了才报 ready），这里只再核一遍存着的文件与本机字体，缺的补
   const lastGen = useRef(engineGen);
   useEffect(() => {
     if (!editing || status !== 'ready') return;
@@ -30,7 +29,7 @@ export function FontRecovery() {
     void (async () => {
       useFontState.setState({ restoring: true });
       try {
-        if (lastGen.current !== engineGen) { lastGen.current = engineGen; stored.current = null; useFontState.setState({ fonts: [] }); }
+        if (lastGen.current !== engineGen) { lastGen.current = engineGen; stored.current = null; }
         stored.current ??= useFontState.getState().loadStored();
         await stored.current;
         if (preset !== 'webapp' || mathFont) await useFontState.getState().autoReadLocal(mathFont ? [mathFont] : []);

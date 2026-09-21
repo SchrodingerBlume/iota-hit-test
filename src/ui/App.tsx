@@ -13,7 +13,7 @@ import { LinkDialogHost } from './LinkDialog';
 import { useComments } from '../editor/comments';
 import { collectRefTargets } from '../typst/pmToTypst';
 import { computeNumbering } from '../typst/numbering';
-import { docVersion } from '../editor/versions';
+import { docVersion, versionOf } from '../editor/versions';
 import { useInputState } from '../editor/inputState';
 import { resolvePage } from '../model/pages';
 import { EditorEnvContext, type EditorEnv } from '../editor/env';
@@ -216,7 +216,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
       images,
       removeImages,
       segments: project.segments,
-      version: docVersion(),
+      version: compiledVersion(doc),
     });
   };
   const fireRef = useRef(fire);
@@ -246,6 +246,12 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
     compileTimer.current = window.setTimeout(() => { compileTimer.current = 0; void fireRef.current(force, wantFull); }, delay);
   }, [doc, loaded, status, fontsVersion, engineGen, refresh, restoring, previewFocused, composing, fullTick, warmTick]);
   return sent;
+}
+/** 产物的版本 = 回灌进 store 的那份 JSON 截自哪一版（几份富文本里最新的那一份）；一份都没截过版（刚载入没改过）按现版 */
+const RICH_KEYS = ['abstractZh', 'abstractEn', 'body', 'conclusion', 'appendix', 'acknowledgement', 'resume'] as const;
+function compiledVersion(doc: ThesisDoc): number {
+  const v = Math.max(-1, ...RICH_KEYS.map((k) => versionOf(doc[k] as object) ?? -1));
+  return v < 0 ? docVersion() : v;
 }
 /** 停手这么久之后整编：整编与打字同一个 worker 时要等久些，在后台那条道上跑就早点 */
 const FULL_AFTER_IDLE = 2500;
