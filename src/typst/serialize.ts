@@ -130,7 +130,7 @@ function axisSuffix(s: Settings): string {
   seg.push(s.category, s.form, s.stage, s.campus);
   return '-' + seg.join('-');
 }
-/** overrides:——页眉的字（内容）与高级的词条覆盖（Typst 表达式原样） */
+/** overrides:——页眉的字（内容） */
 function overridesArg(s: Settings): string {
   const hf = s.headerFooter;
   if (!hf) return '';
@@ -142,7 +142,6 @@ function overridesArg(s: Settings): string {
     // 表单名那一条在模板里是拼法（学位、文种、阶段三个槽），用户给的是整句：常函数
     entries.push(`${k}${ax}: ${k === 'header-report-title' ? `(..a) => ${body}` : body}`);
   }
-  for (const e of hf.extra ?? []) if (!e.auto && /^[a-z][a-z0-9-]*$/.test(e.key.trim()) && e.expr.trim()) entries.push(`${e.key.trim()}: ${e.expr.trim()}`);
   return entries.length ? `overrides: (${entries.join(', ')})` : '';
 }
 const localStylesArg = (d: LayoutDict | undefined): string => (d && Object.keys(d).length ? `styles: ${typstDict(d)}` : '');

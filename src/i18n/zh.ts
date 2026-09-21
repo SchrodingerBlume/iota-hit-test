@@ -946,9 +946,6 @@ const zh: Record<string, string> = {
   "封面与内封永远不出页眉页脚；页眉印什么按规范由模板定，改字到「页眉文字」。": "封面与内封永远不出页眉页脚；页眉印什么按规范由模板定，改字到「页眉文字」。",
   "页眉印什么是规范定的：本科、硕士每页「校名 + 文种」，博士奇数页本章标题、偶数页「校名 + 文种」，报告「校名 + 表单名」。这里只改字，不改排法。": "页眉印什么是规范定的：本科、硕士每页「校名 + 文种」，博士奇数页本章标题、偶数页「校名 + 文种」，报告「校名 + 表单名」。这里只改字，不改排法。",
   "这一档用不上": "这一档用不上",
-  "高级：词条覆盖（改拼法，值是 Typst 表达式原样透传）": "高级：词条覆盖（改拼法，值是 Typst 表达式原样透传）",
-  "例：header-even-final ＝ p => p.document-type + [｜] + p.university。键名要带档（final / not-final…），p 里有 university、document-type、chapter、report-title、stage。": "例：header-even-final ＝ p => p.document-type + [｜] + p.university。键名要带档（final / not-final…），p 里有 university、document-type、chapter、report-title、stage。",
-  "添加一条": "添加一条",
   "关闭": "关闭",
   // ── ui/InfoField.tsx
   "输入关键词后按 Enter": "输入关键词后按 Enter",

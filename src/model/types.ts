@@ -130,8 +130,6 @@ export interface HeaderFooterSettings {
   levels?: Partial<Record<HFLevel, { header?: Partial<HFRecord>; footer?: Partial<HFRecord> }>>;
   /** 页眉里的字：overrides 的 header 桶里改字的那几条，值是纯文本 */
   terms?: Partial<Record<HeaderTermKey, HFField<string>>>;
-  /** 高级：任意词条覆盖，值是 Typst 表达式原样透传（改拼法用） */
-  extra?: { key: string; expr: string; auto: boolean }[];
 }
 export type LayoutDict = Record<string, unknown>;
 /** 局部样式（只在工程 JSON 里）：pages.abstract → #abstract(styles:)，chapters → new-styles / restore-styles */

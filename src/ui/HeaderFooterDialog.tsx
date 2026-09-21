@@ -133,8 +133,6 @@ export function HeaderFooterDialog() {
   const setRec = (p: 'header' | 'footer', r: Partial<HFRecord>) => update({ ...hf, levels: { ...hf.levels, [level]: { ...hf.levels?.[level], [p]: r } } });
   const terms = hf.terms ?? {};
   const setTerm = (k: HeaderTermKey, f: HFField<string>) => update({ ...hf, terms: { ...terms, [k]: f } });
-  const extra = hf.extra ?? [];
-  const setExtra = (list: HeaderFooterSettings['extra']) => update({ ...hf, extra: list });
   const dirtyLevel = (l: HFLevel) => { const v = hf.levels?.[l]; return !!v && Object.values(v).some((r) => r && Object.entries(r).some(([k, x]) => (k === 'shown' ? x !== 'auto' && x !== undefined : x && !(x as HFField<unknown>).auto))); };
   return (
     <Dialog open={open} onOpenChange={(_, d) => { if (!d.open) close(); }}>
@@ -169,19 +167,6 @@ export function HeaderFooterDialog() {
                     </AutoRow>
                   ); })}
                 </div>
-                <details className="hf-adv">
-                  <summary className="muted">{tx("高级：词条覆盖（改拼法，值是 Typst 表达式原样透传）")}</summary>
-                  <p className="field-hint muted">{tx("例：header-even-final ＝ p => p.document-type + [｜] + p.university。键名要带档（final / not-final…），p 里有 university、document-type、chapter、report-title、stage。")}</p>
-                  {extra.map((e, i) => (
-                    <div key={i} className="hf-row hf-extra">
-                      <button type="button" className={`hf-auto ${e.auto ? 'on' : ''}`} onClick={() => setExtra(extra.map((x, j) => (j === i ? { ...x, auto: !x.auto } : x)))}>{tx("自动")}</button>
-                      <Input size="small" className="hf-key" placeholder="header-even-final" value={e.key} disabled={e.auto} onChange={(_, d) => setExtra(extra.map((x, j) => (j === i ? { ...x, key: d.value } : x)))} />
-                      <Input size="small" className="hf-expr" placeholder="p => p.university + p.document-type" value={e.expr} disabled={e.auto} onChange={(_, d) => setExtra(extra.map((x, j) => (j === i ? { ...x, expr: d.value } : x)))} />
-                      <Button size="small" appearance="subtle" onClick={() => setExtra(extra.filter((_, j) => j !== i))}>{tx("删除")}</Button>
-                    </div>
-                  ))}
-                  <Button size="small" onClick={() => setExtra([...extra, { key: '', expr: '', auto: false }])}>{tx("添加一条")}</Button>
-                </details>
               </>
             )}
           </DialogContent>
