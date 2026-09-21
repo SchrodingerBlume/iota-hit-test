@@ -99,7 +99,7 @@ export interface SwitchDef<V extends string | boolean = boolean> {
   applies?: (s: Settings) => boolean;
   group: string;
   /** 只关乎某一页的开关放到那一页去（摘要、缩略语、附录、页面设置、论文信息、论文类型），不在论文设置里列 */
-  place?: 'abstract' | 'nomenclature' | 'appendix' | 'toc' | 'cover' | 'titlepage' | 'type' | 'body';
+  place?: 'abstract' | 'nomenclature' | 'appendix' | 'toc' | 'cover' | 'titlepage' | 'type' | 'body' | 'bibliography';
 }
 
 const isReport = (s: Settings) => s.stage !== 'final';
@@ -303,6 +303,18 @@ export const SWITCHES: SwitchDef<any>[] = [
     resolve: () => ({ value: false, reason: t("倾斜") }),
   },
   {
+    key: 'bibliographyFull',
+    label: t("参考文献列出范围"),
+    hint: t("全部登记的条目，或只列正文引用过的"),
+    choices: [
+      { value: false, label: t("只列引用过的"), tone: 'off' },
+      { value: true, label: t("全部条目"), tone: 'on' },
+    ],
+    group: t("后置"),
+    place: 'bibliography',
+    resolve: () => ({ value: true, reason: t("登记的条目全部列出（未引用的按登记顺序接在引用过的后面）") }),
+  },
+  {
     key: 'abstractKeywordsAbove',
     label: t("摘要关键词上方"),
     hint: t("无 / 空一行 / 页底"),
@@ -485,6 +497,7 @@ export const defaultSettings = (): Settings => ({
   captionNumberingByChapter: 'auto',
   equationNumberingByChapter: 'auto',
   theoremNumberingByChapter: 'auto',
+  bibliographyFull: 'auto',
   equationNumberingFullwidth: 'auto',
   subcaptionBilingual: 'auto',
   heading1Pagebreak: 'auto',

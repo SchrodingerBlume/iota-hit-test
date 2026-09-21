@@ -333,7 +333,7 @@ export function BibPanel({ which }: { which: 'bibliography' | 'achievements' }) 
   return (
     <>
       <h2>{isBib ? tx("参考文献") : tx("攻读学位期间取得的成果")}</h2>
-      {!isBib && <PageSettings pages={['achievements']} />}
+      {isBib ? <div className="card"><SettingSwitch k="bibliographyFull" /></div> : <PageSettings pages={['achievements']} />}
       {isBib
         ? <BibEditor mode="references" entries={references} onChange={setReferences} citedKeys={cited} fileName="refs.bib" />
         : <BibEditor mode="achievements" entries={achievementEntries} onChange={setAchievementEntries} fileName="achievements.bib" />}

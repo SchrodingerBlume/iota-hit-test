@@ -358,7 +358,8 @@ function serializeTable(table: PMNode, opts: SerializeOptions, fit: string = 'co
     lines.push(`    table.header(${headerRows.map((r) => (r.content ?? []).map(cell).join(', ')).join(',\n      ')}),`);
   }
   for (; i < rows.length; i++) lines.push(`    ${(rows[i].content ?? []).map(cell).join(', ')},`);
-  return `table(\n    columns: ${columns},${rowsArg}\n    align: center + horizon,\n${lines.join('\n')}\n  )`;
+  // iota-table：主文件里定义的壳，列宽超过版心就压回来（serialize.ts TABLE_RULE）
+  return `iota-table(\n    columns: ${columns},${rowsArg}\n    align: center + horizon,\n${lines.join('\n')}\n  )`;
 }
 
 function serializeList(node: PMNode, marker: '-' | '+', opts: SerializeOptions, depth: number): string {
@@ -439,7 +440,7 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
       const table = (n.content ?? []).find((c) => c.type === 'table');
       if (!table) return '';
       const label = labelOf(n.attrs, 'tab');
-      return floatWrap(n, 'table', tag(opts, n, 'node', `#figure(\n  caption: [${caption(n, opts)}],${placementArg(n)}\n  ${serializeTable(table, opts, String(n.attrs?.fit ?? 'content'), n.attrs?.colWidth ?? 2.5, n.attrs?.cols ?? {})},\n)`) + (label ? ` <${label}>` : ''));
+      return floatWrap(n, 'table', tag(opts, n, 'node', `#figure(\n  kind: table,\n  caption: [${caption(n, opts)}],${placementArg(n)}\n  ${serializeTable(table, opts, String(n.attrs?.fit ?? 'content'), n.attrs?.colWidth ?? 2.5, n.attrs?.cols ?? {})},\n)`) + (label ? ` <${label}>` : ''));
     }
     case 'equation': {
       const src = String(n.attrs?.src ?? '').trim();

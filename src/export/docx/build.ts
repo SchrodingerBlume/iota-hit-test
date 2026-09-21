@@ -422,11 +422,11 @@ function nomenclature(ctx: Ctx): Block[] {
 /** 中文档的文献条目照模板（omni-gb7714）的标点：号、文献类型标识用全角方括号，条目内的逗号、冒号全角 */
 const gbPunct = (l: string, lang: 'zh' | 'en') => (lang === 'en' ? l : l.replace(/\[/g, '［').replace(/\]/g, '］').replace(/, /g, '，').replace(/: /g, '：').replace(/］\. /g, '］. ').replace(/^(［\d+］) /, '$1'));
 function references(ctx: Ctx): Block[] {
-  // 模板是 full: true：先按引用序排引用过的，再把没引用的按登记顺序接上
+  // 先按引用序排引用过的；full: true（默认）再把没引用的按登记顺序接上
   const order = [...ctx.cites.entries()].sort((a, b) => a[1] - b[1]).map(([k]) => k);
   const byKey = new Map(ctx.doc.references.map((e) => [e.key, e] as const));
   const cited = order.map((k) => byKey.get(k)).filter((e): e is BibEntry => !!e);
-  const rest = ctx.doc.references.filter((e) => !ctx.cites.has(e.key));
+  const rest = ctx.s.bibliographyFull === false ? [] : ctx.doc.references.filter((e) => !ctx.cites.has(e.key));
   const entries = [...cited, ...rest];
   if (!entries.length) return [];
   const lang = ctx.s.lang === 'en' ? 'en' : 'zh';

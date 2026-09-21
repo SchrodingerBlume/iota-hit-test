@@ -341,6 +341,39 @@ const indent = (s: string, n: number) => s.split('\n').map((l) => (l ? ' '.repea
 // 另给一个 iota-hl-math：在基线上放一个零尺寸盒，从盒里往上下画同一条带子，公式照常排在上面
 const HIGHLIGHT_RULE = `#let iota-hl(fill, body) = context highlight(fill: fill, top-edge: 1.01 * text.size, bottom-edge: -0.29 * text.size, body)
 #let iota-hl-math(fill, body) = context { let s = text.size; let w = measure(body).width; box(width: 0pt, height: 0pt, place(top + left, dy: -1.01 * s, rect(width: w, height: 1.3 * s, fill: fill))) + body }`;
+// 表格不超版心：Word 的三种「自动调整」都在版心里排，模板却把量出来比版心宽的表居中两边溢出（自动列按无限宽量，
+// 内容一长就不折行）。自动列按内容量宽，装不下就按比例压窄；给了绝对列宽（固定列宽、拖过的列）的超了也按比例压；
+// 有 fr 列的本来就撑满版心，原样。表里的字号与格的左右边距从两个探针表量出来（不碰模板的样式表）
+const TABLE_RULE = `#let iota-table(columns: 1, ..args) = layout(size => {
+  let W = size.width
+  let n = if type(columns) == int { columns } else { columns.len() }
+  let cols = if type(columns) == int { (auto,) * n } else { columns }
+  if cols.any(c => type(c) == fraction) { return table(columns: columns, ..args) }
+  let w1 = measure(table(columns: 1, [x])).width
+  let dx = measure(table(columns: 1, [xx])).width - w1
+  let k = dx / measure([x]).width
+  let ov = w1 - dx
+  let cw = (0pt,) * n
+  let taken = (:)
+  let (r, c) = (0, 0)
+  let cells = args.pos().map(k => if k.func() == table.header { k.children } else { (k,) }).flatten()
+  for cell in cells {
+    if cell.func() in (table.hline, table.vline) { continue }
+    while str(r) + "," + str(c) in taken { c += 1; if c >= n { r += 1; c = 0 } }
+    let (span, rows, body) = if cell.func() == table.cell { (cell.at("colspan", default: 1), cell.at("rowspan", default: 1), cell.body) } else { (1, 1, cell) }
+    let w = measure(body).width * k / span
+    for dr in range(rows) { for dc in range(span) { taken.insert(str(r + dr) + "," + str(c + dc), true) } }
+    for dc in range(span) { if c + dc < n { cw.at(c + dc) = calc.max(cw.at(c + dc), w) } }
+    c += span
+    if c >= n { r += 1; c = 0 }
+  }
+  let want = cols.enumerate().map(((i, x)) => if x == auto { cw.at(i) + ov } else if type(x) == ratio { W * x } else { x })
+  if want.sum() <= W { return table(columns: columns, ..args) }
+  let avail = W - n * ov
+  let inner = want.map(w => calc.max(w - ov, 0pt))
+  if avail <= 0pt or inner.sum() <= 0pt { return table(columns: (1fr,) * n, ..args) }
+  table(columns: inner.map(w => ov + w * (avail / inner.sum())), ..args)
+})`;
 const PREVIEW_PRELUDE = `// 站内预览用：空回车段上各放一个隐形的 ¶，预览里点空行才有落点。只在 sys.inputs.preview 下排字，
 // 正式排版（PDF）里这一句退化成 #enter(n)，与模板原样一致
 // 预览里每个空段是一个与 enter(1) 同高的块、¶ 放在块里，跨页时随块折到下一页
@@ -376,7 +409,7 @@ export function serializePara(doc: ThesisDoc, index: number, live?: { node: PMNo
   const nodes = doc.body.content ?? [];
   const chapter = chapterRanges(doc.body).findIndex((r) => index >= r.from && index < r.to) + 1;
   parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *`);
-  parts.push(HIGHLIGHT_RULE);
+  parts.push(HIGHLIGHT_RULE, TABLE_RULE);
   parts.push(PREVIEW_PRELUDE);
   parts.push(iotaHitShow(doc));
   if (stockPrelude(s)) parts.push(stockPrelude(s));
@@ -416,7 +449,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   const knownLabels = new Set<string>([...collectRefTargets(doc.body), ...collectRefTargets(doc.appendix)].map((r) => r.label));
 
   parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n// LaTeX 公式走 mitex 转成 Typst（包已随站内打包）\n#import "@preview/mitex:0.2.7": mitex, mi`);
-  parts.push(HIGHLIGHT_RULE);
+  parts.push(HIGHLIGHT_RULE, TABLE_RULE);
   if (preview) parts.push(PREVIEW_PRELUDE);
   parts.push(iotaHitShow(doc));
   if (preview && stockPrelude(s)) parts.push(stockPrelude(s));
@@ -477,7 +510,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   const refs = generateBibtex(doc.references ?? []);
   if (refs.trim()) {
     files['refs.bib'] = refs;
-    parts.push('#bibliography(read("refs.bib"), full: true)');
+    parts.push(`#bibliography(read("refs.bib")${s.bibliographyFull === false ? '' : ', full: true'})`);
   }
 
   const appendix = rich('appendix', { headings: true, headingBase: 1 });
@@ -552,7 +585,7 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   for (const [label, info] of computeNumbering(doc.appendix as any, s, 'appendix')) if (!knownLabels.has(label)) refText.set(label, info.ref);
 
   parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n#import "@preview/mitex:0.2.7": mitex, mi`);
-  parts.push(HIGHLIGHT_RULE);
+  parts.push(HIGHLIGHT_RULE, TABLE_RULE);
   parts.push(PREVIEW_PRELUDE);
   parts.push(iotaHitShow(doc));
   if (stockPrelude(s)) parts.push(stockPrelude(s));

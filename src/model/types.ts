@@ -61,6 +61,8 @@ export interface Settings {
   captionNumberingByChapter: TriBool;
   equationNumberingByChapter: TriBool;
   theoremNumberingByChapter: TriBool;
+  /** 参考文献表列全部登记的条目（模板 bibliography 的 full: true）还是只列引用过的 */
+  bibliographyFull: TriBool;
   equationNumberingFullwidth: TriBool;
   subcaptionBilingual: TriBool;
   heading1Pagebreak: TriBool;
