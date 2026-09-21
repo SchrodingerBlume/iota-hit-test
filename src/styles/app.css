@@ -1096,6 +1096,18 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .alg-btn:disabled { opacity: 0.3; cursor: default; }
 .alg-btn svg { width: 13px; height: 13px; }
 .blk.alg { border-bottom: 1px solid var(--ink); }
+/* 定理类环境：头一行（环境、编号、说明）+ 正文段；模板把头与第一段拼成一段，这里分两行看得清 */
+.blk.thm { padding-left: 14px; border-left: 3px solid var(--line-2); font-family: var(--serif); font-size: inherit; line-height: inherit; }
+.blk.thm.is-selected { border-left-color: var(--accent); }
+.thm-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+.thm-head .cap-num { font-family: "Heiti SC", "Noto Sans CJK SC", "SimHei", var(--sans); font-weight: 500; }
+.thm-kind { font: inherit; font-family: var(--sans); font-size: 12px; color: var(--muted); border: 1px solid transparent; border-radius: var(--r-s); background: transparent; padding: 0 2px; cursor: pointer; max-width: 9em; }
+.thm-kind:hover, .thm-kind:focus { border-color: var(--line-2); color: var(--ink); outline: none; }
+.thm-note input { text-align: left; }
+.thm-body > p:first-child { text-indent: 0; }
+.rb-theorem-menu .rb-pop-menu { margin-top: 0; border-top: 0; padding-top: 0; display: grid; grid-template-columns: 1fr 1fr; column-gap: 8px; }
+.rb-theorem-menu .rb-pop-menu button { justify-content: space-between; gap: 12px; }
+.rb-theorem-menu .rb-thm-zh { min-width: 2.5em; }
 /* 代码清单：题注在上、代码在下（模板 tabular 那一档的样子） */
 .blk.lst .lst-body pre { margin: 0; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--ink); border-radius: 0; }
 /* 分图 */

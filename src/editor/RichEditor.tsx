@@ -26,6 +26,7 @@ import { Figure, TableFigure, CodeFigure, Equation, PageBreak, BlockCaptionKeys 
 import { MathInputRules } from './extensions/mathRules';
 import { EditKeys } from './extensions/EditKeys';
 import { Algorithm } from './extensions/algorithm';
+import { Theorem } from './extensions/theorem';
 import { EqDenote } from './extensions/eqdenote';
 import { useEditorEnv, NumberingContext, RichKeyContext } from './env';
 import { computeNumbering, type Part } from '../typst/numbering';
@@ -120,7 +121,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
       Placeholder.configure({ placeholder: placeholder ?? t("在此输入文字…") }),
       TableKit.configure({ table: { resizable: true, cellMinWidth: 40 }, tableCell: false, tableHeader: false, tableRow: false }),
       AlignedTableCell, AlignedTableHeader, SizedTableRow, TableExtras,
-      Figure, TableFigure, CodeFigure, Algorithm, Equation, PageBreak, EqDenote, BlockCaptionKeys, MathInputRules,
+      Figure, TableFigure, CodeFigure, Algorithm, Theorem, Equation, PageBreak, EqDenote, BlockCaptionKeys, MathInputRules,
       MathInline, Cite, Ref, Abbr, Footnote, Ccwd, Idx,
       UniqueId, MirrorCaret, Search, SpaceMarks, EditKeys,
       FontFamily, FontSize, TextColor, Highlight,

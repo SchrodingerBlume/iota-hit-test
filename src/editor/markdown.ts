@@ -88,7 +88,7 @@ export function toMarkdown(doc: RichDoc): string { return (doc.content ?? []).ma
 /** 纯文本里认几种行内写法：$公式$、[@文献; @文献]、@标签、^[脚注] */
 function inlineSyntax(text: string): Node[] {
   const out: Node[] = [];
-  const re = /\$([^$\n]+?)\$|\[(@[^\]\n]+)\]|(?<![\w@])@((?:fig|tab|eq|sec|alg|lst|app):[A-Za-z0-9_:.\-]*[A-Za-z0-9_])|\^\[([^\]\n]+)\]/g;
+  const re = /\$([^$\n]+?)\$|\[(@[^\]\n]+)\]|(?<![\w@])@((?:fig|tab|eq|sec|alg|lst|app|thm):[A-Za-z0-9_:.\-]*[A-Za-z0-9_])|\^\[([^\]\n]+)\]/g;
   let last = 0; let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
     out.push(...textNode(text.slice(last, m.index)));

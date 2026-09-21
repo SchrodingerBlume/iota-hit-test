@@ -95,9 +95,9 @@ function CiteView({ node, updateAttributes, selected, deleteNode, editor, getPos
 export const Cite = inlineAtom('cite', { keys: { default: '' } }, CiteView);
 
 // ── 交叉引用 ────────────────────────────────────────────────────
-const KIND_NAME: Record<string, string> = { fig: t("图"), tab: t("表"), eq: t("式"), sec: t("节") };
-const KIND_GROUP: Record<string, string> = { fig: t("图"), tab: t("表"), eq: t("公式"), alg: t("算法"), lst: t("代码"), sec: t("章节") };
-const KIND_ORDER = ['fig', 'tab', 'eq', 'alg', 'lst', 'sec'];
+const KIND_NAME: Record<string, string> = { fig: t("图"), tab: t("表"), eq: t("式"), sec: t("节"), thm: t("定理") };
+const KIND_GROUP: Record<string, string> = { fig: t("图"), tab: t("表"), eq: t("公式"), alg: t("算法"), lst: t("代码"), thm: t("定理"), sec: t("章节") };
+const KIND_ORDER = ['fig', 'tab', 'eq', 'alg', 'lst', 'thm', 'sec'];
 
 /** 交叉引用选择器：按图 / 表 / 公式 / 章节分组，可搜索 */
 function RefPicker({ env, target, onPick }: { env: ReturnType<typeof useEditorEnv>; target: string; onPick: (label: string) => void }) {

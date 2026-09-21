@@ -15,6 +15,7 @@
 // 纯文本里 Typst 的特殊字符一律转义，行首会被当成标记的字符再多转义一次。
 // 带 map 选项时，文本与节点外面套上源码映射的记号（见 sourcemap.ts），预览区直接编辑靠它。
 import { mark, unmarked } from './sourcemap';
+import { theoremKind } from './theorem';
 import { lengthTypst } from '../model/length';
 
 /** 分图 / 伪代码的属性都是 JSON 串（与 eqdenote 的 rows 同一套路） */
@@ -54,7 +55,7 @@ export interface SerializeOptions {
 
 // ── ProseMirror 位置 ──────────────────────────────────────────────
 // 文本节点占字数，容器节点占 2 + 内容，其余（原子）占 1。
-const CONTAINERS = new Set(['doc', 'paragraph', 'heading', 'blockquote', 'bulletList', 'orderedList', 'listItem', 'codeBlock', 'tableFigure', 'table', 'tableRow', 'tableCell', 'tableHeader']);
+const CONTAINERS = new Set(['doc', 'paragraph', 'heading', 'blockquote', 'bulletList', 'orderedList', 'listItem', 'codeBlock', 'tableFigure', 'table', 'tableRow', 'tableCell', 'tableHeader', 'theorem']);
 const sizeCache = new WeakMap<PMNode, number>();
 export function nodeSize(n: PMNode): number {
   if (n.type === 'text') return (n.text ?? '').length;
@@ -486,6 +487,16 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
       const label = labelOf(n.attrs, 'alg');
       return tag(opts, n, 'node', `#figure(lovelace[\n${[...io, ...lines].join('\n')}\n], caption: [${caption(n, opts)}])`) + (label ? ` <${label}>` : '');
     }
+    case 'theorem': {
+      // 定理类环境：#theorem(note: [勾股])[…] <thm:label>；头与第一段同段由模板拼，证明不编号也不能引用
+      const kind = theoremKind(n.attrs?.kind);
+      const note = String(n.attrs?.note ?? '').trim();
+      const body = serializeBlocks(n.content, opts, depth + 1);
+      if (!unmarked(body).trim()) return '';
+      const label = kind === 'proof' ? '' : labelOf(n.attrs, 'thm');
+      const arg = note ? `(note: [${tag(opts, n, 'attr', escapeText(note), { attr: 'note', raw: note })}])` : '';
+      return tag(opts, n, 'node', `#${kind}${arg}[\n${body}\n]`) + (label ? ` <${label}>` : '');
+    }
     case 'blockquote':
       return `#quote(block: true)[\n${serializeBlocks(n.content, opts, depth + 1)}\n]`;
     case 'bulletList': return serializeList(n, '-', opts, depth);
@@ -583,14 +594,14 @@ export function serializeDoc(doc: PMNode | undefined | null, opts: SerializeOpti
 /** 文档里所有能被引用的东西：图、表、公式、标题（带 uid 的） */
 export interface RefTarget {
   label: string;
-  kind: 'fig' | 'tab' | 'eq' | 'sec' | 'alg' | 'lst';
+  kind: 'fig' | 'tab' | 'eq' | 'sec' | 'alg' | 'lst' | 'thm';
   title: string;
   index: number;
 }
 
 export function collectRefTargets(doc: PMNode | undefined | null): RefTarget[] {
   const out: RefTarget[] = [];
-  const counters = { fig: 0, tab: 0, eq: 0, sec: 0, alg: 0, lst: 0 };
+  const counters = { fig: 0, tab: 0, eq: 0, sec: 0, alg: 0, lst: 0, thm: 0 };
   const walk = (n: PMNode) => {
     let kind: RefTarget['kind'] | null = null;
     let title = '';
@@ -600,6 +611,7 @@ export function collectRefTargets(doc: PMNode | undefined | null): RefTarget[] {
     else if (n.type === 'heading') { kind = 'sec'; title = (n.content ?? []).map((t) => t.text ?? '').join(''); }
     else if (n.type === 'algorithm') { kind = 'alg'; title = n.attrs?.caption ?? ''; }
     else if (n.type === 'codeFigure') { kind = 'lst'; title = n.attrs?.caption ?? ''; }
+    else if (n.type === 'theorem' && theoremKind(n.attrs?.kind) !== 'proof') { kind = 'thm'; title = (n.content ?? []).map((c) => (c.content ?? []).map((t) => t.text ?? '').join('')).join(' ').trim().slice(0, 60); }
     if (kind) {
       const label = labelOf(n.attrs, kind);
       if (label) { counters[kind]++; out.push({ label, kind, title, index: counters[kind] }); }

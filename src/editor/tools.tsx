@@ -12,6 +12,7 @@ import { parseTableText, tableNodeFromParsed } from './tableImport';
 import { LengthInput } from '../ui/LengthInput';
 import { parseLength, toPx } from '../model/length';
 import { useEditorEnv } from './env';
+import type { TheoremKind } from '../typst/theorem';
 import { usePreviewSurface } from '../ui/PreviewEditLayer';
 import { t as tx } from '../i18n';
 
@@ -156,7 +157,16 @@ export function useInsertActions(editor: Editor | null) {
     e.state.doc.nodesBetween(at, e.state.doc.content.size, (node, pos) => { if (inside >= 0) return false; if (node.type.name === 'codeFigure') { inside = pos + 2; return false; } return true; });
     if (inside >= 0) e.chain().setTextSelection(inside).scrollIntoView().run();
   };
-  return { insertInline, insertTable, insertTableFromText, insertFigure, insertEquation, insertDenote, insertPageBreak, insertAlgorithm, insertCodeFigure };
+  /** 定理类环境：光标放进正文第一段 */
+  const insertTheorem = (kind: TheoremKind = 'theorem') => {
+    const e = ed();
+    const at = e.state.selection.from;
+    e.chain().focus().insertContent({ type: 'theorem', attrs: { kind }, content: [{ type: 'paragraph' }] }).run();
+    let inside = -1;
+    e.state.doc.nodesBetween(at, e.state.doc.content.size, (node, pos) => { if (inside >= 0) return false; if (node.type.name === 'theorem') { inside = pos + 2; return false; } return true; });
+    if (inside >= 0) e.chain().setTextSelection(inside).scrollIntoView().run();
+  };
+  return { insertInline, insertTable, insertTableFromText, insertFigure, insertEquation, insertDenote, insertPageBreak, insertAlgorithm, insertCodeFigure, insertTheorem };
 }
 
 /** 表格：九宫格对齐（像 Word）、作用于单元格或整行、列宽、行高 */

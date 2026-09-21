@@ -170,6 +170,7 @@ function settingsArgs(s: Settings): string[] {
     ['captionNumberingByChapter', 'caption-numbering-by-chapter'],
     ['equationNumberingByChapter', 'equation-numbering-by-chapter'],
     ['equationNumberingFullwidth', 'equation-numbering-fullwidth'],
+    ['theoremNumberingByChapter', 'theorem-numbering-by-chapter'],
     ['subcaptionBilingual', 'subcaption-bilingual'],
     ['heading1Pagebreak', 'heading-1-pagebreak'],
     ['openright', 'openright'],

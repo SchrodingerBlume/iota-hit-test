@@ -14,13 +14,14 @@ import {
   ChevronUp20Regular, ChevronDown20Regular, ChevronLeft20Regular, ChevronRight20Regular, Dismiss20Regular, Pin20Regular, Grid20Regular, TextParagraph20Regular,
   Translate20Regular, ImageEdit20Regular, Delete20Regular, TableSimple20Regular, ClipboardTextLtr20Regular,
   CommentAdd20Regular, CommentDismiss20Regular, Comment20Regular, TextBulletListSquare20Regular, TextEditStyle20Regular,
-  ZoomIn20Regular, AutoFitWidth20Regular, DocumentOnePage20Regular, DocumentMultiple20Regular, TextChangeCase20Regular, TextWordCount20Regular, PanelLeftText20Regular, ChevronDoubleRight16Regular, DocumentHeader20Regular, DocumentFooter20Regular,
+  Lightbulb20Regular, ZoomIn20Regular, AutoFitWidth20Regular, DocumentOnePage20Regular, DocumentMultiple20Regular, TextChangeCase20Regular, TextWordCount20Regular, PanelLeftText20Regular, ChevronDoubleRight16Regular, DocumentHeader20Regular, DocumentFooter20Regular,
 } from '@fluentui/react-icons';
 import { useStore } from '../model/store';
 import { getEditor, getEditorMeta, onRegistryChange } from '../editor/registry';
 import { historyLog, entryText } from '../editor/historyLog';
 import { usePreviewSurface, usePreviewMarks } from './PreviewEditLayer';
 import { useBlockMenu } from '../editor/BlockMenu';
+import { THEOREM_KINDS, THEOREM_NAMES } from '../typst/theorem';
 import { B, Sep, useEditorTick, useInsertActions, TableAlignTools, FontSizeTool, refocusPreviewAfter } from '../editor/tools';
 import { searchKey, selectCurrentMatch } from '../editor/extensions/Search';
 import { levelLabels } from '../typst/numbering';
@@ -174,7 +175,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const collapsed = userCollapsed || shortScreen;
   /** 收起状态下临时展开 */
   const [peek, setPeek] = useState(false);
-  const [pop, setPop] = useState<'table' | 'symbol' | 'symbol2' | null>(null);
+  const [pop, setPop] = useState<'table' | 'symbol' | 'symbol2' | 'theorem' | null>(null);
   const [tableDlg, setTableDlg] = useState<TableDialogKind | null>(null);
   const [painter, setPainter] = useState<Mark[] | null>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -564,6 +565,18 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                   <B title={tx("插入不带题注的代码块，并应用模板代码样式。")} icon={<Braces20Regular />} disabled={none || !blocks} run={() => chain().toggleCodeBlock().run()}>{tx("代码块")}</B>
                   <B title={tx("插入代码清单")} icon={<Code20Regular />} disabled={none || !blocks} run={ins.insertCodeFigure}>{tx("代码清单")}</B>
                 </Stack>
+              </Group>
+              <Group label={tx("定理")}>
+                <Popover open={pop === 'theorem'} onOpenChange={(_, d) => setPop(d.open ? 'theorem' : null)} positioning="below-start" trapFocus={false}>
+                  <PopoverTrigger disableButtonEnhancement>
+                    <span className="rb-keep"><B title={tx("插入定理、引理、定义等环境；头用黑体，编号与公式一样按章")} big menu icon={<Lightbulb20Regular />} disabled={none || !blocks} run={() => setPop(pop === 'theorem' ? null : 'theorem')}>{tx("定理")}</B></span>
+                  </PopoverTrigger>
+                  <PopoverSurface className="rb-theorem-menu">
+                    <div className="rb-pop-menu">
+                      {THEOREM_KINDS.map((k) => <button key={k} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setPop(null); ins.insertTheorem(k); afterCommand(); }}><span className="rb-thm-zh">{THEOREM_NAMES[k].zh}</span><span className="muted">{THEOREM_NAMES[k].en}</span></button>)}
+                    </div>
+                  </PopoverSurface>
+                </Popover>
               </Group>
             </>
           )}

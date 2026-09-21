@@ -8,11 +8,12 @@ import type { Settings, StyleKey } from '../model/types';
 import { SWITCHES, resolveSwitch } from '../model/options';
 import type { PMNode } from './pmToTypst';
 import { labelOf } from './pmToTypst';
+import { THEOREM_NAMES, theoremKind, joinHead } from './theorem';
 
 export type Part = 'body' | 'appendix' | 'other';
 
 export interface NumberInfo {
-  kind: 'sec' | 'fig' | 'tab' | 'eq' | 'alg' | 'lst';
+  kind: 'sec' | 'fig' | 'tab' | 'eq' | 'alg' | 'lst' | 'thm';
   label: string;
   /** 印在节点旁边的：第 2 章 / 2.1 / 图 2-1 / (2-1) */
   number: string;
@@ -76,12 +77,14 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
   const isReportBody = s.stage !== 'final' && !(s.campus === 'shenzhen' && s.degreeLevel === 'bachelor');
   const figByChapter = sw<boolean>('captionNumberingByChapter', s);
   const eqByChapter = sw<boolean>('equationNumberingByChapter', s);
+  const thmByChapter = sw<boolean>('theoremNumberingByChapter', s);
   const appPattern = sw<'letters' | 'roman' | 'numbers' | 'hanzi' | 'words'>('appendixNumbering', s);
   const en = s.lang === 'en';
   const hass = s.category === 'hass';
 
   const counters = [0, 0, 0, 0];
   let fig = 0, tab = 0, eq = 0, alg = 0, lst = 0;
+  const thm: Record<string, number> = {};
   // 附录只有一章时不编号（模板数出来的：编号的一级标题 ≤ 1）——章标题光印「附录」，中文档的图表少一位（附图1）
   const single = part === 'appendix' && (doc.content ?? []).filter((n) => n.type === 'heading' && (n.attrs?.level ?? 1) === 1 && n.attrs?.numbered !== false).length <= 1;
   const text = (n: PMNode): string => (n.content ?? []).map((c) => (c.type === 'text' ? c.text ?? '' : c.content ? text(c) : '')).join('');
@@ -142,7 +145,28 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
     return wrap(`附 ${counters[0]}-${k}`);
   };
 
+  /**
+   * 定理类的号与名（模板 src/math/theorem.typ）：各环境各自计数，按章时「章.序」（附录 A.1 / 1.1，只有一个附录光序号），
+   * 「附」跟图表一样挂在名前、不进号码；名与号之间中文不空格（定理1.1、Theorem 1.1）；证明不编号
+   */
+  const thmHead = (kind: ReturnType<typeof theoremKind>): string => {
+    const word = (part === 'appendix' && thmByChapter && !en && (single || (appPattern !== 'letters' && appPattern !== 'roman')) ? '附' : '') + THEOREM_NAMES[kind][en ? 'en' : 'zh'];
+    if (kind === 'proof') return word;
+    const k = (thm[kind] = (thm[kind] ?? 0) + 1);
+    const mark = part === 'appendix' && single ? '' : part === 'appendix' && en ? (appPattern === 'roman' ? toRoman(counters[0]) : letter(counters[0])) : part === 'appendix' && appPattern !== 'letters' && appPattern !== 'roman' ? String(counters[0]) : chapterMark() || String(counters[0]);
+    return joinHead(word, thmByChapter && mark ? `${mark}.${k}` : String(k));
+  };
+
   const walk = (n: PMNode) => {
+    if (n.type === 'theorem') {
+      const kind = theoremKind(n.attrs?.kind);
+      const label = kind === 'proof' ? '' : labelOf(n.attrs, 'thm');
+      const num = thmHead(kind);
+      const info: NumberInfo = { kind: 'thm', label, number: num, ref: num, title: (n.content ?? []).map(text).join(' ').trim().slice(0, 60) };
+      byNode?.set(n, info); if (label) out.set(label, info);
+      for (const c of n.content ?? []) walk(c);
+      return;
+    }
     if (n.type === 'heading') {
       const level = Math.max(1, Math.min(4, n.attrs?.level ?? 1));
       if (n.attrs?.numbered === false) {
@@ -153,7 +177,7 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
       }
       counters[level - 1]++;
       for (let i = level; i < 4; i++) counters[i] = 0;
-      if (level === 1) { fig = 0; tab = 0; eq = 0; alg = 0; lst = 0; }
+      if (level === 1) { fig = 0; tab = 0; eq = 0; alg = 0; lst = 0; for (const k in thm) thm[k] = 0; }
       const label = labelOf(n.attrs, 'sec');
       const num = headingNumber(level);
       { const info: NumberInfo = { kind: 'sec', label, number: num, ref: level === 1 || /^(第|Chapter|Appendix|附录)/.test(num) ? num : en ? `Section ${num}` : `${num} 节`, title: text(n), level }; byNode?.set(n, info); if (label) out.set(label, info); }

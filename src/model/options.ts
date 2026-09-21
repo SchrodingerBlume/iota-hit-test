@@ -157,6 +157,17 @@ export const SWITCHES: SwitchDef<any>[] = [
       : { value: false, reason: t("报告连续编号 (1)") }),
   },
   {
+    key: 'theoremNumberingByChapter',
+    label: t("定理按章编号"),
+    hint: t("定理、引理、定义等各自计数"),
+    choices: onOff,
+    group: t("题注与编号"),
+    place: 'body',
+    resolve: (s) => (bodyStage(s) === 'final'
+      ? { value: true, reason: t("与公式一样按章编号（定理1.1）") }
+      : { value: false, reason: t("报告只数序号（定理1）") }),
+  },
+  {
     key: 'equationNumberingFullwidth',
     label: t("公式编号全角括号"),
     hint: t("全角括号 / 半角括号"),
@@ -473,6 +484,7 @@ export const defaultSettings = (): Settings => ({
   captionBilingual: 'auto',
   captionNumberingByChapter: 'auto',
   equationNumberingByChapter: 'auto',
+  theoremNumberingByChapter: 'auto',
   equationNumberingFullwidth: 'auto',
   subcaptionBilingual: 'auto',
   heading1Pagebreak: 'auto',

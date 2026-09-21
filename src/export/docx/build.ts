@@ -22,7 +22,8 @@ import type { BibEntry } from '../../bib/bibtex';
 import { fonts, fontsFor, NO_BORDERS, hasCJK } from './units';
 import { coverPage, titlepageZh, titlepageEn, defensePage, declarationsPage, pageBreak } from './pages';
 import { resolveSwitch, SWITCHES } from '../../model/options';
-import { queryFacts, stylesXml, gapTwips, headingLevels, shown, tw, type Facts, type PageSetup } from './template';
+import { queryFacts, stylesXml, gapTwips, headingLevels, shown, tw, asianOf, type Facts, type PageSetup } from './template';
+import { THEOREM_NAMES, theoremKind, joinHead } from '../../typst/theorem';
 
 const DOC_TYPE = { bachelor: "本科毕业论文（设计）", master: "硕士学位论文", doctor: "博士学位论文" } as const;
 const sw = <V,>(key: string, s: Settings): V => resolveSwitch<V>(SWITCHES.find((d) => d.key === key)!, s).effective;
@@ -305,6 +306,26 @@ function heading(ctx: Ctx, n: PMNode, part: 'body' | 'appendix', forceBreak = fa
   return pageBreak ? [pageTop(), para] : [para];
 }
 
+/** 定理类环境（模板 src/math/theorem.typ）：头（名＋号＋说明）与第一段同段、首行顶格，头后空一个字（theorem-body-indent 默认一字），
+ *  头的字体照样式表 theorem.head（中文黑体、英文加粗）；号那一截打书签给 REF 域；后面的段照正文 */
+function theorem(ctx: Ctx, n: PMNode, part: 'body' | 'appendix' | 'other', depth: number): Block[] {
+  const kind = theoremKind(n.attrs?.kind);
+  const num = ctx.byNode.get(n)?.number ?? THEOREM_NAMES[kind][ctx.s.lang === 'en' ? 'en' : 'zh'];
+  const note = String(n.attrs?.note ?? '').trim();
+  const st = ctx.F.styles.theorem?.head ?? {};
+  const zhFont = asianOf(st) ? ctx.F.fonts[asianOf(st)!] : undefined;
+  const bold = !!st.bold, latinBold = !!st['latin-bold'];
+  const run = (text: string) => new TextRun({ text, bold: bold || (latinBold && !hasCJK(text)) || undefined, font: zhFont ? fontsFor(text, zhFont, ctx.F.fonts.serif) : undefined });
+  const pieces = (text: string) => (latinBold && !bold ? text.split(/(?<=[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef])(?=[^\u4e00-\u9fff\u3000-\u303f\uff00-\uffef])|(?<=[^\u4e00-\u9fff\u3000-\u303f\uff00-\uffef])(?=[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef])/) : [text]).filter(Boolean).map(run);
+  const label = kind === 'proof' ? '' : labelOf(n.attrs, 'thm');
+  const headRuns: ParagraphChild[] = [...(label ? [new Bookmark({ id: bmName(label), children: pieces(tidy(num)) })] : pieces(tidy(num))), ...pieces(joinHead(num, note).slice(num.length)), new TextRun({ text: '\u3000' })];
+  const [first, ...rest] = n.content ?? [];
+  const lead = first?.type === 'paragraph' ? inline(ctx, first.content) : [];
+  const out: Block[] = [new Paragraph({ style: 'Normal', indent: { firstLine: 0, left: depth ? depth * 2 * tw(ctx.P['font-size']) : undefined }, children: [...headRuns, ...lead] })];
+  out.push(...blocks(ctx, first?.type === 'paragraph' ? rest : n.content, part, depth));
+  return out;
+}
+
 function blocks(ctx: Ctx, nodes: PMNode[] = [], part: 'body' | 'appendix' | 'other', depth = 0, breakFirst = false): Block[] {
   const out: Block[] = [];
   nodes = [...nodes];
@@ -319,6 +340,7 @@ function blocks(ctx: Ctx, nodes: PMNode[] = [], part: 'body' | 'appendix' | 'oth
       case 'codeBlock': out.push(...codeLines(ctx, n)); break;
       case 'codeFigure': { const code = (n.content ?? []).find((c) => c.type === 'codeBlock'); out.push(...captionPara(ctx, numOf(ctx, n, 'lst'), String(n.attrs?.caption ?? ''), undefined, { kind: 'plain', node: n, prefix: 'lst' }), ...(code ? codeLines(ctx, code) : [])); break; }
       case 'algorithm': out.push(...algorithm(ctx, n)); break;
+      case 'theorem': out.push(...theorem(ctx, n, part, depth)); break;
       case 'bulletList': case 'orderedList': {
         (n.content ?? []).forEach((item, idx) => {
           const [first, ...rest] = item.content ?? [];

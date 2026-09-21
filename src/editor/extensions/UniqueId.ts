@@ -3,7 +3,7 @@
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 
-const TYPES = new Set(['heading', 'figure', 'tableFigure', 'equation', 'algorithm', 'codeFigure']);
+const TYPES = new Set(['heading', 'figure', 'tableFigure', 'equation', 'algorithm', 'codeFigure', 'theorem']);
 
 export const newUid = () => Math.random().toString(36).slice(2, 8);
 

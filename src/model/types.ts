@@ -60,6 +60,7 @@ export interface Settings {
   captionBilingual: TriBool;
   captionNumberingByChapter: TriBool;
   equationNumberingByChapter: TriBool;
+  theoremNumberingByChapter: TriBool;
   equationNumberingFullwidth: TriBool;
   subcaptionBilingual: TriBool;
   heading1Pagebreak: TriBool;

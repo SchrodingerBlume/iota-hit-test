@@ -28,7 +28,7 @@ export interface PageSetup {
   inputs: { grid?: string | null };
 }
 export interface Facts {
-  styles: Record<string, Style> & { figure: { image: Style; table: Style; caption: Style } };
+  styles: Record<string, Style> & { figure: { image: Style; table: Style; caption: Style }; theorem?: { head: Style; body: Style } };
   /** 字体角色 → Windows 上的家族名（模板 presets.windows） */
   fonts: Record<string, string>;
   layout: { doc: PageSetup; front: PageSetup; main: PageSetup; back: PageSetup };
