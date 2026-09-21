@@ -1,6 +1,6 @@
 // 整份工程 → main.typ（以及要一起交给编译器的旁文件）。
 // 结构照 iota-hit/template/example.typ：前置 → 主体 → 附录 → 后置。
-import { headerKeys, headerSplit } from './hfTerms';
+import { axisSuffix, headerSplit } from './hfTerms';
 import type { ThesisDoc, Settings, Info, StyleEntry, OpenrightKey, LayoutDict, LocalInfoPage, TriBool, HFRecord, HFLevel } from '../model/types';
 import { INFO_FIELDS, localInfoFields, type InfoFieldDef } from '../model/info';
 import { serializeDoc, escapeText, collectImages, collectRefTargets, collectCiteKeys, indexPositions, type PMNode } from './pmToTypst';
@@ -129,15 +129,15 @@ function overridesArg(s: Settings): string {
   if (!hf) return '';
   const t = hf.text;
   if (!t || t.auto) return '';
-  // 页眉那一行的词条是收料字典 p 的函数：用户给整句就发常函数，换掉模板会选中的那一条（odd / even）。
+  // 页眉那一行的词条是收料字典 p 的函数：用户给整句就发常函数，键带全轴、压过模板自带的各档（odd / even）。
   // 不分奇偶：一句发两条（不发 even 的话偶数页回到模板拼的）；分奇偶：哪格填了换哪格，空着的留模板的
-  const keys = headerKeys(s);
+  const ax = axisSuffix(s);
   const split = t.split ?? headerSplit(s);
   const line = (v: string) => `(..a) => [${escapeText(v.trim())}]`;
   const out: string[] = [];
-  if (t.value.trim()) out.push(`header-${keys.odd}: ${line(t.value)}`);
+  if (t.value.trim()) out.push(`header-odd${ax}: ${line(t.value)}`);
   const even = split ? t.even : t.value;
-  if (keys.even && even.trim()) out.push(`header-${keys.even}: ${line(even)}`);
+  if (even.trim()) out.push(`header-even${ax}: ${line(even)}`);
   return out.length ? `overrides: (${out.join(', ')})` : '';
 }
 const localStylesArg = (d: LayoutDict | undefined): string => (d && Object.keys(d).length ? `styles: ${typstDict(d)}` : '');

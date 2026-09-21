@@ -10,7 +10,7 @@ import { ZIHAO, INLINE_FONTS } from '../model/zihao';
 import { LengthInput } from './LengthInput';
 import type { SegChoice } from './TriSwitch';
 import { t as tx } from '../i18n';
-import { headerDefault, headerKeys, headerSplit } from '../typst/hfTerms';
+import { headerDefault, headerSplit } from '../typst/hfTerms';
 
 export const useHFDialog = create<{ open: boolean; part: 'header' | 'footer'; show: (part: 'header' | 'footer') => void; close: () => void }>((set) => ({
   open: false, part: 'header', show: (part) => set({ open: true, part }), close: () => set({ open: false }),
@@ -127,8 +127,7 @@ export function HeaderFooterDialog() {
   const text = hf.text ?? { auto: true, value: '', even: '' };
   const setText = (patch: Partial<typeof text>) => update({ ...hf, text: { ...text, ...patch } });
   const dft = headerDefault(settings);
-  const canSplit = !!headerKeys(settings).even;
-  const split = canSplit && (text.split ?? headerSplit(settings));
+  const split = text.split ?? headerSplit(settings);
   const dirtyLevel = (l: HFLevel) => { const v = hf.levels?.[l]; return !!v && Object.values(v).some((r) => r && Object.entries(r).some(([k, x]) => (k === 'shown' ? x !== 'auto' && x !== undefined : x && !(x as HFField<unknown>).auto))); };
   return (
     <Dialog open={open} onOpenChange={(_, d) => { if (!d.open) close(); }}>
@@ -167,11 +166,9 @@ export function HeaderFooterDialog() {
                       <div className="hf-ctl"><Input size="small" className="hf-text" disabled={text.auto} value={text.even} placeholder={dft.even} onChange={(_, d) => setText({ even: d.value })} />{text.auto && <span className="hf-note muted">{tx("模板：{{v}}", { v: dft.even })}</span>}</div>
                     </div>
                   )}
-                  {canSplit && (
-                    <div className="hf-row hf-row-plain">
-                      <Checkbox label={tx("奇偶页不同")} checked={split} disabled={text.auto} onChange={(_, d) => setText({ split: !!d.checked })} />
-                    </div>
-                  )}
+                  <div className="hf-row hf-row-plain">
+                    <Checkbox label={tx("奇偶页不同")} checked={split} disabled={text.auto} onChange={(_, d) => setText({ split: !!d.checked })} />
+                  </div>
                 </div>
               </>
             )}
