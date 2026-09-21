@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NodeViewWrapper } from '@tiptap/react';
 import { t } from '../../i18n';
+import { isJumpModifier } from '../jump';
 
 interface Props {
   kind: string;
@@ -20,9 +21,11 @@ interface Props {
   /** 变了就展开（预览里双击过来的请求） */
   openNonce?: number;
   onSelect?: () => void;
+  /** ⌘ / Ctrl + 点：跳到它指的地方（引用 → 被引的图表，引文 → 文献条目…） */
+  onJump?: () => void;
 }
 
-export function InlineChip({ kind, text, title, selected, editable = true, children, autoOpen, onDelete, wide, openNonce, onSelect }: Props) {
+export function InlineChip({ kind, text, title, selected, editable = true, children, autoOpen, onDelete, wide, openNonce, onSelect, onJump }: Props) {
   const [open, setOpen] = useState(!!autoOpen);
   const ref = useRef<HTMLSpanElement>(null);
   useEffect(() => { if (openNonce) setOpen(true); }, [openNonce]);
@@ -44,8 +47,8 @@ export function InlineChip({ kind, text, title, selected, editable = true, child
         className={`chip chip-${kind} ${selected ? 'is-selected' : ''}`}
         title={title}
         contentEditable={false}
-        onMouseDown={(e) => { e.preventDefault(); onSelect?.(); }}
-        onClick={() => editable && setOpen((o) => !o)}
+        onMouseDown={(e) => { e.preventDefault(); if (onJump && isJumpModifier(e)) return; onSelect?.(); }}
+        onClick={(e) => { if (onJump && isJumpModifier(e)) { onJump(); return; } if (editable) setOpen((o) => !o); }}
       >
         {text}
       </button>

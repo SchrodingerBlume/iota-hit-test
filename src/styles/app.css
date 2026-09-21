@@ -923,6 +923,7 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .pv-layer { position: absolute; inset: 0; z-index: 3; user-select: none; -webkit-user-select: none; touch-action: pan-x pan-y pinch-zoom; }
 .pv-layer.cur-text { cursor: text; }
 .pv-layer.cur-pointer { cursor: pointer; }
+.pv-layer.cur-link { cursor: pointer; }
 .pv-sel { position: absolute; background: rgba(22, 97, 131, 0.24); border-radius: var(--r-xs); pointer-events: none; }
 :root[data-theme="dark"] .pv-sel { background: rgba(102, 178, 218, 0.32); }
 .pv-caret { position: absolute; width: 1.6px; background: var(--accent); pointer-events: none; animation: caret-blink 1.05s steps(2, start) infinite; box-shadow: 0 0 0 0.5px rgba(255,255,255,0.6); }

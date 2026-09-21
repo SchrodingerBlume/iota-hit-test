@@ -1,7 +1,7 @@
 // 文献条目的可视化录入：左边条目列表（搜索、按类型筛），右边逐字段的表单。
 // 参考文献页与成果页共用；成果页多两种自造类型和「附注」字段。
 // 原始 BibTeX 照样进出：导入文件、导出文件、以及一个能直接改的源码抽屉。
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BibEntry } from '../bib/bibtex';
 import { parseBibtex, generateBibtex, newEntryId, splitNames, joinNames, suggestKey } from '../bib/bibtex';
 import { TYPES, ACHIEVEMENT_TYPES, ACHIEVEMENT_TYPE_KEYS, ANNOTE_FIELD, typeDef, type FieldDef, type TypeDef } from '../bib/schema';
@@ -11,6 +11,7 @@ import { ZoteroDialog, entriesFromText } from './ZoteroDialog';
 import { mergeEntries } from '../bib/csl';
 import { FoldIcon } from './Fold';
 import { t as tx } from '../i18n';
+import { useBibFocus } from '../editor/jump';
 
 interface Props {
   entries: BibEntry[];
@@ -46,6 +47,14 @@ function download(name: string, text: string) {
 
 export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Props) {
   const [selected, setSelected] = useState<string | null>(entries[0]?.id ?? null);
+  // 引文芯片 ⌘点过来：选中那条、滚到它
+  const focusKey = useBibFocus((s) => s.key);
+  useEffect(() => {
+    if (!focusKey || mode !== 'references') return;
+    const hit = entries.find((e) => e.key === focusKey);
+    if (hit) { setSelected(hit.id); setGroupFilter(null); requestAnimationFrame(() => document.querySelector(`.bib-item[data-id="${hit.id}"]`)?.scrollIntoView({ block: 'center' })); }
+    useBibFocus.getState().clear();
+  }, [focusKey, entries, mode]);
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('');
   const [raw, setRaw] = useState<string | null>(null);
@@ -229,7 +238,7 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
                     const p = previewOf(e);
                     const cited = citedKeys?.has(e.key);
                     return (
-                      <li key={e.id} className={`bib-item ${e.id === selected ? 'on' : ''}`} onClick={() => setSelected(e.id)}>
+                      <li key={e.id} data-id={e.id} className={`bib-item ${e.id === selected ? 'on' : ''}`} onClick={() => setSelected(e.id)}>
                         <span className="bib-mark">[{p.mark}]</span>
                         <span className="bib-item-body">
                           <span className="bib-title">{p.title}</span>

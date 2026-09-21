@@ -9,6 +9,7 @@ import { MathEditor, forPreview } from '../math/MathEditor';
 import { MathPreview } from '../math/MathPreview';
 import { t } from '../../i18n';
 import { MirrorInput, MirrorTextarea } from '../mirror';
+import { jumpToLabel, jumpToCite, jumpToAbbr } from '../jump';
 
 const inlineAtom = (name: string, attrs: Record<string, { default: any }>, View: (p: NodeViewProps) => ReactElement) =>
   Node.create({
@@ -69,7 +70,7 @@ function CiteView({ node, updateAttributes, selected, deleteNode, editor, getPos
   const chipText = keys.length ? `[${keys.join(', ')}${supplement ? `: ${supplement}` : ''}]${form === 'prose' ? t("·叙") : form === 'author' ? t("·著") : form === 'year' ? t("·年") : ''}` : '';
   const chip = chipText ? (missing.length ? <span className="ref-dangling" title={t("文献 {{keys}} 没有登记，排出来是 ??", { keys: missing.join(', ') })}>{chipText}</span> : chipText) : '';
   return (
-    <InlineChip onSelect={() => { const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }} kind="cite" openNonce={open.nonce} text={chip || <em>{t("引用")}</em>} title={t("参考文献引用")} selected={selected} editable={editor.isEditable} autoOpen={!keys.length} onDelete={deleteNode}>
+    <InlineChip onSelect={() => { const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }} onJump={keys.length ? () => jumpToCite(keys[0]) : undefined} kind="cite" openNonce={open.nonce} text={chip || <em>{t("引用")}</em>} title={t("参考文献引用（⌘ / Ctrl + 点击跳到文献条目）")} selected={selected} editable={editor.isEditable} autoOpen={!keys.length} onDelete={deleteNode}>
       {() => (
         <>
           <Field label={t("文献")} hint={env.bibKeys.length ? t("选择一项或多项") : t("请先在“参考文献”中添加文献。")}>
@@ -156,7 +157,7 @@ function RefView({ node, updateAttributes, selected, deleteNode, editor, getPos 
   const hit = env.refTargets.find((r) => r.label === target);
   const text = hit ? (hit.ref ?? `${KIND_NAME[hit.kind]} ${hit.index}`) : target ? <span className="ref-dangling" title={t("未找到引用对象。该对象可能已被删除或取消编号。")}>??</span> : <em>{t("引用")}</em>;
   return (
-    <InlineChip onSelect={() => { const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }} kind="ref" openNonce={open.nonce} text={text} title={hit ? `${KIND_NAME[hit.kind]}：${hit.title}` : t("交叉引用")} selected={selected} editable={editor.isEditable} autoOpen={!target} onDelete={deleteNode}>
+    <InlineChip onSelect={() => { const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }} onJump={hit ? () => jumpToLabel(target) : undefined} kind="ref" openNonce={open.nonce} text={text} title={hit ? t("{{kind}}：{{title}}（⌘ / Ctrl + 点击跳过去）", { kind: KIND_NAME[hit.kind], title: hit.title }) : t("交叉引用")} selected={selected} editable={editor.isEditable} autoOpen={!target} onDelete={deleteNode}>
       {(close) => <RefPicker env={env} target={target} onPick={(l) => { updateAttributes({ target: l }); close(); }} />}
     </InlineChip>
   );
@@ -170,7 +171,7 @@ function AbbrView({ node, updateAttributes, selected, deleteNode, editor, getPos
   const key = String(node.attrs.key ?? '');
   const hit = env.abbrs.find((a) => a.key === key);
   return (
-    <InlineChip onSelect={() => { const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }} kind="abbr" openNonce={open.nonce} text={key || <em>{t("缩写")}</em>} title={hit ? t("{{key}}：{{long}}（首次出现自动展开）", { key: key, long: hit.long }) : t("缩略语")} selected={selected} editable={editor.isEditable} autoOpen={!key} onDelete={deleteNode}>
+    <InlineChip onSelect={() => { const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }} onJump={key ? jumpToAbbr : undefined} kind="abbr" openNonce={open.nonce} text={key || <em>{t("缩写")}</em>} title={hit ? t("{{key}}：{{long}}（首次出现自动展开）", { key: key, long: hit.long }) : t("缩略语")} selected={selected} editable={editor.isEditable} autoOpen={!key} onDelete={deleteNode}>
       {(close) => (
         <>
           <div className="field-label">{t("缩略语")}</div>

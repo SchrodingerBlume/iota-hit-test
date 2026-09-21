@@ -27,6 +27,7 @@ import { MathInputRules } from './extensions/mathRules';
 import { EditKeys } from './extensions/EditKeys';
 import { Algorithm } from './extensions/algorithm';
 import { Theorem } from './extensions/theorem';
+import { isJumpModifier, openLink } from './jump';
 import { EqDenote } from './extensions/eqdenote';
 import { useEditorEnv, NumberingContext, RichKeyContext } from './env';
 import { computeNumbering, type Part } from '../typst/numbering';
@@ -139,6 +140,8 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     onTransaction: ({ editor, transaction }) => { if (richKey) recordTransaction(richKey, transaction); trackHistory(editor, transaction); },
     editorProps: {
       attributes: { class: 'rich', spellcheck: 'false' },
+      // ⌘ / Ctrl + 点链接：新窗口打开（平时点是放光标，好改字）
+      handleClick: (_view, _pos, event) => { const a = (event.target as HTMLElement).closest?.('a.lnk'); if (a && isJumpModifier(event)) { openLink(a.getAttribute('href') ?? ''); return true; } return false; },
       // 光标离视口上下沿不到 40px 就滚，滚到留 72px：Word 那种贴着边打字看不见下一行的感觉要不得
       scrollThreshold: 40,
       scrollMargin: 72,

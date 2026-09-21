@@ -11,6 +11,7 @@ import { getEditor, onRegistryChange, whenEditorReady } from '../editor/registry
 import { docVersion, mappingBetween, mappingSince, toNewPos, toOldPos } from '../editor/versions';
 import { useOpenRequest } from '../editor/openRequest';
 import { useBlockMenu } from '../editor/BlockMenu';
+import { isJumpModifier, openLink } from '../editor/jump';
 import { useComments } from '../editor/comments';
 import { buildIndex, mergeIndex, patchIndex, linesOfRange, caretRect, hitPos, hitTest, lineStep, selectionRects, paragraphMarks, EMPTY_INDEX, type CaretRect, type Glyph, type Hit, type Line } from './previewEdit';
 import { t as tx } from '../i18n';
@@ -47,6 +48,21 @@ export const usePreviewMarks = create<MarksState>((set, get) => ({
 interface PageGeom { left: number; top: number; scale: number; w: number; h: number }
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+
+/** 这一点底下有没有 typst.ts 画的链接：目录条目、图表引用、文献回跳是 handleTypstLocation(this, 页, x, y)，外链带 href */
+type LinkHit = { page: number; x: number; y: number } | { href: string };
+function linkAt(clientX: number, clientY: number): LinkHit | null {
+  // elementsFromPoint 给的是命中的叶子（rect / use）与 svg 根，中间的 <a> 得自己往上找
+  for (const hit of document.elementsFromPoint(clientX, clientY)) {
+    const el = hit.closest('a');
+    if (!el) continue;
+    const m = /handleTypstLocation\(this,\s*(\d+),\s*([\d.]+),\s*([\d.]+)\)/.exec(el.getAttribute('onclick') ?? '');
+    if (m) return { page: Number(m[1]), x: Number(m[2]), y: Number(m[3]) };
+    const href = el.getAttribute('href') ?? el.getAttribute('xlink:href') ?? '';
+    if (href && href !== '#') return { href };
+  }
+  return null;
+}
 
 export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: RefObject<HTMLDivElement | null>; scrollRef: RefObject<HTMLDivElement | null>; renderTick: number }) {
   // 字形表跟着*画上去的*那一版走（renderTick），不跟编译回来的那一刻：产物落地到画进 DOM 有几十到几百毫秒，这段里
@@ -456,8 +472,23 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     clickPending.current = true;
     try { await pointerDown(e); } finally { requestAnimationFrame(() => { clickPending.current = false; }); }
   };
+  /** 滚到某页的某个点（typst.ts 链接给的页号从 1 数，坐标是那页里的 pt） */
+  const scrollToPoint = (page: number, y: number) => {
+    const sc = scrollRef.current, layer = layerRef.current;
+    const g = geom[toDisplay(page - 1)];
+    if (!sc || !layer || !g) return;
+    const top = layer.getBoundingClientRect().top + g.top + y * g.scale - sc.getBoundingClientRect().top + sc.scrollTop;
+    sc.scrollTo({ top: Math.max(0, top - 24), behavior: 'smooth' });
+  };
+  useEffect(() => {
+    // typst.ts 给内部链接写的是 onclick="handleTypstLocation(...)"，这里定义它省得漏到它时报错
+    (window as unknown as { handleTypstLocation?: unknown }).handleTypstLocation = (_el: unknown, page: number, _x: number, y: number) => scrollToPoint(page, y);
+  });
+  const follow = (l: LinkHit) => { if ('href' in l) openLink(l.href); else scrollToPoint(l.page, l.y); };
   const pointerDown = async (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
+    // ⌘ / Ctrl + 点链接：目录条目跳到那一章、图表引用跳到图表、引文跳到文献表、外链新窗口打开
+    if (isJumpModifier(e)) { const l = linkAt(e.clientX, e.clientY); if (l) { e.preventDefault(); follow(l); return; } }
     const hit = hitAt(e.clientX, e.clientY);
     if (!hit) return;
     e.preventDefault();
@@ -520,7 +551,9 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     if (e.buttons) return;
     const { clientX, clientY } = e;
     cancelAnimationFrame(hoverRaf.current);
+    const mod = isJumpModifier(e);
     hoverRaf.current = requestAnimationFrame(() => {
+      if (mod && linkAt(clientX, clientY)) { setCursor('cur-link'); return; }
       const hit = hitAt(clientX, clientY);
       const next = !hit ? '' : hit.glyph.kind === 'text' || hit.glyph.kind === 'info' || hit.glyph.kind === 'attr' ? 'cur-text' : 'cur-pointer';
       setCursor((c) => (c === next ? c : next));
