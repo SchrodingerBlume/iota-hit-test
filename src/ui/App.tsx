@@ -35,7 +35,9 @@ import { FluentProvider, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, Men
 import { Fold } from './Fold';
 import { SettingSwitch } from './TriSwitch';
 import { watchReflow } from './reflow';
-import { Home20Regular, Save20Regular, ArrowDownload20Regular, DocumentPdf20Regular, Document20Regular, Info20Regular, WeatherSunny20Regular, WeatherMoon20Regular, Navigation20Regular, ChevronLeft20Regular, BotSparkle20Regular } from '@fluentui/react-icons';
+import { Home20Regular, Save20Regular, ArrowDownload20Regular, DocumentPdf20Regular, Document20Regular, Info20Regular, WeatherSunny20Regular, WeatherMoon20Regular, Navigation20Regular, ChevronLeft20Regular, BotSparkle20Regular, History20Regular, BranchFork20Regular } from '@fluentui/react-icons';
+import { useHistoryDialog } from './HistoryDialog';
+import { useGitDialog } from './GitDialog';
 import { fluentLight, fluentDark } from './fluent';
 import { SlidersHorizontal, BookText, PenLine, Library } from 'lucide-react';
 import { t as tx } from '../i18n';
@@ -390,6 +392,12 @@ export function App() {
               </Tooltip>
               <Tooltip content={tx("下载副本（.iota.json）")} relationship="label" withArrow positioning="below">
                 <Button appearance="subtle" size="small" className="rb-btn" icon={<Save20Regular />} disabled={!hasDocument} onMouseDown={(e) => e.preventDefault()} onClick={() => void onSaveProject()} />
+              </Tooltip>
+              <Tooltip content={tx("本地历史：自动存的快照，看差异、整份恢复")} relationship="label" withArrow positioning="below">
+                <Button appearance="subtle" size="small" className="rb-btn" icon={<History20Regular />} disabled={!hasDocument} onMouseDown={(e) => e.preventDefault()} onClick={() => useHistoryDialog.getState().set(true)} />
+              </Tooltip>
+              <Tooltip content={tx("Git：有名称的提交、差异、恢复，连上 GitHub 能推能拉")} relationship="label" withArrow positioning="below">
+                <Button appearance="subtle" size="small" className="rb-btn" icon={<BranchFork20Regular />} disabled={!hasDocument} onMouseDown={(e) => e.preventDefault()} onClick={() => useGitDialog.getState().set(true)} />
               </Tooltip>
               <HistoryButtons />
               <Menu positioning="below-start">

@@ -1464,6 +1464,9 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .hist-dialog, .git-dialog { max-width: min(1100px, 96vw); width: min(1100px, 96vw); }
 .hist-bar, .git-tabs { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
 .hist-bar .spacer, .git-tabs .spacer, .hist-actions .spacer { flex: 1; }
+.hist-every, .hist-custom select { font: inherit; font-size: 12px; padding: 2px 4px; border: 1px solid var(--line-2); border-radius: var(--r-s); background: var(--panel); color: var(--ink); }
+.hist-custom { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+.hist-custom input { width: 56px; font: inherit; font-size: 12px; padding: 2px 4px; border: 1px solid var(--line-2); border-radius: var(--r-s); background: var(--panel); color: var(--ink); }
 .hist-grid, .git-grid { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 14px; min-height: 380px; max-height: 68vh; }
 .hist-list, .git-log, .git-files { list-style: none; margin: 0; padding: 0; overflow: auto; border: 1px solid var(--line); border-radius: var(--r-s); }
 .hist-list li button, .git-log li button, .git-files li button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 6px 10px; border: 0; background: none; text-align: left; cursor: pointer; font: inherit; color: var(--ink); border-bottom: 1px solid var(--line); }

@@ -1,19 +1,32 @@
 // 本地历史（照 Typst Studio 的样子）：整份工程按时间存快照到 IndexedDB，能看跟现在的差异、能整份恢复。
-// 每隔几分钟有改动就自动存一份，手动、导出、恢复前另存；每个项目最多留 MAX 份，先淘汰最老的自动快照。
+// 自动存的节奏用户定（每次操作、每 15 秒 / 30 秒 / 1 分钟 / …、自定义秒数、关），手动、导出、恢复前另存；
+// 每个项目最多留 MAX 份，先淘汰最老的自动快照。
 import { kv } from '../model/persist';
 import type { ThesisDoc } from '../model/types';
 import { t } from '../i18n';
+import { t as tx } from '../i18n';
 
 export interface SnapshotMeta { key: string; project: string; ts: number; label: HistoryLabel; bytes: number; hash: string }
 export const HISTORY_LABELS = { auto: t("自动"), manual: t("手动"), restore: t("恢复前"), export: t("导出"), open: t("打开"), git: 'Git' } as const;
 export type HistoryLabel = keyof typeof HISTORY_LABELS;
 
-const MAX = 80;
-const AUTO_EVERY = 5 * 60 * 1000;
+const MAX = 200;
 const ENABLED_KEY = 'iota4web-history-enabled';
+const EVERY_KEY = 'iota4web-history-every';
+/** 自动存的间隔（秒）；0 = 每次操作（改动停下 1 秒就存） */
+export const HISTORY_EVERY_CHOICES: { value: number; label: string }[] = [
+  { value: 0, label: tx("每次操作") }, { value: 15, label: tx("每 15 秒") }, { value: 30, label: tx("每 30 秒") }, { value: 60, label: tx("每 1 分钟") },
+  { value: 300, label: tx("每 5 分钟") }, { value: 900, label: tx("每 15 分钟") }, { value: 3600, label: tx("每 1 小时") },
+];
+export const DEFAULT_EVERY = 300;
 
 export const historyEnabled = () => { try { return localStorage.getItem(ENABLED_KEY) !== '0'; } catch { return true; } };
-export const setHistoryEnabled = (v: boolean) => { try { localStorage.setItem(ENABLED_KEY, v ? '1' : '0'); } catch { /* 无所谓 */ } };
+const CHANGED = 'iota4web-history-settings';
+const notify = () => window.dispatchEvent(new Event(CHANGED));
+export const setHistoryEnabled = (v: boolean) => { try { localStorage.setItem(ENABLED_KEY, v ? '1' : '0'); } catch { /* 无所谓 */ } notify(); };
+export const historyEvery = (): number => { try { const v = Number(localStorage.getItem(EVERY_KEY)); return Number.isFinite(v) && localStorage.getItem(EVERY_KEY) !== null ? Math.max(0, Math.round(v)) : DEFAULT_EVERY; } catch { return DEFAULT_EVERY; } };
+export const setHistoryEvery = (sec: number) => { try { localStorage.setItem(EVERY_KEY, String(Math.max(0, Math.round(sec)))); } catch { /* 无所谓 */ } notify(); };
+export const describeEvery = (sec: number) => HISTORY_EVERY_CHOICES.find((c) => c.value === sec)?.label ?? (sec % 3600 === 0 ? tx("每 {{v0}} 小时", { v0: sec / 3600 }) : sec % 60 === 0 ? tx("每 {{v0}} 分钟", { v0: sec / 60 }) : tx("每 {{sec}} 秒", { sec: sec }));
 
 const enc = new TextEncoder();
 export async function sha1(text: string): Promise<string> {
@@ -76,11 +89,21 @@ export async function takeSnapshot(doc: ThesisDoc, label: HistoryLabel): Promise
   return { key: keyOf(doc.id, ts), project: doc.id, ts, label, bytes: text.length, hash };
 }
 
-/** 定时自动存：App 挂一个，每 5 分钟看一眼当前文档变没变 */
-export function startAutoHistory(getDoc: () => ThesisDoc | null): () => void {
-  const tick = () => { const d = getDoc(); if (d && historyEnabled()) void takeSnapshot(d, 'auto'); };
-  const timer = window.setInterval(tick, AUTO_EVERY);
-  const onHide = () => { if (document.visibilityState === 'hidden') tick(); };
+/**
+ * 自动存：功能区挂一个。间隔 > 0 时按间隔看一眼文档变没变（间隔改了下一拍生效）；「每次操作」时跟着文档改动走，
+ * 改动停下 1 秒存一份；页面藏起来也存一份。onChange 给一个「文档变了就叫我」的订阅
+ */
+export function startAutoHistory(getDoc: () => ThesisDoc | null, onChange: (cb: () => void) => () => void): () => void {
+  let stopped = false;
+  const snap = () => { const d = getDoc(); if (d && historyEnabled()) void takeSnapshot(d, 'auto'); };
+  let timer = 0;
+  const arm = () => { if (stopped) return; window.clearTimeout(timer); const every = historyEvery(); timer = window.setTimeout(() => { if (every > 0 && historyEnabled()) snap(); arm(); }, every > 0 ? every * 1000 : 5000); };
+  arm();
+  // 设置改了立刻按新节奏重排
+  window.addEventListener(CHANGED, arm);
+  let debounce = 0;
+  const off = onChange(() => { if (historyEvery() !== 0 || !historyEnabled()) return; window.clearTimeout(debounce); debounce = window.setTimeout(snap, 1000); });
+  const onHide = () => { if (document.visibilityState === 'hidden') snap(); };
   document.addEventListener('visibilitychange', onHide);
-  return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', onHide); };
+  return () => { stopped = true; window.clearTimeout(timer); window.clearTimeout(debounce); off(); window.removeEventListener(CHANGED, arm); document.removeEventListener('visibilitychange', onHide); };
 }

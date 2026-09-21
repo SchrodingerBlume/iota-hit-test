@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import { Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions, Button, Switch } from '@fluentui/react-components';
 import { useStore } from '../model/store';
 import type { ThesisDoc, RichDoc } from '../model/types';
-import { listHistory, loadSnapshot, takeSnapshot, deleteSnapshot, clearHistory, historyEnabled, setHistoryEnabled, HISTORY_LABELS, type SnapshotMeta } from '../history/history';
+import { listHistory, loadSnapshot, takeSnapshot, deleteSnapshot, clearHistory, historyEnabled, setHistoryEnabled, historyEvery, setHistoryEvery, describeEvery, HISTORY_EVERY_CHOICES, HISTORY_LABELS, type SnapshotMeta } from '../history/history';
 import { lineDiff, countChanges } from '../history/diff';
 import { toMarkdown } from '../editor/markdown';
 import { generateBibtex } from '../bib/bibtex';
@@ -13,7 +13,7 @@ import { t as tx } from '../i18n';
 
 export const useHistoryDialog = create<{ open: boolean; set: (v: boolean) => void }>((set) => ({ open: false, set: (open) => set({ open }) }));
 
-const fmt = (ts: number) => { const d = new Date(ts); const p = (n: number) => String(n).padStart(2, '0'); return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+const fmt = (ts: number) => { const d = new Date(ts); const p = (n: number) => String(n).padStart(2, '0'); return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; };
 const kb = (n: number) => (n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`);
 
 /** 工程拆成能逐段对照的文字 */
@@ -33,6 +33,11 @@ export function HistoryDialog() {
   const doc = useStore((s) => s.doc);
   const [list, setList] = useState<SnapshotMeta[]>([]);
   const [enabled, setEnabled] = useState(historyEnabled());
+  const [every, setEvery] = useState(historyEvery());
+  const [customUnit, setCustomUnit] = useState<60 | 1>(every % 60 === 0 && every > 0 ? 60 : 1);
+  const isPreset = HISTORY_EVERY_CHOICES.some((c) => c.value === every);
+  const [custom, setCustom] = useState(!isPreset);
+  const changeEvery = (v: number) => { setEvery(v); setHistoryEvery(v); };
   const [sel, setSel] = useState<string | null>(null);
   const [snap, setSnap] = useState<ThesisDoc | null>(null);
   const [facet, setFacet] = useState<string>('');
@@ -64,7 +69,18 @@ export function HistoryDialog() {
           <DialogTitle>{tx("本地历史")}</DialogTitle>
           <DialogContent>
             <div className="hist-bar">
-              <Switch checked={enabled} label={tx("每 5 分钟自动存一份")} onChange={(_, d) => { setEnabled(!!d.checked); setHistoryEnabled(!!d.checked); }} />
+              <Switch checked={enabled} label={tx("自动存")} onChange={(_, d) => { setEnabled(!!d.checked); setHistoryEnabled(!!d.checked); }} />
+              <select className="hist-every" value={custom ? 'custom' : String(every)} disabled={!enabled} title={tx("多久自动存一份")} onChange={(e) => { if (e.target.value === 'custom') { setCustomUnit(every > 0 && every % 60 === 0 ? 60 : 1); setCustom(true); return; } setCustom(false); changeEvery(Number(e.target.value)); }}>
+                {HISTORY_EVERY_CHOICES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                <option value="custom">{tx("自定义…")}</option>
+              </select>
+              {custom && (
+                <span className="hist-custom">
+                  {tx("每")} <input type="number" min={1} step={1} disabled={!enabled} value={Math.max(1, Math.round(every / customUnit)) || ''} onChange={(e) => { const n = Math.max(1, Math.round(Number(e.target.value) || 1)); changeEvery(n * customUnit); }} />
+                  <select value={customUnit} disabled={!enabled} onChange={(e) => { const u = Number(e.target.value) as 60 | 1; const n = Math.max(1, Math.round(every / customUnit)); setCustomUnit(u); changeEvery(n * u); }}><option value={1}>{tx("秒")}</option><option value={60}>{tx("分钟")}</option></select>
+                </span>
+              )}
+              <span className="muted">{enabled ? (every === 0 ? tx("改动停下 1 秒就存一份") : tx("{{every}}有改动就存一份", { every: describeEvery(every) })) : tx("只在手动、恢复前、Git 提交时存")}</span>
               <span className="spacer" />
               <span className="muted">{busy}</span>
               <Button size="small" onClick={() => void manual()}>{tx("现在存一份")}</Button>
@@ -72,7 +88,7 @@ export function HistoryDialog() {
             </div>
             <div className="hist-grid">
               <ul className="hist-list">
-                {!list.length && <li className="muted">{tx("还没有快照。有改动时每 5 分钟自动存一份，也可以现在存。")}</li>}
+                {!list.length && <li className="muted">{tx("还没有快照。有改动时按上面的节奏自动存，也可以现在存。")}</li>}
                 {[...list].reverse().map((s) => (
                   <li key={s.key} className={s.key === sel ? 'on' : ''}>
                     <button type="button" onClick={() => setSel(s.key === sel ? null : s.key)}>
