@@ -10,6 +10,8 @@ export interface BibEntry {
   fields: Record<string, string>;
   /** 编辑器里的分组（像 Zotero 的分类），不进 .bib */
   group?: string;
+  /** 从哪儿来的（zotero:条目键），再同步时按它对上，不进 .bib */
+  source?: string;
 }
 
 export const newEntryId = () => Math.random().toString(36).slice(2, 10);
@@ -141,7 +143,19 @@ export function generateBibtex(entries: BibEntry[], opts: { withGroups?: boolean
 }
 
 /** 作者字段 ↔ 一行一个人 */
-export const splitNames = (s: string) => s.split(/\s+and\s+/i).map((x) => x.trim()).filter(Boolean);
+export const splitNames = (s: string) => {
+  // 花括号里的 and 不是分隔（{Center for History and New Media} 是一个机构）
+  const out: string[] = [];
+  let depth = 0, cur = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '{') depth++; else if (c === '}') depth = Math.max(0, depth - 1);
+    if (depth === 0 && /\s/.test(c)) { const m = s.slice(i).match(/^\s+and\s+/i); if (m) { out.push(cur); cur = ''; i += m[0].length - 1; continue; } }
+    cur += c;
+  }
+  out.push(cur);
+  return out.map((x) => x.trim()).filter(Boolean);
+};
 export const joinNames = (lines: string) => lines.split(/\r?\n/).map((x) => x.trim()).filter(Boolean).join(' and ');
 
 /** 从作者 + 年份造一个 key：西文取姓，中文取前两个字的拼音做不到就用字面 */

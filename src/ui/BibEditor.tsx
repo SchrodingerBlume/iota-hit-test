@@ -5,7 +5,9 @@ import { useMemo, useRef, useState } from 'react';
 import type { BibEntry } from '../bib/bibtex';
 import { parseBibtex, generateBibtex, newEntryId, splitNames, joinNames, suggestKey } from '../bib/bibtex';
 import { TYPES, ACHIEVEMENT_TYPES, ACHIEVEMENT_TYPE_KEYS, ANNOTE_FIELD, typeDef, type FieldDef, type TypeDef } from '../bib/schema';
-import { Plus, Trash2, Copy, Search, Upload, Download, Code2, Wand2, Check, FolderPlus, Folder } from 'lucide-react';
+import { Plus, Trash2, Copy, Search, Upload, Download, Code2, Wand2, Check, FolderPlus, Folder, CloudDownload } from 'lucide-react';
+import { ZoteroDialog, entriesFromText } from './ZoteroDialog';
+import { mergeEntries } from '../bib/csl';
 import { FoldIcon } from './Fold';
 import { t as tx } from '../i18n';
 
@@ -113,19 +115,17 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
     onChange([copy, ...entries]);
     setSelected(copy.id);
   };
-  const importFile = async (f: File) => {
-    const parsed = parseBibtex(await f.text()).map((p) => ({ ...p, group: p.group ?? (groupFilter || undefined) }));
+  const [zotero, setZotero] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  // .bib 与 Zotero 导出的 CSL JSON 都收；同 key（或同 Zotero 来源）的当作更新，其余追加
+  const importFiles = async (files: File[]) => {
+    const taken = new Set(entries.map((e) => e.key));
+    const parsed: BibEntry[] = [];
+    for (const f of files) { try { const got = entriesFromText(await f.text(), taken); for (const e of got) taken.add(e.key); parsed.push(...got); } catch { /* 不是文献文件 */ } }
     if (!parsed.length) { alert(tx("未从此文件中解析出任何条目")); return; }
-    // 同 key 的当作更新，其余追加
-    const byKey = new Map(entries.map((e) => [e.key, e]));
-    const merged = [...entries];
-    for (const p of parsed) {
-      const old = byKey.get(p.key);
-      if (old) merged[merged.indexOf(old)] = { ...old, type: p.type, fields: p.fields, group: p.group ?? old.group };
-      else merged.push(p);
-    }
-    onChange(merged);
-    setSelected(parsed[0].id);
+    const r = mergeEntries(entries, parsed, groupFilter || undefined);
+    onChange(r.entries);
+    setSelected(r.entries.find((e) => e.key === parsed[0].key)?.id ?? parsed[0].id);
   };
   const applyRaw = () => {
     if (raw === null) return;
@@ -145,7 +145,8 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
   const extraFields = current ? Object.keys(current.fields).filter((k) => !known.has(k)) : [];
 
   return (
-    <div className="bib">
+    <div className={`bib ${dragOver ? 'is-drop' : ''}`} onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragOver(true); } }} onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }} onDrop={(e) => { if (!e.dataTransfer.files.length) return; e.preventDefault(); setDragOver(false); void importFiles(Array.from(e.dataTransfer.files)); }}>
+      <ZoteroDialog open={zotero} onClose={() => setZotero(false)} entries={entries} onChange={onChange} />
       <aside className="bib-list">
         <div className="bib-tools">
           <span className="bib-search"><Search /><input value={q} placeholder={tx("搜索引用键、题名或作者…")} onChange={(e) => setQ(e.target.value)} /></span>
@@ -157,11 +158,12 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
         <div className="bib-add">
           <AddMenu types={types} onAdd={add} />
           <span className="join">
-            <button type="button" className="btn btn-xs btn-icon" title={tx("导入 .bib 文件")} onClick={() => fileInput.current?.click()}><Upload /></button>
+            <button type="button" className="btn btn-xs btn-icon" title={tx("导入 .bib 或 CSL JSON 文件")} onClick={() => fileInput.current?.click()}><Upload /></button>
+            <button type="button" className="btn btn-xs btn-icon" title={tx("从 Zotero 导入（云端或导出的文件）")} onClick={() => setZotero(true)}><CloudDownload /></button>
             <button type="button" className="btn btn-xs btn-icon" title={groupFilter ? tx("导出分组“{{groupFilter}}”", { groupFilter: groupFilter }) : tx("导出 .bib 文件")} onClick={() => { const set = groupFilter === null ? entries : entries.filter((e) => (groupFilter === '' ? !e.group?.trim() : e.group?.trim() === groupFilter)); download(groupFilter ? fileName.replace(/\.bib$/, `-${groupFilter}.bib`) : fileName, generateBibtex(set, { withGroups: true })); }} disabled={!entries.length}><Download /></button>
             <button type="button" className={`btn btn-xs btn-icon ${raw !== null ? 'on' : ''}`} title={tx("编辑 BibTeX 源代码")} onClick={() => { setRaw(raw === null ? generateBibtex(entries, { withGroups: true }) : null); setRawError(null); }}><Code2 /></button>
           </span>
-          <input ref={fileInput} type="file" accept=".bib,text/plain" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importFile(f); e.target.value = ''; }} />
+          <input ref={fileInput} type="file" accept=".bib,.json,text/plain,application/json" multiple hidden onChange={(e) => { if (e.target.files?.length) void importFiles(Array.from(e.target.files)); e.target.value = ''; }} />
         </div>
         <div className="bib-groups">
           <button type="button" className={`bib-group-chip ${groupFilter === null ? 'on' : ''}`} onClick={() => setGroupFilter(null)}>{tx("全部")}{' '}<span className="muted">{entries.length}</span></button>

@@ -1440,3 +1440,19 @@ body.is-resizing .preview-stage { pointer-events: none; }
   .hf-lab { grid-column: 1 / -1; }
   .hf-extra { grid-template-columns: auto minmax(0, 1fr); }
 }
+
+/* 从 Zotero 导入 */
+.zt-dialog { max-width: 600px; }
+.zt-sec + .zt-sec { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.zt-sec h4 { margin: 0 0 6px; font-size: 13px; }
+.zt-sec .field-hint { margin: 0 0 8px; line-height: 1.5; }
+.zt-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-bottom: 8px; }
+.zt-row .spacer { flex: 1; }
+.zt-key { flex: 1 1 16em; font-family: var(--mono); }
+.zt-lab { color: var(--ink-2); }
+.zt-grid { display: grid; grid-template-columns: auto minmax(0, 320px); align-items: center; gap: 6px 10px; margin-bottom: 8px; }
+.zt-drop { border: 1.5px dashed var(--line-2); border-radius: var(--r-s); padding: 18px 12px; text-align: center; color: var(--muted); cursor: pointer; transition: border-color var(--fast) var(--ease), background-color var(--fast) var(--ease); }
+.zt-drop:hover, .zt-drop.is-over { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+.zt-status { margin: 10px 0 0; font-size: 12.5px; }
+.zt-error { color: var(--danger); }
+.bib.is-drop { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: var(--r-s); }
