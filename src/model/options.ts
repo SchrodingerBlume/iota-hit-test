@@ -422,6 +422,20 @@ export const SWITCHES: SwitchDef<any>[] = [
     resolve: () => ({ value: 'sentence', mixed: t("照原文"), reason: t("照条目原文；改的话 {…} 保护的不动") }),
   },
   {
+    key: 'bibNameCase',
+    label: t("西文姓名大小写"),
+    hint: t("姓全大写（WILLIS R）或照原文（Willis R）"),
+    choices: [
+      { value: 'upper', label: t("姓全大写") },
+      { value: 'asis', label: t("照原文") },
+    ],
+    group: t("参考文献"),
+    place: 'bibliography',
+    resolve: (s) => ((s.bibVersion === 'auto' ? '2015' : s.bibVersion) === '2025'
+      ? { value: 'asis', reason: t("2025 版国标姓照原文（Willis R）") }
+      : { value: 'upper', reason: t("2015 版国标姓全大写（WILLIS R）") }),
+  },
+  {
     key: 'bibSortZh',
     label: t("中文著者排序"),
     hint: t("著者-出版年制的表怎么排中文名"),
@@ -627,6 +641,7 @@ export const defaultSettings = (): Settings => ({
   bibHyperlinks: 'auto',
   bibDegreeNote: 'auto',
   bibTitleCase: 'auto',
+  bibNameCase: 'auto',
   bibSortZh: 'auto',
   equationNumberingFullwidth: 'auto',
   subcaptionBilingual: 'auto',

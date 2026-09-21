@@ -165,6 +165,7 @@ function gb7714Arg(s: Settings): string {
   if (s.bibHyperlinks !== 'auto') { d.hyperlink = String(s.bibHyperlinks); d['hyperlink-title'] = String(s.bibHyperlinks); d['back-ref'] = String(s.bibHyperlinks); }
   if (s.bibDegreeNote !== 'auto') d['show-degree'] = String(s.bibDegreeNote);
   if (s.bibTitleCase !== 'auto') d['titles-text-case'] = JSON.stringify(s.bibTitleCase);
+  if (s.bibNameCase !== 'auto') d['bib-name-style'] = `(family-case: ${s.bibNameCase === 'upper' ? '"uppercase"' : 'none'})`;
   if (s.bibSortZh !== 'auto' && s.bibStyle === 'author-date') d['bib-sort-zh-by'] = JSON.stringify(s.bibSortZh);
   // 字符串当 Typst 字符串发；写成 Typst 原话的长度 / auto / none / 字典 / 数组原样
   const lit = (v: unknown): string => (typeof v === 'string' ? (/^(auto|none|true|false|[\d.]+(pt|em|cm|mm|in|%|fr)?|\(.*\)|\[.*\])$/.test(v.trim()) ? v.trim() : JSON.stringify(v)) : typstDict(v));

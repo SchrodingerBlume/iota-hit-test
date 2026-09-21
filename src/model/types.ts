@@ -73,6 +73,7 @@ export interface Settings {
   bibHyperlinks: TriBool;
   bibDegreeNote: TriBool;
   bibTitleCase: Tri<'sentence' | 'title'>;
+  bibNameCase: Tri<'upper' | 'asis'>;
   bibSortZh: Tri<'pinyin' | 'bihua'>;
   /** omni-gb7714 其余的 90 来项（只从工程 JSON 里改）：键照它的参数名，值是字符串就当 Typst 字符串发（"author-date"），
    *  写成 Typst 原话的长度 / auto / none / 字典（"0.65em"、"(doi: false)"）原样发；这里的键压过上面那几项折出来的 */
