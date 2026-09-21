@@ -220,6 +220,45 @@ code { font-family: var(--mono); font-size: 0.92em; }
 .boot .bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--hit-orange), var(--accent)); background-size: 200% 100%; animation: shimmer 1.6s linear infinite; transition: width var(--base) var(--ease); border-radius: var(--r-xs); }
 .boot .detail { color: var(--muted); font-size: 12px; font-family: var(--mono); }
 
+/* ── 初次排版：影子论文一行行写出来、一页页摞起来 ─────── */
+.first-compile { position: absolute; inset: 40px 0 0; z-index: 3; overflow: auto; padding: 18px 18px 40px; background: var(--preview-bg); display: flex; flex-direction: column; align-items: center; gap: 30px; transition: opacity 500ms var(--ease); }
+.first-compile.fc-out { opacity: 0; pointer-events: none; }
+.fc-caption { margin: 22px 0 0; max-width: 420px; width: 100%; padding: 18px 22px; }
+.fc-stack { position: relative; flex: none; width: min(340px, 100%, calc(56vh * 0.707)); aspect-ratio: 210 / 297; margin-top: 12px; }
+.fc-sheet { position: absolute; inset: 0; background: var(--paper); border-radius: 2px; box-shadow: 0 1px 2px rgba(0,0,0,.18), 0 6px 16px rgba(0,0,0,.10); overflow: hidden; transform-origin: 50% 0; }
+.fc-ghost.g1 { transform: translateY(-7px) scale(.97); }
+.fc-ghost.g2 { transform: translateY(-14px) scale(.94); }
+.fc-ghost.g3 { transform: translateY(-21px) scale(.91); }
+.fc-done { animation: fc-settle 480ms var(--ease) both; }
+.fc-done .fc-body, .fc-done .fc-num { animation: fc-vanish 480ms var(--ease) both; }
+.fc-cur { animation: fc-in 420ms var(--ease) both; }
+@keyframes fc-settle { to { transform: translateY(-7px) scale(.97); } }
+@keyframes fc-vanish { to { opacity: 0; } }
+@keyframes fc-in { from { opacity: 0; transform: translateY(18px); } }
+.fc-body { position: absolute; inset: 9% 11% 8%; color: #202020; }
+.preview[data-bg="night"] .fc-body { filter: invert(.85) hue-rotate(180deg); }
+.fc-num { position: absolute; bottom: 3.5%; left: 0; right: 0; text-align: center; font: 8px var(--serif); color: #888; }
+.fc-line { position: relative; margin-bottom: 8px; }
+.fc-p { height: 5px; width: var(--w); background: #cfd4d9; border-radius: 3px; }
+.fc-fig { height: 48px; width: 62%; margin: 6px auto 12px; background: #eef0f2; border: 1px solid #d5d9dd; border-radius: 3px; }
+.fc-h { font: 700 9px/1.4 var(--serif); margin: 8px 0 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fc-h.l1 { font-size: 12px; text-align: center; margin: 10px 0 9px; }
+.fc-h.l3 { font-weight: 500; }
+.fc-title { text-align: center; margin: 10px 0 22px; }
+.fc-title b { display: block; font: 700 13px/1.4 var(--serif); }
+.fc-title span { display: block; font: 8px/2 var(--serif); color: #555; }
+/* 正在写的那页：每行按序号错开、在这一页的 1.2 s 里写完；笔尖是行尾一点橙光 */
+.fc-cur .fc-line { animation-duration: calc(1200ms / var(--n) * 1.6); animation-delay: calc(1200ms * var(--i) / var(--n)); animation-fill-mode: both; animation-timing-function: ease-out; }
+.fc-cur .fc-p, .fc-cur .fc-fig { animation-name: fc-grow; }
+.fc-cur .fc-h { animation-name: fc-wipe; }
+.fc-cur .fc-title { animation-name: fc-drop; }
+.fc-cur .fc-p::after, .fc-cur .fc-fig::after { content: ''; position: absolute; right: -4px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%; background: var(--hit-orange); box-shadow: 0 0 10px 3px var(--hit-orange); animation-name: fc-pen; animation-duration: inherit; animation-delay: inherit; animation-fill-mode: both; }
+@keyframes fc-grow { from { width: 0; } }
+@keyframes fc-wipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes fc-drop { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes fc-pen { 0% { opacity: 0; } 8%, 85% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .first-compile * { animation: none !important; } .fc-cur .fc-line::after { display: none; } }
+
 /* ── 诊断 ───────────────────────────────────────── */
 .diag { background: var(--warn-soft); border: 1px solid transparent; border-radius: var(--r-s); max-height: 160px; overflow: auto; font-size: 12px; animation: rise var(--fast) var(--ease) both; }
 .diag.err { background: var(--danger-soft); }

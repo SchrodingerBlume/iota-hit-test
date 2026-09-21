@@ -11,6 +11,7 @@ import { useStore, type RichKey } from '../model/store';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { Eye, ZoomIn, ZoomOut, Maximize2, Minimize2, Loader2, RefreshCw } from 'lucide-react';
 import { PreviewEditLayer } from './PreviewEditLayer';
+import { FirstCompile } from './FirstCompile';
 import { PageIndicator, WordCountBadge, ZoomMenu, BgMenu, usePreviewBg } from './previewTools';
 import { t as tx } from '../i18n';
 import { t as tr } from '../i18n';
@@ -339,6 +340,8 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
   const [diagOpen, setDiagOpen] = useState(false);
   // 警告也给（标签没挂上这类要用户处理）；只滤掉本机字体档缺字体那几条噪音
   const shown = [...errors, ...serWarnings.map((message) => ({ severity: 'warning', message, where: '' })), ...warnings.filter((w) => !/unknown font family: (kaiti_gb2312|lisu|stxinwei|simsun|simhei|kaiti|fangsong)/i.test(w.message))];
+  // 进工程后第一份整编还没回来（读图、排队、编译都算）：摆影子论文，别写「暂无内容」
+  const first = status === 'ready' && !artifact && !errors.length && !refreshDisabled;
 
   return (
     <div className={`preview ${compiling ? 'is-compiling' : ''}`} data-bg={bg}>
@@ -399,7 +402,8 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
           </div>
         )}
         {renderError && <div className="diag err" style={{ marginBottom: 12, padding: 8 }}>{tx("渲染失败：")}{renderError}</div>}
-        {status === 'ready' && !artifact && !compiling && !errors.length && <div className="preview-empty">{tx("暂无内容")}</div>}
+        {status === 'ready' && !artifact && !compiling && !errors.length && refreshDisabled && <div className="preview-empty">{tx("暂无内容")}</div>}
+        <FirstCompile show={first} />
         {/* 渲染器会整个改写 preview-doc 的内容，编辑层只能做它的兄弟盖在上面 */}
         <div ref={canvasRef} className="preview-canvas">
           <div ref={stageRef} className="preview-stage" style={{ width: '100%' }}>
