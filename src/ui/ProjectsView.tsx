@@ -1,6 +1,6 @@
 // 我的文档：照 Word 的「开始」页排——上面一排模板卡（点了弹出新建对话框起名、选档），下面「最近使用」
 // 一张可搜索、可排序的列表，每行悬停出操作；删除走对话框确认，重命名就地改
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions, Button, Input, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuItemRadio, MenuDivider, Tooltip } from '@fluentui/react-components';
 import { Document20Regular, DocumentSparkle20Regular, FolderOpen20Regular, ArrowLeft20Regular, Search20Regular, MoreHorizontal20Regular, Rename20Regular, Copy20Regular, Delete20Regular, ArrowDownload20Regular, Open20Regular, ArrowSort20Regular, Pin20Regular, PinOff20Regular } from '@fluentui/react-icons';
 import { kv } from '../model/persist';
@@ -34,14 +34,14 @@ function download(name: string, data: BlobPart, type: string) {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
-function ProjectRow({ p, active, pinned, onDelete, onDuplicate }: { p: ProjectMeta; active: boolean; pinned: boolean; onDelete: (p: ProjectMeta) => void; onDuplicate: (p: ProjectMeta) => void }) {
+function ProjectRow({ p, active, pinned, k, onDelete, onDuplicate }: { p: ProjectMeta; active: boolean; pinned: boolean; k: number; onDelete: (p: ProjectMeta) => void; onDuplicate: (p: ProjectMeta) => void }) {
   const { openProject, renameProject, exportProject, togglePin } = useStore();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(p.name);
   const commit = () => { const n = name.trim(); setEditing(false); if (n && n !== p.name) void renameProject(p.id, n); else setName(p.name); };
   const save = async () => { const r = await exportProject(p.id); if (r) download(`${r.name}.iota.json`, r.json, 'application/json'); };
   return (
-    <div className={`proj-row ${active ? 'is-active' : ''}`} onDoubleClick={() => { if (!editing) void openProject(p.id); }}>
+    <div className={`proj-row ${active ? 'is-active' : ''}`} style={{ '--k': k } as CSSProperties} onDoubleClick={() => { if (!editing) void openProject(p.id); }}>
       <span className="proj-ico"><Document20Regular /></span>
       <div className="proj-main">
         {editing
@@ -184,9 +184,9 @@ export function ProjectsView() {
           </div>
           <div className="proj-table">
             {pinnedRows.length > 0 && <div className="proj-group">{tx("已固定")}</div>}
-            {pinnedRows.map((p) => <ProjectRow key={p.id} p={p} active={p.id === doc.id && loaded} pinned onDelete={setPendingDelete} onDuplicate={(p) => void onDuplicate(p)} />)}
+            {pinnedRows.map((p, i) => <ProjectRow key={p.id} p={p} k={i} active={p.id === doc.id && loaded} pinned onDelete={setPendingDelete} onDuplicate={(p) => void onDuplicate(p)} />)}
             {pinnedRows.length > 0 && recentRows.length > 0 && <div className="proj-group">{tx("最近")}</div>}
-            {recentRows.map((p) => <ProjectRow key={p.id} p={p} active={p.id === doc.id && loaded} pinned={false} onDelete={setPendingDelete} onDuplicate={(p) => void onDuplicate(p)} />)}
+            {recentRows.map((p, i) => <ProjectRow key={p.id} p={p} k={i} active={p.id === doc.id && loaded} pinned={false} onDelete={setPendingDelete} onDuplicate={(p) => void onDuplicate(p)} />)}
             {!projects.length && <div className="proj-empty muted">{tx("暂无文档。从上面的模板新建一个，或打开下载过的副本。")}</div>}
             {projects.length > 0 && !shown.length && <div className="proj-empty muted">{tx("没有匹配「{{q}}」的文档。", { q: query.trim() })}</div>}
           </div>

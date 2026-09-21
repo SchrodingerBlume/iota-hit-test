@@ -54,7 +54,7 @@ export function CommentsPane() {
     <aside className="comments-pane" aria-label={t("批注")}>
       <div className="comments-head">
         <span><Comment20Regular />{t("批注")}{' '}<span className="muted">{here.length}</span></span>
-        <Input size="small" value={author} placeholder={t("审阅者姓名")} onChange={(_, d) => setAuthor(d.value)} style={{ width: 110 }} />
+        <Input size="small" value={author} placeholder={t("审阅者姓名")} onChange={(_, d) => setAuthor(d.value)} className="comments-author" />
         <Tooltip content={t("收起批注窗格")} relationship="label"><Button size="small" appearance="subtle" icon={<Dismiss20Regular />} onClick={() => setOpen(false)} /></Tooltip>
       </div>
       {resolvedCount > 0 && <button type="button" className="comments-toggle" onClick={() => setShowResolved((v) => !v)}>{showResolved ? t("隐藏") : t("显示")}{t("显示已解决的批注")}{' '}{resolvedCount} {' '}{t("条")}</button>}

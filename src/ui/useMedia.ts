@@ -15,6 +15,8 @@ export function useMedia(query: string): boolean {
 }
 /** 窄屏（手机、竖着的平板）：单栏或上下叠，左栏变抽屉 */
 export const COMPACT = '(max-width: 900px)';
+/** 手机：顶栏只留最要紧的几个钮 */
+export const PHONE = '(max-width: 600px)';
 export const PORTRAIT = '(orientation: portrait)';
 /** 矮屏（手机横屏）：功能区默认收起，省高度 */
 export const SHORT = '(max-height: 520px)';

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useStore, type Section } from '../model/store';
 import type { ThesisDoc } from '../model/types';
 import { startCompiler, requestCompile, requestPara, resetForProject, exportPdf, useCompileState, setFocusPlacer, LONG_DOC } from '../compiler/client';
@@ -30,8 +30,9 @@ import { Preview } from './Preview';
 import { usePreviewSurface } from './PreviewEditLayer';
 import { useTheme, type ThemePref } from './theme';
 import { useLayoutPrefs } from './layout';
+import { useMedia, PHONE } from './useMedia';
 import { Ribbon, HistoryButtons } from './Ribbon';
-import { FluentProvider, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuItemRadio, Button, Tooltip, Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions } from '@fluentui/react-components';
+import { FluentProvider, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuItemRadio, MenuDivider, Button, Tooltip, Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions } from '@fluentui/react-components';
 import { Fold } from './Fold';
 import { SettingSwitch } from './TriSwitch';
 import { watchReflow } from './reflow';
@@ -278,7 +279,8 @@ export function App() {
   useAutoCompile(doc, loaded && view === 'editor', refresh, previewFocused, composing);
   const [busy, setBusy] = useState<string | null>(null);
   const [theme, themePref, setThemePref] = useTheme();
-  const { navOpen, setNavOpen, mode, setMode, ratio, startDrag, mainRef, gridColumns, gridRows, compact, stacked } = useLayoutPrefs();
+  const { navOpen, setNavOpen, mode, setMode, ratio, startDrag, mainRef, gridColumns, gridRows, compact, stacked, agentOverlay } = useLayoutPrefs();
+  const phone = useMedia(PHONE);
   // 设置类页面的表单：容器变窄、行折行、行增减时各元素滑到新位置
   const reflowStop = useRef<(() => void) | null>(null);
   const reflowRef = useCallback((el: HTMLDivElement | null) => { reflowStop.current?.(); reflowStop.current = el && !el.querySelector('.editor') ? watchReflow(el, '.card, .card > *, .triseg > *, .axis > *') : null; }, []);
@@ -394,10 +396,10 @@ export function App() {
                 <Button appearance="subtle" size="small" className="rb-btn" icon={<Save20Regular />} disabled={!hasDocument} onMouseDown={(e) => e.preventDefault()} onClick={() => void onSaveProject()} />
               </Tooltip>
               <Tooltip content={tx("本地历史：自动存的快照，看差异、整份恢复")} relationship="label" withArrow positioning="below">
-                <Button appearance="subtle" size="small" className="rb-btn" icon={<History20Regular />} disabled={!hasDocument} onMouseDown={(e) => e.preventDefault()} onClick={() => useHistoryDialog.getState().set(true)} />
+                <Button appearance="subtle" size="small" className="rb-btn rb-adv" icon={<History20Regular />} disabled={!hasDocument} onMouseDown={(e) => e.preventDefault()} onClick={() => useHistoryDialog.getState().set(true)} />
               </Tooltip>
               <Tooltip content={tx("Git：有名称的提交、差异、恢复，连上 GitHub 能推能拉")} relationship="label" withArrow positioning="below">
-                <Button appearance="subtle" size="small" className="rb-btn" icon={<BranchFork20Regular />} disabled={!hasDocument} onMouseDown={(e) => e.preventDefault()} onClick={() => useGitDialog.getState().set(true)} />
+                <Button appearance="subtle" size="small" className="rb-btn rb-adv" icon={<BranchFork20Regular />} disabled={!hasDocument} onMouseDown={(e) => e.preventDefault()} onClick={() => useGitDialog.getState().set(true)} />
               </Tooltip>
               <HistoryButtons />
               <Menu positioning="below-start">
@@ -414,6 +416,12 @@ export function App() {
                     <MenuItem icon={<DocumentPdf20Regular />} disabled={!canExportPdf} onClick={() => void onExportPdf()}>{tx("导出 PDF")}</MenuItem>
                     <MenuItem icon={<Document20Regular />} disabled={!hasDocument} onClick={onExportTypst}>{tx("导出 Typst 源文件")}</MenuItem>
                     <MenuItem icon={<Document20Regular />} disabled={!hasDocument} onClick={() => void onExportDocx()}>{tx("导出 Word 文档（.docx）")}</MenuItem>
+                    {/* 手机顶栏放不下本地历史与 Git 两颗钮，收进这个菜单 */}
+                    {phone && (<>
+                      <MenuDivider />
+                      <MenuItem icon={<History20Regular />} disabled={!hasDocument} onClick={() => useHistoryDialog.getState().set(true)}>{tx("本地历史…")}</MenuItem>
+                      <MenuItem icon={<BranchFork20Regular />} disabled={!hasDocument} onClick={() => useGitDialog.getState().set(true)}>{tx("Git…")}</MenuItem>
+                    </>)}
                   </MenuList>
                 </MenuPopover>
               </Menu>
@@ -424,7 +432,7 @@ export function App() {
             {view === 'editor' && <span className="status"><i className={`dot ${dot}`} /><span key={statusText} className="status-text">{statusText}</span></span>}
             {view === 'editor' && (
               <Tooltip content={tx("Agent：接你自己的模型，让它读、改这篇论文")} relationship="label" positioning="below">
-                <Button appearance="subtle" size="small" className={`agent-btn ${agentOpen ? 'on' : ''}`} icon={<BotSparkle20Regular />} onClick={() => useAgent.getState().setOpen(!agentOpen)}>Agent</Button>
+                <Button appearance="subtle" size="small" className={`agent-btn ${agentOpen ? 'on' : ''}`} icon={<BotSparkle20Regular />} onClick={() => useAgent.getState().setOpen(!agentOpen)}>{phone ? undefined : 'Agent'}</Button>
               </Tooltip>
             )}
 
@@ -442,7 +450,7 @@ export function App() {
                 </MenuList>
               </MenuPopover>
             </Menu>
-            <Menu positioning="below-end">
+            <Menu positioning="below-end" checkedValues={{ theme: [themePref] }} onCheckedValueChange={(_, d) => setThemePref((d.checkedItems[0] ?? 'system') as ThemePref)}>
               <MenuTrigger disableButtonEnhancement>
                 <button type="button" className="brand-btn" title={tx("iota4web · 关于")}><Logo size={30} /></button>
               </MenuTrigger>
@@ -450,6 +458,13 @@ export function App() {
                 <MenuList>
                   <MenuItem icon={<Info20Regular />} onClick={() => setAbout(true)}>{tx("关于 iota4web")}</MenuItem>
                   <MenuItem onClick={() => window.open('https://github.com/SchrodingerBlume/iota-hit-test', '_blank', 'noopener')}>GitHub</MenuItem>
+                  {/* 手机顶栏放不下外观钮，挪到这里 */}
+                  {phone && (<>
+                    <MenuDivider />
+                    <MenuItemRadio name="theme" value="light" icon={<WeatherSunny20Regular />}>{tx("浅色")}</MenuItemRadio>
+                    <MenuItemRadio name="theme" value="dark" icon={<WeatherMoon20Regular />}>{tx("深色")}</MenuItemRadio>
+                    <MenuItemRadio name="theme" value="system">{tx("跟随系统")}</MenuItemRadio>
+                  </>)}
                 </MenuList>
               </MenuPopover>
             </Menu>
@@ -482,9 +497,12 @@ export function App() {
             </div>
           </nav>
           {!compact && <Fold className="nav-toggle" open={navOpen} title={navOpen ? tx("收起左侧导航") : tx("展开左侧导航")} onClick={() => setNavOpen(!navOpen)} />}
-          <section className={`work ${commentsOpen ? 'has-comments' : ''}`} hidden={mode === 'preview'}>
-            {loaded ? <div className="work-inner" key={`${doc.id}:${section}`} ref={reflowRef}>{panel}</div> : <div className="muted">{tx("正在打开文档…")}</div>}
-            {commentsOpen && loaded && <CommentsPane />}
+          <section className="work" hidden={mode === 'preview'}>
+            {/* 批注栏够宽才放右边，不够就叠到下面：按 .work 的宽（容器查询），不按窗口 */}
+            <div className={`work-cols ${commentsOpen ? 'has-comments' : ''}`}>
+              {loaded ? <div className="work-inner" key={`${doc.id}:${section}`} ref={reflowRef}>{panel}</div> : <div className="muted">{tx("正在打开文档…")}</div>}
+              {commentsOpen && loaded && <CommentsPane />}
+            </div>
           </section>
           <LinkDialogHost />
           <Dialog open={about} onOpenChange={(_, d) => setAbout(d.open)}>
@@ -504,12 +522,12 @@ export function App() {
           </Dialog>
           {mode === 'split' && <div className="splitter" title={tx("拖动调整比例（{{v0}}% : {{v1}}%）", { v0: Math.round(ratio * 100), v1: Math.round((1 - ratio) * 100) })} onPointerDown={startDrag} />}
           <div className="preview-slot" hidden={mode === 'editor'}><Preview onRefresh={() => setRefresh((n) => n + 1)} refreshDisabled={!hasDocument} /></div>
-          {agentOpen && loaded && <AgentPane overlay={compact} />}
+          {agentOpen && loaded && <AgentPane overlay={agentOverlay} />}
           <BlockMenu />
         </div>
         {/* 手机：底部一条切换 编辑 / 分栏 / 预览 与目录抽屉，够不着功能区「视图」页时用 */}
         {compact && (
-          <div className="mobile-bar" role="toolbar">
+          <div className="mobile-bar" role="toolbar" style={{ '--i': mode === 'editor' ? 1 : mode === 'split' ? 2 : 3 } as CSSProperties}>
             <button type="button" className={navOpen ? 'on' : ''} onClick={() => setNavOpen(!navOpen)} title={tx("导航窗格")}><Navigation20Regular />{tx("导航")}</button>
             <button type="button" className={mode === 'editor' ? 'on' : ''} onClick={() => setMode('editor')}>{tx("编辑")}</button>
             <button type="button" className={mode === 'split' ? 'on' : ''} onClick={() => setMode('split')}>{tx("并排查看")}</button>

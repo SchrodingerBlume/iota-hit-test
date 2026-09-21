@@ -15,8 +15,10 @@ export const AGENT_W = 380;
 const splitTracks = (ratio: number, minA: number, minB: number) => `minmax(${minA}px, ${Math.round(ratio * 100)}fr) ${SPLIT_W}px minmax(${minB}px, ${Math.round((1 - ratio) * 100)}fr)`;
 
 function load(): { navOpen: boolean; mode: Mode; ratio: number } {
-  try { const v = JSON.parse(localStorage.getItem(KEY) ?? '{}'); return { navOpen: v.navOpen ?? true, mode: v.mode ?? 'split', ratio: Math.min(0.8, Math.max(0.2, v.ratio ?? 0.54)) }; }
-  catch { return { navOpen: true, mode: 'split', ratio: 0.54 }; }
+  // 手机上下叠着的分栏两边都不够用，没选过的默认只看编辑
+  const mode: Mode = window.matchMedia(COMPACT).matches ? 'editor' : 'split';
+  try { const v = JSON.parse(localStorage.getItem(KEY) ?? '{}'); return { navOpen: v.navOpen ?? true, mode: v.mode ?? mode, ratio: Math.min(0.8, Math.max(0.2, v.ratio ?? 0.54)) }; }
+  catch { return { navOpen: true, mode, ratio: 0.54 }; }
 }
 
 export function useLayoutPrefs() {
@@ -37,7 +39,7 @@ export function useLayoutPrefs() {
   const openNav = (v: boolean) => {
     const el = mainRef.current;
     if (el && !stacked) {
-      const targets = [...el.querySelectorAll<HTMLElement>(':scope > .work > .work-inner, :scope > .splitter, :scope > .preview, :scope > .nav-toggle')];
+      const targets = [...el.querySelectorAll<HTMLElement>(':scope > .work .work-inner, :scope > .splitter, :scope > .preview, :scope > .nav-toggle')];
       flip.current = { open: v, lefts: targets.map((t) => [t, t.getBoundingClientRect().left]) };
     }
     setPrefs((p) => ({ ...p, navOpen: v }));
@@ -103,8 +105,11 @@ export function useLayoutPrefs() {
 
   // 宽屏上左栏收起是列宽归零（列还在，收放才能有过渡）；窄屏它是盖在上面的抽屉，不占列
   const nav = compact ? '' : `${prefs.navOpen ? NAV_W : 0}px `;
+  // Agent 面板占一列得放得下三栏的下限（左栏 200 + 编辑 360 + 预览 320 + 面板 380）；放不下就盖在上面
   const agentOpen = useAgent((s) => s.open);
-  const agent = agentOpen && !compact ? ` ${AGENT_W}px` : '';
+  const agentFits = useMedia(prefs.mode === 'split' ? '(min-width: 1280px)' : '(min-width: 960px)');
+  const agentOverlay = compact || !agentFits;
+  const agent = agentOpen && !agentOverlay ? ` ${AGENT_W}px` : '';
   const gridColumns = stacked
     ? 'minmax(0, 1fr)'
     : prefs.mode === 'split'
@@ -116,6 +121,6 @@ export function useLayoutPrefs() {
     navOpen: compact ? drawer : prefs.navOpen,
     setNavOpen: (v: boolean) => { if (compact) setDrawer(v); else openNav(v); },
     mode: prefs.mode, setMode: (m: Mode) => setPrefs((p) => ({ ...p, mode: m })),
-    ratio: prefs.ratio, startDrag, mainRef, gridColumns, gridRows, compact, stacked,
+    ratio: prefs.ratio, startDrag, mainRef, gridColumns, gridRows, compact, stacked, agentOverlay,
   };
 }
