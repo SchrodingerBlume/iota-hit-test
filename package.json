@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.127.0",
     "@citation-js/core": "^0.8.2",
     "@citation-js/plugin-bibtex": "^0.8.2",
     "@citation-js/plugin-csl": "^0.8.2",

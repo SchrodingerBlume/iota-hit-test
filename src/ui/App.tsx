@@ -7,6 +7,8 @@ import { chapterAt, chapterPages } from '../compiler/focus';
 import { getEditor, onRegistryChange } from '../editor/registry';
 import { BlockMenu } from '../editor/BlockMenu';
 import { CommentsPane } from './CommentsPane';
+import { AgentPane } from './AgentPane';
+import { useAgent } from '../ai/state';
 import { Logo } from './Logo';
 import { OutlinePane, useOutline } from './OutlinePane';
 import { LinkDialogHost } from './LinkDialog';
@@ -33,7 +35,7 @@ import { FluentProvider, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, Men
 import { Fold } from './Fold';
 import { SettingSwitch } from './TriSwitch';
 import { watchReflow } from './reflow';
-import { Home20Regular, Save20Regular, ArrowDownload20Regular, DocumentPdf20Regular, Document20Regular, Info20Regular, WeatherSunny20Regular, WeatherMoon20Regular, Navigation20Regular, ChevronLeft20Regular } from '@fluentui/react-icons';
+import { Home20Regular, Save20Regular, ArrowDownload20Regular, DocumentPdf20Regular, Document20Regular, Info20Regular, WeatherSunny20Regular, WeatherMoon20Regular, Navigation20Regular, ChevronLeft20Regular, BotSparkle20Regular } from '@fluentui/react-icons';
 import { fluentLight, fluentDark } from './fluent';
 import { SlidersHorizontal, BookText, PenLine, Library } from 'lucide-react';
 import { t as tx } from '../i18n';
@@ -285,6 +287,7 @@ export function App() {
   }, [section, mode, setMode]);
   const hasDocument = loaded && useStore.getState().projects.some((p) => p.id === doc.id);
   const commentsOpen = useComments((s) => s.open);
+  const agentOpen = useAgent((s) => s.open);
   const [about, setAbout] = useState(false);
   const outlineFolded = useOutline((s) => s.folded);
 
@@ -411,6 +414,11 @@ export function App() {
         ); const trailing = (
           <span className="rb-trailing">
             {view === 'editor' && <span className="status"><i className={`dot ${dot}`} /><span key={statusText} className="status-text">{statusText}</span></span>}
+            {view === 'editor' && (
+              <Tooltip content={tx("Agent：接你自己的模型，让它读、改这篇论文")} relationship="label" positioning="below">
+                <Button appearance="subtle" size="small" className={`agent-btn ${agentOpen ? 'on' : ''}`} icon={<BotSparkle20Regular />} onClick={() => { useAgent.getState().setOpen(!agentOpen); if (!agentOpen) { useComments.getState().setOpen(false); if (mode === 'preview') setMode('split'); } }}>Agent</Button>
+              </Tooltip>
+            )}
 
             <Menu positioning="below-end" checkedValues={{ theme: [themePref] }} onCheckedValueChange={(_, d) => setThemePref((d.checkedItems[0] ?? 'system') as ThemePref)}>
               <MenuTrigger disableButtonEnhancement>
@@ -466,9 +474,10 @@ export function App() {
             </div>
           </nav>
           {!compact && <Fold className="nav-toggle" open={navOpen} title={navOpen ? tx("收起左侧导航") : tx("展开左侧导航")} onClick={() => setNavOpen(!navOpen)} />}
-          <section className={`work ${commentsOpen ? 'has-comments' : ''}`} hidden={mode === 'preview'}>
+          <section className={`work ${commentsOpen ? 'has-comments' : ''} ${agentOpen ? 'has-agent' : ''}`} hidden={mode === 'preview'}>
             {loaded ? <div className="work-inner" key={`${doc.id}:${section}`} ref={reflowRef}>{panel}</div> : <div className="muted">{tx("正在打开文档…")}</div>}
             {commentsOpen && loaded && <CommentsPane />}
+            {agentOpen && loaded && <AgentPane />}
           </section>
           <LinkDialogHost />
           <Dialog open={about} onOpenChange={(_, d) => setAbout(d.open)}>
