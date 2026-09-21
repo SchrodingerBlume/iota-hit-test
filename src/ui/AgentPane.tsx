@@ -44,6 +44,9 @@ function cardTitle(c: ToolCard): string {
     case 'abbreviations_add': return tx("加了缩略语 / 符号");
     case 'settings_list': return tx("看了论文设置");
     case 'settings_set': return tx("改设置：{{key}}", { key: i.key });
+    case 'schema': return tx("看了节点结构");
+    case 'read_json': return tx("读了{{part}} {{rng}} 的 JSON", { part: partLabel(i.part), rng });
+    case 'write_json': return tx("按 JSON 改了{{part}} {{rng}}", { part: partLabel(i.part), rng });
     case 'pdf_images': return tx("从 {{file}} 抽了图", { file: i.file });
     case 'pdf_render': return tx("把 {{file}} 第 {{page}} 页画成了图", { file: i.file, page: i.page });
     case 'web_fetch': return tx("抓了网页 {{url}}", { url: String(i.url ?? '').replace(/^https?:\/\//, '').slice(0, 60) });
@@ -51,7 +54,7 @@ function cardTitle(c: ToolCard): string {
     default: return c.name;
   }
 }
-const EDIT_TOOLS = new Set(['replace', 'insert', 'delete', 'table_write', 'figure_write', 'bib_add', 'info_write', 'abbreviations_add', 'settings_set']);
+const EDIT_TOOLS = new Set(['replace', 'insert', 'delete', 'table_write', 'figure_write', 'bib_add', 'info_write', 'abbreviations_add', 'settings_set', 'write_json']);
 
 function FileChip({ f, onRemove }: { f: Attachment; onRemove?: () => void }) {
   const Icon = f.kind === 'image' ? Image16Regular : f.kind === 'pdf' ? DocumentPdf16Regular : DocumentText16Regular;
@@ -68,7 +71,8 @@ function Card({ c }: { c: ToolCard }) {
   const [open, setOpen] = useState(false);
   const detail = c.name === 'replace' || c.name === 'insert' ? `${String(c.input.markdown ?? '')}\n\n— ${c.result}`
     : c.name === 'table_write' ? `${(c.input.rows as string[][] | undefined)?.map((r) => r.join(' | ')).join('\n') ?? ''}\n\n— ${c.result}`
-    : c.name === 'bib_add' ? `${String(c.input.bibtex ?? '')}\n\n— ${c.result}` : c.result;
+    : c.name === 'bib_add' ? `${String(c.input.bibtex ?? '')}\n\n— ${c.result}`
+    : c.name === 'write_json' ? `${JSON.stringify(c.input.nodes, null, 1)}\n\n— ${c.result}` : c.result;
   return (
     <div className={`ag-card ${c.isError ? 'is-error' : EDIT_TOOLS.has(c.name) ? 'is-edit' : ''}`}>
       <button type="button" className="ag-card-head" onClick={() => setOpen(!open)}>{open ? <ChevronDown12Regular /> : <ChevronRight12Regular />}<span>{cardTitle(c)}</span></button>

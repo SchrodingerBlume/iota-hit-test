@@ -79,6 +79,9 @@ export const TOOLS: ToolDef[] = [
   { name: 'info_write', description: '改论文信息里的字段。patch 是字段名到值的字典（字段名和说明见 info_read）；keywords / keywordsEn 是字符串数组，答辩日期 defenseDate 与封面日期 date 是年月「YYYY-MM」（如 2026-06）。', parameters: { type: 'object', properties: { patch: { type: 'object', additionalProperties: true } }, required: ['patch'], additionalProperties: false } },
   { name: 'abbreviations', description: '缩略语表与符号表。正文里 @缩略语键 首次出现会自动展开。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'abbreviations_add', description: '往缩略语表 / 符号表加条目（同键当作更新）。缩略语要 key（正文里 @key 用）、long（中文全称）、longEn（英文全称）；符号要 symbol（LaTeX 写法）和 meaning。', parameters: { type: 'object', properties: { abbreviations: { type: 'array', items: { type: 'object', properties: { key: { type: 'string' }, long: { type: 'string' }, longEn: { type: 'string' }, short: { type: 'string' } }, required: ['key', 'long'] } }, symbols: { type: 'array', items: { type: 'object', properties: { symbol: { type: 'string' }, meaning: { type: 'string' } }, required: ['symbol', 'meaning'] } } }, additionalProperties: false } },
+  { name: 'schema', description: '编辑器节点的 JSON 结构：每种块 / 行内节点 / 标记的名字、属性及默认值、能装什么内容。Markdown 写不出的高级操作（表格合并格、图的浮动方式、批注……）用 read_json / write_json 直接改节点，改之前先看这个。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+  { name: 'read_json', description: '读某一部分第 from 到 to 块的原始节点 JSON（ProseMirror 文档节点，含全部属性）。', parameters: { type: 'object', properties: { part: partEnum, ...range }, required: ['part', 'from', 'to'], additionalProperties: false } },
+  { name: 'write_json', description: '用节点 JSON 换掉某一部分第 from 到 to 块（to = from - 1 就是在 from 前插入）。nodes 是块节点数组，按 schema 校验，不合法会报错、什么都不改。', parameters: { type: 'object', properties: { part: partEnum, ...range, nodes: { type: 'array', items: { type: 'object' } } }, required: ['part', 'from', 'to', 'nodes'], additionalProperties: false } },
   { name: 'settings_list', description: '论文设置里能改的开关和档位：键、说明、可选值、现在的值（auto = 跟模板按档定，旁边写着自动落在哪一档和原因）。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'settings_set', description: '改一个设置。会弹窗把这个开关的说明和改动给用户看，用户允许了才改；reason 写清为什么要改，用户看得到。', parameters: { type: 'object', properties: { key: { type: 'string' }, value: { description: '开关的档位值，或 "auto"' }, reason: { type: 'string' } }, required: ['key', 'value', 'reason'], additionalProperties: false } },
 ];
@@ -130,6 +133,8 @@ function splice(key: RichKey, from: number, to: number, nodes: any[], what: stri
     step.setMeta('undoLabel', 'AI 编辑');
     ed.view.dispatch(step);
   } else {
+    const any = PART_KEYS.map((k) => getEditor(k)).find(Boolean);
+    if (any) { try { nodes.forEach((n) => any.schema.nodeFromJSON(n).check()); } catch (e) { return `转不成文档节点：${(e as Error).message}`; } }
     const next = [...blocks]; next.splice(from, to - from + 1, ...nodes);
     useStore.getState().setRich(key, { type: 'doc', content: next.length ? next : [{ type: 'paragraph' }] });
   }
@@ -342,6 +347,37 @@ async function pdfRenderTool(input: Record<string, any>): Promise<string> {
   return `已画成 ${name}（${r.width}×${r.height}；这份 PDF 共 ${r.pages} 页）`;
 }
 
+/** 从挂着的编辑器读 schema（没挂就找任一挂着的），节点 / 标记的属性默认值与内容表达式 */
+function schemaText(): string {
+  const ed = PART_KEYS.map((k) => getEditor(k)).find(Boolean);
+  if (!ed) return '现在没有打开的编辑器，读不到 schema；先在左栏打开正文';
+  const lines: string[] = ['节点（type｜能装的内容｜属性=默认值）：'];
+  ed.schema.spec.nodes.forEach((name, spec: any) => {
+    const attrs = Object.entries(spec.attrs ?? {}).map(([k, v]: [string, any]) => `${k}=${JSON.stringify(v?.default ?? null)}`).join(' ');
+    lines.push(`- ${name}｜${spec.content ?? '（原子）'}${spec.group ? `｜组 ${spec.group}` : ''}${attrs ? `｜${attrs}` : ''}`);
+  });
+  lines.push('标记（marks，放在 text 节点的 marks 数组里）：');
+  ed.schema.spec.marks.forEach((name, spec: any) => {
+    const attrs = Object.entries(spec.attrs ?? {}).map(([k, v]: [string, any]) => `${k}=${JSON.stringify(v?.default ?? null)}`).join(' ');
+    lines.push(`- ${name}${attrs ? `｜${attrs}` : ''}`);
+  });
+  lines.push('顶层块的 JSON 形如 {"type":"paragraph","attrs":{…},"content":[{"type":"text","text":"…","marks":[{"type":"bold"}]}]}；表是 tableFigure > table > tableRow > (tableHeader|tableCell) > paragraph；uid 属性别自己填，编辑器会补。');
+  return lines.join('\n');
+}
+function readJson(key: RichKey, from: number, to: number): string {
+  const blocks = blocksOf(key);
+  if (!blocks.length) return '（这一部分是空的）';
+  from = Math.max(0, from); to = Math.min(blocks.length - 1, to, from + 39);
+  if (from > to) return `段号超出范围（共 ${blocks.length} 块）`;
+  return JSON.stringify(blocks.slice(from, to + 1).map((b, i) => ({ '#': from + i, ...b })), null, 1);
+}
+function writeJson(key: RichKey, from: number, to: number, nodes: unknown): string {
+  if (!Array.isArray(nodes)) return 'nodes 得是节点数组';
+  const clean = nodes.map((n: any) => { const { '#': _i, ...rest } = n ?? {}; return rest; });
+  for (const n of clean) if (!n || typeof n.type !== 'string') return '每个节点都要有 type';
+  return splice(key, from, to, clean, '已按 JSON 写入');
+}
+
 function imagesText(): string {
   const imgs = useStore.getState().doc.images;
   const att = attachments.filter((a) => a.kind === 'image');
@@ -389,6 +425,9 @@ export async function runTool(name: string, input: Record<string, any>): Promise
     case 'info_write': return infoWrite(input.patch ?? {});
     case 'abbreviations': return abbreviations();
     case 'abbreviations_add': return abbreviationsAdd(input);
+    case 'schema': return schemaText();
+    case 'read_json': return readJson(need().key, Number(input.from), Number(input.to));
+    case 'write_json': return writeJson(need().key, Number(input.from), Number(input.to), input.nodes);
     case 'settings_list': return settingsList();
     case 'settings_set': return settingsSet(input);
     case 'pdf_images': return pdfImagesTool(input);
@@ -420,6 +459,8 @@ export const SYSTEM_PROMPT = `你是 iota4web 里的写作助手。iota4web 是�
 - 缩略语：先用 abbreviations_add 登记（key、中文全称、英文全称），正文里写 @key，模板会在首次出现处展开成「全称（缩写）」、之后只印缩写；不要自己手写「有限元法（FEM）」。
 - 做不到的事直说做不到、为什么，不要绕弯子也不要假装做了；用户可以自己在编辑器里做的，告诉他在哪儿做。
 - 行文照学位论文的规范：客观、书面、不用第一人称口语；中文用全角标点。
+- 引号：中文一律用弯引号“ ”‘ ’，禁止「」『』；英文一律用直引号 " 和 '，模板的智能引号会把成对的直引号排成弯的、走西文字体。非要写不成对的英文引号（’90s 这种）就手打弯引号 ’ 或 ”，并套上 <span font="serif">…</span> 让它用西文字体。
+- Markdown 写不出的（合并单元格、图的浮动方式、批注、某个属性），用 schema 看节点结构，再 read_json / write_json 直接改节点 JSON；平常改文字还是用 Markdown。
 - 中文与西文、数字之间不加空格（不要「盘古之白」，间距由模板排版时自动加）：「采用 Ergun 方程」是错的，要写「采用Ergun方程」；也别把原文里没有的空格加上。
 - 每次改完用一两句话说明改了什么；不确定用户想要什么就先问。
 - 回答用用户的语言，简短；代码和公式用 Markdown 的写法（\`\`\` 围栏、$…$）。`;
