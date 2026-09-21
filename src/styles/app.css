@@ -672,12 +672,11 @@ html.theme-anim :not(svg, svg *) { transition: background-color 320ms var(--ease
 
 /* ── 窄屏（手机、竖着的平板）：单栏 / 上下叠，左栏是抽屉，底部一条模式切换；横屏仍左右分 ── */
 .mobile-bar { display: none; position: fixed; left: 50%; bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 50; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-pill); box-shadow: var(--shadow-2); padding: 4px; grid-template-columns: repeat(4, 1fr); overflow: hidden; animation: bar-in 360ms var(--ease-spring) both; }
-.mobile-bar::before { content: ''; position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px) / 4); border-radius: var(--r-pill); background: var(--accent-soft); transform: translateX(calc(var(--i, 1) * 100%)); transition: transform 320ms var(--ease-spring); }
-.mobile-bar button { position: relative; border: 0; background: none; padding: 7px 10px; border-radius: var(--r-pill); font-size: 13px; color: var(--ink-2); display: inline-flex; align-items: center; justify-content: center; gap: 4px; white-space: nowrap; transition: color var(--fast) var(--ease), transform var(--fast) var(--ease); }
+.mobile-bar button { position: relative; border: 0; background: none; padding: 7px 10px; border-radius: var(--r-pill); font-size: 13px; color: var(--ink-2); display: inline-flex; align-items: center; justify-content: center; gap: 4px; white-space: nowrap; transition: color var(--fast) var(--ease), background-color 220ms var(--ease), transform var(--fast) var(--ease); }
 .mobile-bar button:active { transform: scale(0.94); }
 .mobile-bar button svg { width: 16px; height: 16px; }
-.mobile-bar button.on { color: var(--accent-ink); font-weight: 600; }
-.mobile-bar button:first-child.on { background: var(--panel-2); }
+.mobile-bar button.on { color: var(--accent-ink); font-weight: 600; background: var(--accent-soft); animation: pop 220ms var(--ease-spring) backwards; }
+.mobile-bar button:first-child.on { background: var(--panel-2); animation: none; }
 @keyframes bar-in { from { opacity: 0; transform: translate(-50%, 24px); } }
 @keyframes drawer-in { from { transform: translateX(-100%); } }
 .nav-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.28); z-index: 59; animation: fade var(--fast) var(--ease) both; }
@@ -688,6 +687,10 @@ html.theme-anim :not(svg, svg *) { transition: background-color 320ms var(--ease
   .main.is-stacked .splitter::before { left: 0; right: 0; top: 50%; bottom: auto; width: auto; height: 1px; transform: translateY(-50%); }
   .main.is-stacked .splitter::after { top: 50%; left: 50%; width: 32px; height: 3px; transform: translate(-50%, -50%); }
   .main.is-stacked .preview { border-left: 0; border-top: 1px solid var(--line); }
+  .main.is-stacked .agent-pane, .main.is-compact .splitter-agent + .agent-host > .agent-pane { border-left: 0; }
+  .main.is-stacked .agent-pane { border-top: 1px solid var(--line); }
+  /* 底部那条模式栏浮在上面，Agent 的输入框得让出来 */
+  .main.is-compact .agent-pane { padding-bottom: 58px; }
   .main.is-compact .preview { border-left: 0; }
   .work { padding: 12px 12px 72px; }
   .preview-scroll { padding: 8px; padding-bottom: 72px; }
@@ -980,6 +983,16 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 body.is-resizing-row { cursor: row-resize; user-select: none; }
 body.is-resizing .preview-doc, body.is-resizing .preview-stage { transition: none; }
 body.is-resizing .preview-stage { pointer-events: none; }
+/* ── Agent 面板的壳：停靠时没有壳；浮着时是一扇小窗（.main 里 absolute），头部能拖、右下角能拉 ── */
+.agent-host { display: contents; }
+.splitter-agent + .agent-host > .agent-pane { border-left: 0; }
+.agent-host .ag-head, .agent-window .ag-head { cursor: grab; user-select: none; -webkit-user-select: none; }
+.agent-window { position: absolute; z-index: 9; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--r-l); background: var(--panel); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12), 0 18px 48px rgba(0, 0, 0, 0.22); overflow: hidden; animation: dialog-in 260ms var(--ease-spring) backwards; }
+.agent-window > .agent-pane { flex: 1; min-height: 0; height: auto; border-left: 0; }
+.agent-window-resize { position: absolute; right: 0; bottom: 0; width: 20px; height: 20px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 0 55%, var(--line-2) 55% 62%, transparent 62% 75%, var(--line-2) 75% 82%, transparent 82%); }
+body.is-dragging-window { user-select: none; cursor: grabbing; }
+body.is-dragging-window .ag-head { cursor: grabbing; }
+body.is-dragging-window iframe, body.is-dragging-window .preview-stage { pointer-events: none; }
 .preview-slot { display: contents; }
 .preview-slot[hidden] { display: none; }
 .main.mode-split .preview { border-left: 0; }
@@ -1212,8 +1225,12 @@ body.is-resizing .preview-stage { pointer-events: none; }
 /* 代码清单：题注在上、代码在下（模板 tabular 那一档的样子） */
 .blk.lst .lst-body pre { margin: 0; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--ink); border-radius: 0; }
 /* 分图 */
-.subfig-grid { display: grid; gap: 10px 14px; align-items: end; }
+.subfig-grid { display: flex; flex-direction: column; gap: 10px; }
+.subfig-row { display: grid; gap: 10px 14px; align-items: end; }
+.subfig-stack { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.subfig-pair { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; align-items: end; }
 .subfig { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.subfig-tool-row { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: center; }
 .subfig img { display: block; }
 /* 图上的 (a)(b) 标签：跟模板 numbering: 的样子——五号无衬线，贴角半个字 */
 .subfig-img { position: relative; display: block; max-width: 100%; }
@@ -1223,8 +1240,8 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .subcaps { display: flex; flex-wrap: wrap; gap: 4px 14px; justify-content: center; margin-top: 2px; }
 .subcaps .subfig-cap { display: inline-flex; align-items: center; gap: 4px; }
 .subfig-cap { display: flex; align-items: baseline; gap: 4px; font-family: var(--serif); font-size: 14px; }
-.subfig-tools { display: none; align-items: center; gap: 4px; }
-.subfig:hover .subfig-tools, .subfig:focus-within .subfig-tools { display: inline-flex; }
+.subfig-tools { display: none; flex-direction: column; align-items: center; gap: 3px; }
+.subfig:hover .subfig-tools, .subfig:focus-within .subfig-tools { display: flex; }
 .fig-drop-sm { min-height: 70px; padding: 8px; font-size: 12px; }
 .dlg-fs { border: 1px solid var(--line); border-radius: var(--r-s); padding: 8px 12px 10px; margin: 0 0 10px; }
 .dlg-fs legend { font-size: 12px; color: var(--muted); padding: 0 4px; }

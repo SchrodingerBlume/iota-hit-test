@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore, type Section } from '../model/store';
 import type { ThesisDoc } from '../model/types';
 import { startCompiler, requestCompile, requestPara, resetForProject, exportPdf, useCompileState, setFocusPlacer, LONG_DOC } from '../compiler/client';
@@ -7,7 +7,7 @@ import { chapterAt, chapterPages } from '../compiler/focus';
 import { getEditor, onRegistryChange } from '../editor/registry';
 import { BlockMenu } from '../editor/BlockMenu';
 import { CommentsPane } from './CommentsPane';
-import { AgentPane } from './AgentPane';
+import { AgentHost } from './AgentHost';
 import { useAgent } from '../ai/state';
 import { Logo } from './Logo';
 import { OutlinePane, useOutline } from './OutlinePane';
@@ -279,7 +279,9 @@ export function App() {
   useAutoCompile(doc, loaded && view === 'editor', refresh, previewFocused, composing);
   const [busy, setBusy] = useState<string | null>(null);
   const [theme, themePref, setThemePref] = useTheme();
-  const { navOpen, setNavOpen, mode, setMode, ratio, startDrag, mainRef, gridColumns, gridRows, compact, stacked, agentOverlay } = useLayoutPrefs();
+  const { navOpen, setNavOpen, mode, setMode, shown, togglePane, ratio, startDrag, mainRef, gridColumns, gridRows, compact, stacked, agentDocked, agentFloat } = useLayoutPrefs();
+  // 功能区「视图」页只认编辑 / 分栏 / 预览三档；窄屏「只看 Agent」那档在它眼里是编辑
+  const ribbonLayout = { navOpen, setNavOpen, mode: mode === 'agent' ? 'editor' as const : mode, setMode };
   const phone = useMedia(PHONE);
   // 设置类页面的表单：容器变窄、行折行、行增减时各元素滑到新位置
   const reflowStop = useRef<(() => void) | null>(null);
@@ -469,7 +471,7 @@ export function App() {
               </MenuPopover>
             </Menu>
           </span>
-        ); return view === 'projects' ? <Ribbon minimal leading={leading} trailing={trailing} layout={{ navOpen, setNavOpen, mode, setMode }} /> : <Ribbon leading={leading} trailing={trailing} layout={{ navOpen, setNavOpen, mode, setMode }} />; })()}
+        ); return view === 'projects' ? <Ribbon minimal leading={leading} trailing={trailing} layout={ribbonLayout} /> : <Ribbon leading={leading} trailing={trailing} layout={ribbonLayout} />; })()}
         {view === 'projects' ? <ProjectsView /> : (<>
         <div className={`main mode-${mode} ${navOpen ? '' : 'nav-closed'} ${compact ? 'is-compact' : ''} ${stacked ? 'is-stacked' : ''}`} ref={mainRef} style={{ gridTemplateColumns: gridColumns, gridTemplateRows: gridRows }}>
           {compact && navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} />}
@@ -497,7 +499,7 @@ export function App() {
             </div>
           </nav>
           {!compact && <Fold className="nav-toggle" open={navOpen} title={navOpen ? tx("收起左侧导航") : tx("展开左侧导航")} onClick={() => setNavOpen(!navOpen)} />}
-          <section className="work" hidden={mode === 'preview'}>
+          <section className="work" hidden={!shown.includes('editor')}>
             {/* 批注栏够宽才放右边，不够就叠到下面：按 .work 的宽（容器查询），不按窗口 */}
             <div className={`work-cols ${commentsOpen ? 'has-comments' : ''}`}>
               {loaded ? <div className="work-inner" key={`${doc.id}:${section}`} ref={reflowRef}>{panel}</div> : <div className="muted">{tx("正在打开文档…")}</div>}
@@ -520,18 +522,19 @@ export function App() {
               </DialogBody>
             </DialogSurface>
           </Dialog>
-          {mode === 'split' && <div className="splitter" title={tx("拖动调整比例（{{v0}}% : {{v1}}%）", { v0: Math.round(ratio * 100), v1: Math.round((1 - ratio) * 100) })} onPointerDown={startDrag} />}
-          <div className="preview-slot" hidden={mode === 'editor'}><Preview onRefresh={() => setRefresh((n) => n + 1)} refreshDisabled={!hasDocument} /></div>
-          {agentOpen && loaded && <AgentPane overlay={agentOverlay} />}
+          {shown.includes('editor') && shown.includes('preview') && <div className="splitter" title={tx("拖动调整比例（{{v0}}% : {{v1}}%）", { v0: Math.round(ratio * 100), v1: Math.round((1 - ratio) * 100) })} onPointerDown={(e) => startDrag(e, 'main')} />}
+          <div className="preview-slot" hidden={!shown.includes('preview')}><Preview onRefresh={() => setRefresh((n) => n + 1)} refreshDisabled={!hasDocument} /></div>
+          {/* Agent 那一块前面的分隔条：宽屏拖的是 Agent 列宽，窄屏上两块之间按 ratio 分 */}
+          {shown.includes('agent') && shown.length > 1 && <div className="splitter splitter-agent" title={compact ? undefined : tx("拖动调整 Agent 面板宽度")} onPointerDown={(e) => startDrag(e, compact ? 'main' : 'agent')} />}
+          {agentOpen && loaded && <AgentHost mode={compact ? 'stack' : agentFloat ? 'float' : agentDocked ? 'dock' : 'overlay'} hostRef={mainRef} />}
           <BlockMenu />
         </div>
         {/* 手机：底部一条切换 编辑 / 分栏 / 预览 与目录抽屉，够不着功能区「视图」页时用 */}
         {compact && (
-          <div className="mobile-bar" role="toolbar" style={{ '--i': mode === 'editor' ? 1 : mode === 'split' ? 2 : 3 } as CSSProperties}>
+          <div className="mobile-bar" role="toolbar">
             <button type="button" className={navOpen ? 'on' : ''} onClick={() => setNavOpen(!navOpen)} title={tx("导航窗格")}><Navigation20Regular />{tx("导航")}</button>
-            <button type="button" className={mode === 'editor' ? 'on' : ''} onClick={() => setMode('editor')}>{tx("编辑")}</button>
-            <button type="button" className={mode === 'split' ? 'on' : ''} onClick={() => setMode('split')}>{tx("并排查看")}</button>
-            <button type="button" className={mode === 'preview' ? 'on' : ''} onClick={() => setMode('preview')}>{tx("预览")}</button>
+            {/* 三选二：编辑、预览、Agent 各是一颗开关，最多亮两颗 */}
+            {(['editor', 'preview', 'agent'] as const).map((p) => <button key={p} type="button" className={shown.includes(p) ? 'on' : ''} aria-pressed={shown.includes(p)} onClick={() => togglePane(p)}>{p === 'editor' ? tx("编辑") : p === 'preview' ? tx("预览") : 'Agent'}</button>)}
           </div>
         )}
         </>)}
