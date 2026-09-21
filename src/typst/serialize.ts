@@ -1,5 +1,6 @@
 // 整份工程 → main.typ（以及要一起交给编译器的旁文件）。
 // 结构照 iota-hit/template/example.typ：前置 → 主体 → 附录 → 后置。
+import { headerKeys } from './hfTerms';
 import type { ThesisDoc, Settings, Info, StyleEntry, OpenrightKey, LayoutDict, LocalInfoPage, TriBool, HFRecord, HFLevel } from '../model/types';
 import { INFO_FIELDS, localInfoFields, type InfoFieldDef } from '../model/info';
 import { serializeDoc, escapeText, collectImages, collectRefTargets, collectCiteKeys, indexPositions, type PMNode } from './pmToTypst';
@@ -119,30 +120,19 @@ export function levelLayout(s: Settings, level: HFLevel): LayoutDict | undefined
   if (!header && !footer) return base;
   return { ...(base ?? {}), ...(header ? { header: { ...((base?.header as LayoutDict) ?? {}), ...header } } : {}), ...(footer ? { footer: { ...((base?.footer as LayoutDict) ?? {}), ...footer } } : {}) };
 }
-// 词条按最专的那一档查（src/axes.typ：正档记 2、按轴累加），光键名会被模板自带的 -master、
-// -shenzhen 这类压住；用户改的字要在他这一篇里生效，键就得带上全部的轴、按 axes 的顺序
-function axisSuffix(s: Settings): string {
-  const seg: string[] = [s.degreeLevel];
-  if (s.degreeLevel !== 'bachelor') {
-    const dt = s.degreeType === 'auto' ? (s.form === 'practice' ? 'professional' : 'academic') : s.degreeType;
-    if (dt !== 'none') seg.push(dt);
-  }
-  seg.push(s.category, s.form, s.stage, s.campus);
-  return '-' + seg.join('-');
-}
-/** overrides:——页眉的字（内容） */
+/** overrides:——页眉印的那一行 */
 function overridesArg(s: Settings): string {
   const hf = s.headerFooter;
   if (!hf) return '';
-  const entries: string[] = [];
-  const ax = axisSuffix(s);
-  for (const [k, f] of Object.entries(hf.terms ?? {})) {
-    if (!f || f.auto || !f.value.trim()) continue;
-    const body = `[${escapeText(f.value.trim())}]`;
-    // 表单名那一条在模板里是拼法（学位、文种、阶段三个槽），用户给的是整句：常函数
-    entries.push(`${k}${ax}: ${k === 'header-report-title' ? `(..a) => ${body}` : body}`);
-  }
-  return entries.length ? `overrides: (${entries.join(', ')})` : '';
+  const t = hf.text;
+  if (!t || t.auto || !t.value.trim()) return '';
+  // 页眉那一行的词条是收料字典 p 的函数：用户给整句就发常函数，换掉模板会选中的那一条（odd / even）；
+  // 只给一条时偶数页也发同一句——不发的话偶数页回到模板拼的
+  const keys = headerKeys(s);
+  const line = (v: string) => `(..a) => [${escapeText(v.trim())}]`;
+  const out = [`header-${keys.odd}: ${line(t.value)}`];
+  if (keys.even) out.push(`header-${keys.even}: ${line(t.split && t.even.trim() ? t.even : t.value)}`);
+  return `overrides: (${out.join(', ')})`;
 }
 const localStylesArg = (d: LayoutDict | undefined): string => (d && Object.keys(d).length ? `styles: ${typstDict(d)}` : '');
 

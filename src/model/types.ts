@@ -125,11 +125,10 @@ export interface HFRecord {
   border: HFField<HFBorder | null>;
 }
 export type HFLevel = 'doc' | 'frontmatter' | 'mainmatter' | 'backmatter';
-export type HeaderTermKey = 'header-university' | 'header-document-type' | 'header-degree' | 'header-stage' | 'header-report-title';
 export interface HeaderFooterSettings {
   levels?: Partial<Record<HFLevel, { header?: Partial<HFRecord>; footer?: Partial<HFRecord> }>>;
-  /** 页眉里的字：overrides 的 header 桶里改字的那几条，值是纯文本 */
-  terms?: Partial<Record<HeaderTermKey, HFField<string>>>;
+  /** 页眉印的那一行字，整条替掉模板拼的；split 开了偶数页另一条 */
+  text?: { auto: boolean; value: string; even: string; split: boolean };
 }
 export type LayoutDict = Record<string, unknown>;
 /** 局部样式（只在工程 JSON 里）：pages.abstract → #abstract(styles:)，chapters → new-styles / restore-styles */

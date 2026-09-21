@@ -3,14 +3,14 @@
 // 每个能改的值都带「自动」：自动 = 跟模板按档定，填过的值留着，取消自动就回来
 import { useEffect, useState } from 'react';
 import { create } from 'zustand';
-import { Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions, Button, Input, Dropdown, Option, TabList, Tab } from '@fluentui/react-components';
+import { Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions, Button, Input, Dropdown, Option, TabList, Tab, Checkbox } from '@fluentui/react-components';
 import { useStore } from '../model/store';
-import type { Settings, HFLevel, HFRecord, HFField, HFBorder, HeaderFooterSettings, HeaderTermKey } from '../model/types';
+import type { Settings, HFLevel, HFRecord, HFField, HFBorder, HeaderFooterSettings } from '../model/types';
 import { ZIHAO, INLINE_FONTS } from '../model/zihao';
 import { LengthInput } from './LengthInput';
 import type { SegChoice } from './TriSwitch';
 import { t as tx } from '../i18n';
-import { termDefault } from '../typst/hfTerms';
+import { headerDefault, headerKeys } from '../typst/hfTerms';
 
 export const useHFDialog = create<{ open: boolean; part: 'header' | 'footer'; show: (part: 'header' | 'footer') => void; close: () => void }>((set) => ({
   open: false, part: 'header', show: (part) => set({ open: true, part }), close: () => set({ open: false }),
@@ -21,13 +21,6 @@ const LEVELS: { key: HFLevel; label: string; hint: string }[] = [
   { key: 'frontmatter', label: tx("前置"), hint: tx("摘要、目录这些页") },
   { key: 'mainmatter', label: tx("正文"), hint: tx("各章与附录") },
   { key: 'backmatter', label: tx("后置"), hint: tx("参考文献、致谢这些页；不写就承正文的") },
-];
-const TERMS: { key: HeaderTermKey; label: string; hint: string }[] = [
-  { key: 'header-university', label: tx("校名"), hint: tx("页眉开头那几个字，各档都印") },
-  { key: 'header-document-type', label: tx("文种"), hint: tx("终稿：「硕士学位论文」这一截（带学位）") },
-  { key: 'header-degree', label: tx("学位"), hint: tx("文种里的学位字样") },
-  { key: 'header-report-title', label: tx("表单名"), hint: tx("报告：「硕士学位论文开题报告」这一截") },
-  { key: 'header-stage', label: tx("阶段"), hint: tx("深圳研究生报告：「中期报告」这一截") },
 ];
 const caret = <i className="rb-caret" />;
 const DD = { minWidth: 0, width: 132 } as const;
@@ -131,8 +124,10 @@ export function HeaderFooterDialog() {
   const update = (next: HeaderFooterSettings) => setSettings({ headerFooter: next });
   const rec = (p: 'header' | 'footer'): Partial<HFRecord> => hf.levels?.[level]?.[p] ?? {};
   const setRec = (p: 'header' | 'footer', r: Partial<HFRecord>) => update({ ...hf, levels: { ...hf.levels, [level]: { ...hf.levels?.[level], [p]: r } } });
-  const terms = hf.terms ?? {};
-  const setTerm = (k: HeaderTermKey, f: HFField<string>) => update({ ...hf, terms: { ...terms, [k]: f } });
+  const text = hf.text ?? { auto: true, value: '', even: '', split: false };
+  const setText = (patch: Partial<typeof text>) => update({ ...hf, text: { ...text, ...patch } });
+  const dft = headerDefault(settings);
+  const canSplit = !!headerKeys(settings).even;
   const dirtyLevel = (l: HFLevel) => { const v = hf.levels?.[l]; return !!v && Object.values(v).some((r) => r && Object.entries(r).some(([k, x]) => (k === 'shown' ? x !== 'auto' && x !== undefined : x && !(x as HFField<unknown>).auto))); };
   return (
     <Dialog open={open} onOpenChange={(_, d) => { if (!d.open) close(); }}>
@@ -159,13 +154,23 @@ export function HeaderFooterDialog() {
               </>
             ) : (
               <>
-                <p className="field-hint muted">{tx("页眉印什么是规范定的：本科、硕士每页「校名 + 文种」，博士奇数页本章标题、偶数页「校名 + 文种」，报告「校名 + 表单名」。这里只改字，不改排法。")}</p>
+                <p className="field-hint muted">{tx("页眉那一行字。自动 = 模板按规范拼（本科、硕士「校名 + 文种」，博士奇数页本章标题、偶数页「校名 + 文种」，报告「校名 + 表单名」）；自己填就整条替掉。")}</p>
                 <div className="hf-card">
-                  {TERMS.map((tm) => { const f = field(terms[tm.key], ''); const dft = termDefault(settings, tm.key); return (
-                    <AutoRow key={tm.key} label={tm.label} hint={tm.hint} auto={f.auto} onAuto={(a) => setTerm(tm.key, { ...f, auto: a })} note={dft || tx("这一档用不上")}>
-                      <Input size="small" className="hf-text" disabled={f.auto} value={f.value} placeholder={dft || tm.hint} onChange={(_, d) => setTerm(tm.key, { auto: false, value: d.value })} />
-                    </AutoRow>
-                  ); })}
+                  <AutoRow label={text.split && canSplit ? tx("奇数页") : tx("页眉文字")} auto={text.auto} onAuto={(a) => setText({ auto: a })} note={dft.odd === dft.even ? dft.odd : tx("奇数页 {{odd}} · 偶数页 {{even}}", dft)}>
+                    <Input size="small" className="hf-text" disabled={text.auto} value={text.value} placeholder={dft.odd} onChange={(_, d) => setText({ auto: false, value: d.value })} />
+                  </AutoRow>
+                  {text.split && canSplit && (
+                    <div className="hf-row">
+                      <span className="hf-lab">{tx("偶数页")}</span>
+                      <span />
+                      <div className="hf-ctl"><Input size="small" className="hf-text" disabled={text.auto} value={text.even} placeholder={dft.even} onChange={(_, d) => setText({ even: d.value })} /></div>
+                    </div>
+                  )}
+                  {canSplit && (
+                    <div className="hf-row hf-row-plain">
+                      <Checkbox label={tx("奇偶页不同")} checked={text.split} disabled={text.auto} onChange={(_, d) => setText({ split: !!d.checked })} />
+                    </div>
+                  )}
                 </div>
               </>
             )}
