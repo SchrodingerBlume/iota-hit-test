@@ -68,7 +68,7 @@ function CiteView({ node, updateAttributes, selected, deleteNode, editor, getPos
   const supplement = String(node.attrs.supplement ?? '').trim();
   const missing = keys.filter((k) => !env.bibKeys.some((b) => b.key === k));
   const chipText = keys.length ? `[${keys.join(', ')}${supplement ? `: ${supplement}` : ''}]${form === 'prose' ? t("·叙") : form === 'author' ? t("·著") : form === 'year' ? t("·年") : ''}` : '';
-  const chip = chipText ? (missing.length ? <span className="ref-dangling" title={t("文献 {{keys}} 没有登记，排出来是 ??", { keys: missing.join(', ') })}>{chipText}</span> : chipText) : '';
+  const chip = chipText ? (missing.length ? <span className="ref-dangling" title={t("未登记文献 {{keys}}，排版结果将显示为 ??", { keys: missing.join(', ') })}>{chipText}</span> : chipText) : '';
   return (
     <InlineChip onSelect={() => { const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }} onJump={keys.length ? () => jumpToCite(keys[0]) : undefined} kind="cite" openNonce={open.nonce} text={chip || <em>{t("引用")}</em>} title={t("参考文献引用（⌘ / Ctrl + 点击跳到文献条目）")} selected={selected} editable={editor.isEditable} autoOpen={!keys.length} onDelete={deleteNode}>
       {() => (

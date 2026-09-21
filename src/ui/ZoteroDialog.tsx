@@ -77,9 +77,9 @@ export function ZoteroDialog({ open, onClose, entries, onChange }: Props) {
     const all: BibEntry[] = [];
     for (const f of Array.from(files)) {
       try { const got = entriesFromText(await f.text(), taken); for (const e of got) taken.add(e.key); all.push(...got); }
-      catch (e) { setError(tx("{{name}}：读不出条目（{{err}}）", { name: f.name, err: describe(e) })); return; }
+      catch (e) { setError(tx("{{name}}：无法读取条目（{{err}}）", { name: f.name, err: describe(e) })); return; }
     }
-    if (!all.length) { setError(tx("文件里没有条目")); return; }
+    if (!all.length) { setError(tx("文件中没有文献条目")); return; }
     merge(all);
   };
   const curLib = libs.find((l) => l.id === lib);
@@ -94,7 +94,7 @@ export function ZoteroDialog({ open, onClose, entries, onChange }: Props) {
               <h4>{tx("云端（推荐）")}</h4>
               {auth === undefined ? null : !auth ? (
                 <>
-                  <p className="field-hint muted">{tx("Zotero 开着同步的话，文献已经在 zotero.org 上：登录后到 设置 → 安全 → 新建私钥，勾上「允许读取文库」（只读就够，要导群组的再把群组权限设成只读），把密钥粘到这里。密钥只存在这台浏览器里。")}{' '}<a href={KEYS_URL} target="_blank" rel="noreferrer">{tx("去 zotero.org 新建密钥 ↗")}</a></p>
+                  <p className="field-hint muted">{tx("若已启用 Zotero 同步，可在 zotero.org 的「设置 → 安全」中创建私钥，并授予文库只读权限。导入群组时还需授予群组只读权限。密钥仅保存在当前浏览器中。")}{' '}<a href={KEYS_URL} target="_blank" rel="noreferrer">{tx("创建 Zotero 密钥 ↗")}</a></p>
                   <div className="zt-row">
                     <Input size="small" className="zt-key" value={keyInput} placeholder={tx("API 密钥（24 位）")} onChange={(_, d) => setKeyInput(d.value)} onKeyDown={(e) => { if (e.key === 'Enter' && keyInput.trim()) void doConnect(); }} />
                     <Button size="small" appearance="primary" disabled={!keyInput.trim() || !!busy} onClick={doConnect}>{tx("连接")}</Button>
@@ -118,25 +118,25 @@ export function ZoteroDialog({ open, onClose, entries, onChange }: Props) {
                     </Dropdown>
                   </div>
                   <div className="zt-row">
-                    <Checkbox size="medium" label={tx("按收藏夹名放进分组")} checked={asGroup} disabled={!col} onChange={(_, d) => setAsGroup(!!d.checked)} />
+                    <Checkbox size="medium" label={tx("按收藏夹名称创建分组")} checked={asGroup} disabled={!col} onChange={(_, d) => setAsGroup(!!d.checked)} />
                     <span className="spacer" />
                     <Button size="small" appearance="primary" disabled={!!busy || !lib} onClick={doImport}>{tx("导入")}</Button>
                   </div>
-                  <p className="field-hint muted">{tx("再点一次「导入」就是同步：已导入过的按 Zotero 条目对上、就地更新，引用键与分组不动；Zotero 里删掉的这里不删。选收藏夹只拿它直属的条目，不含子收藏夹。")}</p>
+                  <p className="field-hint muted">{tx("再次导入会按 Zotero 条目更新已有文献，并保留引用键和分组。Zotero 中删除的条目不会从当前文档移除。选择收藏夹时仅导入其直属条目。")}</p>
                 </>
               )}
             </section>
             <section className="zt-sec">
               <h4>{tx("文件")}</h4>
-              <p className="field-hint muted">{tx("Zotero 里 文件 → 导出文献库…（或右键收藏夹 → 导出收藏夹…），格式选 CSL JSON；.bib 也认。导出的是当时那一份快照，库改了要重新导。")}</p>
+              <p className="field-hint muted">{tx("在 Zotero 中选择「文件 → 导出文献库」，或右键收藏夹导出，格式使用 CSL JSON；也支持 .bib。文件不会自动同步，文库更新后需重新导入。")}</p>
               <div className={`zt-drop ${drag ? 'is-over' : ''}`} onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={(e) => { e.preventDefault(); setDrag(false); void importFiles(e.dataTransfer.files); }} onClick={() => fileInput.current?.click()}>
-                {tx("把文件拖到这里，或点击选择")}
+                {tx("拖入文件，或单击选择")}
                 <input ref={fileInput} type="file" accept=".json,.bib,application/json,text/plain" multiple hidden onChange={(e) => { if (e.target.files?.length) void importFiles(e.target.files); e.target.value = ''; }} />
               </div>
             </section>
             {busy && <p className="zt-status muted">{busy}</p>}
             {error && <p className="zt-status zt-error">{error}</p>}
-            {result && <p className="zt-status">{tx("读到 {{total}} 条：新增 {{added}}，更新 {{updated}}", result)}</p>}
+            {result && <p className="zt-status">{tx("已读取 {{total}} 条：新增 {{added}}，更新 {{updated}}", result)}</p>}
           </DialogContent>
           <DialogActions><Button appearance="secondary" onClick={onClose}>{tx("关闭")}</Button></DialogActions>
         </DialogBody>
@@ -147,8 +147,8 @@ export function ZoteroDialog({ open, onClose, entries, onChange }: Props) {
 
 function describe(e: unknown): string {
   const m = e instanceof Error ? e.message : String(e);
-  if (m === 'forbidden') return tx("密钥不对，或没有读取这个文库的权限");
-  if (m === 'notfound') return tx("找不到：密钥无效，或这个文库 / 收藏夹不存在");
-  if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return tx("连不上 api.zotero.org（检查网络；校园网可能拦了）");
+  if (m === 'forbidden') return tx("密钥无效，或没有此文库的读取权限");
+  if (m === 'notfound') return tx("无法找到文库或收藏夹，请检查密钥和编号");
+  if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return tx("无法连接 api.zotero.org，请检查网络或校园网限制");
   return m;
 }

@@ -45,8 +45,8 @@ export function TriSeg<V>({ label, hint, choices, value, auto, onChange, showAut
 }
 
 export const ON_OFF: SegChoice<boolean>[] = [
-  { value: false, label: t("关"), tone: 'off' },
-  { value: true, label: t("开"), tone: 'on' },
+  { value: false, label: t("关闭"), tone: 'off' },
+  { value: true, label: t("开启"), tone: 'on' },
 ];
 
 /** 按键名取一个开关，接在它所属的那一页里（摘要、缩略语、附录……）；不适用于当前档的不画 */
@@ -58,7 +58,7 @@ export function SettingSwitch({ k, className }: { k: string; className?: string 
   return <TriSwitch def={def} settings={settings} onChange={(v) => setSettings({ [def.key]: v } as any)} className={className} />;
 }
 
-const onOffChoices = (def: SwitchDef<any>) => (def.choices.every((c: Choice<any>) => c.label === (c.value ? t("开") : t("关"))) ? def.choices : null);
+const onOffChoices = (def: SwitchDef<any>) => (def.choices.every((c: Choice<any>) => c.label === (c.value ? t("开启") : t("关闭"))) ? def.choices : null);
 /** 论文设置里的开关：从登记表取档位与 auto 映射 */
 export function TriSwitch({ def, settings, onChange, className }: { def: SwitchDef<any>; settings: Settings; onChange: (value: 'auto' | any) => void; className?: string }) {
   const raw = settings[def.key] as 'auto' | any;

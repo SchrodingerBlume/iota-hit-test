@@ -398,7 +398,7 @@ export function App() {
               <Tooltip content={tx("本地历史：自动存的快照，看差异、整份恢复")} relationship="label" withArrow positioning="below">
                 <Button appearance="subtle" size="small" className="rb-btn rb-adv" icon={<History20Regular />} disabled={!hasDocument} onMouseDown={(e) => e.preventDefault()} onClick={() => useHistoryDialog.getState().set(true)} />
               </Tooltip>
-              <Tooltip content={tx("Git：有名称的提交、差异、恢复，连上 GitHub 能推能拉")} relationship="label" withArrow positioning="below">
+              <Tooltip content={tx("Git：创建提交、查看差异和恢复版本；连接 GitHub 后可推送与拉取")} relationship="label" withArrow positioning="below">
                 <Button appearance="subtle" size="small" className="rb-btn rb-adv" icon={<BranchFork20Regular />} disabled={!hasDocument} onMouseDown={(e) => e.preventDefault()} onClick={() => useGitDialog.getState().set(true)} />
               </Tooltip>
               <HistoryButtons />
@@ -431,7 +431,7 @@ export function App() {
           <span className="rb-trailing">
             {view === 'editor' && <span className="status"><i className={`dot ${dot}`} /><span key={statusText} className="status-text">{statusText}</span></span>}
             {view === 'editor' && (
-              <Tooltip content={tx("Agent：接你自己的模型，让它读、改这篇论文")} relationship="label" positioning="below">
+              <Tooltip content={tx("Agent：配置模型以读取和修改论文")} relationship="label" positioning="below">
                 <Button appearance="subtle" size="small" className={`agent-btn ${agentOpen ? 'on' : ''}`} icon={<BotSparkle20Regular />} onClick={() => useAgent.getState().setOpen(!agentOpen)}>{phone ? undefined : 'Agent'}</Button>
               </Tooltip>
             )}

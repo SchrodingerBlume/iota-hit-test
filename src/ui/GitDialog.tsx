@@ -24,7 +24,7 @@ function ChangeList({ changes, sel, onSel }: { changes: Change[]; sel: string | 
   );
 }
 function ChangeDiff({ c }: { c: Change | undefined }) {
-  if (!c) return <p className="muted">{tx("选一个文件看差异。")}</p>;
+  if (!c) return <p className="muted">{tx("选择文件以查看差异。")}</p>;
   if (c.before === undefined && c.after === undefined) return <p className="muted">{tx("二进制文件（{{kind}}）", { kind: KIND[c.kind] })}</p>;
   return <DiffView before={c.before ?? ''} after={c.after ?? ''} />;
 }
@@ -63,7 +63,7 @@ export function GitDialog() {
   };
   const doCommit = () => run(tx("正在提交"), async () => {
     if (!repo) return;
-    if (!message.trim()) throw new Error(tx("先写一句提交说明"));
+    if (!message.trim()) throw new Error(tx("请输入提交说明"));
     saveAuthor(author);
     await commit(repo, await workTree(doc), message.trim(), author);
     setMessage('');
@@ -74,7 +74,7 @@ export function GitDialog() {
     if (!repo) return;
     const d = await docAt(repo, c);
     if (!d) throw new Error(tx("这次提交里没有工程文件（project.iota.json）"));
-    if (!window.confirm(tx("把整份工程换成「{{msg}}」那一次的？现在这份会先存进本地历史。", { msg: c.message }))) return;
+    if (!window.confirm(tx("是否恢复到提交「{{msg}}」？当前工程会先保存到本地历史。", { msg: c.message }))) return;
     await takeSnapshot(doc, 'restore');
     useStore.getState().replaceDoc(d);
     close();
@@ -95,20 +95,20 @@ export function GitDialog() {
     setRemoteInfo({ head: await remoteHead(token, r), url: info.html_url });
   });
   const doPush = () => run(tx("正在推送"), async (step) => {
-    if (!repo || !repo.remote) throw new Error(tx("先连上仓库"));
+    if (!repo || !repo.remote) throw new Error(tx("请先连接仓库"));
     const r = await push(token, repo, repo.remote, step);
     setRemoteInfo((i) => (i ? { ...i, head: r.head } : i));
     await reload();
   });
   const doPull = () => run(tx("正在拉取"), async (step) => {
-    if (!repo || !repo.remote) throw new Error(tx("先连上仓库"));
-    if (changes.length) throw new Error(tx("工作区还有没提交的改动，先提交（或恢复）再拉"));
-    if (unpushed(repo).length) throw new Error(tx("本地有没推的提交，先推上去再拉"));
+    if (!repo || !repo.remote) throw new Error(tx("请先连接仓库"));
+    if (changes.length) throw new Error(tx("工作区有未提交的改动，请提交或恢复后再拉取"));
+    if (unpushed(repo).length) throw new Error(tx("本地有尚未推送的提交，请先推送再拉取"));
     const snap = await fetchHead(token, repo.remote, step);
     if (!snap) throw new Error(tx("远端分支还不存在"));
     if (snap.sha === headCommit(repo)?.remoteSha) { setBusy(''); setError(tx("远端已经是最新的")); return; }
     const pj = snap.files.find((f) => f.path === 'project.iota.json');
-    if (!pj || !('text' in pj)) throw new Error(tx("远端这次提交里没有 project.iota.json，拉不回工程"));
+    if (!pj || !('text' in pj)) throw new Error(tx("远端提交中缺少 project.iota.json，无法拉取工程"));
     const incoming = JSON.parse(pj.text);
     for (const f of snap.files) if ('bytes' in f && f.path.startsWith('images/')) await saveImage(f.path.slice(7), new Blob([f.bytes as BlobPart]), doc.id);
     await takeSnapshot(doc, 'restore');
@@ -128,22 +128,22 @@ export function GitDialog() {
             {repo === undefined && <p className="muted">{tx("正在读取…")}</p>}
             {repo === null && (
               <div className="git-init">
-                <p>{tx("为这份工程记录有名称的提交：每次提交把 Typst 源（main.typ、refs.bib、图片）和整份工程一起记下，能看差异、能恢复，连上 GitHub 还能推到仓库。文件继续保存在这个浏览器里。")}</p>
+                <p>{tx("启用后可为工程创建提交、查看差异并恢复版本。提交包含 Typst 源文件、图片和完整工程；连接 GitHub 后可推送到远端。文件仍保存在当前浏览器中。")}</p>
                 <Button appearance="primary" onClick={() => void run(tx("正在启用"), async () => { setRepo(await initRepo(doc.id)); await reload(); })}>{tx("启用 Git")}</Button>
               </div>
             )}
             {repo && (
               <>
                 <div className="git-tabs">
-                  {(['changes', 'history', 'github'] as const).map((k) => <button key={k} type="button" className={`bib-group-chip ${tab === k ? 'on' : ''}`} onClick={() => setTab(k)}>{k === 'changes' ? tx("改动") : k === 'history' ? tx("提交历史") : 'GitHub'}{k === 'changes' && changes.length ? <span className="muted"> {changes.length}</span> : null}{k === 'github' && pending ? <span className="muted"> {tx("{{n}} 未推", { n: pending })}</span> : null}</button>)}
+                  {(['changes', 'history', 'github'] as const).map((k) => <button key={k} type="button" className={`bib-group-chip ${tab === k ? 'on' : ''}`} onClick={() => setTab(k)}>{k === 'changes' ? tx("改动") : k === 'history' ? tx("提交历史") : 'GitHub'}{k === 'changes' && changes.length ? <span className="muted"> {changes.length}</span> : null}{k === 'github' && pending ? <span className="muted"> {tx("{{n}} 个未推送", { n: pending })}</span> : null}</button>)}
                   <span className="spacer" />
-                  <span className="muted">{busy || (head ? tx("最近提交：{{msg}}", { msg: head.message }) : tx("还没有提交"))}</span>
+                  <span className="muted">{busy || (head ? tx("最近提交：{{msg}}", { msg: head.message }) : tx("暂无提交"))}</span>
                 </div>
                 {error && <p className="zt-status zt-error">{error}</p>}
                 {tab === 'changes' && (
                   <div className="git-grid">
                     <div>
-                      {!changes.length ? <p className="muted">{head ? tx("所有改动已提交。新的编辑会显示在这里。") : tx("还没有提交，把现在这份提交一次吧。")}</p> : <ChangeList changes={changes} sel={selPath} onSel={setSelPath} />}
+                      {!changes.length ? <p className="muted">{head ? tx("所有改动已提交。新的编辑会显示在这里。") : tx("暂无提交。可提交当前工程。")}</p> : <ChangeList changes={changes} sel={selPath} onSel={setSelPath} />}
                       <div className="git-commit">
                         <Input size="small" value={message} placeholder={tx("提交说明")} onChange={(_, d) => setMessage(d.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) void doCommit(); }} />
                         <div className="git-author">
@@ -151,7 +151,7 @@ export function GitDialog() {
                           <Input size="small" value={author.email} placeholder={tx("邮箱")} onChange={(_, d) => setAuthor((a) => ({ ...a, email: d.value }))} />
                         </div>
                         <Button size="small" appearance="primary" disabled={!!busy || (!changes.length && !!head)} onClick={() => void doCommit()}>{tx("提交")}</Button>
-                        <span className="field-hint muted">{tx("提交先记在本地，推送后才到 GitHub。")}</span>
+                        <span className="field-hint muted">{tx("提交先保存在本地，推送后才会上传到 GitHub。")}</span>
                       </div>
                     </div>
                     <div className="git-diff"><ChangeDiff c={changes.find((c) => c.path === selPath)} /></div>
@@ -160,7 +160,7 @@ export function GitDialog() {
                 {tab === 'history' && (
                   <div className="git-grid">
                     <div>
-                      {!repo.commits.length && <p className="muted">{tx("还没有提交。")}</p>}
+                      {!repo.commits.length && <p className="muted">{tx("暂无提交。")}</p>}
                       <ul className="git-log">
                         {[...repo.commits].reverse().map((c) => (
                           <li key={c.id} className={c.id === selCommit ? 'on' : ''}>
@@ -173,7 +173,7 @@ export function GitDialog() {
                       </ul>
                     </div>
                     <div className="git-diff">
-                      {!selCommit && <p className="muted">{tx("选一条提交，看它改了哪些文件。")}</p>}
+                      {!selCommit && <p className="muted">{tx("选择提交以查看文件差异。")}</p>}
                       {selCommit && (() => { const c = commitOf(repo, selCommit)!; return (
                         <>
                           <div className="hist-actions">
@@ -192,7 +192,7 @@ export function GitDialog() {
                   <div className="git-github">
                     <section className="zt-sec">
                       <h4>{tx("账户")}</h4>
-                      <p className="field-hint muted">{tx("到 GitHub 的 Settings → Developer settings 新建一个 fine-grained 个人访问令牌，只选这个仓库，给 Contents 读写权限。令牌只保存在当前浏览器会话里。")} <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">{tx("在 GitHub 创建令牌")}</a></p>
+                      <p className="field-hint muted">{tx("在 GitHub 的 Settings → Developer settings 中创建 fine-grained 个人访问令牌，仅授权当前仓库的 Contents 读写权限。令牌只保存在当前浏览器会话中。")} <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">{tx("在 GitHub 创建令牌")}</a></p>
                       <div className="zt-row">
                         <Input size="small" type="password" value={token} placeholder={tx("个人访问令牌")} onChange={(_, d) => setToken(d.value)} style={{ flex: 1, minWidth: 240 }} />
                         <Button size="small" appearance="primary" disabled={!token.trim() || !!busy} onClick={() => void connect()}>{login ? tx("重新连接") : tx("连接 GitHub")}</Button>
@@ -207,17 +207,17 @@ export function GitDialog() {
                         <span>/</span>
                         <Input size="small" value={remote.repo} placeholder={tx("仓库名")} onChange={(_, d) => setRemote((r) => ({ ...r, repo: d.value.trim() }))} style={{ width: 170 }} />
                         <Input size="small" value={remote.branch} placeholder={tx("分支")} onChange={(_, d) => setRemote((r) => ({ ...r, branch: d.value.trim() }))} style={{ width: 110 }} />
-                        <Button size="small" disabled={!token.trim() || !remote.owner || !remote.repo || !!busy} onClick={() => void checkRemote()}>{tx("连上仓库")}</Button>
+                        <Button size="small" disabled={!token.trim() || !remote.owner || !remote.repo || !!busy} onClick={() => void checkRemote()}>{tx("连接仓库")}</Button>
                       </div>
-                      {remoteInfo && <p className="field-hint muted">{remoteInfo.head ? tx("远端分支头 {{sha}}", { sha: remoteInfo.head.slice(0, 7) }) : tx("远端分支还不存在，第一次推送会建")} · <a href={remoteInfo.url} target="_blank" rel="noreferrer">{tx("在 GitHub 打开")}</a></p>}
+                      {remoteInfo && <p className="field-hint muted">{remoteInfo.head ? tx("远端分支头 {{sha}}", { sha: remoteInfo.head.slice(0, 7) }) : tx("远端分支不存在，将在首次推送时创建")} · <a href={remoteInfo.url} target="_blank" rel="noreferrer">{tx("在 GitHub 打开")}</a></p>}
                       <div className="zt-row">
                         <Button size="small" appearance="primary" disabled={!repo.remote || !token.trim() || !pending || !!busy} onClick={() => void doPush()}>{tx("推送")}{pending ? ` (${pending})` : ''}</Button>
                         <Button size="small" disabled={!repo.remote || !token.trim() || !!busy} onClick={() => void doPull()}>{tx("拉取")}</Button>
-                        <span className="field-hint muted">{tx("推：本地没推过的提交按顺序造到远端，远端有别处的新提交就先拉。拉：远端更新时取回整份工程与图片、本地记一条镜像提交，工作区得先干净。")}</span>
+                        <span className="field-hint muted">{tx("推送会依次上传本地提交；远端有新提交时需先拉取。拉取会恢复远端工程和图片，并在本地创建镜像提交；操作前需提交或恢复工作区改动。")}</span>
                       </div>
                     </section>
                     <section className="zt-sec">
-                      <Button size="small" appearance="subtle" onClick={() => void run(tx("正在停用"), async () => { if (window.confirm(tx("停用 Git 会删掉这个工程在本机的全部提交记录（GitHub 上的不动）。确定？"))) { await dropRepo(doc.id); setRepo(null); } })}>{tx("停用 Git")}</Button>
+                      <Button size="small" appearance="subtle" onClick={() => void run(tx("正在停用"), async () => { if (window.confirm(tx("停用 Git 将删除此工程的全部本地提交记录，GitHub 上的提交不受影响。是否继续？"))) { await dropRepo(doc.id); setRepo(null); } })}>{tx("停用 Git")}</Button>
                     </section>
                   </div>
                 )}

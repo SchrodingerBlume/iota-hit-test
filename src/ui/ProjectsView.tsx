@@ -158,7 +158,7 @@ export function ProjectsView() {
           <div className="tpl-cards">
             <button type="button" className="tpl-card" disabled={!loaded} onClick={() => setTpl('blank')}>
               <span className="tpl-thumb"><Document20Regular /></span>
-              <b>{tx("空白文档")}</b><small>{tx("从零开始写")}</small>
+              <b>{tx("空白文档")}</b><small>{tx("不含示例内容")}</small>
             </button>
             <button type="button" className="tpl-card" disabled={!loaded} onClick={() => setTpl('sample')}>
               <span className="tpl-thumb is-sample"><DocumentSparkle20Regular /></span>
@@ -216,7 +216,7 @@ export function ProjectsView() {
                   </label>
                 ))}
               </div>
-              <p className="field-hint muted">{tx("这些都能在「论文设置」里再改。")}</p>
+              <p className="field-hint muted">{tx("创建后可在「论文设置」中修改。")}</p>
             </DialogContent>
             <DialogActions>
               <Button appearance="secondary" onClick={() => setTpl(null)}>{tx("取消")}</Button>
@@ -230,11 +230,11 @@ export function ProjectsView() {
         <DialogSurface>
           <DialogBody>
             <DialogTitle>{tx("创建副本")}</DialogTitle>
-            <DialogContent>{tx("「{{name}}」有 {{n}} 场 Agent 对话记录，副本要一起带上吗？", { name: pendingCopy?.p.name ?? '', n: pendingCopy?.chats ?? 0 })}</DialogContent>
+            <DialogContent>{tx("「{{name}}」包含 {{n}} 场 Agent 对话。是否同时复制？", { name: pendingCopy?.p.name ?? '', n: pendingCopy?.chats ?? 0 })}</DialogContent>
             <DialogActions>
               <Button appearance="secondary" onClick={() => setPendingCopy(null)}>{tx("取消")}</Button>
               <Button appearance="secondary" onClick={() => { const c = pendingCopy; setPendingCopy(null); if (c) void duplicateProject(c.p.id, false); }}>{tx("只复制文档")}</Button>
-              <Button appearance="primary" onClick={() => { const c = pendingCopy; setPendingCopy(null); if (c) void duplicateProject(c.p.id, true); }}>{tx("连对话一起复制")}</Button>
+              <Button appearance="primary" onClick={() => { const c = pendingCopy; setPendingCopy(null); if (c) void duplicateProject(c.p.id, true); }}>{tx("复制文档和对话")}</Button>
             </DialogActions>
           </DialogBody>
         </DialogSurface>

@@ -538,8 +538,8 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                 <B title={tx("分页符")} big icon={<DocumentPageBreak20Regular />} disabled={none || !blocks} run={ins.insertPageBreak}>{tx("分页符")}</B>
               </Group>
               <Group label={tx("页眉和页脚")}>
-                <B title={tx("页眉：排不排、距边界、字体字号行距、横线；页眉印什么按规范由模板定，这里能改字")} big icon={<DocumentHeader20Regular />} run={() => useHFDialog.getState().show('header')}>{tx("页眉")}</B>
-                <B title={tx("页脚：排不排、距边界、字号行距、横线；页码格式按规范由模板定")} big icon={<DocumentFooter20Regular />} run={() => useHFDialog.getState().show('footer')}>{tx("页脚")}</B>
+                <B title={tx("设置页眉显示、边距、字体、字号、行距和横线；可覆盖模板生成的页眉文字")} big icon={<DocumentHeader20Regular />} run={() => useHFDialog.getState().show('header')}>{tx("页眉")}</B>
+                <B title={tx("设置页脚显示、边距、字号、行距和横线；页码格式由模板确定")} big icon={<DocumentFooter20Regular />} run={() => useHFDialog.getState().show('footer')}>{tx("页脚")}</B>
               </Group>
               <Group label={tx("表格和图片")}>
                 <Popover open={pop === 'table'} onOpenChange={(_, d) => setPop(d.open ? 'table' : null)} positioning="below-start" trapFocus={false}>
@@ -579,7 +579,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               <Group label={tx("定理")}>
                 <Popover open={pop === 'theorem'} onOpenChange={(_, d) => setPop(d.open ? 'theorem' : null)} positioning="below-start" trapFocus={false}>
                   <PopoverTrigger disableButtonEnhancement>
-                    <span className="rb-keep"><B title={tx("插入定理、引理、定义等环境；头用黑体，编号与公式一样按章")} big menu icon={<Lightbulb20Regular />} disabled={none || !blocks} run={() => setPop(pop === 'theorem' ? null : 'theorem')}>{tx("定理")}</B></span>
+                    <span className="rb-keep"><B title={tx("插入定理、引理或定义；标题使用黑体并按章编号")} big menu icon={<Lightbulb20Regular />} disabled={none || !blocks} run={() => setPop(pop === 'theorem' ? null : 'theorem')}>{tx("定理")}</B></span>
                   </PopoverTrigger>
                   <PopoverSurface className="rb-theorem-menu">
                     <div className="rb-pop-menu">
@@ -600,7 +600,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               </Group>
               <Group label={tx("引文与书目")}>
                 <B title={tx("引用参考文献")} big icon={<Book20Regular />} disabled={none} run={() => ins.insertInline('cite')}>{tx("插入引文")}</B>
-                <B title={tx("从 Zotero 导入文献：云端文库（API 密钥）或导出的 CSL JSON / .bib 文件；再点一次就是同步")} big icon={<CloudArrowDown20Regular />} run={() => setZoteroOpen(true)}>Zotero</B>
+                <B title={tx("从 Zotero 云端文库或 CSL JSON、BibTeX 文件导入；再次导入可同步更新")} big icon={<CloudArrowDown20Regular />} run={() => setZoteroOpen(true)}>Zotero</B>
                 <Stack>
                   <B title={tx("管理源")} icon={<Library20Regular />} run={() => useStore.getState().setSection('bibliography')}>{tx("管理源")}</B>
                   <B title={tx("打开“成果”页，登记攻读学位期间取得的成果。")} icon={<TextGrammarSettings20Regular />} run={() => useStore.getState().setSection('achievements')}>{tx("成果")}</B>
@@ -720,7 +720,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                   <Rows>
                     <Row><ChoiceMenu label={tx("每行")} choices={[{ value: '0', label: tx("一行排完") }, ...[1, 2, 3, 4].map((n) => ({ value: String(n), label: tx("{{n}} 张", { n: n }) }))]} value={String(Math.max(0, Math.min(4, Number(a.columns) ?? 2)))} onChange={(v) => chain().updateAttributes('figure', { columns: Number(v) }).run()} /></Row>
                     <Row><ChoiceMenu label={tx("分图题注")} hint={tx("分图题注位置")} choices={[{ value: 'under', label: tx("分图之下") }, { value: 'caption', label: tx("图题之下连排") }]} value={(a.subMode as string) || 'under'} onChange={(v) => chain().updateAttributes('figure', { subMode: v }).run()} /></Row>
-                    <Row><ChoiceMenu label={tx("图上标签")} hint={tx("(a)(b) 直接印在图角上")} choices={[{ value: 'none', label: tx("不印") }, { value: 'tl', label: tx("左上") }, { value: 'tr', label: tx("右上") }, { value: 'bl', label: tx("左下") }, { value: 'br', label: tx("右下") }]} value={(a.subLabel as string) || 'none'} onChange={(v) => chain().updateAttributes('figure', { subLabel: v }).run()} /><ChoiceMenu label={tx("标签色")} choices={[{ value: 'black', label: tx("黑") }, { value: 'white', label: tx("白（深色图）") }]} value={(a.subLabelFill as string) || 'black'} onChange={(v) => chain().updateAttributes('figure', { subLabelFill: v }).run()} /></Row>
+                    <Row><ChoiceMenu label={tx("图上标签")} hint={tx("将 (a)、(b) 显示在图片角落")} choices={[{ value: 'none', label: tx("不著录") }, { value: 'tl', label: tx("左上") }, { value: 'tr', label: tx("右上") }, { value: 'bl', label: tx("左下") }, { value: 'br', label: tx("右下") }]} value={(a.subLabel as string) || 'none'} onChange={(v) => chain().updateAttributes('figure', { subLabel: v }).run()} /><ChoiceMenu label={tx("标签色")} choices={[{ value: 'black', label: tx("黑色") }, { value: 'white', label: tx("白色（适合深色图片）") }]} value={(a.subLabelFill as string) || 'black'} onChange={(v) => chain().updateAttributes('figure', { subLabelFill: v }).run()} /></Row>
                   </Rows>
                 </span>
               </Group>

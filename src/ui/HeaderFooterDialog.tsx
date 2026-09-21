@@ -17,14 +17,14 @@ export const useHFDialog = create<{ open: boolean; part: 'header' | 'footer'; sh
 }));
 
 const LEVELS: { key: HFLevel; label: string; hint: string }[] = [
-  { key: 'doc', label: tx("整篇"), hint: tx("文档级，各段承它") },
-  { key: 'frontmatter', label: tx("前置"), hint: tx("摘要、目录这些页") },
-  { key: 'mainmatter', label: tx("正文"), hint: tx("各章与附录") },
-  { key: 'backmatter', label: tx("后置"), hint: tx("参考文献、致谢这些页；不写就承正文的") },
+  { key: 'doc', label: tx("整篇"), hint: tx("全文默认设置，各部分可覆盖") },
+  { key: 'frontmatter', label: tx("前置"), hint: tx("摘要、目录等页面") },
+  { key: 'mainmatter', label: tx("正文"), hint: tx("各章和附录") },
+  { key: 'backmatter', label: tx("后置"), hint: tx("参考文献、致谢等页面；未设置时继承正文") },
 ];
 const caret = <i className="rb-caret" />;
 const DD = { minWidth: 0, width: 132 } as const;
-const SHOWN: SegChoice<boolean>[] = [{ value: false, label: tx("不排"), tone: 'off' }, { value: true, label: tx("排"), tone: 'on' }];
+const SHOWN: SegChoice<boolean>[] = [{ value: false, label: tx("不显示"), tone: 'off' }, { value: true, label: tx("显示"), tone: 'on' }];
 
 /** 模板按档的默认，给「自动」那一档做提示 */
 interface Note { shownAuto: boolean; shown: string; fromEdge: string; asianFont: string; size: string; lineSpacing: string; border: string }
@@ -40,14 +40,14 @@ function autoNote(s: Settings, part: 'header' | 'footer'): Note {
       border: final ? tx("细粗双线 2.25pt，距正文 1pt") : sz ? tx("细粗双线 3pt") : tx("无"),
     };
   }
-  return { shownAuto: true, shown: tx("各档都排页码"), fromEdge: final ? '2.3cm' : '1.75cm', asianFont: '', size: tx("小五"), lineSpacing: tx("单倍"), border: tx("无") };
+  return { shownAuto: true, shown: tx("所有文档类型均显示页码"), fromEdge: final ? '2.3cm' : '1.75cm', asianFont: '', size: tx("小五"), lineSpacing: tx("单倍"), border: tx("无") };
 }
 
 function AutoRow({ label, hint, auto, onAuto, note, children }: { label: string; hint?: string; auto: boolean; onAuto: (v: boolean) => void; note?: string; children: React.ReactNode }) {
   return (
     <div className="hf-row">
       <span className="hf-lab" title={hint}>{label}</span>
-      <button type="button" className={`hf-auto ${auto ? 'on' : ''}`} onClick={() => onAuto(!auto)} title={tx("自动：跟模板按档定；取消自动后填的值留着，再点回来不会丢")}>{tx("自动")}</button>
+      <button type="button" className={`hf-auto ${auto ? 'on' : ''}`} onClick={() => onAuto(!auto)} title={tx("自动时使用模板设置；切换后仍保留自定义值")}>{tx("自动")}</button>
       <div className="hf-ctl">
         <span className={`hf-inner ${auto ? 'is-auto' : ''}`}>{children}</span>
         {note && auto && <span className="hf-note muted">{tx("模板：{{v}}", { v: note })}</span>}
@@ -71,7 +71,7 @@ function RecordEditor({ part, rec, note, onChange }: { part: 'header' | 'footer'
   const bstyle = border.value ? border.value.style : 'none';
   return (
     <div className="hf-card">
-      <AutoRow label={tx("显示")} auto={shown === 'auto'} onAuto={(a) => set('shown', a ? 'auto' : note.shownAuto)} note={`${note.shownAuto ? tx("排") : tx("不排")}（${note.shown}）`}>
+      <AutoRow label={tx("显示")} auto={shown === 'auto'} onAuto={(a) => set('shown', a ? 'auto' : note.shownAuto)} note={`${note.shownAuto ? tx("显示") : tx("不显示")}（${note.shown}）`}>
         <div className="seg hf-seg" role="radiogroup">
           {SHOWN.map((c) => <button key={String(c.value)} type="button" role="radio" aria-checked={shown === c.value} className={shown === c.value ? `on t-${c.tone}` : ''} disabled={shown === 'auto'} onClick={() => set('shown', c.value)}>{c.label}</button>)}
         </div>
@@ -96,7 +96,7 @@ function RecordEditor({ part, rec, note, onChange }: { part: 'header' | 'footer'
           {LS.map(([v, l]) => <Option key={v} value={v} text={l}>{l}</Option>)}
         </Dropdown>
       </AutoRow>
-      <AutoRow label={tx("横线")} hint={tx("那一段的下边框（边框和底纹：样式 / 宽度 / 距正文）")} auto={border.auto} onAuto={(a) => set('border', { ...border, auto: a })} note={note.border}>
+      <AutoRow label={tx("横线")} hint={tx("当前段落的下边框，可设置样式、宽度和正文间距")} auto={border.auto} onAuto={(a) => set('border', { ...border, auto: a })} note={note.border}>
         <span className="hf-inline">
           <Dropdown size="small" expandIcon={caret} style={DD} disabled={border.auto} value={BS.find((x) => x[0] === bstyle)?.[1] ?? bstyle} selectedOptions={[bstyle]} onOptionSelect={(_, d) => set('border', { auto: false, value: d.optionValue === 'none' ? null : { style: d.optionValue as HFBorder['style'], thickness: d.optionValue === 'single' ? '0.75pt' : '2.25pt', fromText: border.value?.fromText ?? '1pt' } })}>
             {BS.map(([v, l]) => <Option key={v} value={v} text={l}>{l}</Option>)}
@@ -147,14 +147,14 @@ export function HeaderFooterDialog() {
                   <div className="seg hf-seg" role="radiogroup">
                     {LEVELS.map((l) => <button key={l.key} type="button" className={level === l.key ? 'on' : ''} title={l.hint} onClick={() => setLevel(l.key)}>{l.label}{dirtyLevel(l.key) && <i className="hf-dot" />}</button>)}
                   </div>
-                  <span className="hf-note muted">{LEVELS.find((l) => l.key === level)?.hint}{level !== 'doc' ? tx("；没改的项承上一层") : ''}</span>
+                  <span className="hf-note muted">{LEVELS.find((l) => l.key === level)?.hint}{level !== 'doc' ? tx("；未设置项继承上一级") : ''}</span>
                 </div>
                 <RecordEditor part={tab} rec={rec(tab)} note={autoNote(settings, tab)} onChange={(r) => setRec(tab, r)} />
-                <p className="field-hint muted">{tab === 'footer' ? tx("页脚印页码，格式按规范：终稿「- n -」、前置罗马、正文起阿拉伯；能改的只有这几项。") : tx("封面与内封永远不出页眉页脚；页眉印什么按规范由模板定，改字到「页眉文字」。")}</p>
+                <p className="field-hint muted">{tab === 'footer' ? tx("页脚用于显示页码。模板按规范设置终稿、前置部分和正文的页码格式。") : tx("封面和内封不显示页眉页脚。页眉内容由模板确定，可在「页眉文字」中覆盖。")}</p>
               </>
             ) : (
               <>
-                <p className="field-hint muted">{tx("页眉那一行字。自动 = 模板按规范拼（本科、硕士「校名 + 文种」，博士奇数页本章标题、偶数页「校名 + 文种」，报告「校名 + 表单名」）；自己填就整条替掉。")}</p>
+                <p className="field-hint muted">{tx("自动时由模板生成页眉文字；填写内容后将替换整行页眉。博士论文可分别设置奇数页和偶数页。")}</p>
                 <div className="hf-card">
                   <AutoRow label={split ? tx("奇数页") : tx("页眉文字")} auto={text.auto} onAuto={(a) => setText({ auto: a })} note={split ? dft.odd : dft.odd === dft.even ? dft.odd : tx("奇数页 {{odd}} · 偶数页 {{even}}", dft)}>
                     <Input size="small" className="hf-text" disabled={text.auto} value={text.value} placeholder={dft.odd} onChange={(_, d) => setText({ auto: false, value: d.value })} />

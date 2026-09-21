@@ -43,17 +43,17 @@ async function pushOne(token: string, repo: Repo, r: Remote, c: Commit, parentSh
   for (const [path, sha] of Object.entries(c.tree)) {
     if (parent?.tree[path] !== sha || !parentSha) {
       const blob = await readBlob(repo.project, sha);
-      if (!blob) throw new Error(tx("本地缺了 {{path}} 的内容", { path: path }));
+      if (!blob) throw new Error(tx("本地缺少 {{path}} 的内容", { path: path }));
       onStep(tx("上传 {{path}}", { path: path }));
       const bytes = new Uint8Array(await blob.arrayBuffer());
       const made = await api<{ sha: string }>(token, `${base}/blobs`, { method: 'POST', body: JSON.stringify(isText(path) ? { content: new TextDecoder().decode(bytes), encoding: 'utf-8' } : { content: b64(bytes), encoding: 'base64' }) });
-      if (made.sha !== sha) throw new Error(tx("{{path}} 的 sha 对不上（本地 {{v1}}，GitHub {{v2}}）", { path: path, v1: sha.slice(0, 7), v2: made.sha.slice(0, 7) }));
+      if (made.sha !== sha) throw new Error(tx("{{path}} 的 SHA 不一致（本地 {{v1}}，GitHub {{v2}}）", { path: path, v1: sha.slice(0, 7), v2: made.sha.slice(0, 7) }));
     }
     tree.push({ path, mode: '100644', type: 'blob', sha });
   }
-  onStep(tx("造树"));
+  onStep(tx("创建 Git 树"));
   const t = await api<{ sha: string }>(token, `${base}/trees`, { method: 'POST', body: JSON.stringify({ tree }) });
-  onStep(tx("造提交"));
+  onStep(tx("创建提交"));
   const made = await api<{ sha: string }>(token, `${base}/commits`, { method: 'POST', body: JSON.stringify({ message: c.message, tree: t.sha, parents: parentSha ? [parentSha] : [], author: { name: c.author.name || 'iota4web', email: c.author.email || 'iota4web@localhost', date: new Date(c.ts).toISOString() } }) });
   return made.sha;
 }
@@ -64,7 +64,7 @@ export async function push(token: string, repo: Repo, r: Remote, onStep: (s: str
   if (!chain.length) return { pushed: 0, head: headCommit(repo)?.remoteSha ?? '' };
   const remote = await remoteHead(token, r);
   const lastPushed = commitOf(repo, chain[0].parent)?.remoteSha ?? null;
-  if (remote !== lastPushed) throw new Error(remote ? tx("远端分支有别处推上来的提交，先拉取") : tx("远端分支在别处被删了，换个分支名再推"));
+  if (remote !== lastPushed) throw new Error(remote ? tx("远端分支已更新，请先拉取") : tx("远端分支已被删除，请更换分支名后推送"));
   let parentSha = lastPushed;
   for (const c of chain) {
     parentSha = await pushOne(token, repo, r, c, parentSha, onStep);
@@ -86,7 +86,7 @@ export async function fetchHead(token: string, r: Remote, onStep: (s: string) =>
   const base = `/repos/${r.owner}/${r.repo}`;
   const c = await api<{ sha: string; message: string; author: { name: string; email: string; date: string }; tree: { sha: string } }>(token, `${base}/git/commits/${sha}`);
   const t = await api<{ tree: { path: string; type: string; sha: string; size?: number }[]; truncated: boolean }>(token, `${base}/git/trees/${c.tree.sha}?recursive=1`);
-  if (t.truncated) throw new Error(tx("仓库文件太多，一次读不完"));
+  if (t.truncated) throw new Error(tx("仓库文件过多，无法一次读取"));
   const files: WorkFile[] = [];
   const tree: Record<string, string> = {};
   for (const e of t.tree) {

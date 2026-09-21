@@ -106,7 +106,7 @@ function Stage({ variant, since }: { variant: Variant; since: number }) {
     <>
       <div className="boot fc-caption">
         <h3><Loader2 />{variant === 'mini' ? tx("正在后台重排") : again ? tx("正在重新排版") : tx("初次排版中")}</h3>
-        <div className="muted">{again ? tx("这篇比较长，这处改动要整篇重排一遍；排好自动换上。") : tx("第一次要把整篇排一遍，之后每次只重排改动的那一部分。")}</div>
+        <div className="muted">{again ? tx("当前改动需要重排全文。完成后将自动更新预览。") : tx("首次打开需排版全文，后续通常只重排改动部分。")}</div>
         <div className="bar"><i style={{ width: `${Math.max(2, p * 100)}%` }} /></div>
         <div className="detail">{tx("约 {{n}} 页 · 已用 {{s}} 秒", { n: about, s: (now / 1000).toFixed(1) })}</div>
       </div>

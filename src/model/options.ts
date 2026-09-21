@@ -111,8 +111,8 @@ const stageName: Record<Stage, string> = { final: t("终稿"), proposal: t("开�
 const campusName: Record<Campus, string> = { harbin: t("本部"), shenzhen: t("深圳") };
 
 const onOff: Choice<boolean>[] = [
-  { value: false, label: t("关") },
-  { value: true, label: t("开") },
+  { value: false, label: t("关闭") },
+  { value: true, label: t("开启") },
 ];
 
 export const SWITCHES: SwitchDef<any>[] = [
@@ -165,7 +165,7 @@ export const SWITCHES: SwitchDef<any>[] = [
     place: 'body',
     resolve: (s) => (bodyStage(s) === 'final'
       ? { value: true, reason: t("与公式一样按章编号（定理1.1）") }
-      : { value: false, reason: t("报告只数序号（定理1）") }),
+      : { value: false, reason: t("报告使用连续编号（定理 1）") }),
   },
   {
     key: 'equationNumberingFullwidth',
@@ -305,23 +305,23 @@ export const SWITCHES: SwitchDef<any>[] = [
   {
     key: 'bibliographyFull',
     label: t("参考文献列出范围"),
-    hint: t("全部登记的条目，或只列正文引用过的"),
+    hint: t("列出全部条目或仅列已引用条目"),
     choices: [
-      { value: false, label: t("只列引用过的"), tone: 'off' },
+      { value: false, label: t("仅列已引用条目"), tone: 'off' },
       { value: true, label: t("全部条目"), tone: 'on' },
     ],
     group: t("后置"),
     place: 'bibliography',
-    resolve: () => ({ value: true, reason: t("登记的条目全部列出（未引用的按登记顺序接在引用过的后面）") }),
+    resolve: () => ({ value: true, reason: t("列出全部条目；未引用条目排在已引用条目之后") }),
   },
   {
     key: 'bibStyle',
     label: t("引用体系"),
     hint: t("顺序编码 / 著者-出版年 / 脚注"),
     choices: [
-      { value: 'numeric', label: t("顺序编码制"), hint: t("正文 [1]，表按引用序") },
-      { value: 'author-date', label: t("著者-出版年制"), hint: t("正文（张三，2020），表按著者排") },
-      { value: 'foot', label: t("脚注制"), hint: t("条目著录在页下注里") },
+      { value: 'numeric', label: t("顺序编码制"), hint: t("正文标注 [1]，文献表按引用顺序排列") },
+      { value: 'author-date', label: t("著者-出版年制"), hint: t("正文标注（张三，2020），文献表按著者排列") },
+      { value: 'foot', label: t("脚注制"), hint: t("文献条目著录于页下注") },
     ],
     group: t("参考文献"),
     place: 'bibliography',
@@ -337,7 +337,7 @@ export const SWITCHES: SwitchDef<any>[] = [
     ],
     group: t("参考文献"),
     place: 'bibliography',
-    resolve: () => ({ value: '2015', reason: t("模板按 GB/T 7714—2015 著录（hithesis 同）") }),
+    resolve: () => ({ value: '2015', reason: t("模板与 hithesis 默认采用 GB/T 7714—2015") }),
   },
   {
     key: 'citeForm',
@@ -381,24 +381,24 @@ export const SWITCHES: SwitchDef<any>[] = [
   {
     key: 'bibUrls',
     label: t("网址与 DOI"),
-    hint: t("印不印 URL、引用日期与 DOI"),
+    hint: t("设置 URL、引用日期和 DOI 的著录范围"),
     choices: [
-      { value: 'all', label: t("都印") },
-      { value: 'online', label: t("只印网络文献的") },
-      { value: 'none', label: t("不印") },
+      { value: 'all', label: t("全部著录") },
+      { value: 'online', label: t("仅著录网络文献") },
+      { value: 'none', label: t("不著录") },
     ],
     group: t("参考文献"),
     place: 'bibliography',
-    resolve: () => ({ value: 'all', reason: t("有就著录（国标 2015 起 DOI 必著）") }),
+    resolve: () => ({ value: 'all', reason: t("存在时著录；GB/T 7714—2015 起要求著录 DOI") }),
   },
   {
     key: 'bibHyperlinks',
     label: t("超链接"),
-    hint: t("URL / DOI / 题名可点，编号跳回引用处"),
+    hint: t("为 URL、DOI 和题名添加链接，编号链接至引用处"),
     choices: onOff,
     group: t("参考文献"),
     place: 'bibliography',
-    resolve: () => ({ value: true, reason: t("模板默认可点（打印无影响）") }),
+    resolve: () => ({ value: true, reason: t("模板默认启用；不影响打印") }),
   },
   {
     key: 'bibDegreeNote',
@@ -407,19 +407,19 @@ export const SWITCHES: SwitchDef<any>[] = [
     choices: onOff,
     group: t("参考文献"),
     place: 'bibliography',
-    resolve: () => ({ value: false, reason: t("国标不加") }),
+    resolve: () => ({ value: false, reason: t("国标不著录") }),
   },
   {
     key: 'bibTitleCase',
     label: t("西文题名大小写"),
-    hint: t("按原文，或统一改"),
+    hint: t("保留原文或统一转换"),
     choices: [
       { value: 'sentence', label: t("句首大写") },
       { value: 'title', label: t("词首大写") },
     ],
     group: t("参考文献"),
     place: 'bibliography',
-    resolve: () => ({ value: 'sentence', mixed: t("照原文"), reason: t("照条目原文；改的话 {…} 保护的不动") }),
+    resolve: () => ({ value: 'sentence', mixed: t("保留原文"), reason: t("默认保留原文；转换时不改动 {…} 内的文字") }),
   },
   {
     key: 'bibNameCase',
@@ -427,18 +427,18 @@ export const SWITCHES: SwitchDef<any>[] = [
     hint: t("姓全大写（WILLIS R）或照原文（Willis R）"),
     choices: [
       { value: 'upper', label: t("姓全大写") },
-      { value: 'asis', label: t("照原文") },
+      { value: 'asis', label: t("保留原文") },
     ],
     group: t("参考文献"),
     place: 'bibliography',
     resolve: (s) => ((s.bibVersion === 'auto' ? '2015' : s.bibVersion) === '2025'
-      ? { value: 'asis', reason: t("2025 版国标姓照原文（Willis R）") }
-      : { value: 'upper', reason: t("2015 版国标姓全大写（WILLIS R）") }),
+      ? { value: 'asis', reason: t("GB/T 7714—2025 保留原文（Willis R）") }
+      : { value: 'upper', reason: t("GB/T 7714—2015 将姓改为全大写（WILLIS R）") }),
   },
   {
     key: 'bibSortZh',
     label: t("中文著者排序"),
-    hint: t("著者-出版年制的表怎么排中文名"),
+    hint: t("设置著者-出版年制文献表中的中文姓名排序"),
     choices: [
       { value: 'pinyin', label: t("拼音") },
       { value: 'bihua', label: t("笔画") },

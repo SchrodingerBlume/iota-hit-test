@@ -52,10 +52,10 @@ export function HistoryDialog() {
     return Object.keys(now).map((k) => ({ k, ...countChanges(lineDiff(then[k] ?? '', now[k] ?? '')) })).filter((x) => x.add || x.del);
   }, [now, then]);
   useEffect(() => { if (changed.length && !changed.some((c) => c.k === facet)) setFacet(changed[0].k); }, [changed, facet]);
-  const manual = async () => { setBusy(tx("正在保存…")); const r = await takeSnapshot(doc, 'manual'); setBusy(r ? '' : tx("跟上一份一样，没存")); await refresh(); };
+  const manual = async () => { setBusy(tx("正在保存…")); const r = await takeSnapshot(doc, 'manual'); setBusy(r ? '' : tx("内容未更改，未创建快照")); await refresh(); };
   const restore = async () => {
     if (!snap) return;
-    if (!window.confirm(tx("把整份工程换成 {{time}} 那一份？现在这份会先存一份「恢复前」快照。", { time: fmt(snap.updatedAt ? Date.parse(snap.updatedAt) : Date.now()) }))) return;
+    if (!window.confirm(tx("是否恢复到 {{time}} 的快照？当前工程会先保存为「恢复前」快照。", { time: fmt(snap.updatedAt ? Date.parse(snap.updatedAt) : Date.now()) }))) return;
     await takeSnapshot(doc, 'restore');
     useStore.getState().replaceDoc(snap);
     await refresh();
@@ -69,8 +69,8 @@ export function HistoryDialog() {
           <DialogTitle>{tx("本地历史")}</DialogTitle>
           <DialogContent>
             <div className="hist-bar">
-              <Switch checked={enabled} label={tx("自动存")} onChange={(_, d) => { setEnabled(!!d.checked); setHistoryEnabled(!!d.checked); }} />
-              <select className="hist-every" value={custom ? 'custom' : String(every)} disabled={!enabled} title={tx("多久自动存一份")} onChange={(e) => { if (e.target.value === 'custom') { setCustomUnit(every > 0 && every % 60 === 0 ? 60 : 1); setCustom(true); return; } setCustom(false); changeEvery(Number(e.target.value)); }}>
+              <Switch checked={enabled} label={tx("自动保存")} onChange={(_, d) => { setEnabled(!!d.checked); setHistoryEnabled(!!d.checked); }} />
+              <select className="hist-every" value={custom ? 'custom' : String(every)} disabled={!enabled} title={tx("自动保存间隔")} onChange={(e) => { if (e.target.value === 'custom') { setCustomUnit(every > 0 && every % 60 === 0 ? 60 : 1); setCustom(true); return; } setCustom(false); changeEvery(Number(e.target.value)); }}>
                 {HISTORY_EVERY_CHOICES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 <option value="custom">{tx("自定义…")}</option>
               </select>
@@ -80,15 +80,15 @@ export function HistoryDialog() {
                   <select value={customUnit} disabled={!enabled} onChange={(e) => { const u = Number(e.target.value) as 60 | 1; const n = Math.max(1, Math.round(every / customUnit)); setCustomUnit(u); changeEvery(n * u); }}><option value={1}>{tx("秒")}</option><option value={60}>{tx("分钟")}</option></select>
                 </span>
               )}
-              <span className="muted">{enabled ? (every === 0 ? tx("改动停下 1 秒就存一份") : tx("{{every}}有改动就存一份", { every: describeEvery(every) })) : tx("只在手动、恢复前、Git 提交时存")}</span>
+              <span className="muted">{enabled ? (every === 0 ? tx("停止编辑 1 秒后保存") : tx("有改动时{{every}}保存一次", { every: describeEvery(every) })) : tx("仅在手动保存、恢复前或 Git 提交时创建快照")}</span>
               <span className="spacer" />
               <span className="muted">{busy}</span>
-              <Button size="small" onClick={() => void manual()}>{tx("现在存一份")}</Button>
+              <Button size="small" onClick={() => void manual()}>{tx("立即保存")}</Button>
               <Button size="small" appearance="subtle" disabled={!list.length} onClick={async () => { if (window.confirm(tx("清空这个工程的全部本地历史？"))) { await clearHistory(doc.id); await refresh(); setSel(null); } }}>{tx("清空")}</Button>
             </div>
             <div className="hist-grid">
               <ul className="hist-list">
-                {!list.length && <li className="muted">{tx("还没有快照。有改动时按上面的节奏自动存，也可以现在存。")}</li>}
+                {!list.length && <li className="muted">{tx("暂无快照。编辑后会按设定自动保存，也可立即保存。")}</li>}
                 {[...list].reverse().map((s) => (
                   <li key={s.key} className={s.key === sel ? 'on' : ''}>
                     <button type="button" onClick={() => setSel(s.key === sel ? null : s.key)}>
@@ -98,7 +98,7 @@ export function HistoryDialog() {
                 ))}
               </ul>
               <div className="hist-detail">
-                {!cur && <p className="muted">{tx("选一份快照，看它跟现在的差别。")}</p>}
+                {!cur && <p className="muted">{tx("选择快照以查看与当前版本的差异。")}</p>}
                 {cur && !snap && <p className="muted">{tx("正在读取…")}</p>}
                 {cur && snap && (
                   <>
@@ -108,7 +108,7 @@ export function HistoryDialog() {
                       <Button size="small" appearance="primary" onClick={() => void restore()}>{tx("恢复到这一份")}</Button>
                       <Button size="small" appearance="subtle" onClick={async () => { await deleteSnapshot(cur.key); setSel(null); await refresh(); }}>{tx("删除快照")}</Button>
                     </div>
-                    {!changed.length ? <p className="muted">{tx("跟现在一模一样。")}</p> : (
+                    {!changed.length ? <p className="muted">{tx("与当前版本相同。")}</p> : (
                       <>
                         <div className="hist-facets">
                           {changed.map((c) => <button key={c.k} type="button" className={`bib-group-chip ${facet === c.k ? 'on' : ''}`} onClick={() => setFacet(c.k)}>{c.k} <span className="diff-add">+{c.add}</span> <span className="diff-del">−{c.del}</span></button>)}

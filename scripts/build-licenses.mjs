@@ -35,7 +35,8 @@ out.push(`本站（站名 iota-hit 在线编辑器，站标是自绘的齿轮「
 不是它们的官方产品，也不代表它们的立场。
 
 【本站自己的代码】
-编辑器本身（src/ 下除上述抄来的文件之外）由本站作者编写，仓库 https://github.com/SchrodingerBlume/iota-hit-test 。
+编辑器本身（src/ 下除上述衍生文件外）版权所有者为 SchrodingerBlume（吴俊豪），采用 MIT 许可证，
+仓库 https://github.com/SchrodingerBlume/iota-hit-test 。
 `);
 
 out.push(rule('一、所用项目'));
