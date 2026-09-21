@@ -116,6 +116,9 @@ interface State {
   /** 项目管理界面还是编辑器 */
   view: 'projects' | 'editor';
   projects: ProjectMeta[];
+  /** 固定在列表顶上的文档 id（Word 的「固定」），记在本机 */
+  pinned: string[];
+  togglePin: (id: string) => Promise<void>;
   loaded: boolean;
   dirty: boolean;
   setSection: (s: Section) => void;
@@ -190,6 +193,7 @@ export const useStore = create<State>((set, get) => {
     section: 'body',
     view: 'projects',
     projects: [],
+    pinned: [],
     loaded: false,
     dirty: false,
     setSection: (section) => set({ section }),
@@ -235,7 +239,15 @@ export const useStore = create<State>((set, get) => {
     refreshProjects: async () => {
       const docs = (await allProjects<ThesisDoc>()).map(normalizeDoc);
       docs.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-      set({ projects: docs.map(metaOf) });
+      const ids = new Set(docs.map((d) => d.id));
+      const pinned = ((await kv.get<string[]>('meta', 'pinned')) ?? []).filter((id) => ids.has(id));
+      set({ projects: docs.map(metaOf), pinned });
+    },
+    togglePin: async (id) => {
+      const cur = get().pinned;
+      const pinned = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+      await kv.set('meta', 'pinned', pinned);
+      set({ pinned });
     },
 
     load: () => {

@@ -661,6 +661,14 @@ html.theme-anim :not(svg, svg *) { transition: background-color 320ms var(--ease
 .proj-actions { display: flex; align-items: center; gap: 4px; opacity: 0; transition: opacity var(--fast) var(--ease); }
 .proj-row:hover .proj-actions, .proj-row:focus-within .proj-actions, .proj-row.is-active .proj-actions { opacity: 1; }
 .proj-empty { padding: 28px 16px; text-align: center; font-size: 13px; }
+.proj-group { padding: 6px 14px 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); background: var(--panel-2); border-top: 1px solid var(--line); }
+.proj-group:first-child { border-top: 0; }
+.proj-group + .proj-row { border-top: 0; }
+/* 固定钮：没固定的行悬停才出，固定了的常显 */
+.proj-actions.is-pinned { opacity: 1; }
+.proj-actions.is-pinned > :not(.proj-pin) { opacity: 0; transition: opacity var(--fast) var(--ease); }
+.proj-row:hover .proj-actions.is-pinned > :not(.proj-pin), .proj-row:focus-within .proj-actions.is-pinned > :not(.proj-pin), .proj-row.is-active .proj-actions.is-pinned > :not(.proj-pin) { opacity: 1; }
+.proj-pin.on { color: var(--accent-ink); }
 .new-proj-dialog { max-width: 560px; }
 .new-proj-dialog .field { margin-bottom: 10px; }
 .new-axes { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
@@ -672,13 +680,32 @@ html.theme-anim :not(svg, svg *) { transition: background-color 320ms var(--ease
   .proj-time { display: none; }
   .proj-actions { opacity: 1; }
 }
+/* 触屏没有悬停：操作常显 */
+@media (hover: none) {
+  .proj-actions, .proj-actions.is-pinned > :not(.proj-pin) { opacity: 1; }
+}
+.fui-MenuList .proj-open-item { display: none; }
 @media (max-width: 560px) {
-  .projects { padding: 20px 14px 48px; }
+  .projects { padding: 16px 14px 48px; }
   .projects-head { display: block; margin-bottom: 14px; }
+  .projects-head h2 { font-size: 22px; }
   .projects-actions { margin-top: 10px; flex-wrap: wrap; }
-  .new-axes { grid-template-columns: 1fr; }
-  .tpl-card { width: 100%; }
-  .proj-search { width: 140px; }
+  .proj-section { margin-bottom: 20px; }
+  .tpl-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tpl-card { width: auto; padding: 12px 12px 10px; }
+  .tpl-thumb { width: 36px; height: 46px; }
+  .tpl-card b { margin-top: 8px; font-size: 13px; }
+  .proj-list-head { flex-wrap: wrap; }
+  .proj-search { width: 100%; order: 3; }
+  .proj-row { grid-template-columns: 32px minmax(0, 1fr) auto; gap: 8px; padding: 10px; }
+  .proj-ico { width: 32px; height: 32px; }
+  .proj-name { font-size: 14px; }
+  /* 手机上点名字就是打开，「打开」钮收进 ⋯ 里 */
+  .proj-actions .proj-open { display: none; }
+  .fui-MenuList .proj-open-item { display: flex; }
+  .proj-actions, .proj-actions.is-pinned > :not(.proj-pin) { opacity: 1; }
+  .new-axes { grid-template-columns: 1fr 1fr; gap: 2px 8px; }
+  .new-proj-dialog .field { margin-bottom: 6px; }
 }
 
 /* ── 文献录入 ────────────────────────────────────── */

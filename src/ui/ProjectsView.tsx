@@ -2,7 +2,7 @@
 // 一张可搜索、可排序的列表，每行悬停出操作；删除走对话框确认，重命名就地改
 import { useMemo, useRef, useState } from 'react';
 import { Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions, Button, Input, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuItemRadio, MenuDivider, Tooltip } from '@fluentui/react-components';
-import { Document20Regular, DocumentSparkle20Regular, FolderOpen20Regular, ArrowLeft20Regular, Search20Regular, MoreHorizontal20Regular, Rename20Regular, Copy20Regular, Delete20Regular, ArrowDownload20Regular, Open20Regular, ArrowSort20Regular } from '@fluentui/react-icons';
+import { Document20Regular, DocumentSparkle20Regular, FolderOpen20Regular, ArrowLeft20Regular, Search20Regular, MoreHorizontal20Regular, Rename20Regular, Copy20Regular, Delete20Regular, ArrowDownload20Regular, Open20Regular, ArrowSort20Regular, Pin20Regular, PinOff20Regular } from '@fluentui/react-icons';
 import { useStore, type ProjectMeta } from '../model/store';
 import { AXES, defaultSettings } from '../model/options';
 import type { Settings } from '../model/types';
@@ -33,8 +33,8 @@ function download(name: string, data: BlobPart, type: string) {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
-function ProjectRow({ p, active, onDelete }: { p: ProjectMeta; active: boolean; onDelete: (p: ProjectMeta) => void }) {
-  const { openProject, renameProject, duplicateProject, exportProject } = useStore();
+function ProjectRow({ p, active, pinned, onDelete }: { p: ProjectMeta; active: boolean; pinned: boolean; onDelete: (p: ProjectMeta) => void }) {
+  const { openProject, renameProject, duplicateProject, exportProject, togglePin } = useStore();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(p.name);
   const commit = () => { const n = name.trim(); setEditing(false); if (n && n !== p.name) void renameProject(p.id, n); else setName(p.name); };
@@ -49,17 +49,22 @@ function ProjectRow({ p, active, onDelete }: { p: ProjectMeta; active: boolean; 
         <div className="proj-tags">{tagsOf(p.settings).map((t) => <span key={t} className="tag">{t}</span>)}{p.blocks > 0 && <span className="muted proj-size">{tx("正文 {{n}} 段", { n: p.blocks })}</span>}</div>
       </div>
       <span className="proj-time muted" title={new Date(p.updatedAt).toLocaleString('zh-CN')}>{fmtTime(p.updatedAt)}</span>
-      <div className="proj-actions">
-        <Button size="small" appearance="primary" icon={<Open20Regular />} onClick={() => void openProject(p.id)}>{tx("打开")}</Button>
+      <div className={`proj-actions ${pinned ? 'is-pinned' : ''}`}>
+        <Tooltip content={pinned ? tx("取消固定") : tx("固定到列表顶上")} relationship="label" positioning="below">
+          <Button size="small" appearance="subtle" className={`proj-pin ${pinned ? 'on' : ''}`} icon={pinned ? <PinOff20Regular /> : <Pin20Regular />} onClick={() => void togglePin(p.id)} />
+        </Tooltip>
+        <Button size="small" appearance="primary" className="proj-open" icon={<Open20Regular />} onClick={() => void openProject(p.id)}>{tx("打开")}</Button>
         <Menu positioning="below-end">
           <MenuTrigger disableButtonEnhancement>
             <Tooltip content={tx("更多操作")} relationship="label" positioning="below"><Button size="small" appearance="subtle" icon={<MoreHorizontal20Regular />} /></Tooltip>
           </MenuTrigger>
           <MenuPopover>
             <MenuList>
+              <MenuItem icon={<Open20Regular />} className="proj-open-item" onClick={() => void openProject(p.id)}>{tx("打开")}</MenuItem>
               <MenuItem icon={<Rename20Regular />} onClick={() => { setName(p.name); setEditing(true); }}>{tx("重命名")}</MenuItem>
               <MenuItem icon={<Copy20Regular />} onClick={() => void duplicateProject(p.id)}>{tx("创建副本")}</MenuItem>
               <MenuItem icon={<ArrowDownload20Regular />} onClick={() => void save()}>{tx("下载副本（.iota.json）")}</MenuItem>
+              <MenuItem icon={pinned ? <PinOff20Regular /> : <Pin20Regular />} onClick={() => void togglePin(p.id)}>{pinned ? tx("取消固定") : tx("固定")}</MenuItem>
               <MenuDivider />
               <MenuItem icon={<Delete20Regular />} onClick={() => onDelete(p)}>{tx("删除")}</MenuItem>
             </MenuList>
@@ -71,7 +76,7 @@ function ProjectRow({ p, active, onDelete }: { p: ProjectMeta; active: boolean; 
 }
 
 export function ProjectsView() {
-  const { projects, doc, createProject, importProject, deleteProject, setView, loaded } = useStore();
+  const { projects, pinned, doc, createProject, importProject, deleteProject, setView, loaded } = useStore();
   const canBack = loaded && projects.some((p) => p.id === doc.id);
   // 新建对话框
   const [tpl, setTpl] = useState<'blank' | 'sample' | null>(null);
@@ -88,6 +93,9 @@ export function ProjectsView() {
     const list = q ? projects.filter((p) => p.name.toLowerCase().includes(q)) : [...projects];
     return list.sort((a, b) => (sort === 'name' ? a.name.localeCompare(b.name, 'zh-CN') : b.updatedAt.localeCompare(a.updatedAt)));
   }, [projects, query, sort]);
+  // 固定的照 Word 单独一组放在顶上，按固定的先后
+  const pinnedRows = pinned.map((id) => shown.find((p) => p.id === id)).filter(Boolean) as ProjectMeta[];
+  const recentRows = shown.filter((p) => !pinned.includes(p.id));
 
   const onOpenProject = () => {
     const input = document.createElement('input');
@@ -167,7 +175,10 @@ export function ProjectsView() {
             </Menu>
           </div>
           <div className="proj-table">
-            {shown.map((p) => <ProjectRow key={p.id} p={p} active={p.id === doc.id && loaded} onDelete={setPendingDelete} />)}
+            {pinnedRows.length > 0 && <div className="proj-group">{tx("已固定")}</div>}
+            {pinnedRows.map((p) => <ProjectRow key={p.id} p={p} active={p.id === doc.id && loaded} pinned onDelete={setPendingDelete} />)}
+            {pinnedRows.length > 0 && recentRows.length > 0 && <div className="proj-group">{tx("最近")}</div>}
+            {recentRows.map((p) => <ProjectRow key={p.id} p={p} active={p.id === doc.id && loaded} pinned={false} onDelete={setPendingDelete} />)}
             {!projects.length && <div className="proj-empty muted">{tx("暂无文档。从上面的模板新建一个，或打开下载过的副本。")}</div>}
             {projects.length > 0 && !shown.length && <div className="proj-empty muted">{tx("没有匹配「{{q}}」的文档。", { q: query.trim() })}</div>}
           </div>
