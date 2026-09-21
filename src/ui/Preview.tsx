@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCompileState, placeFocus } from '../compiler/client';
 import { renderArtifact, renderFocus, restitchFocus, relayoutPages, showPages } from '../compiler/renderer';
+import { restoreLineShift } from './previewShift';
 import { flipBefore, flipAfter } from './flip';
 import { usePreviewZoom } from './previewZoom';
 import { humanize, locateDiagnostic, type DiagTarget } from './diagnostics';
@@ -253,7 +254,7 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
     // 补丁会把页组的 class 整个换掉，is-virtual 全丢；版面在打补丁前量好（那时是干净的），打完立刻按旧几何把
     // 视口外的页藏回去，谁再量版面都只排视口附近那几页，不用等两百页全排一遍
     renderArtifact(artifact, containerRef.current, artifactFresh, {
-      before: (c) => { virtualizeRef.current.snapshot(); if (animate) { const [a, b] = view(); flipBefore(c, a, b); } },
+      before: (c) => { restoreLineShift(); virtualizeRef.current.snapshot(); if (animate) { const [a, b] = view(); flipBefore(c, a, b); } },
       after: (c) => { virtualizeRef.current.apply(); if (animate) { const [a, b] = view(); flipAfter(c, a, b); } },
     }, usePreviewZoom.getState().perRow)
       .then((info) => {
@@ -284,7 +285,7 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
     let alive = true;
     const t0 = performance.now();
     renderFocus(focusArtifact, c, focusFresh, focusAt.start, focusAt.baseCount, {
-      before: () => virtualizeRef.current.snapshot(),
+      before: () => { restoreLineShift(); virtualizeRef.current.snapshot(); },
       after: () => virtualizeRef.current.apply(),
     }, usePreviewZoom.getState().perRow)
       .then(() => { if (alive) { useCompileState.setState({ renderMs: Math.round(performance.now() - t0) }); setRenderError(null); setRenderTick((t) => t + 1); } })

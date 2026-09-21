@@ -15,6 +15,7 @@ import { useComments } from '../editor/comments';
 import { buildIndex, mergeIndex, patchIndex, linesOfRange, caretRect, hitPos, hitTest, lineStep, selectionRects, paragraphMarks, EMPTY_INDEX, type CaretRect, type Glyph, type Hit, type Line } from './previewEdit';
 import { t as tx } from '../i18n';
 import { useInputState } from '../editor/inputState';
+import { applyLineShift, restoreLineShift } from './previewShift';
 
 const KEY_SECTION: Record<RichKey, Section> = {
   body: 'body', appendix: 'appendix', conclusion: 'conclusion', acknowledgement: 'acknowledgement', resume: 'resume',
@@ -48,13 +49,11 @@ interface PageGeom { left: number; top: number; scale: number; w: number; h: num
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
 export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: RefObject<HTMLDivElement | null>; scrollRef: RefObject<HTMLDivElement | null>; renderTick: number }) {
-  const glyphs = useCompileState((s) => s.glyphs);
-  const segments = useCompileState((s) => s.segments);
-  const mapVersion = useCompileState((s) => s.mapVersion);
+  // 字形表跟着*画上去的*那一版走（renderTick），不跟编译回来的那一刻：产物落地到画进 DOM 有几十到几百毫秒，这段里
+  // 按新表算光标 / 暂印 / 让位，画在旧字上就是一帧错乱
+  const rendered = useMemo(() => { const s = useCompileState.getState(); return { glyphs: s.glyphs, segments: s.segments, mapVersion: s.mapVersion, focusGlyphs: s.focusGlyphs, focusSegments: s.focusSegments, focusMapVersion: s.focusMapVersion }; }, [renderTick]);
+  const { glyphs, segments, mapVersion, focusGlyphs, focusSegments, focusMapVersion } = rendered;
   const fullIndex = useMemo(() => (glyphs ? buildIndex(glyphs, segments, mapVersion) : EMPTY_INDEX), [glyphs, segments, mapVersion]);
-  const focusGlyphs = useCompileState((s) => s.focusGlyphs);
-  const focusSegments = useCompileState((s) => s.focusSegments);
-  const focusMapVersion = useCompileState((s) => s.focusMapVersion);
   const focusIndex = useMemo(() => (focusGlyphs ? buildIndex(focusGlyphs, focusSegments, focusMapVersion) : null), [focusGlyphs, focusSegments, focusMapVersion]);
   // 只编一章嵌进来的页数与它顶掉的母本页数不等时，字形表（按上次整编的页码）与展示层的页序错开一截
   const [focusMap, setFocusMap] = useState<{ start: number; baseCount: number; count: number } | null>(null);
@@ -729,6 +728,19 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   const overlayText = composing !== null ? composing : pendingText || fadingText;
   const overlayW = useMemo(() => (overlayText && caretH && !fadingText ? measureText(overlayText, caretH * 0.92) : 0), [overlayText, caretH, fadingText]);
   const caretLeft = caretPx ? caretPx.left + overlayW : 0;
+  // 等重排那一会儿：光标后面同一行的字形就地让开暂印的那几个字，删掉的字形当场藏起来（藏不住的仍用纸色遮）
+  const [hiddenGone, setHiddenGone] = useState<Set<(typeof gone)[number]>>(() => new Set());
+  useLayoutEffect(() => {
+    const view = docRef.current?.querySelector<SVGSVGElement>(':scope > .preview-doc > svg.typst-doc');
+    const pageG = caret && view ? view.querySelectorAll<SVGGElement>(':scope > g.typst-page')[toDisplay(caret.page)] : null;
+    if (!caret || !pageG || (!overlayW && !gone.length) || fadingText) { restoreLineShift(); setHiddenGone((h) => (h.size ? new Set() : h)); return; }
+    const scale = caretPx?.scale || 1;
+    const onLine = gone.filter((g) => g.page === caret.page && g.y + g.h > caret.y && g.y < caret.y + caret.h && g.x >= caret.x - 0.5);
+    const hidden = applyLineShift(pageG, { caret, dx: overlayW / scale - onLine.reduce((w, g) => w + g.w, 0), hide: gone.filter((g) => g.page === caret.page) });
+    setHiddenGone(hidden);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caret, overlayW, gone, fadingText, renderTick]);
+  useEffect(() => () => restoreLineShift(), []);
   // 隐形输入框跟着光标走，但别跑出纸的右边、也别在光标算不出来时跳回 (0,0)——浏览器会把滚动容器
   // 卷过去追焦点里的输入框，整个预览就横着 / 竖着飞走了
   const inputPos = useRef({ left: 0, top: 0 });
@@ -745,7 +757,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   return (
     <div ref={layerRef} data-active={activeKey ?? ''} data-focused={focused ? 1 : 0} className={`pv-layer ${cursor} ${focused ? 'is-focused' : ''}`} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerLeave={() => setCursor('')} onContextMenu={(e) => { void onContextMenu(e); }}>
       {rects.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <div key={i} className="pv-sel" style={{ left: p.left, top: p.top, width: r.w * p.scale, height: r.h * p.scale }} /> : null; })}
-      {gone.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <div key={`g${i}`} className="pv-gone" style={{ left: p.left, top: p.top, width: r.w * p.scale + 0.5, height: r.h * p.scale }} /> : null; })}
+      {gone.map((r, i) => { if (hiddenGone.has(r)) return null; const p = pageTo(r.page, r.x, r.y); return p ? <div key={`g${i}`} className="pv-gone" style={{ left: p.left, top: p.top, width: r.w * p.scale + 0.5, height: r.h * p.scale }} /> : null; })}
       {commentRects.map((c) => c.rects.map((r, i) => { const p = pageTo(r.page, r.x, r.y); return p ? <div key={`c${c.id}${i}`} className={`pv-comment ${activeComment === c.id ? 'is-active' : ''}`} style={{ left: p.left, top: p.top, width: r.w * p.scale, height: r.h * p.scale }} /> : null; }))}
       {marks.map((r, i) => { const p = pageTo(r.page, r.x, r.y); if (!p) return null; if (r.space) return <span key={`m${i}`} className="pv-mark is-space" style={{ left: p.left, top: p.top, width: (r.w ?? r.h * 0.3) * p.scale, height: r.h * p.scale, fontSize: r.h * p.scale * 0.8, lineHeight: `${r.h * p.scale}px` }}>·</span>; const gutter = r.noIndent && !r.blank; return <span key={`m${i}`} className={`pv-mark ${r.blank ? 'is-blank' : ''} ${gutter || (r.noIndent && r.blank) ? 'is-gutter' : ''}`} style={{ left: p.left - (r.noIndent ? r.h * p.scale * 1.2 : 0), top: p.top, height: r.h * p.scale, fontSize: r.h * p.scale * 0.8, lineHeight: `${r.h * p.scale}px` }}>{r.noIndent && !r.blank ? '⇤' : r.blank && r.noIndent ? '⇤¶' : '¶'}</span>; })}
       {caretPx && overlayText && (
