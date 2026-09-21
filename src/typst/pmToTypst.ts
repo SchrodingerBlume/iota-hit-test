@@ -559,16 +559,19 @@ function blankRun(opts: SerializeOptions, blanks: PMNode[]): string {
 
 export function serializeBlocks(nodes: PMNode[] = [], opts: SerializeOptions = {}, depth = 0): string {
   // 连着的空段落 = 用户敲的空回车，合成模板的 #enter(n)（真占一行的空段，Word 的写法）
-  // 首尾的空段落是编辑器自带的（空文档、末尾那个光标位），不算；夹在内容中间的才算
+  // 正式排版时首尾的空段落是编辑器自带的（空文档、末尾那个光标位），不算；预览里照 Word 一个不少地排——
+  // 空着的一节、末尾那个光标位在页面上都得有个隐形 ¶ 可点，只在预览里写的人才有地方接着写
   const out: string[] = [];
   let blanks: PMNode[] = [];
+  const edges = !!opts.preview;
   for (const n of nodes) {
-    if (isEmptyParagraph(n)) { if (out.length) blanks.push(n); continue; }
+    if (isEmptyParagraph(n)) { if (out.length || edges) blanks.push(n); continue; }
     const s = serializeBlock(n, opts, depth);
     if (!unmarked(s).trim()) continue;
     if (blanks.length) { out.push(blankRun(opts, blanks)); blanks = []; }
     out.push(s);
   }
+  if (edges && blanks.length) out.push(blankRun(opts, blanks));
   return out.join('\n\n');
 }
 
