@@ -115,6 +115,8 @@ export function escapeLineStart(s: string): string {
 
 // ── 行内 ────────────────────────────────────────────────────────
 
+const hlFill = (m: { attrs?: Record<string, any> }) => `rgb(${JSON.stringify(/^#[0-9a-f]{6}$/i.test(m.attrs?.color ?? '') ? m.attrs!.color : '#ffff00')})`;
+
 function wrapMarks(text: string, marks: PMNode['marks'] = [], rawText?: string): string {
   let out = text;
   for (const m of marks) {
@@ -130,7 +132,7 @@ function wrapMarks(text: string, marks: PMNode['marks'] = [], rawText?: string):
       case 'fontFamily': out = `#${['songti', 'heiti', 'kaishu', 'fangsong'].includes(m.attrs?.role) ? m.attrs!.role : 'songti'}[${out}]`; break;
       case 'fontSize': out = `#text(size: zihao.${/^[a-z]+$/.test(m.attrs?.size ?? '') ? m.attrs!.size : 'xiaosi'})[${out}]`; break;
       case 'textColor': out = `#text(fill: rgb(${JSON.stringify(/^#[0-9a-f]{6}$/i.test(m.attrs?.color ?? '') ? m.attrs!.color : '#000000')}))[${out}]`; break;
-      case 'highlight': out = `#highlight(fill: rgb(${JSON.stringify(/^#[0-9a-f]{6}$/i.test(m.attrs?.color ?? '') ? m.attrs!.color : '#ffff00')}))[${out}]`; break;
+      case 'highlight': out = `#iota-hl(${hlFill(m)})[${out}]`; break;
     }
   }
   return out;
@@ -230,7 +232,14 @@ export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {
         break;
       }
       case 'hardBreak': emit(' \\\n', false); break;
-      case 'mathInline': { const ms = marksOf(n, skip).filter((m) => GROUPABLE.includes(m.type)); const s = tag(opts, n, 'node', mathInline(n.attrs)); emit(ms.length ? wrapMarks(s, ms) : s, ms.length > 0 || n.attrs?.mode === 'latex'); } break;
+      case 'mathInline': {
+        const ms = marksOf(n, skip).filter((m) => GROUPABLE.includes(m.type));
+        let s = tag(opts, n, 'node', mathInline(n.attrs));
+        // highlight 不给公式上色：公式里没有 text 元素。突出显示落在公式上的（自己带的或外层包着的），另外垫一块同高的底色
+        const hl = [...ms, ...skip].find((m) => m.type === 'highlight');
+        if (hl) s = `#iota-hl-math(${hlFill(hl)})[${s}]`;
+        emit(ms.length ? wrapMarks(s, ms) : s, ms.length > 0 || !!hl || n.attrs?.mode === 'latex');
+      } break;
       case 'cite': {
         const keys = String(n.attrs?.keys ?? '').split(/[,，;；\s]+/).map(safeLabel).filter(Boolean);
         // 写成函数调用而不是 @key：Typst 0.15 的 @ 引用会把紧跟的汉字也吞进 label

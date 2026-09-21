@@ -268,9 +268,12 @@ ${indent(resolution, 4)}
 const indent = (s: string, n: number) => s.split('\n').map((l) => (l ? ' '.repeat(n) + l : l)).join('\n');
 
 /** 预览用的隐形段落标记：空回车段每段一个 ¶，只在站内预览编译（sys.inputs.preview）时真的排字 */
-// 突出显示：Typst 的 highlight 默认按字体的 ascender / descender 画框，中西文字体的数不一样，一句里换个字体框就高低不齐；
-// 照 typst-studio 的做法按 em 定死上下沿，整行一样高（Word 的突出显示也是整行一样高）
-const HIGHLIGHT_RULE = '#set highlight(top-edge: 1.01em, bottom-edge: -0.29em)';
+// 突出显示：Typst 的 highlight 默认按字体的 ascender / descender 画框，中西文字体的数不一样、上下标又缩小，
+// 一句里框就高低不齐。照 typst-studio 的做法按 em 定上下沿，但用 context 取调用处的字号折成绝对长度，
+// 里面的上下标、引文角标一样高（Word 的突出显示整行等高）；公式里没有 text 元素、highlight 不上色，
+// 另给一个 iota-hl-math：在基线上放一个零尺寸盒，从盒里往上下画同一条带子，公式照常排在上面
+const HIGHLIGHT_RULE = `#let iota-hl(fill, body) = context highlight(fill: fill, top-edge: 1.01 * text.size, bottom-edge: -0.29 * text.size, body)
+#let iota-hl-math(fill, body) = context { let s = text.size; let w = measure(body).width; box(width: 0pt, height: 0pt, place(top + left, dy: -1.01 * s, rect(width: w, height: 1.3 * s, fill: fill))) + body }`;
 const PREVIEW_PRELUDE = `// 站内预览用：空回车段上各放一个隐形的 ¶，预览里点空行才有落点。只在 sys.inputs.preview 下排字，
 // 正式排版（PDF）里这一句退化成 #enter(n)，与模板原样一致
 // 预览里每个空段是一个与 enter(1) 同高的块、¶ 放在块里，跨页时随块折到下一页
