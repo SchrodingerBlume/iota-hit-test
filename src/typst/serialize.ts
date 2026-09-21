@@ -1,6 +1,6 @@
 // 整份工程 → main.typ（以及要一起交给编译器的旁文件）。
 // 结构照 iota-hit/template/example.typ：前置 → 主体 → 附录 → 后置。
-import type { ThesisDoc, Settings, Info, StyleEntry, OpenrightKey, LayoutDict, LocalInfoPage, TriBool } from '../model/types';
+import type { ThesisDoc, Settings, Info, StyleEntry, OpenrightKey, LayoutDict, LocalInfoPage, TriBool, HFRecord, HFLevel } from '../model/types';
 import { INFO_FIELDS, localInfoFields, type InfoFieldDef } from '../model/info';
 import { serializeDoc, escapeText, collectImages, collectRefTargets, collectCiteKeys, indexPositions, type PMNode } from './pmToTypst';
 import { computeNumbering } from './numbering';
@@ -96,11 +96,61 @@ export function typstDict(v: unknown): string {
   return entries.length ? `(${entries.map(([k, x]) => `${k}: ${typstDict(x)}`).join(', ')})` : '(:)';
 }
 export const layoutArg = (d: LayoutDict | undefined): string => (d && Object.keys(d).length ? `layout: ${typstDict(d)}` : '');
+
+/** 页眉 / 页脚那条记录折成模板的 layout.header / footer：自动的键不发，模板按档定 */
+function hfRecord(r: Partial<HFRecord> | undefined, header: boolean): LayoutDict | undefined {
+  if (!r) return undefined;
+  const out: LayoutDict = {};
+  if (r.shown !== undefined && r.shown !== 'auto') out.shown = r.shown;
+  if (r.fromEdge && !r.fromEdge.auto && r.fromEdge.value) out['from-edge'] = r.fromEdge.value;
+  const style: LayoutDict = {};
+  if (header && r.asianFont && !r.asianFont.auto && r.asianFont.value) style['asian-font'] = JSON.stringify(r.asianFont.value);
+  if (r.size && !r.size.auto && r.size.value) style.size = /^[a-z]+$/.test(r.size.value) ? `zihao.${r.size.value}` : r.size.value;
+  if (r.lineSpacing && !r.lineSpacing.auto && r.lineSpacing.value) style['line-spacing'] = r.lineSpacing.value === 'single' || r.lineSpacing.value === 'double' ? JSON.stringify(r.lineSpacing.value) : r.lineSpacing.value;
+  if (Object.keys(style).length) out.style = style;
+  if (r.border && !r.border.auto) out.border = r.border.value ? { style: JSON.stringify(r.border.value.style), thickness: r.border.value.thickness, 'from-text': r.border.value.fromText } : null;
+  return Object.keys(out).length ? out : undefined;
+}
+/** 某一层的 layout 字典：工程 JSON 里手写的那份 + 页眉页脚面板改的 */
+export function levelLayout(s: Settings, level: HFLevel): LayoutDict | undefined {
+  const base = s.layout?.[level];
+  const hf = s.headerFooter?.levels?.[level];
+  const header = hfRecord(hf?.header, true), footer = hfRecord(hf?.footer, false);
+  if (!header && !footer) return base;
+  return { ...(base ?? {}), ...(header ? { header: { ...((base?.header as LayoutDict) ?? {}), ...header } } : {}), ...(footer ? { footer: { ...((base?.footer as LayoutDict) ?? {}), ...footer } } : {}) };
+}
+// 词条按最专的那一档查（src/axes.typ：正档记 2、按轴累加），光键名会被模板自带的 -master、
+// -shenzhen 这类压住；用户改的字要在他这一篇里生效，键就得带上全部的轴、按 axes 的顺序
+function axisSuffix(s: Settings): string {
+  const seg: string[] = [s.degreeLevel];
+  if (s.degreeLevel !== 'bachelor') {
+    const dt = s.degreeType === 'auto' ? (s.form === 'practice' ? 'professional' : 'academic') : s.degreeType;
+    if (dt !== 'none') seg.push(dt);
+  }
+  seg.push(s.category, s.form, s.stage, s.campus);
+  return '-' + seg.join('-');
+}
+/** overrides:——页眉的字（内容）与高级的词条覆盖（Typst 表达式原样） */
+function overridesArg(s: Settings): string {
+  const hf = s.headerFooter;
+  if (!hf) return '';
+  const entries: string[] = [];
+  const ax = axisSuffix(s);
+  for (const [k, f] of Object.entries(hf.terms ?? {})) {
+    if (!f || f.auto || !f.value.trim()) continue;
+    const body = `[${escapeText(f.value.trim())}]`;
+    // 表单名那一条在模板里是拼法（学位、文种、阶段三个槽），用户给的是整句：常函数
+    entries.push(`${k}${ax}: ${k === 'header-report-title' ? `(..a) => ${body}` : body}`);
+  }
+  for (const e of hf.extra ?? []) if (!e.auto && /^[a-z][a-z0-9-]*$/.test(e.key.trim()) && e.expr.trim()) entries.push(`${e.key.trim()}: ${e.expr.trim()}`);
+  return entries.length ? `overrides: (${entries.join(', ')})` : '';
+}
 const localStylesArg = (d: LayoutDict | undefined): string => (d && Object.keys(d).length ? `styles: ${typstDict(d)}` : '');
 
 function settingsArgs(s: Settings): string[] {
   const args: string[] = [];
-  if (layoutArg(s.layout?.doc)) args.push(layoutArg(s.layout?.doc));
+  if (layoutArg(levelLayout(s, 'doc'))) args.push(layoutArg(levelLayout(s, 'doc')));
+  if (overridesArg(s)) args.push(overridesArg(s));
   args.push(`campus: ${JSON.stringify(s.campus)}`);
   args.push(`degree-level: ${JSON.stringify(s.degreeLevel)}`);
   args.push(`form: ${JSON.stringify(s.form)}`);
@@ -315,7 +365,7 @@ export function serializePara(doc: ThesisDoc, index: number, live?: { node: PMNo
   if (stockPrelude(s)) parts.push(stockPrelude(s));
   if (s.hyphenate === true) parts.push('#set text(hyphenate: true)');
   else if (s.hyphenate === false) parts.push('#set text(hyphenate: false)');
-  const mm = [layoutArg(s.layout?.mainmatter)].filter(Boolean);
+  const mm = [layoutArg(levelLayout(s, 'mainmatter'))].filter(Boolean);
   parts.push(mm.length ? `#show: mainmatter.with(${mm.join(', ')})` : '#show: mainmatter');
   const one: RichDoc = { type: 'doc', content: [live ? live.node as any : nodes[index]] };
   const posOf = live ? indexPositions(one as any, live.pos) : indexPositions(doc.body as any);
@@ -363,7 +413,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   const orLead = (k: OpenrightKey): string => (or(k) ? `${or(k)}, ` : '');
   const withArgs = (fn: string, ...xs: string[]) => { const a = xs.filter(Boolean); return a.length ? `#show: ${fn}.with(${a.join(', ')})` : `#show: ${fn}`; };
   const pageLayout = (k: string) => layoutArg(s.layout?.pages?.[k]);
-  parts.push(withArgs('frontmatter', or('frontmatter'), layoutArg(s.layout?.frontmatter)));
+  parts.push(withArgs('frontmatter', or('frontmatter'), layoutArg(levelLayout(s, 'frontmatter'))));
   // 封面、内封、目录与清单这几页预览里退回原版断行（layout: (linebreaks: none)）：封面内封的空行、字段表按模板自己的网格模拟
   // 量高落位，在 msword 段落里量会漂；清单条目的悬挂宽是模板 measure 编号量出来的，同一个坑（章名左缘 133.05 → 135.73 → 140.64）。
   // 这几页条目短、不折行，用模板自己的网格模拟与原版一字不差
@@ -396,7 +446,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   if (resolvePage(doc, 'listOfEquations').value) parts.push(`#list-of-equations(${[or('listOfEquations'), stockLayout('listOfEquations')].filter(Boolean).join(', ')})`);
 
   // ── 主体 ──
-  parts.push(withArgs('mainmatter', or('mainmatter'), layoutArg(s.layout?.mainmatter)));
+  parts.push(withArgs('mainmatter', or('mainmatter'), layoutArg(levelLayout(s, 'mainmatter'))));
   const body = bodyByChapters(doc, s, (r) => serializeDoc({ type: 'doc', content: (doc.body.content ?? []).slice(r.from, r.to) } as any, { headings: true, headingBase: 1, knownLabels, preview, map: { key: 'body', posOf: indexPositions(doc.body as any) } }));
   parts.push(body || '= 绪论');
 
@@ -414,7 +464,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   if (resolvePage(doc, 'appendix').value && appendix.trim()) {
     parts.push(`#appendix[\n${indent(appendix, 2)}\n]`);
   }
-  if (layoutArg(s.layout?.backmatter)) parts.push(`#show: backmatter.with(${layoutArg(s.layout?.backmatter)})`);
+  if (layoutArg(levelLayout(s, 'backmatter'))) parts.push(`#show: backmatter.with(${layoutArg(levelLayout(s, 'backmatter'))})`);
 
   const ach = generateBibtex(doc.achievementEntries ?? []);
   if (resolvePage(doc, 'achievements').value && ach.trim()) {
@@ -493,7 +543,7 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   // 缩略语的定义在前置页那一函数里；不印页，只登记
   const abbrs = doc.abbreviations.filter((a) => a.key.trim());
   if (abbrs.length) parts.push(`#list-of-abbreviations(${abbrDictOf(abbrs)}, form: none, shown: true)`);
-  const mm = [or('mainmatter'), layoutArg(s.layout?.mainmatter)].filter(Boolean);
+  const mm = [or('mainmatter'), layoutArg(levelLayout(s, 'mainmatter'))].filter(Boolean);
   parts.push(mm.length ? `#show: mainmatter.with(${mm.join(', ')})` : '#show: mainmatter');
   // 章号从上一章数起；首页页码钉在上次整编的位置
   parts.push(`#counter(heading).update(${Math.max(0, focus.chapter - 1)})${focus.page && focus.page > 1 ? `\n#counter(page).update(${focus.page})` : ''}`);

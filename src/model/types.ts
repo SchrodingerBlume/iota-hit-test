@@ -109,6 +109,29 @@ export interface Settings {
    */
   layout?: LayoutOverrides;
   localStyles?: LocalStyles;
+  /** 页眉页脚（Word 页面设置 → 版式那张卡）：逐层的 layout.header / footer，与页眉文字的词条覆盖 */
+  headerFooter?: HeaderFooterSettings;
+}
+/** 能改的值都带一个「自动」：自动 = 跟模板，填过的值留着，取消自动就回来 */
+export interface HFField<T> { auto: boolean; value: T }
+export interface HFBorder { style: 'single' | 'thin-thick-small-gap'; thickness: string; fromText: string }
+export interface HFRecord {
+  shown: TriBool;
+  fromEdge: HFField<string>;
+  /** 只有页眉有（页眉那一段的中文字体角色） */
+  asianFont: HFField<string>;
+  size: HFField<string>;
+  lineSpacing: HFField<string>;
+  border: HFField<HFBorder | null>;
+}
+export type HFLevel = 'doc' | 'frontmatter' | 'mainmatter' | 'backmatter';
+export type HeaderTermKey = 'header-university' | 'header-document-type' | 'header-degree' | 'header-stage' | 'header-report-title';
+export interface HeaderFooterSettings {
+  levels?: Partial<Record<HFLevel, { header?: Partial<HFRecord>; footer?: Partial<HFRecord> }>>;
+  /** 页眉里的字：overrides 的 header 桶里改字的那几条，值是纯文本 */
+  terms?: Partial<Record<HeaderTermKey, HFField<string>>>;
+  /** 高级：任意词条覆盖，值是 Typst 表达式原样透传（改拼法用） */
+  extra?: { key: string; expr: string; auto: boolean }[];
 }
 export type LayoutDict = Record<string, unknown>;
 /** 局部样式（只在工程 JSON 里）：pages.abstract → #abstract(styles:)，chapters → new-styles / restore-styles */

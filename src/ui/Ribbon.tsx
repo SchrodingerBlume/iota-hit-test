@@ -14,7 +14,7 @@ import {
   ChevronUp20Regular, ChevronDown20Regular, ChevronLeft20Regular, ChevronRight20Regular, Dismiss20Regular, Pin20Regular, Grid20Regular, TextParagraph20Regular,
   Translate20Regular, ImageEdit20Regular, Delete20Regular, TableSimple20Regular, ClipboardTextLtr20Regular,
   CommentAdd20Regular, CommentDismiss20Regular, Comment20Regular, TextBulletListSquare20Regular, TextEditStyle20Regular,
-  ZoomIn20Regular, AutoFitWidth20Regular, DocumentOnePage20Regular, DocumentMultiple20Regular, TextChangeCase20Regular, TextWordCount20Regular, PanelLeftText20Regular, ChevronDoubleRight16Regular,
+  ZoomIn20Regular, AutoFitWidth20Regular, DocumentOnePage20Regular, DocumentMultiple20Regular, TextChangeCase20Regular, TextWordCount20Regular, PanelLeftText20Regular, ChevronDoubleRight16Regular, DocumentHeader20Regular, DocumentFooter20Regular,
 } from '@fluentui/react-icons';
 import { useStore } from '../model/store';
 import { getEditor, getEditorMeta, onRegistryChange } from '../editor/registry';
@@ -37,6 +37,7 @@ import { useMedia, SHORT } from './useMedia';
 import { TableSizeDialog, TableTextDialog, readTableDefaults, type TableDialogKind } from './TableInsert';
 import { LengthInput } from './LengthInput';
 import { useLinkDialog } from './LinkDialog';
+import { HeaderFooterDialog, useHFDialog } from './HeaderFooterDialog';
 import { useComments, newCommentId } from '../editor/comments';
 import { commentRange } from './CommentsPane';
 import { wordAt } from '../editor/wordAt';
@@ -398,6 +399,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   return (
     <div ref={root} className={`ribbon ${none ? 'is-idle' : ''} ${collapsed ? 'is-collapsed' : ''} ${peek ? 'is-peek' : ''}`} onClick={(e) => { const t = e.target as HTMLElement; if (t.closest('.rb-btn') && !t.closest('.rb-keep')) afterCommand(); }}>
       <SymbolPicker onPick={(ch) => { chain().insertContent(ch).run(); }} />
+      <HeaderFooterDialog />
       <div className="rb-tabs">
         <div className="rb-tabs-left">
           {leading}
@@ -523,6 +525,10 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
             <>
               <Group label={tx("页面")}>
                 <B title={tx("分页符")} big icon={<DocumentPageBreak20Regular />} disabled={none || !blocks} run={ins.insertPageBreak}>{tx("分页符")}</B>
+              </Group>
+              <Group label={tx("页眉和页脚")}>
+                <B title={tx("页眉：排不排、距边界、字体字号行距、横线；页眉印什么按规范由模板定，这里能改字")} big icon={<DocumentHeader20Regular />} run={() => useHFDialog.getState().show('header')}>{tx("页眉")}</B>
+                <B title={tx("页脚：排不排、距边界、字号行距、横线；页码格式按规范由模板定")} big icon={<DocumentFooter20Regular />} run={() => useHFDialog.getState().show('footer')}>{tx("页脚")}</B>
               </Group>
               <Group label={tx("表格和图片")}>
                 <Popover open={pop === 'table'} onOpenChange={(_, d) => setPop(d.open ? 'table' : null)} positioning="below-start" trapFocus={false}>
