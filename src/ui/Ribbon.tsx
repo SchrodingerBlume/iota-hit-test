@@ -31,7 +31,7 @@ import { usePreviewZoom } from './previewZoom';
 import { ZoomMenu, WordCountBadge } from './previewTools';
 import { changeCase, type CaseKind } from '../editor/changeCase';
 import { convertChinese } from '../editor/zhconvert';
-import { FontFamilyPicker, FontSizePicker, FontColorButton } from './FontTools';
+import { FontFamilyPicker, FontSizePicker, FontColorButton, HighlightButton } from './FontTools';
 import { useCompileState } from '../compiler/client';
 import { useMedia, SHORT } from './useMedia';
 import { TableSizeDialog, TableTextDialog, readTableDefaults, type TableDialogKind } from './TableInsert';
@@ -471,7 +471,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                     <B title={tx("下标 (⌘,)")} icon={<TextSubscript20Regular />} on={!!ed?.isActive('subscript')} disabled={none} run={() => chain().toggleSubscript().run()} />
                     <B title={tx("上标 (⌘.)")} icon={<TextSuperscript20Regular />} on={!!ed?.isActive('superscript')} disabled={none} run={() => chain().toggleSuperscript().run()} />
                     <B title={tx("等宽字体")} icon={<Code20Regular />} on={!!ed?.isActive('code')} disabled={none} run={() => chain().toggleCode().run()} />
-                    <span className="rb-keep"><FontColorButton ed={ed} /></span>
+                    <span className="rb-keep rb-inline"><HighlightButton ed={ed} /><FontColorButton ed={ed} /></span>
                   </Row>
                 </Rows>
               </Group>

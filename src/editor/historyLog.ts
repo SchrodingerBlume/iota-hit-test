@@ -42,7 +42,7 @@ function fit(list: HistoryEntry[], n: number) {
 
 const MARKS: Record<string, () => string> = {
   bold: () => t("加粗"), italic: () => t("倾斜"), underline: () => t("下划线"), strike: () => t("删除线"),
-  subscript: () => t("下标"), superscript: () => t("上标"), textColor: () => t("字体颜色"),
+  subscript: () => t("下标"), superscript: () => t("上标"), textColor: () => t("字体颜色"), highlight: () => t("突出显示"),
 };
 const INSERT: Record<string, () => string> = {
   table: () => t("插入表格"), tableFigure: () => t("插入表格"), tableRow: () => t("插入行"), tableCell: () => t("插入列"), tableHeader: () => t("插入列"),

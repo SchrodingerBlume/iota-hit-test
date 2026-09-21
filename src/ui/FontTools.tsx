@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { Editor } from '@tiptap/core';
 import { Dropdown, Option, Popover, PopoverTrigger, PopoverSurface, Tooltip, Button } from '@fluentui/react-components';
-import { TextColor20Regular, FontIncrease20Regular, FontDecrease20Regular } from '@fluentui/react-icons';
+import { TextColor20Regular, Highlight20Regular, FontIncrease20Regular, FontDecrease20Regular } from '@fluentui/react-icons';
 import { ZIHAO, INLINE_FONTS, BLOCK_SIZE, type FontRole } from '../model/zihao';
 import { B, refocusPreviewAfter } from '../editor/tools';
 import { t as tx } from '../i18n';
@@ -80,6 +80,38 @@ export function FontColorButton({ ed }: { ed: Editor | null }) {
           {STANDARD.map(([c, name]) => <button key={c} type="button" className={`rb-color-cell ${cur === c ? 'on' : ''}`} title={name} style={{ background: c }} onClick={() => apply(c)} />)}
         </div>
         <label className="pv-row">{tx("其他颜色…")}<input type="color" value={cur ?? last} onChange={(e) => apply(e.target.value)} /></label>
+      </PopoverSurface>
+    </Popover>
+  );
+}
+
+/** Word「文本突出显示颜色」那 15 色（wdColorIndex 的顺序，名字照 Word 的中文资源） */
+const HIGHLIGHTS = [
+  ['#ffff00', tx("黄色")], ['#00ff00', tx("鲜绿")], ['#00ffff', tx("青绿")], ['#ff00ff', tx("粉红")], ['#0000ff', tx("蓝色")],
+  ['#ff0000', tx("红色")], ['#000080', tx("深蓝")], ['#008080', tx("青色")], ['#008000', tx("绿色")], ['#800080', tx("紫罗兰")],
+  ['#800000', tx("深红")], ['#808000', tx("深黄")], ['#808080', tx("灰色-50%")], ['#c0c0c0', tx("灰色-25%")], ['#000000', tx("黑色")],
+] as const;
+
+export function HighlightButton({ ed }: { ed: Editor | null }) {
+  const [last, setLast] = useState('#ffff00');
+  const [open, setOpen] = useState(false);
+  const cur: string | undefined = ed?.getAttributes('highlight').color;
+  const apply = (color: string | null) => { setOpen(false); refocusPreviewAfter(() => { const c = ed!.chain().focus(); (color ? c.setHighlight(color) : c.unsetHighlight()).run(); }); if (color) setLast(color); };
+  return (
+    <Popover open={open} onOpenChange={(_, d) => setOpen(d.open)} positioning="below-start" trapFocus={false}>
+      <span className="rb-split">
+        <Tooltip content={tx("文本突出显示颜色")} relationship="label" positioning="below" withArrow>
+          <Button appearance="subtle" className="rb-btn rb-color" disabled={!ed} icon={<span className="rb-color-ico"><Highlight20Regular /><i style={{ background: cur ?? last }} /></span>} onMouseDown={(e) => e.preventDefault()} onClick={() => apply(cur ? null : last)} />
+        </Tooltip>
+        <PopoverTrigger disableButtonEnhancement>
+          <Button appearance="subtle" className="rb-btn rb-menu" aria-label={tx("文本突出显示颜色")} disabled={!ed} onMouseDown={(e) => e.preventDefault()} />
+        </PopoverTrigger>
+      </span>
+      <PopoverSurface className="pv-pop rb-colors">
+        <div className="rb-color-grid rb-color-grid-5">
+          {HIGHLIGHTS.map(([c, name]) => <button key={c} type="button" className={`rb-color-cell ${cur === c ? 'on' : ''}`} title={name} style={{ background: c }} onClick={() => apply(c)} />)}
+        </div>
+        <button type="button" className={`pv-row ${cur ? '' : 'on'}`} onClick={() => apply(null)}><i className="pv-swatch" style={{ background: 'transparent' }} />{tx("无颜色")}</button>
       </PopoverSurface>
     </Popover>
   );

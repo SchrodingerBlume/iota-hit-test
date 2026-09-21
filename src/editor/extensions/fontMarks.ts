@@ -11,6 +11,8 @@ declare module '@tiptap/core' {
       unsetFontSize: () => ReturnType;
       setTextColor: (color: string) => ReturnType;
       unsetTextColor: () => ReturnType;
+      setHighlight: (color: string) => ReturnType;
+      unsetHighlight: () => ReturnType;
     };
   }
 }
@@ -50,6 +52,20 @@ export const TextColor = Mark.create({
     return {
       setTextColor: (color) => ({ commands }) => commands.setMark(this.name, { color }),
       unsetTextColor: () => ({ commands }) => commands.unsetMark(this.name),
+    };
+  },
+});
+
+/** 文本突出显示颜色：Word 的荧光笔那 15 色，写出去是 #highlight(fill:)（上下沿在序言里按 em 定死） */
+export const Highlight = Mark.create({
+  name: 'highlight',
+  addAttributes() { return { color: { default: '#ffff00', parseHTML: (el) => el.getAttribute('data-highlight'), renderHTML: (a) => ({ 'data-highlight': a.color, style: `background-color: ${a.color}` }) } }; },
+  parseHTML() { return [{ tag: 'mark[data-highlight]' }]; },
+  renderHTML({ HTMLAttributes }) { return ['mark', mergeAttributes(HTMLAttributes), 0]; },
+  addCommands() {
+    return {
+      setHighlight: (color) => ({ commands }) => commands.setMark(this.name, { color }),
+      unsetHighlight: () => ({ commands }) => commands.unsetMark(this.name),
     };
   },
 });

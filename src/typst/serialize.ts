@@ -268,6 +268,9 @@ ${indent(resolution, 4)}
 const indent = (s: string, n: number) => s.split('\n').map((l) => (l ? ' '.repeat(n) + l : l)).join('\n');
 
 /** 预览用的隐形段落标记：空回车段每段一个 ¶，只在站内预览编译（sys.inputs.preview）时真的排字 */
+// 突出显示：Typst 的 highlight 默认按字体的 ascender / descender 画框，中西文字体的数不一样，一句里换个字体框就高低不齐；
+// 照 typst-studio 的做法按 em 定死上下沿，整行一样高（Word 的突出显示也是整行一样高）
+const HIGHLIGHT_RULE = '#set highlight(top-edge: 1.01em, bottom-edge: -0.29em)';
 const PREVIEW_PRELUDE = `// 站内预览用：空回车段上各放一个隐形的 ¶，预览里点空行才有落点。只在 sys.inputs.preview 下排字，
 // 正式排版（PDF）里这一句退化成 #enter(n)，与模板原样一致
 // 预览里每个空段是一个与 enter(1) 同高的块、¶ 放在块里，跨页时随块折到下一页
@@ -288,7 +291,7 @@ const PREVIEW_PRELUDE = `// 站内预览用：空回车段上各放一个隐形�
 /** 只编正文的一章（长文档打字时用）：chapter 是一级标题的序号（1 起），page 是这一章首页在上次整编里的页码（正文计数） */
 export interface Focus { chapter: number; page?: number }
 
-const PARA_MARKS = new Set(['bold', 'italic', 'underline', 'strike', 'subscript', 'superscript', 'fontFamily', 'fontSize', 'textColor']);
+const PARA_MARKS = new Set(['bold', 'italic', 'underline', 'strike', 'subscript', 'superscript', 'fontFamily', 'fontSize', 'textColor', 'highlight']);
 /** 打字即时回显只认纯文字段：正文里的普通段落，里面只有文字与字符级格式（引用、脚注、公式、缩略语都不行——编号在片段里取不到） */
 export function paraEligible(node: PMNode | undefined | null): boolean {
   if (!node || node.type !== 'paragraph') return false;
@@ -303,6 +306,7 @@ export function serializePara(doc: ThesisDoc, index: number, live?: { node: PMNo
   const nodes = doc.body.content ?? [];
   const chapter = chapterRanges(doc.body).findIndex((r) => index >= r.from && index < r.to) + 1;
   parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *`);
+  parts.push(HIGHLIGHT_RULE);
   parts.push(PREVIEW_PRELUDE);
   parts.push(iotaHitShow(doc));
   if (stockPrelude(s)) parts.push(stockPrelude(s));
@@ -342,6 +346,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   const knownLabels = new Set<string>([...collectRefTargets(doc.body), ...collectRefTargets(doc.appendix)].map((r) => r.label));
 
   parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n// LaTeX 公式走 mitex 转成 Typst（包已随站内打包）\n#import "@preview/mitex:0.2.7": mitex, mi`);
+  parts.push(HIGHLIGHT_RULE);
   if (preview) parts.push(PREVIEW_PRELUDE);
   parts.push(iotaHitShow(doc));
   if (preview && stockPrelude(s)) parts.push(stockPrelude(s));
@@ -474,6 +479,7 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   for (const [label, info] of computeNumbering(doc.appendix as any, s, 'appendix')) if (!knownLabels.has(label)) refText.set(label, info.ref);
 
   parts.push(`#import "@local/iota-hit:${IOTA_HIT_VERSION}": *\n#import "@preview/mitex:0.2.7": mitex, mi`);
+  parts.push(HIGHLIGHT_RULE);
   parts.push(PREVIEW_PRELUDE);
   parts.push(iotaHitShow(doc));
   if (stockPrelude(s)) parts.push(stockPrelude(s));

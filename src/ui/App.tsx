@@ -33,7 +33,7 @@ import { FluentProvider, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, Men
 import { Fold } from './Fold';
 import { SettingSwitch } from './TriSwitch';
 import { watchReflow } from './reflow';
-import { Home20Regular, Save20Regular, DocumentPdf20Regular, Document20Regular, Info20Regular, WeatherSunny20Regular, WeatherMoon20Regular, Navigation20Regular, ChevronLeft20Regular } from '@fluentui/react-icons';
+import { Home20Regular, Save20Regular, ArrowExportLtr20Regular, DocumentPdf20Regular, Document20Regular, Info20Regular, WeatherSunny20Regular, WeatherMoon20Regular, Navigation20Regular, ChevronLeft20Regular } from '@fluentui/react-icons';
 import { fluentLight, fluentDark } from './fluent';
 import { SlidersHorizontal, BookText, PenLine, Library } from 'lucide-react';
 import { t as tx } from '../i18n';
@@ -332,7 +332,7 @@ export function App() {
               <Menu positioning="below-start">
                 <span className="rb-split">
                   <Tooltip content={tx("导出 PDF")} relationship="label" withArrow positioning="below">
-                    <Button appearance="subtle" size="small" className="rb-btn" icon={<DocumentPdf20Regular />} disabled={!canExportPdf} onMouseDown={(e) => e.preventDefault()} onClick={() => void onExportPdf()} />
+                    <Button appearance="subtle" size="small" className="rb-btn" icon={<ArrowExportLtr20Regular />} disabled={!canExportPdf} onMouseDown={(e) => e.preventDefault()} onClick={() => void onExportPdf()} />
                   </Tooltip>
                   <MenuTrigger disableButtonEnhancement>
                     <Button appearance="subtle" size="small" className="rb-btn rb-menu" aria-label={tx("其他导出格式")} disabled={!hasDocument} onMouseDown={(e) => e.preventDefault()} />

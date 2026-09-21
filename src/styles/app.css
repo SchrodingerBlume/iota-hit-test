@@ -1178,10 +1178,14 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .rb-font.fui-Dropdown { width: 92px; }
 .rb-size.fui-Dropdown { width: 68px; }
 .rb-font .fui-Dropdown__button, .rb-size .fui-Dropdown__button { padding: 0 6px; font-size: 12.5px; min-height: 0; }
-.rb-color-ico { position: relative; display: inline-flex; }
-.rb-color-ico i { position: absolute; left: 2px; right: 2px; bottom: -3px; height: 3px; border-radius: 1px; }
+/* 颜色钮的图标：字形 16px 靠上、色条 3px 贴底，合起来 20px，跟旁边 20px 的图标一样居中 */
+.rb-color-ico { position: relative; display: inline-flex; width: 20px; height: 20px; align-items: flex-start; justify-content: center; }
+.rb-color-ico svg { width: 16px; height: 16px; }
+.rb-color-ico i { position: absolute; left: 1px; right: 1px; bottom: 0; height: 3px; border-radius: 1px; }
 .rb-colors.fui-PopoverSurface { min-width: 180px; }
 .rb-color-grid { display: grid; grid-template-columns: repeat(10, 18px); gap: 3px; padding: 4px 14px 8px; }
+.rb-color-grid-5 { grid-template-columns: repeat(5, 18px); padding-top: 8px; }
+.rich mark[data-highlight] { color: inherit; padding: 0; }
 .rb-color-cell { width: 18px; height: 18px; border: 1px solid rgba(0,0,0,0.25); border-radius: 2px; padding: 0; cursor: pointer; }
 .rb-color-cell:hover, .rb-color-cell.on { outline: 2px solid var(--accent); outline-offset: 1px; }
 .rb-colors label.pv-row { justify-content: space-between; }
