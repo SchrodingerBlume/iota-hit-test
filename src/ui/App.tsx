@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore, type Section } from '../model/store';
 import type { ThesisDoc } from '../model/types';
-import { startCompiler, requestCompile, requestPara, resetForProject, exportPdf, useCompileState, setFocusPlacer, LONG_DOC } from '../compiler/client';
+import { startCompiler, requestCompile, requestPara, resetForProject, exportPdf, useCompileState } from '../compiler/client';
 import { serializeProject, serializePara, paraEligible, linebreaksInput } from '../typst/serialize';
 import { chapterAt, chapterPages } from '../compiler/focus';
 import { getEditor, onRegistryChange } from '../editor/registry';
@@ -82,38 +82,6 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
   const paraActiveUntil = useRef(0);
   const docRef = useRef(doc);
   docRef.current = doc;
-  const lastDoc = useRef<ThesisDoc | null>(null);
-  // 只编一章落地时按当时的整编算它顶在哪几页（整编在后台跑，产物发出去之后章的起始页可能挪了）
-  useEffect(() => {
-    setFocusPlacer((k) => {
-      const cs = useCompileState.getState();
-      const cp = chapterPages(docRef.current.body, cs.glyphs, cs.segments, cs.mapVersion, cs.pageCount);
-      if (!cp || cp.pages[k - 1] === undefined) return null;
-      const start = cp.pages[k - 1];
-      return { start, baseCount: Math.max(0, (cp.pages[k] ?? cp.end) - start) };
-    });
-    return () => setFocusPlacer(null);
-  }, []);
-  // 光标换到别的章：先把那一章编一遍暖着（前台那条道的缓存是按章的，冷的一章第一击要好几秒），停手时才编
-  const [warmTick, setWarmTick] = useState(0);
-  const warmChapter = useRef(0);
-  useEffect(() => {
-    if (!loaded) return;
-    let ed = getEditor('body');
-    const onSel = () => {
-      const e = getEditor('body');
-      const cs = useCompileState.getState();
-      if (!e || e.isDestroyed || cs.status !== 'ready' || cs.pageCount < LONG_DOC || !cs.artifact) return;
-      const k = chapterAt(docRef.current.body, e);
-      if (!k || k === warmChapter.current) return;
-      warmChapter.current = k;
-      setWarmTick((n) => n + 1);
-    };
-    const attach = () => { ed?.off('selectionUpdate', onSel); ed = getEditor('body'); ed?.on('selectionUpdate', onSel); };
-    attach();
-    const off = onRegistryChange(attach);
-    return () => { off(); ed?.off('selectionUpdate', onSel); };
-  }, [loaded]);
   // 打字即时回显：直接听正文编辑器的事务（工程 JSON 要停 100 ms 才回灌），光标所在是纯文字段就先只编这一段（85 ms）
   useEffect(() => {
     if (!loaded) return;
@@ -122,7 +90,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
       if (!transaction.docChanged) return;
       const e = getEditor('body');
       const cs = useCompileState.getState();
-      if (!e || e.isDestroyed || cs.status !== 'ready' || cs.pageCount < LONG_DOC || !cs.artifact || useFontState.getState().restoring) return;
+      if (!e || e.isDestroyed || cs.status !== 'ready' || cs.pageCount < FOCUS_PAGES || !cs.artifact || useFontState.getState().restoring) return;
       const $from = e.state.selection.$from;
       if ($from.depth < 1) return;
       const node = $from.node(1).toJSON();
@@ -158,25 +126,21 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
     const wantFull = fullTick !== lastFull.current;
     lastFull.current = fullTick;
     let focus: { id: string; chapter: number; start: number; baseCount: number; page: number } | null = null;
-    if (!force && !wantFull && pageCount >= LONG_DOC && cs.artifact) {
+    if (!force && !wantFull && pageCount >= FOCUS_PAGES && cs.artifact) {
       const k = chapterAt(doc.body, getEditor('body'));
       const cp = k ? chapterPages(doc.body, cs.glyphs, cs.segments, cs.mapVersion, pageCount) : null;
       if (k && cp && cp.pages[k - 1] !== undefined) {
         const start = cp.pages[k - 1];
         const next = cp.pages[k] ?? cp.end;
         focus = { id: `${doc.id}:body:${k}:${cs.focusGen}`, chapter: k, start, baseCount: Math.max(0, next - start), page: start - cp.pages[0] + 1 };
-        warmChapter.current = k;
       }
     }
     // 打字即时回显在跑（见下面那个 effect）：章级编译推后到停手 400 ms
     const para = focus && performance.now() < paraActiveUntil.current;
-    // 光标换章的暖身编译：文档没变，不必再排整编
-    const docChanged = lastDoc.current !== doc;
-    lastDoc.current = doc;
-    if (focus && docChanged) {
-      // 停手一会儿再整编（校准页码、目录、跨章引用）；整编在后台那条道上跑的话不挡打字，早点校准
+    if (focus) {
+      // 停手一会儿再整编（校准页码、目录、跨章引用）
       window.clearTimeout(fullTimer.current);
-      fullTimer.current = window.setTimeout(() => setFullTick((n) => n + 1), useCompileState.getState().bgReady ? FULL_AFTER_IDLE_BG : FULL_AFTER_IDLE);
+      fullTimer.current = window.setTimeout(() => setFullTick((n) => n + 1), FULL_AFTER_IDLE);
     }
     const t = window.setTimeout(async () => {
       const project = serializeProject(doc, { preview: true, focus: focus ? { chapter: focus.chapter, page: focus.page } : undefined });
@@ -214,7 +178,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
         // 避免每次击键都扫描约 200 页；位置映射会把旧表换算到当前文档。
         // 只编一章时那份字形表只有一章，便宜，每次都要
         glyphs: !!focus || force || previewFocused || wantFull || pageCount < 80,
-        focus: focus ? { id: focus.id, chapter: focus.chapter, start: focus.start, baseCount: focus.baseCount } : undefined,
+        focus: focus ? { id: focus.id, start: focus.start, baseCount: focus.baseCount } : undefined,
         main: project.main,
         files: project.files,
         inputs: linebreaksInput(doc.settings) ? { linebreaks: linebreaksInput(doc.settings)! } : {},
@@ -223,16 +187,15 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
         segments: project.segments,
         version: docVersion(),
       });
-    // 防抖按上一次编译的耗时来：编译在 worker 里，主线程不等它，排队的只留最新一份，所以不必等用户停手——
-    // 短文档一击一编（十几页的稿编一次一百多毫秒，击键到预览两百毫秒内），长的按耗时的三成推后
-    }, force ? 0 : para ? 400 : focus ? 60 : Math.min(600, Math.max(30, (useCompileState.getState().lastMs ?? 0) * 0.3)));
+    // 防抖按上一次编译的耗时来：编译在 worker 里，主线程不等它，排队的只留最新一份，所以不必等用户停手太久
+    }, force ? 0 : para ? 400 : focus ? 150 : Math.min(600, Math.max(180, (useCompileState.getState().lastMs ?? 0) * 0.3)));
     return () => { cancelled = true; window.clearTimeout(t); };
-  }, [doc, loaded, status, fontsVersion, engineGen, refresh, restoring, previewFocused, composing, fullTick, warmTick]);
+  }, [doc, loaded, status, fontsVersion, engineGen, refresh, restoring, previewFocused, composing, fullTick]);
   return sent;
 }
-/** 停手这么久之后整编：整编与打字同一个 worker 时要等久些，在后台那条道上跑就早点 */
+/** 页数到了这个数才只编一章；停手这么久之后整编 */
+const FOCUS_PAGES = 40;
 const FULL_AFTER_IDLE = 2500;
-const FULL_AFTER_IDLE_BG = 1000;
 
 function download(name: string, data: BlobPart, type: string) {
   const a = document.createElement('a');
@@ -346,8 +309,8 @@ export function App() {
     }
   })();
 
-  const dot = compile.status === 'error' ? 'err' : compile.status === 'booting' || compile.compiling || compile.bgCompiling ? 'busy' : 'ok';
-  const statusText = compile.status === 'booting' ? tx("正在准备预览…") : compile.status === 'error' ? tx("预览不可用") : busy ?? (compile.compiling ? tx("正在更新预览…") : compile.bgCompiling ? tx("正在后台重排全文…") : compile.diagnostics.some((d) => d.severity === 'error') ? tx("排版失败") : compile.lastMs !== null ? tx("预览已更新（{{s}} 秒）", { s: (compile.lastMs / 1000).toFixed(1) }) : tx("预览已更新"));
+  const dot = compile.status === 'error' ? 'err' : compile.status === 'booting' || compile.compiling ? 'busy' : 'ok';
+  const statusText = compile.status === 'booting' ? tx("正在准备预览…") : compile.status === 'error' ? tx("预览不可用") : busy ?? (compile.compiling ? tx("正在更新预览…") : compile.diagnostics.some((d) => d.severity === 'error') ? tx("排版失败") : compile.lastMs !== null ? tx("预览已更新（{{s}} 秒）", { s: (compile.lastMs / 1000).toFixed(1) }) : tx("预览已更新"));
   const GROUP_ICON: Record<string, React.ReactNode> = { 设置: <SlidersHorizontal />, 前置: <BookText />, 主体: <PenLine />, 后置: <Library /> };
 
   return (
