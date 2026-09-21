@@ -12,7 +12,8 @@ export function FontRecovery() {
   const docId = useStore((s) => s.doc.id);
   const editing = useStore((s) => s.loaded && s.view === 'editor');
   const status = useCompileState((s) => s.status);
-  const engineGen = useCompileState((s) => s.engineGen);
+  // 哪条道起了新 worker（前台重启、后台整编那条道起来）都要把用户字体再发一遍
+  const engineGen = useCompileState((s) => s.lanesGen);
   const families = useCompileState((s) => s.families);
   const { busy, error, canQuery, readLocal, addFiles, restoring } = useFontState();
   const [restored, setRestored] = useState('');

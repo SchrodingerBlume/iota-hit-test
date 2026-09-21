@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { useCompileState } from '../compiler/client';
-import { renderArtifact, renderFocus, relayoutPages, showPages } from '../compiler/renderer';
+import { useCompileState, placeFocus } from '../compiler/client';
+import { renderArtifact, renderFocus, restitchFocus, relayoutPages, showPages } from '../compiler/renderer';
 import { flipBefore, flipAfter } from './flip';
 import { usePreviewZoom } from './previewZoom';
 import { humanize, locateDiagnostic, type DiagTarget } from './diagnostics';
@@ -256,7 +256,17 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
       before: (c) => { virtualizeRef.current.snapshot(); if (animate) { const [a, b] = view(); flipBefore(c, a, b); } },
       after: (c) => { virtualizeRef.current.apply(); if (animate) { const [a, b] = view(); flipAfter(c, a, b); } },
     }, usePreviewZoom.getState().perRow)
-      .then((info) => { if (alive) { useCompileState.setState({ renderMs: Math.round(performance.now() - t0), pageCount: info.length }); setRenderError(null); setRenderTick((t) => t + 1); } })
+      .then((info) => {
+        if (!alive) return;
+        // 手里那章的产物比这份整编新（整编在后台跑的那几秒里接着敲了字）：按新整编的落点再顶进去，别闪回旧字
+        const s = useCompileState.getState();
+        if (s.focusArtifact && s.focusAt && containerRef.current) {
+          const at = placeFocus?.(s.focusAt.chapter);
+          if (at && restitchFocus(containerRef.current, at.start, at.baseCount, usePreviewZoom.getState().perRow)) useCompileState.setState({ focusAt: { ...s.focusAt, ...at } });
+          else useCompileState.setState({ focusArtifact: null, focusAt: null, focusGlyphs: null });
+        }
+        useCompileState.setState({ renderMs: Math.round(performance.now() - t0), pageCount: info.length }); setRenderError(null); setRenderTick((t) => t + 1);
+      })
       .catch((e) => {
         if (!alive) return;
         setRenderError(String(e?.message ?? e));

@@ -100,6 +100,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     const ed = target ?? pendingChange.current;
     if (!ed || ed.isDestroyed || pendingChange.current !== ed) return;
     window.clearTimeout(changeTimer.current);
+    changeTimer.current = 0;
     pendingChange.current = null;
     const json = ed.getJSON() as RichDoc;
     lastEmitted.current = json;
@@ -125,11 +126,11 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
     ],
     content: value,
     onUpdate: ({ editor }) => {
-      // getJSON 会遍历整节文档。长论文连续输入时只在短暂停顿后做一次，
-      // 否则每个按键都会同步扫描上百页，直接阻塞输入事件；也别撞上打字即时回显那一趟（发出去 ~120 ms 回来）
+      // getJSON 会遍历整节文档。*节流不是防抖*：连续打字时也按节奏回灌，预览才能跟着每个字走；短文档 100 ms 一回，
+      // 长论文 150 ms 一回（每回都要扫上百页，别撞上打字即时回显那一趟：发出去 ~120 ms 回来）
       pendingChange.current = editor;
-      window.clearTimeout(changeTimer.current);
-      changeTimer.current = window.setTimeout(() => commitChange(editor), 250);
+      if (changeTimer.current) return;
+      changeTimer.current = window.setTimeout(() => { changeTimer.current = 0; commitChange(editor); }, editor.state.doc.content.size > 60000 ? 150 : 100);
     },
     onBlur: ({ editor }) => commitChange(editor),
     // 每一笔改动的 mapping 记下来：预览区的字形表要靠它把老位置换算成新位置

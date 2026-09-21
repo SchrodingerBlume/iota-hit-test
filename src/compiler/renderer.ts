@@ -240,18 +240,32 @@ export async function renderFocus(artifact: Uint8Array, container: HTMLElement, 
   // 尾巴上的文献表那几页纸宽是 FOCUS_TAIL_WIDTH：不是这一章的，不上屏
   const tail = all.findIndex((p) => Math.abs(p.width - FOCUS_TAIL_WIDTH) < 0.01);
   const pages = tail < 0 ? all : all.slice(0, tail);
+  fm.setAttribute('data-focus-count', String(pages.length));
+  stitch(container, master, view, pages.length, start, baseCount, perRow);
+  hooks.after?.(container, pages);
+  return pages;
+}
+/** 展示层 = 整编第 start 页之前 + 这一章的 count 页 + 整编第 start + baseCount 页之后 */
+function stitch(container: HTMLElement, master: SVGSVGElement, view: SVGSVGElement, count: number, start: number, baseCount: number, perRow: number) {
   const total = pagesOf(master).length;
   const s0 = Math.max(0, Math.min(start, total));
   const bc = Math.max(0, Math.min(baseCount, total - s0));
   const srcs: Src[] = [];
   for (let i = 0; i < s0; i++) srcs.push({ kind: 'm', i });
-  for (let j = 0; j < pages.length; j++) srcs.push({ kind: 'f', i: j });
+  for (let j = 0; j < count; j++) srcs.push({ kind: 'f', i: j });
   for (let i = s0 + bc; i < total; i++) srcs.push({ kind: 'm', i });
-  focusOf.set(container, { start: s0, baseCount: bc, count: pages.length });
+  focusOf.set(container, { start: s0, baseCount: bc, count });
   rebuild(container, view, srcs);
   layoutPages(container, [], perRow);
-  hooks.after?.(container, pages);
-  return pages;
+}
+/** 整编换了版、手里那章的产物却更新：不重画，只把它按新整编的落点再顶进去 */
+export function restitchFocus(container: HTMLElement, start: number, baseCount: number, perRow = 1): boolean {
+  const master = container.querySelector(':scope > svg.typst-master') as SVGSVGElement | null;
+  const view = container.querySelector(':scope > svg.typst-doc') as SVGSVGElement | null;
+  const fm = container.querySelector(':scope > svg.typst-focus') as SVGSVGElement | null;
+  if (!master || !view || !fm) return false;
+  stitch(container, master, view, Number(fm.getAttribute('data-focus-count') ?? pagesOf(fm).length), start, baseCount, perRow);
+  return true;
 }
 
 /**

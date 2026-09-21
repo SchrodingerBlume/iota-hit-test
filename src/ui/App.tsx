@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore, type Section } from '../model/store';
 import type { ThesisDoc } from '../model/types';
-import { startCompiler, requestCompile, requestPara, resetForProject, exportPdf, useCompileState } from '../compiler/client';
+import { startCompiler, requestCompile, requestPara, resetForProject, exportPdf, useCompileState, setFocusPlacer, LONG_DOC } from '../compiler/client';
 import { serializeProject, serializePara, paraEligible, linebreaksInput } from '../typst/serialize';
 import { chapterAt, chapterPages } from '../compiler/focus';
 import { getEditor, onRegistryChange } from '../editor/registry';
@@ -82,6 +82,38 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
   const paraActiveUntil = useRef(0);
   const docRef = useRef(doc);
   docRef.current = doc;
+  const lastReq = useRef<{ doc: ThesisDoc; key: { focus: string; glyphs: boolean } } | null>(null);
+  // 只编一章落地时按当时的整编算它顶在哪几页（整编在后台跑，产物发出去之后章的起始页可能挪了）
+  useEffect(() => {
+    setFocusPlacer((k) => {
+      const cs = useCompileState.getState();
+      const cp = chapterPages(docRef.current.body, cs.glyphs, cs.segments, cs.mapVersion, cs.pageCount);
+      if (!cp || cp.pages[k - 1] === undefined) return null;
+      const start = cp.pages[k - 1];
+      return { start, baseCount: Math.max(0, (cp.pages[k] ?? cp.end) - start) };
+    });
+    return () => setFocusPlacer(null);
+  }, []);
+  // 光标换到别的章：先把那一章编一遍暖着（前台那条道的缓存是按章的，冷的一章第一击要好几秒），停手时才编
+  const [warmTick, setWarmTick] = useState(0);
+  const warmChapter = useRef(0);
+  useEffect(() => {
+    if (!loaded) return;
+    let ed = getEditor('body');
+    const onSel = () => {
+      const e = getEditor('body');
+      const cs = useCompileState.getState();
+      if (!e || e.isDestroyed || cs.status !== 'ready' || cs.pageCount < LONG_DOC || !cs.artifact) return;
+      const k = chapterAt(docRef.current.body, e);
+      if (!k || k === warmChapter.current) return;
+      warmChapter.current = k;
+      setWarmTick((n) => n + 1);
+    };
+    const attach = () => { ed?.off('selectionUpdate', onSel); ed = getEditor('body'); ed?.on('selectionUpdate', onSel); };
+    attach();
+    const off = onRegistryChange(attach);
+    return () => { off(); ed?.off('selectionUpdate', onSel); };
+  }, [loaded]);
   // 打字即时回显：直接听正文编辑器的事务（工程 JSON 要停 100 ms 才回灌），光标所在是纯文字段就先只编这一段（85 ms）
   useEffect(() => {
     if (!loaded) return;
@@ -90,7 +122,7 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
       if (!transaction.docChanged) return;
       const e = getEditor('body');
       const cs = useCompileState.getState();
-      if (!e || e.isDestroyed || cs.status !== 'ready' || cs.pageCount < FOCUS_PAGES || !cs.artifact || useFontState.getState().restoring) return;
+      if (!e || e.isDestroyed || cs.status !== 'ready' || cs.pageCount < LONG_DOC || !cs.artifact || useFontState.getState().restoring) return;
       const $from = e.state.selection.$from;
       if ($from.depth < 1) return;
       const node = $from.node(1).toJSON();
@@ -109,93 +141,115 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
     const off = onRegistryChange(attach);
     return () => { off(); ed?.off('transaction', onTr); window.clearTimeout(paraTimer.current); };
   }, [loaded]);
-  useEffect(() => () => window.clearTimeout(fullTimer.current), []);
-  useEffect(() => {
-    if (!loaded || status !== 'ready' || composing) return;
-    // 读 store 里的现值：引擎刚重启时 FontRecovery 的 effect 先跑、把 restoring 拨成 true，闭包里的还是旧的 false，
-    // 按旧值就会先用替代字体编一遍、字体到了再编一遍——预览闪一下「字体丢了」
-    if ((restoring || useFontState.getState().restoring) && doc.settings.fontset !== 'webapp') return;
-    let cancelled = false;
-    // 换了工程：预览区已被项目管理页卸掉，渲染器没有上一版可以打差，增量产物会让它崩（reflexo 的 module unwrap），整个重编
-    // 字体表换了也整个重来：增量差分里的字形还指着旧字体，渲染器接不上
-    const force = refresh !== lastRefresh.current || engineKey !== lastEngine.current || lastProject.current !== doc.id || fontsVersion !== lastFonts.current || engineGen !== lastGen.current;
-    if (lastProject.current !== doc.id) { resetForProject(doc.id); useComments.getState().setActive(null); usePreviewSurface.getState().set({ activeKey: null, focused: false }); }
+  // 排一次编译。*节流不是防抖*：连续打字时不重新计时，到点按当时最新的文档编（编译在 worker 里、队里只留最新一份），
+  // 十几页的稿每个字都能上屏，几百页的按只编一章 / 只编一段那两条走；force / 整编要立刻发
+  const compileTimer = useRef(0);
+  useEffect(() => () => { window.clearTimeout(fullTimer.current); window.clearTimeout(compileTimer.current); }, []);
+  const previewFocusedRef = useRef(previewFocused);
+  previewFocusedRef.current = previewFocused;
+  const fire = async (force: boolean, wantFull: boolean) => {
+    const doc = docRef.current;
     const cs = useCompileState.getState();
     const pageCount = cs.pageCount;
     // 只编一章的条件：整编过、页数多、光标在正文的某一章里（预览里直接编辑也走这条：那份字形表是这一章自己的，并进整编那份用）
-    const wantFull = fullTick !== lastFull.current;
-    lastFull.current = fullTick;
     let focus: { id: string; chapter: number; start: number; baseCount: number; page: number } | null = null;
-    if (!force && !wantFull && pageCount >= FOCUS_PAGES && cs.artifact) {
+    if (!force && !wantFull && pageCount >= LONG_DOC && cs.artifact) {
       const k = chapterAt(doc.body, getEditor('body'));
       const cp = k ? chapterPages(doc.body, cs.glyphs, cs.segments, cs.mapVersion, pageCount) : null;
       if (k && cp && cp.pages[k - 1] !== undefined) {
         const start = cp.pages[k - 1];
         const next = cp.pages[k] ?? cp.end;
         focus = { id: `${doc.id}:body:${k}:${cs.focusGen}`, chapter: k, start, baseCount: Math.max(0, next - start), page: start - cp.pages[0] + 1 };
+        warmChapter.current = k;
       }
     }
-    // 打字即时回显在跑（见下面那个 effect）：章级编译推后到停手 400 ms
-    const para = focus && performance.now() < paraActiveUntil.current;
-    if (focus) {
-      // 停手一会儿再整编（校准页码、目录、跨章引用）
+    // 上一次真发出去的是哪份文档：没变的（光标换章的暖身编译）不必再排整编；文档、要编的范围、要不要字形表都没变
+    // （字体恢复的开关翻一下、状态变一下这类）就一个字都不编——几百页的稿一次整编几秒，落地还要重排一遍预览
+    const docChanged = lastReq.current?.doc !== doc;
+    // 首次排版、小文档与预览直接编辑需要精确字形表。长文档在左侧连续输入时沿用旧表，避免每次击键都扫描约 200 页；
+    // 位置映射会把旧表换算到当前文档。只编一章时那份字形表只有一章，便宜，每次都要
+    const glyphs = !!focus || force || previewFocusedRef.current || wantFull || pageCount < 80;
+    const reqKey = { focus: focus?.id ?? '', glyphs };
+    // 少要一份字形表不是重编的理由
+    if (!force && !wantFull && !docChanged && lastReq.current?.key.focus === reqKey.focus && (!glyphs || lastReq.current.key.glyphs)) return;
+    // 这一份算发出去了（下面读图要等）：等的时候 effect 再跑一遍不会再发一份一样的
+    lastReq.current = { doc, key: reqKey };
+    if (focus && docChanged) {
+      // 停手一会儿再整编（校准页码、目录、跨章引用）；整编在后台那条道上跑的话不挡打字，早点校准
       window.clearTimeout(fullTimer.current);
-      fullTimer.current = window.setTimeout(() => setFullTick((n) => n + 1), FULL_AFTER_IDLE);
+      fullTimer.current = window.setTimeout(() => setFullTick((n) => n + 1), cs.bgReady ? FULL_AFTER_IDLE_BG : FULL_AFTER_IDLE);
     }
-    const t = window.setTimeout(async () => {
-      const project = serializeProject(doc, { preview: true, focus: focus ? { chapter: focus.chapter, page: focus.page } : undefined });
-      // 换了项目：图片名字空间变了，worker 里映射的旧图全撤掉，重新发
-      let stale: string[] = [];
-      const nextSent = new Map(sent.current);
-      if (lastProject.current !== doc.id || engineGen !== lastGen.current) {
-        // 换了工程、或引擎重启过（新 worker 里什么图都没有）：全部重发
-        stale = [...sent.current.keys()];
-        nextSent.clear();
-      }
-      const images: { name: string; data: ArrayBuffer }[] = [];
-      for (const name of project.images) {
-        if (nextSent.has(name)) continue;
-        const buf = await imageBytes(name);
-        if (cancelled) return;
-        if (!buf) continue;
-        images.push({ name, data: buf.slice(0) });
-        nextSent.set(name, buf.byteLength);
-      }
-      const removeImages = [...new Set([...stale, ...[...nextSent.keys()].filter((n) => !project.images.includes(n))])].filter((n) => !images.some((i) => i.name === n));
-      for (const n of removeImages) nextSent.delete(n);
-      if (cancelled) return;
-      sent.current = nextSent;
-      lastProject.current = doc.id;
-      lastRefresh.current = refresh;
-      lastFonts.current = fontsVersion;
-      lastGen.current = engineGen;
-      lastEngine.current = engineKey;
-      lastFocusId.current = focus?.id ?? '';
-      requestCompile({
-        docId: doc.id,
-        force,
-        // 首次排版、小文档与预览直接编辑需要精确字形表。长文档在左侧连续输入时沿用旧表，
-        // 避免每次击键都扫描约 200 页；位置映射会把旧表换算到当前文档。
-        // 只编一章时那份字形表只有一章，便宜，每次都要
-        glyphs: !!focus || force || previewFocused || wantFull || pageCount < 80,
-        focus: focus ? { id: focus.id, start: focus.start, baseCount: focus.baseCount } : undefined,
-        main: project.main,
-        files: project.files,
-        inputs: linebreaksInput(doc.settings) ? { linebreaks: linebreaksInput(doc.settings)! } : {},
-        images,
-        removeImages,
-        segments: project.segments,
-        version: docVersion(),
-      });
-    // 防抖按上一次编译的耗时来：编译在 worker 里，主线程不等它，排队的只留最新一份，所以不必等用户停手太久
-    }, force ? 0 : para ? 400 : focus ? 150 : Math.min(600, Math.max(180, (useCompileState.getState().lastMs ?? 0) * 0.3)));
-    return () => { cancelled = true; window.clearTimeout(t); };
-  }, [doc, loaded, status, fontsVersion, engineGen, refresh, restoring, previewFocused, composing, fullTick]);
+    const project = serializeProject(doc, { preview: true, focus: focus ? { chapter: focus.chapter, page: focus.page } : undefined });
+    // 换了项目：图片名字空间变了，worker 里映射的旧图全撤掉，重新发
+    let stale: string[] = [];
+    const nextSent = new Map(sent.current);
+    const gen = useCompileState.getState().engineGen;
+    if (lastProject.current !== doc.id || gen !== lastGen.current) {
+      // 换了工程、或引擎重启过（新 worker 里什么图都没有）：全部重发
+      stale = [...sent.current.keys()];
+      nextSent.clear();
+    }
+    lastProject.current = doc.id;
+    lastGen.current = gen;
+    const images: { name: string; data: ArrayBuffer }[] = [];
+    for (const name of project.images) {
+      if (nextSent.has(name)) continue;
+      const buf = await imageBytes(name);
+      if (docRef.current.id !== doc.id) return;
+      if (!buf) continue;
+      images.push({ name, data: buf.slice(0) });
+      nextSent.set(name, buf.byteLength);
+    }
+    const removeImages = [...new Set([...stale, ...[...nextSent.keys()].filter((n) => !project.images.includes(n))])].filter((n) => !images.some((i) => i.name === n));
+    for (const n of removeImages) nextSent.delete(n);
+    if (docRef.current.id !== doc.id) return;
+    sent.current = nextSent;
+    lastFocusId.current = focus?.id ?? '';
+    requestCompile({
+      docId: doc.id,
+      force,
+      glyphs,
+      focus: focus ? { id: focus.id, chapter: focus.chapter, start: focus.start, baseCount: focus.baseCount } : undefined,
+      main: project.main,
+      files: project.files,
+      inputs: linebreaksInput(doc.settings) ? { linebreaks: linebreaksInput(doc.settings)! } : {},
+      images,
+      removeImages,
+      segments: project.segments,
+      version: docVersion(),
+    });
+  };
+  const fireRef = useRef(fire);
+  fireRef.current = fire;
+  useEffect(() => {
+    if (!loaded || status !== 'ready' || composing) return;
+    // 读 store 里的现值：引擎刚重启时 FontRecovery 的 effect 先跑、把 restoring 拨成 true，闭包里的还是旧的 false，
+    // 按旧值就会先用替代字体编一遍、字体到了再编一遍——预览闪一下「字体丢了」
+    if ((restoring || useFontState.getState().restoring) && doc.settings.fontset !== 'webapp') return;
+    // 换了工程：预览区已被项目管理页卸掉，渲染器没有上一版可以打差，增量产物会让它崩（reflexo 的 module unwrap），整个重编
+    // 字体表换了也整个重来：增量差分里的字形还指着旧字体，渲染器接不上
+    const force = refresh !== lastRefresh.current || engineKey !== lastEngine.current || lastProject.current !== doc.id || fontsVersion !== lastFonts.current || engineGen !== lastGen.current;
+    if (lastProject.current !== doc.id) { resetForProject(doc.id); useComments.getState().setActive(null); usePreviewSurface.getState().set({ activeKey: null, focused: false }); }
+    lastRefresh.current = refresh;
+    lastFonts.current = fontsVersion;
+    lastEngine.current = engineKey;
+    const wantFull = fullTick !== lastFull.current;
+    lastFull.current = fullTick;
+    // 已经排着一次：到点按最新的文档编，不重新计时（防抖会让连续打字期间一次都不编）
+    if (compileTimer.current && !force && !wantFull) return;
+    const cs = useCompileState.getState();
+    const long = cs.pageCount >= LONG_DOC && !!cs.artifact;
+    // 打字即时回显在跑（见上面那个 effect）：章级编译推后到停手 400 ms；长文档按只编一章的节奏，短文档按上一次耗时的三成
+    const para = long && performance.now() < paraActiveUntil.current;
+    const delay = force || wantFull ? 0 : para ? 400 : long ? 60 : Math.min(600, Math.max(30, (cs.lastMs ?? 0) * 0.3));
+    window.clearTimeout(compileTimer.current);
+    compileTimer.current = window.setTimeout(() => { compileTimer.current = 0; void fireRef.current(force, wantFull); }, delay);
+  }, [doc, loaded, status, fontsVersion, engineGen, refresh, restoring, previewFocused, composing, fullTick, warmTick]);
   return sent;
 }
-/** 页数到了这个数才只编一章；停手这么久之后整编 */
-const FOCUS_PAGES = 40;
+/** 停手这么久之后整编：整编与打字同一个 worker 时要等久些，在后台那条道上跑就早点 */
 const FULL_AFTER_IDLE = 2500;
+const FULL_AFTER_IDLE_BG = 1000;
 
 function download(name: string, data: BlobPart, type: string) {
   const a = document.createElement('a');
@@ -309,8 +363,8 @@ export function App() {
     }
   })();
 
-  const dot = compile.status === 'error' ? 'err' : compile.status === 'booting' || compile.compiling ? 'busy' : 'ok';
-  const statusText = compile.status === 'booting' ? tx("正在准备预览…") : compile.status === 'error' ? tx("预览不可用") : busy ?? (compile.compiling ? tx("正在更新预览…") : compile.diagnostics.some((d) => d.severity === 'error') ? tx("排版失败") : compile.lastMs !== null ? tx("预览已更新（{{s}} 秒）", { s: (compile.lastMs / 1000).toFixed(1) }) : tx("预览已更新"));
+  const dot = compile.status === 'error' ? 'err' : compile.status === 'booting' || compile.compiling || compile.bgCompiling ? 'busy' : 'ok';
+  const statusText = compile.status === 'booting' ? tx("正在准备预览…") : compile.status === 'error' ? tx("预览不可用") : busy ?? (compile.compiling ? tx("正在更新预览…") : compile.bgCompiling ? tx("正在后台重排全文…") : compile.diagnostics.some((d) => d.severity === 'error') ? tx("排版失败") : compile.lastMs !== null ? tx("预览已更新（{{s}} 秒）", { s: (compile.lastMs / 1000).toFixed(1) }) : tx("预览已更新"));
   const GROUP_ICON: Record<string, React.ReactNode> = { 设置: <SlidersHorizontal />, 前置: <BookText />, 主体: <PenLine />, 后置: <Library /> };
 
   return (
