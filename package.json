@@ -14,7 +14,8 @@
     "packages": "node scripts/bundle-packages.mjs && node scripts/build-licenses.mjs",
     "licenses": "node scripts/build-licenses.mjs",
     "wasm": "bash scripts/build-wasm.sh",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "mirror": "bash scripts/mirror.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",
