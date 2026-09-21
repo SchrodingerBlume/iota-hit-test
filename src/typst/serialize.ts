@@ -154,7 +154,8 @@ const localStylesArg = (d: LayoutDict | undefined): string => (d && Object.keys(
 /** gb7714:——暴露出来的几项折成 omni-gb7714 的参数，工程 JSON 里的 gb7714 字典再压上去；auto 的不发，模板 / 包自己定 */
 function gb7714Arg(s: Settings): string {
   const d: Record<string, string> = {};
-  if (s.bibStyle === 'foot') d.note = '"foot"';
+  // 脚注制：一条文献一条脚注，不把挨着的引用并进同一条（omni 默认 cite-merge 会把相邻引用合成一个脚注、条目分号接排）
+  if (s.bibStyle === 'foot') { d.note = '"foot"'; d['cite-merge'] = 'false'; }
   else if (s.bibStyle !== 'auto') d.style = JSON.stringify(s.bibStyle);
   if (s.bibVersion !== 'auto') d.version = s.bibVersion;
   if (s.citeForm !== 'auto' && s.bibStyle !== 'foot') d['cite-form'] = JSON.stringify(s.citeForm);

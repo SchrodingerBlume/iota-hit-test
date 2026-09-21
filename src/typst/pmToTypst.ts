@@ -257,11 +257,12 @@ export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {
       case 'cite': {
         const keys = String(n.attrs?.keys ?? '').split(/[,，;；\s]+/).map(safeLabel).filter(Boolean);
         // 写成函数调用而不是 @key：Typst 0.15 的 @ 引用会把紧跟的汉字也吞进 label。cite 是 omni-gb7714 的（主文件里盖掉原生的）：
-        // 几个键一次合并，页码（supplement）与标注形式（叙述式 / 只著者 / 只年份）都是它的参数
+        // 页码（supplement）与标注形式（叙述式 / 只著者 / 只年份）都是它的参数。几个键一个挨一个各发一句：顺序编码 / 著者-出版年制
+        // 相邻的自己并成一组（[1-3]），脚注制关了 cite-merge 就各成一条脚注——一句里写几个键的话脚注制也会并进同一条
         if (!keys.length) break;
         const form = ['prose', 'author', 'year'].includes(String(n.attrs?.form ?? '')) ? `, form: ${JSON.stringify(n.attrs!.form)}` : '';
         const sup = String(n.attrs?.supplement ?? '').trim();
-        atom(tag(opts, n, 'node', `#cite(${keys.map((k) => `<${k}>`).join(', ')}${form}${sup ? `, supplement: [${escapeText(sup)}]` : ''})`));
+        atom(tag(opts, n, 'node', keys.map((k, i) => `#cite(<${k}>${form}${sup && i === 0 ? `, supplement: [${escapeText(sup)}]` : ''})`).join('')));
         break;
       }
       case 'ref': {
