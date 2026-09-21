@@ -128,7 +128,7 @@ function inline(ctx: Ctx, nodes: PMNode[] = [], base: { size?: number; font?: st
         if (at + num.length < ref.length) push(new TextRun({ text: ref.slice(at + num.length), size: base.size }));
         break;
       }
-      case 'cite': push(new TextRun({ text: citeText(ctx, String(n.attrs?.keys ?? '').split(/[,，;；\s]+/).filter(Boolean)), superScript: true })); break;
+      case 'cite': push(new TextRun({ text: citeText(ctx, String(n.attrs?.keys ?? '').split(/[,，;；\s]+/).filter(Boolean)), superScript: ctx.s.citeForm !== 'inline' || undefined })); break;
       case 'footnote': {
         const id = ctx.nextFootnote++;
         ctx.footnotes[id] = { children: [new Paragraph({ style: 'FootnoteText', children: [new TextRun({ text: String(n.attrs?.text ?? '') })] })] };

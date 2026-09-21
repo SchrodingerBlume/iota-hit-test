@@ -717,6 +717,7 @@ html.theme-anim :not(svg, svg *) { transition: background-color 320ms var(--ease
 .bib-search input { border: 0; background: none; padding: 6px 0; width: 100%; outline: none; }
 .bib-filter { border: 1px solid var(--line-2); border-radius: var(--r-s); background-color: var(--panel); color: var(--ink); padding: 0 20px 0 6px; font-size: 12px; }
 .bib-add { display: flex; gap: 6px; align-items: center; padding: 0 10px 8px; border-bottom: 1px solid var(--line); }
+.bib-list:focus { outline: none; }
 .bib-paste { width: 100%; box-sizing: border-box; font-family: var(--mono); font-size: 12px; border: 1px solid var(--line-2); border-radius: var(--r-s); padding: 6px 8px; background: var(--panel); color: var(--ink); resize: vertical; }
 .bib-add .btn.on { background: var(--accent-soft); color: var(--accent-ink); }
 .bib-add-menu { left: 0; right: auto; min-width: 200px; max-height: 60vh; overflow: auto; }

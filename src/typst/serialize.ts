@@ -51,13 +51,13 @@ const infoMultiline = (field: string, s: string) => {
   }
   return lines.join(' \\ ');
 };
-/** 双语并成一段带标记的内容（模板 826caa9 起没有 -en 孪生参数）：[中#en[EN]]；英文档反过来 [EN#zh[中]]；
- *  只有一半就只发那一半，只有英文时 [#en[EN]]，中文那半模板回落到英文 */
+/** 双语并成一段带标记的内容（模板 826caa9 起没有 -en 孪生参数）：没标记的是文档语言那一半，另一半写在 #en[] / #zh[] 里——
+ *  中文档 [中#en[EN]]、英文档 [EN#zh[中]]；只有一半就只发那一半（是文档语言的裸发，不是的带标记），另一种语言的页模板印同一份 */
 function bilingual(zh: string, en: string, lang: Lang): string | null {
-  if (!zh && !en) return null;
-  if (!zh) return `[#en[${en}]]`;
-  if (!en) return `[${zh}]`;
-  return lang === 'en' ? `[${en}#zh[${zh}]]` : `[${zh}#en[${en}]]`;
+  const [main, other, mark] = lang === 'en' ? [en, zh, 'zh'] : [zh, en, 'en'];
+  if (!main && !other) return null;
+  if (!other) return `[${main}]`;
+  return `[${main}#${mark}[${other}]]`;
 }
 
 function tri(v: 'auto' | boolean | string): string {
@@ -149,10 +149,34 @@ function overridesArg(s: Settings): string {
 }
 const localStylesArg = (d: LayoutDict | undefined): string => (d && Object.keys(d).length ? `styles: ${typstDict(d)}` : '');
 
+/** gb7714:——暴露出来的几项折成 omni-gb7714 的参数，工程 JSON 里的 gb7714 字典再压上去；auto 的不发，模板 / 包自己定 */
+function gb7714Arg(s: Settings): string {
+  const d: Record<string, string> = {};
+  if (s.bibStyle === 'foot') d.note = '"foot"';
+  else if (s.bibStyle !== 'auto') d.style = JSON.stringify(s.bibStyle);
+  if (s.bibVersion !== 'auto') d.version = s.bibVersion;
+  if (s.citeForm !== 'auto' && s.bibStyle !== 'foot') d['cite-form'] = JSON.stringify(s.citeForm);
+  if (s.bibBracket !== 'auto') { d['bib-numbering-style'] = s.bibBracket === 'full' ? '"fullwidth-bracket"' : '"bracket"'; d['mark-medium-bracket-style'] = JSON.stringify(s.bibBracket); }
+  if (s.bibAuthors === 'all') d['bib-et-al-min'] = '1000';
+  else if (s.bibAuthors === 'three') { d['bib-et-al-min'] = '4'; d['bib-et-al-use-first'] = '3'; }
+  if (s.bibUrls === 'online') d['show-url'] = '"online-only"';
+  else if (s.bibUrls === 'none') { d['show-url'] = 'false'; d['show-urldate'] = 'false'; d['show-pid'] = '(rest: false)'; }
+  else if (s.bibUrls === 'all') { d['show-url'] = 'true'; d['show-urldate'] = 'true'; }
+  if (s.bibHyperlinks !== 'auto') { d.hyperlink = String(s.bibHyperlinks); d['hyperlink-title'] = String(s.bibHyperlinks); d['back-ref'] = String(s.bibHyperlinks); }
+  if (s.bibDegreeNote !== 'auto') d['show-degree'] = String(s.bibDegreeNote);
+  if (s.bibTitleCase !== 'auto') d['titles-text-case'] = JSON.stringify(s.bibTitleCase);
+  if (s.bibSortZh !== 'auto' && s.bibStyle === 'author-date') d['bib-sort-zh-by'] = JSON.stringify(s.bibSortZh);
+  // 字符串当 Typst 字符串发；写成 Typst 原话的长度 / auto / none / 字典 / 数组原样
+  const lit = (v: unknown): string => (typeof v === 'string' ? (/^(auto|none|true|false|[\d.]+(pt|em|cm|mm|in|%|fr)?|\(.*\)|\[.*\])$/.test(v.trim()) ? v.trim() : JSON.stringify(v)) : typstDict(v));
+  for (const [k, v] of Object.entries(s.gb7714 ?? {})) if (/^[a-z][a-z0-9-]*$/.test(k)) d[k] = lit(v);
+  return Object.keys(d).length ? `gb7714: (${Object.entries(d).map(([k, v]) => `${k}: ${v}`).join(', ')})` : '';
+}
+
 function settingsArgs(s: Settings): string[] {
   const args: string[] = [];
   if (layoutArg(levelLayout(s, 'doc'))) args.push(layoutArg(levelLayout(s, 'doc')));
   if (overridesArg(s)) args.push(overridesArg(s));
+  if (gb7714Arg(s)) args.push(gb7714Arg(s));
   args.push(`campus: ${JSON.stringify(s.campus)}`);
   args.push(`degree-level: ${JSON.stringify(s.degreeLevel)}`);
   args.push(`form: ${JSON.stringify(s.form)}`);
@@ -239,14 +263,11 @@ function infoArgs(info: Info, s: Settings, pick: (f: InfoFieldDef) => string | u
   }));
 }
 /** 封面、内封只改这一页的那几项：#cover(title: …)。记号的 attr 带页名，点到跳回那一页的输入框；
- *  只改了一种语言那格时另一半仍取文档的（并进同一段内容，模板不再分格回落） */
+ *  只改了一种语言那格就只发那一半，另一半模板取元信息的 */
 function localInfoArgs(doc: ThesisDoc, page: LocalInfoPage): string[] {
   const local = doc.localInfo?.[page];
   if (!local) return [];
-  const fields = localInfoFields(page, doc.settings);
-  const touched = (f: InfoFieldDef) => { const t = enTwin(f, fields); return !!(String(local[f.key] ?? '').trim() || (t && String(local[t.key] ?? '').trim())); };
-  const base = (f: InfoFieldDef) => fields.find((b) => `${b.param}-en` === f.param) ?? f;
-  return infoArgs(doc.info, doc.settings, (f) => touched(base(f)) ? (String(local[f.key] ?? '').trim() || (doc.info[f.key] as string)) : undefined, (f) => `${page}.${f.key}`, fields);
+  return infoArgs(doc.info, doc.settings, (f) => local[f.key] as string, (f) => `${page}.${f.key}`, localInfoFields(page, doc.settings));
 }
 /** 关键词：中英按序配对成 ([中#en[EN]], …)，多出来的那些单边发（模板另一页回落印同一份） */
 function keywordsArg(info: Info, s: Settings): string {
@@ -480,9 +501,10 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   if (resolvePage(doc, 'abstract').value && (abstractZh || abstractEn)) {
     // 关键词上方：模板 keywords-above——none 不空、v(1fr) 挤到页底、auto 空一行（默认，不写）
     const ka = s.abstractKeywordsAbove === 'none' ? 'keywords-above: none' : s.abstractKeywordsAbove === 'bottom' ? 'keywords-above: v(1fr)' : '';
-    // 英文那篇整块放在末尾的 #en[]（英文档反过来 #zh[]）；只有一种语言就只排那一页
-    const block = (m: string, body: string) => `#${m}[\n${indent(body, 2)}\n]`;
-    const body = !abstractEn ? abstractZh : !abstractZh ? block('en', abstractEn) : s.lang === 'en' ? `${abstractEn}\n\n${block('zh', abstractZh)}` : `${abstractZh}\n\n${block('en', abstractEn)}`;
+    // 文档语言那篇裸写，另一篇整块放在末尾的 #en[] / #zh[]；只有一种语言就只排那一页（没标记的算文档语言）
+    const [main, other, mark] = s.lang === 'en' ? [abstractEn, abstractZh, 'zh'] : [abstractZh, abstractEn, 'en'];
+    const block = other ? `#${mark}[\n${indent(other, 2)}\n]` : '';
+    const body = [main, block].filter(Boolean).join('\n\n');
     parts.push(`#abstract(${[keywordsArg(doc.info, s), ka, or('abstract'), pageLayout('abstract'), localStylesArg(s.localStyles?.pages?.abstract)].filter(Boolean).join(', ')})[\n${indent(body, 2)}\n]`);
   }
 

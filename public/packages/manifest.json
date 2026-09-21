@@ -7,16 +7,16 @@
       "name": "iota-hit",
       "version": "0.1.0",
       "file": "local-iota-hit-0.1.0.tar.gz",
-      "size": 149127,
-      "sha": "9396dca8f3a6"
+      "size": 149940,
+      "sha": "aeb0d6a79a08"
     },
     {
       "namespace": "local",
       "name": "banshi",
       "version": "0.1.0",
       "file": "local-banshi-0.1.0.tar.gz",
-      "size": 58939,
-      "sha": "79a517d52bf9"
+      "size": 59221,
+      "sha": "6c416cb7a6b2"
     },
     {
       "namespace": "local",

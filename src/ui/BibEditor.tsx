@@ -5,7 +5,8 @@ import { useMemo, useRef, useState } from 'react';
 import type { BibEntry } from '../bib/bibtex';
 import { parseBibtex, generateBibtex, newEntryId, splitNames, joinNames, suggestKey } from '../bib/bibtex';
 import { TYPES, ACHIEVEMENT_TYPES, ACHIEVEMENT_TYPE_KEYS, ANNOTE_FIELD, typeDef, type FieldDef, type TypeDef } from '../bib/schema';
-import { Plus, Trash2, Copy, Search, Upload, Download, Code2, Wand2, Check, FolderPlus, Folder, CloudDownload } from 'lucide-react';
+import { Plus, Trash2, Copy, Search, Upload, Download, Code2, Wand2, Check, FolderPlus, Folder, CloudDownload, ClipboardPaste } from 'lucide-react';
+import { Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions, Button } from '@fluentui/react-components';
 import { ZoteroDialog, entriesFromText } from './ZoteroDialog';
 import { mergeEntries } from '../bib/csl';
 import { FoldIcon } from './Fold';
@@ -118,14 +119,38 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
   const [zotero, setZotero] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   // .bib 与 Zotero 导出的 CSL JSON 都收；同 key（或同 Zotero 来源）的当作更新，其余追加
+  const importParsed = (parsed: BibEntry[]) => {
+    const r = mergeEntries(entries, parsed, groupFilter || undefined);
+    onChange(r.entries);
+    setSelected(r.entries.find((e) => e.key === parsed[0].key)?.id ?? parsed[0].id);
+  };
   const importFiles = async (files: File[]) => {
     const taken = new Set(entries.map((e) => e.key));
     const parsed: BibEntry[] = [];
     for (const f of files) { try { const got = entriesFromText(await f.text(), taken); for (const e of got) taken.add(e.key); parsed.push(...got); } catch { /* 不是文献文件 */ } }
     if (!parsed.length) { alert(tx("未从此文件中解析出任何条目")); return; }
-    const r = mergeEntries(entries, parsed, groupFilter || undefined);
-    onChange(r.entries);
-    setSelected(r.entries.find((e) => e.key === parsed[0].key)?.id ?? parsed[0].id);
+    importParsed(parsed);
+  };
+  /** 剪贴板里的 BibTeX / CSL JSON（Zotero 的「快速复制」、网站的「导出引用」）：读得到就直接进，读不到（浏览器不给）就弹框让人粘 */
+  const [pasteBox, setPasteBox] = useState<string | null>(null);
+  const importText = (text: string): boolean => {
+    let parsed: BibEntry[] = [];
+    try { parsed = entriesFromText(text, new Set(entries.map((e) => e.key))); } catch { parsed = []; }
+    if (!parsed.length) return false;
+    importParsed(parsed);
+    return true;
+  };
+  const importClipboard = async () => {
+    let text = '';
+    try { text = await navigator.clipboard.readText(); } catch { setPasteBox(''); return; }
+    if (!text.trim()) { setPasteBox(''); return; }
+    if (!importText(text)) alert(tx("剪贴板里没有认得出的文献条目（支持 BibTeX 与 CSL JSON）"));
+  };
+  const onPaste = (e: React.ClipboardEvent) => {
+    const el = e.target as HTMLElement;
+    if (raw !== null || pasteBox !== null || el.closest('input, textarea, [contenteditable="true"]')) return;
+    const text = e.clipboardData.getData('text/plain');
+    if (text.trim() && importText(text)) e.preventDefault();
   };
   const applyRaw = () => {
     if (raw === null) return;
@@ -145,9 +170,24 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
   const extraFields = current ? Object.keys(current.fields).filter((k) => !known.has(k)) : [];
 
   return (
-    <div className={`bib ${dragOver ? 'is-drop' : ''}`} onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragOver(true); } }} onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }} onDrop={(e) => { if (!e.dataTransfer.files.length) return; e.preventDefault(); setDragOver(false); void importFiles(Array.from(e.dataTransfer.files)); }}>
+    <div className={`bib ${dragOver ? 'is-drop' : ''}`} onPaste={onPaste} onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragOver(true); } }} onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }} onDrop={(e) => { if (!e.dataTransfer.files.length) return; e.preventDefault(); setDragOver(false); void importFiles(Array.from(e.dataTransfer.files)); }}>
       <ZoteroDialog open={zotero} onClose={() => setZotero(false)} entries={entries} onChange={onChange} />
-      <aside className="bib-list">
+      <Dialog open={pasteBox !== null} onOpenChange={(_, d) => { if (!d.open) setPasteBox(null); }}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>{tx("粘贴文献")}</DialogTitle>
+            <DialogContent>
+              <p className="field-hint muted">{tx("浏览器不让直接读剪贴板；把 BibTeX 或 CSL JSON 粘到下面（Zotero 的「快速复制」、期刊网站的「导出引用」都行）。")}</p>
+              <textarea className="bib-paste" rows={10} autoFocus value={pasteBox ?? ''} placeholder={'@article{key, title={…}, …}'} onChange={(e) => setPasteBox(e.target.value)} />
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="secondary" onClick={() => setPasteBox(null)}>{tx("取消")}</Button>
+              <Button appearance="primary" disabled={!pasteBox?.trim()} onClick={() => { if (importText(pasteBox ?? '')) setPasteBox(null); else alert(tx("没有认得出的文献条目（支持 BibTeX 与 CSL JSON）")); }}>{tx("导入")}</Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+      <aside className="bib-list" tabIndex={-1}>
         <div className="bib-tools">
           <span className="bib-search"><Search /><input value={q} placeholder={tx("搜索引用键、题名或作者…")} onChange={(e) => setQ(e.target.value)} /></span>
           <select className="bib-filter" value={filter} onChange={(e) => setFilter(e.target.value)} title={tx("按类型筛选")}>
@@ -160,6 +200,7 @@ export function BibEditor({ entries, onChange, mode, citedKeys, fileName }: Prop
           <span className="join">
             <button type="button" className="btn btn-xs btn-icon" title={tx("导入 .bib 或 CSL JSON 文件")} onClick={() => fileInput.current?.click()}><Upload /></button>
             <button type="button" className="btn btn-xs btn-icon" title={tx("从 Zotero 导入（云端或导出的文件）")} onClick={() => setZotero(true)}><CloudDownload /></button>
+            <button type="button" className="btn btn-xs btn-icon" title={tx("从剪贴板导入 BibTeX 或 CSL JSON（在列表上直接 ⌘V 也行）")} onClick={() => void importClipboard()}><ClipboardPaste /></button>
             <button type="button" className="btn btn-xs btn-icon" title={groupFilter ? tx("导出分组“{{groupFilter}}”", { groupFilter: groupFilter }) : tx("导出 .bib 文件")} onClick={() => { const set = groupFilter === null ? entries : entries.filter((e) => (groupFilter === '' ? !e.group?.trim() : e.group?.trim() === groupFilter)); download(groupFilter ? fileName.replace(/\.bib$/, `-${groupFilter}.bib`) : fileName, generateBibtex(set, { withGroups: true })); }} disabled={!entries.length}><Download /></button>
             <button type="button" className={`btn btn-xs btn-icon ${raw !== null ? 'on' : ''}`} title={tx("编辑 BibTeX 源代码")} onClick={() => { setRaw(raw === null ? generateBibtex(entries, { withGroups: true }) : null); setRawError(null); }}><Code2 /></button>
           </span>
