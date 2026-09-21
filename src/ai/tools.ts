@@ -13,7 +13,7 @@ import { putImage, safeImageName, imageDimensions } from '../editor/imageCache';
 import { useCompileState } from '../compiler/client';
 import { parseBibtex, splitNames, type BibEntry } from '../bib/bibtex';
 import { mergeEntries } from '../bib/csl';
-import type { Attachment } from './files';
+import { pdfRender, pdfImages, type Attachment } from './files';
 import { webOf, type AiConfig } from './config';
 
 export interface ToolDef { name: string; description: string; parameters: Record<string, unknown> }
@@ -24,6 +24,10 @@ export const setAskUser = (f: typeof askUser) => { askUser = f; };
 /** 这一场对话里用户发过的附件，图片可以直接插成图 */
 let attachments: Attachment[] = [];
 export const setAttachments = (a: Attachment[]) => { attachments = a; };
+/** 工具自己造出来的图片（PDF 里抽的），也算附件，figure_write 认名字；面板拿去显示缩略图 */
+export let onDerived: (a: Attachment) => void = () => {};
+export const setOnDerived = (f: typeof onDerived) => { onDerived = f; };
+const addDerived = (a: Attachment) => { attachments = [...attachments, a]; onDerived(a); };
 
 export const PARTS: { key: RichKey; label: string; headings: boolean }[] = [
   { key: 'abstractZh', label: '中文摘要', headings: false },
@@ -68,7 +72,9 @@ export const TOOLS: ToolDef[] = [
   { name: 'delete', description: '删掉某一部分第 from 到 to 块（含两端）。', parameters: { type: 'object', properties: { part: partEnum, ...range }, required: ['part', 'from', 'to'], additionalProperties: false } },
   { name: 'table_write', description: '插一张表或换掉现有的表（给 replace 就是换）。rows 是二维数组，第一行是表头（header 为 true 时）；单元格里写 \\n 就是格内换行，也认 **粗** *斜* `代码` $公式$。fit：content 按内容分列宽、window 撑满版心平分、fixed 每列都是 colWidth 厘米。', parameters: { type: 'object', properties: { ...place, rows: { type: 'array', items: { type: 'array', items: { type: 'string' } }, minItems: 1 }, header: { type: 'boolean' }, caption: { type: 'string', description: '中文题注（表题）' }, captionEn: { type: 'string' }, label: { type: 'string', description: '交叉引用用的标签，形如 tab:xxx' }, fit: { type: 'string', enum: ['content', 'window', 'fixed'] }, colWidth: { type: 'number', description: 'fixed 时每列宽，厘米' } }, required: ['part', 'rows'], additionalProperties: false } },
   { name: 'figure_write', description: '插一张图或换掉现有的图。image 是工程里已有的图片名（见 images），或用户在对话里发来的图片附件的文件名——会先存进工程。', parameters: { type: 'object', properties: { ...place, image: { type: 'string' }, caption: { type: 'string', description: '中文题注（图题）' }, captionEn: { type: 'string' }, label: { type: 'string', description: '形如 fig:xxx' }, width: { type: 'number', description: '图宽，厘米（版心约 15 厘米）' } }, required: ['part', 'image'], additionalProperties: false } },
-  { name: 'images', description: '工程里有哪些图片，以及用户这场对话里发来的图片附件。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+  { name: 'images', description: '工程里有哪些图片，以及用户这场对话里发来的图片附件、从 PDF 里抽出来的图。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+  { name: 'pdf_images', description: '把用户发来的 PDF 附件里嵌的位图抽出来存成图片（file 是附件文件名，page 不给就整份、最多 60 页），回每张的名字与像素尺寸；矢量图抽不出来，用 pdf_render 截那一页。抽出来的图能直接 figure_write。', parameters: { type: 'object', properties: { file: { type: 'string' }, page: { type: 'integer', minimum: 1 } }, required: ['file'], additionalProperties: false } },
+  { name: 'pdf_render', description: '把 PDF 附件的某一页画成图片（scale 1 约 72 dpi，默认 2），可以只截页面的一块：crop 是页面比例 [x, y, w, h]（0–1）。矢量图、公式截图用它。回图片名与尺寸，能直接 figure_write。', parameters: { type: 'object', properties: { file: { type: 'string' }, page: { type: 'integer', minimum: 1 }, scale: { type: 'number' }, crop: { type: 'array', items: { type: 'number' }, minItems: 4, maxItems: 4 } }, required: ['file', 'page'], additionalProperties: false } },
   { name: 'selection', description: '用户现在在编辑器里选中的是哪一部分的哪几块，以及选中的文字。用户说「这段」「选中的」时先调它。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'diagnostics', description: '最近一次排版编译的错误与警告。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'bib_list', description: '参考文献表（或成果表）里有哪些条目：引用键、类型、作者、年份、题名。正文里引用写 [@引用键]。', parameters: { type: 'object', properties: { which: { type: 'string', enum: ['references', 'achievements'] } }, additionalProperties: false } },
@@ -306,6 +312,33 @@ async function settingsSet(input: Record<string, any>): Promise<string> {
   return `已把「${def.label}」设成 ${nameOf(value)}`;
 }
 
+const uid = () => Math.random().toString(36).slice(2, 8);
+function pdfOf(file: string): Attachment | string {
+  const name = String(file ?? '').trim();
+  const a = attachments.find((x) => x.kind === 'pdf' && x.name === name) ?? attachments.find((x) => x.kind === 'pdf');
+  return a ?? `对话里没有 PDF 附件${name ? `「${name}」` : ''}；让用户把 PDF 发过来`;
+}
+async function pdfImagesTool(input: Record<string, any>): Promise<string> {
+  const a = pdfOf(input.file); if (typeof a === 'string') return a;
+  const list = await pdfImages(a.data, input.page ? Number(input.page) : undefined);
+  if (!list.length) return `${a.name}${input.page ? ` 第 ${input.page} 页` : ''}里没有嵌的位图（图可能是矢量的，用 pdf_render 截那一页）`;
+  const stem = a.name.replace(/\.pdf$/i, '');
+  const names = list.map((im, i) => {
+    const name = `${stem}-p${im.page}-${i + 1}.png`;
+    addDerived({ id: uid(), name, type: 'image/png', size: Math.round(im.data.length * 0.75), kind: 'image', data: im.data });
+    return `${name}（第 ${im.page} 页，${im.width}×${im.height}）`;
+  });
+  return `抽出 ${list.length} 张：\n${names.join('\n')}`;
+}
+async function pdfRenderTool(input: Record<string, any>): Promise<string> {
+  const a = pdfOf(input.file); if (typeof a === 'string') return a;
+  const crop = Array.isArray(input.crop) && input.crop.length === 4 ? (input.crop.map(Number) as [number, number, number, number]) : undefined;
+  const r = await pdfRender(a.data, Number(input.page) || 1, Number(input.scale) || 2, crop);
+  const name = `${a.name.replace(/\.pdf$/i, '')}-p${input.page}${crop ? '-crop' : ''}-${uid()}.png`;
+  addDerived({ id: uid(), name, type: 'image/png', size: Math.round(r.data.length * 0.75), kind: 'image', data: r.data });
+  return `已画成 ${name}（${r.width}×${r.height}；这份 PDF 共 ${r.pages} 页）`;
+}
+
 function imagesText(): string {
   const imgs = useStore.getState().doc.images;
   const att = attachments.filter((a) => a.kind === 'image');
@@ -355,6 +388,8 @@ export async function runTool(name: string, input: Record<string, any>): Promise
     case 'abbreviations_add': return abbreviationsAdd(input);
     case 'settings_list': return settingsList();
     case 'settings_set': return settingsSet(input);
+    case 'pdf_images': return pdfImagesTool(input);
+    case 'pdf_render': return pdfRenderTool(input);
     case 'web_fetch': return webFetch(input.url);
     case 'web_search': return webSearch(input.query);
     default: throw new Error(`没有这个工具：${name}`);
@@ -364,7 +399,7 @@ export async function runTool(name: string, input: Record<string, any>): Promise
 export const SYSTEM_PROMPT = `你是 iota4web 里的写作助手。iota4web 是哈尔滨工业大学学位论文的所见即所得编辑器，排版由 iota-hit 模板按学校规范自动完成，用户只管内容。
 文档分成几部分（摘要、正文、结论、附录、致谢、简历），每部分是一串块（标题、段落、公式、图、表、列表……），用工具按「部分 + 段号」读和改。
 读回来的是 Markdown：# 是标题（正文按章节层级），$…$ 是行内公式、$$…$$ 是行间公式，[@key] 是引参考文献，@fig:xx / @tab:xx / @eq:xx 是交叉引用，@缩略语键 是缩略语，^[…] 是脚注；\`\`\`iota-node 围起来的 JSON 块和 <!--iota-inline:…--> 注释是编辑器专有的节点，用 replace 时原样保留。
-你能做的：读改各部分的文字；用 table_write 写表（单元格里 \\n 换行，能定列宽方式）、figure_write 插图（工程里的图或用户发来的图片附件）；往参考文献表 / 成果表加 BibTeX 条目（bib_add）；改论文信息（info_write）；加缩略语和符号；看编译诊断；改论文设置（settings_set，每次都会弹窗请用户允许）。工具表里有 web_search / web_fetch 时能联网：查来的东西要给出处（网址），没有就不要说查过。
+你能做的：读改各部分的文字；用 table_write 写表（单元格里 \\n 换行，能定列宽方式）、figure_write 插图（工程里的图、用户发来的图片附件、或用 pdf_images / pdf_render 从 PDF 附件里抽出来的图）；往参考文献表 / 成果表加 BibTeX 条目（bib_add）；改论文信息（info_write）；加缩略语和符号；看编译诊断；改论文设置（settings_set，每次都会弹窗请用户允许）。工具表里有 web_search / web_fetch 时能联网：查来的东西要给出处（网址），没有就不要说查过。
 规矩：
 - 先 outline 或 read 看清楚再改，改动尽量小，只换需要改的那几块；不要改标题的标签、引用键。
 - 引用文献要先有条目：表里没有就用 bib_add 加进去再在正文里写 [@key]，不要编造文献；拿不准的出处要向用户确认。

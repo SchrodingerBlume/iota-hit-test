@@ -140,22 +140,27 @@ async function* sse(r: Response, signal: AbortSignal): AsyncGenerator<string> {
   }
 }
 
-/** 试连：一句最短的对话，不带工具 */
-export async function testConnection(c: AiConfig, signal?: AbortSignal): Promise<string> {
+/** 试连：一句最短的对话；OpenAI 兼容的再试一次工具调用——不会调工具的模型接上了也只能聊天 */
+export async function testConnection(c: AiConfig, signal?: AbortSignal): Promise<{ reply: string; tools: boolean | null }> {
   if (c.api === 'anthropic') {
     const { default: Client } = await import('@anthropic-ai/sdk');
     const client = new Client({ apiKey: c.apiKey, baseURL: base(c.baseUrl), dangerouslyAllowBrowser: true, maxRetries: 0 });
     const m = await client.messages.create({ model: c.model, max_tokens: 32, messages: [{ role: 'user', content: "回复一个字：好" }] }, { signal });
-    return m.content.map((b) => (b.type === 'text' ? b.text : '')).join('').trim();
+    return { reply: m.content.map((b) => (b.type === 'text' ? b.text : '')).join('').trim(), tools: null };
   }
-  const r = await fetch(`${base(c.baseUrl)}/chat/completions`, {
-    method: 'POST', signal,
-    headers: { 'Content-Type': 'application/json', ...(c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {}) },
-    body: JSON.stringify({ model: c.model, messages: [{ role: 'user', content: "回复一个字：好" }], max_tokens: 32 }),
-  });
-  if (!r.ok) throw new Error(`http ${r.status}${await describeBody(r)}`);
-  const j = await r.json();
-  return String(j.choices?.[0]?.message?.content ?? '').trim();
+  const post = async (body: Record<string, unknown>) => {
+    const r = await fetch(`${base(c.baseUrl)}/chat/completions`, { method: 'POST', signal, headers: { 'Content-Type': 'application/json', ...(c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {}) }, body: JSON.stringify({ model: c.model, ...body }) });
+    if (!r.ok) throw new Error(`http ${r.status}${await describeBody(r)}`);
+    return r.json();
+  };
+  const j = await post({ messages: [{ role: 'user', content: "回复一个字：好" }], max_tokens: 32 });
+  const reply = String(j.choices?.[0]?.message?.content ?? '').trim();
+  let tools: boolean | null = null;
+  try {
+    const t = await post({ messages: [{ role: 'user', content: '请调用 ping 工具，参数 n 填 1' }], tools: [{ type: 'function', function: { name: 'ping', description: '测试用', parameters: { type: 'object', properties: { n: { type: 'integer' } }, required: ['n'] } } }], max_tokens: 64 });
+    tools = !!t.choices?.[0]?.message?.tool_calls?.length;
+  } catch { tools = false; }
+  return { reply, tools };
 }
 
 export function describeError(e: unknown): string {

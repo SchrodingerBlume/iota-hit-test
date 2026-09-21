@@ -322,6 +322,7 @@ export const useStore = create<State>((set, get) => {
       await flushSave();
       await deleteProjectRecord(id);
       for (const key of await listImageKeys()) if (key.startsWith(`${id}/`)) await deleteImageKey(key);
+      await kv.del('meta', `agent:${id}`);
       await get().refreshProjects();
       if (id === get().doc.id) {
         const next = get().projects[0];

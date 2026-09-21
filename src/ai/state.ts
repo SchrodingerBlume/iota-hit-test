@@ -1,12 +1,14 @@
-// Agent 面板的状态：开没开、接的哪家、这一场对话。对话只在内存里，换工程就清
+// Agent 面板的状态：开没开、接的哪家、这一场对话。对话按工程各存各的（本机 IndexedDB meta 里 agent:<工程 id>），换工程就换一份
 import { create } from 'zustand';
 import type { AiConfig } from './config';
 import { loadConfig } from './config';
 import { runTurn, describeError, type Transcript } from './agent';
 import { readAttachment, type Attachment } from './files';
-import { setAskUser, setAttachments, type Ask } from './tools';
+import { setAskUser, setAttachments, setOnDerived, type Ask } from './tools';
+import { kv } from '../model/persist';
+import { useStore } from '../model/store';
 
-export interface ToolCard { name: string; input: Record<string, unknown>; result: string; isError: boolean }
+export interface ToolCard { name: string; input: Record<string, unknown>; result: string; isError: boolean; images?: Attachment[] }
 export interface ChatItem { id: string; role: 'user' | 'assistant'; text: string; tools: ToolCard[]; files?: Attachment[]; error?: string }
 /** 模型要改设置时弹的授权卡：用户点了才往下走 */
 export interface Pending { ask: Ask; resolve: (ok: boolean) => void }
@@ -28,16 +30,29 @@ interface AgentState {
   send: (text: string) => Promise<void>;
   stop: () => void;
   clear: () => void;
+  /** 对话跟着当前工程走：换了工程就存下这份、读那份 */
+  bind: () => Promise<void>;
 }
 
 let transcript: Transcript | null = null;
 let aborter: AbortController | null = null;
 let sentFiles: Attachment[] = [];
+let boundDoc: string | null = null;
 const uid = () => Math.random().toString(36).slice(2, 9);
+
+interface Saved { items: ChatItem[]; transcript: Transcript | null; sentFiles: Attachment[] }
+const keyOf = (id: string) => `agent:${id}`;
+async function persist(id: string, items: ChatItem[]) {
+  if (!items.length) { await kv.del('meta', keyOf(id)); return; }
+  // 附件的正文（base64）都在对话记录里，太大就只留这一场的展示、不留能续聊的原始记录
+  const saved: Saved = { items, transcript, sentFiles };
+  const size = JSON.stringify(saved).length;
+  await kv.set('meta', keyOf(id), size > 40 * 1024 * 1024 ? { ...saved, transcript: null, sentFiles: [] } : saved);
+}
 
 export const useAgent = create<AgentState>((set, get) => ({
   open: false,
-  setOpen: (v) => { set({ open: v }); if (v && get().config === undefined) void loadConfig().then((c) => set({ config: c })); },
+  setOpen: (v) => { set({ open: v }); if (v) { if (get().config === undefined) void loadConfig().then((c) => set({ config: c })); void get().bind(); } },
   config: undefined,
   setConfig: (c) => { set({ config: c }); transcript = null; },
   settingsOpen: false,
@@ -55,6 +70,7 @@ export const useAgent = create<AgentState>((set, get) => ({
   },
   detach: (id) => set({ pending: get().pending.filter((a) => a.id !== id) }),
   send: async (text) => {
+    await get().bind();
     const c = get().config;
     const files = get().pending;
     if (!c || get().running || (!text.trim() && !files.length)) return;
@@ -64,6 +80,8 @@ export const useAgent = create<AgentState>((set, get) => ({
     sentFiles = [...sentFiles, ...files];
     setAttachments(sentFiles);
     setAskUser((ask) => new Promise<boolean>((resolve) => set({ ask: { ask, resolve } })));
+    let derived: Attachment[] = [];
+    setOnDerived((a) => { sentFiles = [...sentFiles, a]; derived.push(a); });
     const patch = (p: Partial<ChatItem>) => set({ items: get().items.map((it) => (it.id === reply.id ? { ...it, ...p } : it)) });
     let buf = '';
     aborter = new AbortController();
@@ -72,7 +90,7 @@ export const useAgent = create<AgentState>((set, get) => ({
     try {
       await runTurn(c, transcript, text || '（看附件）', files, {
         onText: (d) => { buf += d; patch({ text: buf }); },
-        onTool: (name, input, result, isError) => { const cur = get().items.find((it) => it.id === reply.id)!; patch({ tools: [...cur.tools, { name, input, result, isError }] }); },
+        onTool: (name, input, result, isError) => { const cur = get().items.find((it) => it.id === reply.id)!; patch({ tools: [...cur.tools, { name, input, result, isError, images: derived.length ? derived : undefined }] }); derived = []; },
       }, aborter.signal);
     } catch (e) {
       transcript.messages.length = mark;
@@ -80,8 +98,21 @@ export const useAgent = create<AgentState>((set, get) => ({
     } finally {
       aborter = null;
       set({ running: false });
+      if (boundDoc) void persist(boundDoc, get().items);
     }
   },
   stop: () => { get().answer(false); aborter?.abort(); },
-  clear: () => { transcript = null; sentFiles = []; setAttachments([]); set({ items: [] }); },
+  clear: () => { transcript = null; sentFiles = []; setAttachments([]); set({ items: [] }); if (boundDoc) void kv.del('meta', keyOf(boundDoc)); },
+  bind: async () => {
+    const id = useStore.getState().doc.id;
+    if (!id || id === boundDoc) return;
+    if (get().running) { get().stop(); }
+    if (boundDoc) await persist(boundDoc, get().items);
+    boundDoc = id;
+    const saved = await kv.get<Saved>('meta', keyOf(id));
+    transcript = saved?.transcript ?? null;
+    sentFiles = saved?.sentFiles ?? [];
+    setAttachments(sentFiles);
+    set({ items: saved?.items ?? [], pending: [], ask: null });
+  },
 }));

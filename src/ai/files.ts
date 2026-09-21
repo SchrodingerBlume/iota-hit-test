@@ -43,3 +43,63 @@ export async function pdfText(b64: string, name: string): Promise<string> {
 }
 
 export const fmtSize = (n: number) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
+
+/** PDF 一页画成 PNG（缩放 scale，1 ≈ 72dpi；crop 是页面比例 [x, y, w, h]），回 base64 */
+export async function pdfRender(b64: string, page: number, scale = 2, crop?: [number, number, number, number]): Promise<{ data: string; width: number; height: number; pages: number }> {
+  const pdfjs = await import('pdfjs-dist');
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+  const doc = await pdfjs.getDocument({ data: Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)) }).promise;
+  const p = await doc.getPage(Math.min(Math.max(1, page), doc.numPages));
+  const vp = p.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
+  await p.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport: vp } as any).promise;
+  let out = canvas;
+  if (crop) {
+    const [x, y, w, h] = crop.map((v) => Math.min(1, Math.max(0, v))) as [number, number, number, number];
+    out = document.createElement('canvas');
+    out.width = Math.max(1, Math.round(canvas.width * w)); out.height = Math.max(1, Math.round(canvas.height * h));
+    out.getContext('2d')!.drawImage(canvas, Math.round(canvas.width * x), Math.round(canvas.height * y), out.width, out.height, 0, 0, out.width, out.height);
+  }
+  return { data: out.toDataURL('image/png').split(',')[1], width: out.width, height: out.height, pages: doc.numPages };
+}
+
+/** PDF 里嵌的位图（页面上画出来的那些 XObject），小于 minPx 的当装饰跳过 */
+export async function pdfImages(b64: string, page: number | undefined, minPx = 120): Promise<{ page: number; data: string; width: number; height: number }[]> {
+  const pdfjs = await import('pdfjs-dist');
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+  const doc = await pdfjs.getDocument({ data: Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)) }).promise;
+  const pages = page ? [Math.min(Math.max(1, page), doc.numPages)] : Array.from({ length: Math.min(doc.numPages, 60) }, (_, i) => i + 1);
+  const out: { page: number; data: string; width: number; height: number }[] = [];
+  const seen = new Set<string>();
+  for (const n of pages) {
+    const p = await doc.getPage(n);
+    const ops = await p.getOperatorList();
+    for (let i = 0; i < ops.fnArray.length; i++) {
+      if (ops.fnArray[i] !== pdfjs.OPS.paintImageXObject && ops.fnArray[i] !== pdfjs.OPS.paintImageXObjectRepeat) continue;
+      const name = ops.argsArray[i][0] as string;
+      if (seen.has(name)) continue;
+      seen.add(name);
+      const img: any = await new Promise((res) => { try { p.objs.get(name, res); } catch { res(null); } });
+      if (!img) continue;
+      const w = img.width ?? img.bitmap?.width ?? 0, h = img.height ?? img.bitmap?.height ?? 0;
+      if (w < minPx || h < minPx) continue;
+      const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d')!;
+      if (img.bitmap) ctx.drawImage(img.bitmap, 0, 0);
+      else if (img.data) {
+        const rgba = new Uint8ClampedArray(w * h * 4);
+        const k = img.kind; // 1 灰度 2 RGB 3 RGBA（pdf.js 的 ImageKind）
+        for (let j = 0, q = 0; j < w * h; j++, q += 4) {
+          if (k === 3) { rgba[q] = img.data[j * 4]; rgba[q + 1] = img.data[j * 4 + 1]; rgba[q + 2] = img.data[j * 4 + 2]; rgba[q + 3] = img.data[j * 4 + 3]; }
+          else if (k === 2) { rgba[q] = img.data[j * 3]; rgba[q + 1] = img.data[j * 3 + 1]; rgba[q + 2] = img.data[j * 3 + 2]; rgba[q + 3] = 255; }
+          else { const g = img.data[j]; rgba[q] = g; rgba[q + 1] = g; rgba[q + 2] = g; rgba[q + 3] = 255; }
+        }
+        ctx.putImageData(new ImageData(rgba, w, h), 0, 0);
+      } else continue;
+      out.push({ page: n, data: canvas.toDataURL('image/png').split(',')[1], width: w, height: h });
+      if (out.length >= 40) return out;
+    }
+  }
+  return out;
+}

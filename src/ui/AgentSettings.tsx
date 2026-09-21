@@ -33,7 +33,7 @@ export function AgentSettings() {
   };
   const test = async () => {
     setBusy(tx("正在试连…")); setNote(null);
-    try { const r = await testConnection(c); setNote({ ok: true, text: tx("通了，它回：{{r}}", { r: r || '…' }) }); }
+    try { const r = await testConnection(c); setNote(r.tools === false ? { ok: false, text: tx("通了（它回：{{r}}），但这个模型不调工具——接上了也只能聊天，读不了、改不了文档；换个支持函数调用的模型", { r: r.reply || '…' }) } : { ok: true, text: tx("通了，它回：{{r}}{{t}}", { r: r.reply || '…', t: r.tools ? tx("；工具调用正常") : '' }) }); }
     catch (e) { setNote({ ok: false, text: describeError(e) }); }
     finally { setBusy(null); }
   };

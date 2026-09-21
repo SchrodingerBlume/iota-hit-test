@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, Textarea, Tooltip } from '@fluentui/react-components';
 import { Settings20Regular, Dismiss20Regular, Send20Regular, Stop20Regular, Broom20Regular, ChevronRight12Regular, ChevronDown12Regular, Attach20Regular, Dismiss12Regular, Image16Regular, DocumentPdf16Regular, DocumentText16Regular, BotSparkle20Regular, ShieldCheckmark20Regular } from '@fluentui/react-icons';
 import { useAgent, type ToolCard } from '../ai/state';
+import { useStore } from '../model/store';
 import { configReady, PRESETS } from '../ai/config';
 import { PARTS } from '../ai/tools';
 import { fmtSize, type Attachment } from '../ai/files';
@@ -42,6 +43,8 @@ function cardTitle(c: ToolCard): string {
     case 'abbreviations_add': return tx("加了缩略语 / 符号");
     case 'settings_list': return tx("看了论文设置");
     case 'settings_set': return tx("改设置：{{key}}", { key: i.key });
+    case 'pdf_images': return tx("从 {{file}} 抽了图", { file: i.file });
+    case 'pdf_render': return tx("把 {{file}} 第 {{page}} 页画成了图", { file: i.file, page: i.page });
     case 'web_fetch': return tx("抓了网页 {{url}}", { url: String(i.url ?? '').replace(/^https?:\/\//, '').slice(0, 60) });
     case 'web_search': return tx("搜了「{{q}}」", { q: i.query });
     default: return c.name;
@@ -68,6 +71,7 @@ function Card({ c }: { c: ToolCard }) {
   return (
     <div className={`ag-card ${c.isError ? 'is-error' : EDIT_TOOLS.has(c.name) ? 'is-edit' : ''}`}>
       <button type="button" className="ag-card-head" onClick={() => setOpen(!open)}>{open ? <ChevronDown12Regular /> : <ChevronRight12Regular />}<span>{cardTitle(c)}</span></button>
+      {!!c.images?.length && <div className="ag-card-imgs">{c.images.map((im) => <img key={im.id} src={`data:${im.type};base64,${im.data}`} alt={im.name} title={im.name} />)}</div>}
       {open && <pre className="ag-card-body">{detail}</pre>}
     </div>
   );
@@ -80,6 +84,8 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
   const listRef = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const ready = configReady(config);
+  const docId = useStore((s) => s.doc.id);
+  useEffect(() => { void useAgent.getState().bind(); }, [docId]);
   useEffect(() => { const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }, [items, ask]);
   useEffect(() => { if (config === undefined) useAgent.getState().setOpen(true); }, [config]);
   const submit = () => { const t = draft.trim(); if ((!t && !pending.length) || running || !ready) return; setDraft(''); void send(t); };
