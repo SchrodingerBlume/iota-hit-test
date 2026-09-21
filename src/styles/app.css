@@ -830,7 +830,7 @@ html.theme-anim :not(svg, svg *) { transition: background-color 320ms var(--ease
 .bib-extra { margin-top: 8px; padding: 10px 12px; background: var(--panel-2); border-radius: var(--r-s); display: grid; gap: 6px; }
 .bib-raw-text { min-height: 60vh; }
 @container (max-width: 860px) { .bib { grid-template-columns: 1fr; } .bib-list { position: static; max-height: 340px; } .bib-grid { grid-template-columns: 1fr 1fr; } }
-@container (max-width: 560px) { .bib-grid { grid-template-columns: 1fr; } }
+@container (max-width: 560px) { .bib-grid { grid-template-columns: 1fr; } .bib-head { flex-wrap: wrap; } .bib-head .field { flex: 1 1 140px !important; } .bib-head .bib-actions { flex: none; margin-top: 22px; } }
 .bib-head .field:first-child { flex: 0 0 200px; }
 .bib-head .field:nth-child(2) { flex: 1 1 200px; }
 
@@ -1579,6 +1579,7 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .git-github .zt-row .fui-Input { min-width: 0; }
 .git-log li button b { font-weight: 500; }
 @media (max-width: 900px) { .hist-grid, .git-grid { grid-template-columns: 1fr; max-height: none; } }
+@media (max-width: 560px) { .hist-bar .spacer { flex-basis: 100%; height: 0; } }
 .zt-sec + .zt-sec { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .zt-sec h4 { margin: 0 0 6px; font-size: 13px; }
 .zt-sec .field-hint { margin: 0 0 8px; line-height: 1.5; }
