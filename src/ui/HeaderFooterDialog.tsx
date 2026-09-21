@@ -10,7 +10,7 @@ import { ZIHAO, INLINE_FONTS } from '../model/zihao';
 import { LengthInput } from './LengthInput';
 import type { SegChoice } from './TriSwitch';
 import { t as tx } from '../i18n';
-import { headerDefault, headerKeys } from '../typst/hfTerms';
+import { headerDefault, headerKeys, headerSplit } from '../typst/hfTerms';
 
 export const useHFDialog = create<{ open: boolean; part: 'header' | 'footer'; show: (part: 'header' | 'footer') => void; close: () => void }>((set) => ({
   open: false, part: 'header', show: (part) => set({ open: true, part }), close: () => set({ open: false }),
@@ -124,10 +124,11 @@ export function HeaderFooterDialog() {
   const update = (next: HeaderFooterSettings) => setSettings({ headerFooter: next });
   const rec = (p: 'header' | 'footer'): Partial<HFRecord> => hf.levels?.[level]?.[p] ?? {};
   const setRec = (p: 'header' | 'footer', r: Partial<HFRecord>) => update({ ...hf, levels: { ...hf.levels, [level]: { ...hf.levels?.[level], [p]: r } } });
-  const text = hf.text ?? { auto: true, value: '', even: '', split: false };
+  const text = hf.text ?? { auto: true, value: '', even: '' };
   const setText = (patch: Partial<typeof text>) => update({ ...hf, text: { ...text, ...patch } });
   const dft = headerDefault(settings);
   const canSplit = !!headerKeys(settings).even;
+  const split = canSplit && (text.split ?? headerSplit(settings));
   const dirtyLevel = (l: HFLevel) => { const v = hf.levels?.[l]; return !!v && Object.values(v).some((r) => r && Object.entries(r).some(([k, x]) => (k === 'shown' ? x !== 'auto' && x !== undefined : x && !(x as HFField<unknown>).auto))); };
   return (
     <Dialog open={open} onOpenChange={(_, d) => { if (!d.open) close(); }}>
@@ -156,19 +157,19 @@ export function HeaderFooterDialog() {
               <>
                 <p className="field-hint muted">{tx("页眉那一行字。自动 = 模板按规范拼（本科、硕士「校名 + 文种」，博士奇数页本章标题、偶数页「校名 + 文种」，报告「校名 + 表单名」）；自己填就整条替掉。")}</p>
                 <div className="hf-card">
-                  <AutoRow label={text.split && canSplit ? tx("奇数页") : tx("页眉文字")} auto={text.auto} onAuto={(a) => setText({ auto: a })} note={dft.odd === dft.even ? dft.odd : tx("奇数页 {{odd}} · 偶数页 {{even}}", dft)}>
+                  <AutoRow label={split ? tx("奇数页") : tx("页眉文字")} auto={text.auto} onAuto={(a) => setText({ auto: a })} note={split ? dft.odd : dft.odd === dft.even ? dft.odd : tx("奇数页 {{odd}} · 偶数页 {{even}}", dft)}>
                     <Input size="small" className="hf-text" disabled={text.auto} value={text.value} placeholder={dft.odd} onChange={(_, d) => setText({ auto: false, value: d.value })} />
                   </AutoRow>
-                  {text.split && canSplit && (
+                  {split && (
                     <div className="hf-row">
                       <span className="hf-lab">{tx("偶数页")}</span>
                       <span />
-                      <div className="hf-ctl"><Input size="small" className="hf-text" disabled={text.auto} value={text.even} placeholder={dft.even} onChange={(_, d) => setText({ even: d.value })} /></div>
+                      <div className="hf-ctl"><Input size="small" className="hf-text" disabled={text.auto} value={text.even} placeholder={dft.even} onChange={(_, d) => setText({ even: d.value })} />{text.auto && <span className="hf-note muted">{tx("模板：{{v}}", { v: dft.even })}</span>}</div>
                     </div>
                   )}
                   {canSplit && (
                     <div className="hf-row hf-row-plain">
-                      <Checkbox label={tx("奇偶页不同")} checked={text.split} disabled={text.auto} onChange={(_, d) => setText({ split: !!d.checked })} />
+                      <Checkbox label={tx("奇偶页不同")} checked={split} disabled={text.auto} onChange={(_, d) => setText({ split: !!d.checked })} />
                     </div>
                   )}
                 </div>

@@ -50,3 +50,9 @@ export function headerKeys(s: Settings): { odd: string; even: string | null } {
   const pick = (parity: string) => HEADER_KEYS[s.lang === 'en' ? 'en' : 'zh'].filter((k) => k.startsWith(parity + '-')).map((k) => [k, score(k)] as const).filter(([, n]) => n >= 0).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
   return { odd: pick('odd')!, even: pick('even') };
 }
+
+/** 这一档模板自己就分奇偶（博士终稿奇数页本章标题、偶数页校名式），「奇偶页不同」默认就勾上 */
+export function headerSplit(s: Settings): boolean {
+  const d = headerDefault(s);
+  return !!headerKeys(s).even && d.odd !== d.even;
+}

@@ -127,8 +127,8 @@ export interface HFRecord {
 export type HFLevel = 'doc' | 'frontmatter' | 'mainmatter' | 'backmatter';
 export interface HeaderFooterSettings {
   levels?: Partial<Record<HFLevel, { header?: Partial<HFRecord>; footer?: Partial<HFRecord> }>>;
-  /** 页眉印的那一行字，整条替掉模板拼的；split 开了偶数页另一条 */
-  text?: { auto: boolean; value: string; even: string; split: boolean };
+  /** 页眉印的那一行字，整条替掉模板拼的；split 开了偶数页另一条，没写就跟模板这一档（博士终稿本就分奇偶） */
+  text?: { auto: boolean; value: string; even: string; split?: boolean };
 }
 export type LayoutDict = Record<string, unknown>;
 /** 局部样式（只在工程 JSON 里）：pages.abstract → #abstract(styles:)，chapters → new-styles / restore-styles */
