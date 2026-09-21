@@ -1470,7 +1470,10 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .bib.is-drop { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: var(--r-s); }
 
 /* Agent 面板：宽屏上是 .main 最右一整列，窄屏盖在右边；卡片是它每一步读 / 改了什么 */
-.agent-btn.on { background: var(--accent-soft); color: var(--accent-ink); }
+.agent-btn { background: linear-gradient(135deg, var(--accent) 0%, #7a4bd8 100%) !important; color: #fff !important; border: 0 !important; border-radius: var(--r-pill) !important; padding: 2px 12px 2px 8px !important; font-weight: 650 !important; box-shadow: 0 2px 8px rgba(22, 97, 131, 0.35); transition: filter var(--fast) var(--ease), transform var(--fast) var(--ease); }
+.agent-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.agent-btn.on { box-shadow: inset 0 0 0 2px rgba(255,255,255,0.55), 0 2px 8px rgba(22, 97, 131, 0.35); }
+.agent-btn .fui-Button__icon { color: #fff; }
 .agent-pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; height: 100%; border-left: 1px solid var(--line); background: var(--panel); font-size: 13px; }
 .agent-pane.is-overlay { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 100vw); z-index: 9; box-shadow: var(--shadow-2); }
 .agent-pane.is-drop { outline: 2px dashed var(--accent); outline-offset: -4px; }
@@ -1544,3 +1547,37 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .ag-table th, .ag-table td { border: 1px solid var(--line-2); padding: 3px 8px; }
 .ag-table th { background: var(--panel-2); }
 .ag-math.is-display { display: block; text-align: center; margin: 4px 0; overflow-x: auto; }
+
+/* Agent 设置对话框：三页，模型页左边一列存着的接口、右边表单 */
+.ag-dialog { max-width: 780px; }
+.ag-tabs { margin: -4px 0 12px; }
+.ag-models { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.ag-plist { display: flex; flex-direction: column; gap: 4px; }
+.ag-plist-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--muted); padding: 0 0 2px 2px; }
+.ag-pitem { display: flex; flex-direction: column; gap: 3px; text-align: left; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--panel); padding: 7px 9px; cursor: pointer; transition: background-color var(--fast) var(--ease), border-color var(--fast) var(--ease); }
+.ag-pitem:hover { background: var(--panel-2); }
+.ag-pitem.on { border-color: var(--accent); background: var(--accent-soft); }
+.ag-pname { font-size: 13px; font-weight: 500; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-pbadges { display: flex; gap: 4px; min-height: 16px; }
+.ag-badge { display: inline-flex; align-items: center; gap: 2px; font-size: 10.5px; color: var(--orange-ink); background: var(--orange-soft); border-radius: var(--r-pill); padding: 0 6px 0 4px; }
+.ag-badge.is-doc { color: var(--accent-ink); background: var(--accent-soft-2); }
+.ag-plist .field-hint { margin-top: 6px; line-height: 1.45; }
+.ag-pform { min-width: 0; }
+.ag-form { display: grid; grid-template-columns: 4em minmax(0, 1fr); align-items: start; gap: 10px 12px; }
+.ag-form > label { text-align: right; color: var(--ink-2); font-size: 12.5px; line-height: 16px; padding-top: 4px; }
+.ag-form-sub { grid-template-columns: 5em minmax(0, 1fr); gap: 8px 10px; margin-top: 6px; }
+.ag-form-sub > label { font-size: 12px; }
+.ag-keyrow { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ag-keyrow .zt-key { flex: 1; min-width: 0; }
+.ag-keyrow a { flex: none; white-space: nowrap; font-size: 12.5px; }
+.ag-web { display: flex; flex-direction: column; gap: 4px; }
+.ag-web .field-hint { margin: 0; line-height: 1.45; }
+.ag-prow { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.ag-prow .spacer { flex: 1; }
+.ag-status { margin: 8px 0 0; font-size: 12.5px; line-height: 1.45; }
+.ag-ok { color: var(--ok); }
+.ag-page { display: flex; flex-direction: column; gap: 8px; }
+.ag-page h4 { margin: 6px 0 0; font-size: 13px; }
+.ag-page .field-hint { margin: 0; line-height: 1.5; }
+.ag-area textarea { min-height: 120px; font-size: 13px; line-height: 1.5; }
+@media (max-width: 700px) { .ag-models { grid-template-columns: 1fr; } .ag-form > label { text-align: left; } }

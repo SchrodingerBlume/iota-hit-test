@@ -5,7 +5,7 @@ import { Button, Textarea, Tooltip, Menu, MenuTrigger, MenuPopover, MenuList, Me
 import { Settings20Regular, Dismiss20Regular, Send20Regular, Stop20Regular, Add20Regular, History20Regular, Delete16Regular, ChevronRight12Regular, ChevronDown12Regular, Attach20Regular, Dismiss12Regular, Image16Regular, DocumentPdf16Regular, DocumentText16Regular, BotSparkle20Regular, ShieldCheckmark20Regular } from '@fluentui/react-icons';
 import { useAgent, type ToolCard } from '../ai/state';
 import { useStore } from '../model/store';
-import { configReady, PRESETS } from '../ai/config';
+import { configReady, providerLabel } from '../ai/config';
 import { PARTS } from '../ai/tools';
 import { fmtSize, type Attachment } from '../ai/files';
 import { AgentSettings } from './AgentSettings';
@@ -83,7 +83,8 @@ function Card({ c }: { c: ToolCard }) {
 }
 
 export function AgentPane({ overlay }: { overlay?: boolean }) {
-  const { items, running, send, stop, config, setOpen, setSettingsOpen, pending, attach, detach, ask, answer, chats, chatId, newChat, openChat, deleteChat } = useAgent();
+  const { items, running, send, stop, config, setOpen, setSettingsOpen, pending, attach, detach, ask, answer, chats, chatId, newChat, openChat, deleteChat, settings, docProviderId } = useAgent();
+  const provider = settings?.providers.find((p) => p.id === (docProviderId ?? settings.globalId)) ?? settings?.providers[0];
   const [draft, setDraft] = useState('');
   const [drag, setDrag] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
@@ -92,17 +93,16 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
   const docId = useStore((s) => s.doc.id);
   useEffect(() => { void useAgent.getState().bind(); }, [docId]);
   useEffect(() => { const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }, [items, ask]);
-  useEffect(() => { if (config === undefined) useAgent.getState().setOpen(true); }, [config]);
+  useEffect(() => { if (settings === undefined) useAgent.getState().setOpen(true); }, [settings]);
   const submit = () => { const t = draft.trim(); if ((!t && !pending.length) || running || !ready) return; setDraft(''); void send(t); };
   const onFiles = (list: FileList | File[] | null | undefined) => { if (list?.length && ready) void attach(Array.from(list)); };
-  const preset = PRESETS.find((p) => p.key === config?.preset);
   const last = items[items.length - 1];
   return (
     <aside className={`agent-pane ${overlay ? 'is-overlay' : ''} ${drag ? 'is-drop' : ''}`} onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDrag(true); } }} onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDrag(false); }} onDrop={(e) => { if (!e.dataTransfer.files.length) return; e.preventDefault(); setDrag(false); onFiles(e.dataTransfer.files); }}>
       <div className="ag-head">
         <BotSparkle20Regular className="ag-logo" />
         <b>Agent</b>
-        <button type="button" className="ag-model" title={config ? config.baseUrl : ''} onClick={() => setSettingsOpen(true)}>{ready ? `${preset?.label ?? config!.preset} · ${config!.model}` : tx("还没接模型")}</button>
+        <button type="button" className="ag-model" title={config ? `${config.baseUrl}${docProviderId ? tx("（本文档指定）") : ''}` : ''} onClick={() => setSettingsOpen(true)}>{ready && provider ? providerLabel(provider) : tx("还没接模型")}</button>
         <span className="spacer" />
         <Tooltip content={tx("新对话")} relationship="label"><Button size="small" appearance="subtle" icon={<Add20Regular />} disabled={!items.length && !chatId} onClick={() => void newChat()} /></Tooltip>
         <Menu positioning="below-end">
@@ -123,7 +123,7 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
         <Tooltip content={tx("关闭")} relationship="label"><Button size="small" appearance="subtle" icon={<Dismiss20Regular />} onClick={() => setOpen(false)} /></Tooltip>
       </div>
       <div className="ag-list" ref={listRef}>
-        {!ready && config !== undefined && (
+        {!ready && settings !== undefined && (
           <div className="ag-empty">
             <p>{tx("接你自己的模型：Anthropic、OpenAI、DeepSeek、Kimi、通义、智谱、OpenRouter，或本机的 Ollama / LM Studio。密钥只存在这台浏览器里，直连服务方。")}</p>
             <Button appearance="primary" size="small" onClick={() => setSettingsOpen(true)}>{tx("去接模型")}</Button>

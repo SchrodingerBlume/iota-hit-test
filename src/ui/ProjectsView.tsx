@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions, Button, Input, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuItemRadio, MenuDivider, Tooltip } from '@fluentui/react-components';
 import { Document20Regular, DocumentSparkle20Regular, FolderOpen20Regular, ArrowLeft20Regular, Search20Regular, MoreHorizontal20Regular, Rename20Regular, Copy20Regular, Delete20Regular, ArrowDownload20Regular, Open20Regular, ArrowSort20Regular, Pin20Regular, PinOff20Regular } from '@fluentui/react-icons';
+import { kv } from '../model/persist';
 import { useStore, type ProjectMeta } from '../model/store';
 import { AXES, defaultSettings } from '../model/options';
 import type { Settings } from '../model/types';
@@ -33,8 +34,8 @@ function download(name: string, data: BlobPart, type: string) {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
-function ProjectRow({ p, active, pinned, onDelete }: { p: ProjectMeta; active: boolean; pinned: boolean; onDelete: (p: ProjectMeta) => void }) {
-  const { openProject, renameProject, duplicateProject, exportProject, togglePin } = useStore();
+function ProjectRow({ p, active, pinned, onDelete, onDuplicate }: { p: ProjectMeta; active: boolean; pinned: boolean; onDelete: (p: ProjectMeta) => void; onDuplicate: (p: ProjectMeta) => void }) {
+  const { openProject, renameProject, exportProject, togglePin } = useStore();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(p.name);
   const commit = () => { const n = name.trim(); setEditing(false); if (n && n !== p.name) void renameProject(p.id, n); else setName(p.name); };
@@ -62,7 +63,7 @@ function ProjectRow({ p, active, pinned, onDelete }: { p: ProjectMeta; active: b
             <MenuList>
               <MenuItem icon={<Open20Regular />} className="proj-open-item" onClick={() => void openProject(p.id)}>{tx("打开")}</MenuItem>
               <MenuItem icon={<Rename20Regular />} onClick={() => { setName(p.name); setEditing(true); }}>{tx("重命名")}</MenuItem>
-              <MenuItem icon={<Copy20Regular />} onClick={() => void duplicateProject(p.id)}>{tx("创建副本")}</MenuItem>
+              <MenuItem icon={<Copy20Regular />} onClick={() => onDuplicate(p)}>{tx("创建副本")}</MenuItem>
               <MenuItem icon={<ArrowDownload20Regular />} onClick={() => void save()}>{tx("下载副本（.iota.json）")}</MenuItem>
               <MenuItem icon={pinned ? <PinOff20Regular /> : <Pin20Regular />} onClick={() => void togglePin(p.id)}>{pinned ? tx("取消固定") : tx("固定")}</MenuItem>
               <MenuDivider />
@@ -87,6 +88,13 @@ export function ProjectsView() {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<'time' | 'name'>('time');
   const [pendingDelete, setPendingDelete] = useState<ProjectMeta | null>(null);
+  const [pendingCopy, setPendingCopy] = useState<{ p: ProjectMeta; chats: number } | null>(null);
+  const duplicateProject = useStore((s) => s.duplicateProject);
+  const onDuplicate = async (p: ProjectMeta) => {
+    const idx = await kv.get<{ chats?: unknown[] }>('meta', `agent:${p.id}`);
+    const n = Array.isArray(idx?.chats) ? idx!.chats!.length : 0;
+    if (n) setPendingCopy({ p, chats: n }); else void duplicateProject(p.id);
+  };
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -176,9 +184,9 @@ export function ProjectsView() {
           </div>
           <div className="proj-table">
             {pinnedRows.length > 0 && <div className="proj-group">{tx("已固定")}</div>}
-            {pinnedRows.map((p) => <ProjectRow key={p.id} p={p} active={p.id === doc.id && loaded} pinned onDelete={setPendingDelete} />)}
+            {pinnedRows.map((p) => <ProjectRow key={p.id} p={p} active={p.id === doc.id && loaded} pinned onDelete={setPendingDelete} onDuplicate={(p) => void onDuplicate(p)} />)}
             {pinnedRows.length > 0 && recentRows.length > 0 && <div className="proj-group">{tx("最近")}</div>}
-            {recentRows.map((p) => <ProjectRow key={p.id} p={p} active={p.id === doc.id && loaded} pinned={false} onDelete={setPendingDelete} />)}
+            {recentRows.map((p) => <ProjectRow key={p.id} p={p} active={p.id === doc.id && loaded} pinned={false} onDelete={setPendingDelete} onDuplicate={(p) => void onDuplicate(p)} />)}
             {!projects.length && <div className="proj-empty muted">{tx("暂无文档。从上面的模板新建一个，或打开下载过的副本。")}</div>}
             {projects.length > 0 && !shown.length && <div className="proj-empty muted">{tx("没有匹配「{{q}}」的文档。", { q: query.trim() })}</div>}
           </div>
@@ -218,6 +226,19 @@ export function ProjectsView() {
         </DialogSurface>
       </Dialog>
 
+      <Dialog open={!!pendingCopy} onOpenChange={(_, d) => { if (!d.open) setPendingCopy(null); }}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>{tx("创建副本")}</DialogTitle>
+            <DialogContent>{tx("「{{name}}」有 {{n}} 场 Agent 对话记录，副本要一起带上吗？", { name: pendingCopy?.p.name ?? '', n: pendingCopy?.chats ?? 0 })}</DialogContent>
+            <DialogActions>
+              <Button appearance="secondary" onClick={() => setPendingCopy(null)}>{tx("取消")}</Button>
+              <Button appearance="secondary" onClick={() => { const c = pendingCopy; setPendingCopy(null); if (c) void duplicateProject(c.p.id, false); }}>{tx("只复制文档")}</Button>
+              <Button appearance="primary" onClick={() => { const c = pendingCopy; setPendingCopy(null); if (c) void duplicateProject(c.p.id, true); }}>{tx("连对话一起复制")}</Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
       <Dialog open={!!pendingDelete} onOpenChange={(_, d) => { if (!d.open) setPendingDelete(null); }}>
         <DialogSurface>
           <DialogBody>

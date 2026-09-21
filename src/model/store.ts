@@ -148,7 +148,8 @@ interface State {
   createProject: (opts: { name: string; settings: Partial<Settings>; template: 'blank' | 'sample' }) => Promise<string>;
   renameProject: (id: string, name: string) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
-  duplicateProject: (id: string) => Promise<string>;
+  /** withChats：连 Agent 的对话记录（meta 里 agent:<id>…）一起复制 */
+  duplicateProject: (id: string, withChats?: boolean) => Promise<string>;
   /** 打包成 .iota.json（工程 + 图片 base64），当前文档或列表里任一份 */
   exportProject: (id: string) => Promise<{ name: string; json: string } | null>;
 }
@@ -331,13 +332,14 @@ export const useStore = create<State>((set, get) => {
       }
     },
 
-    duplicateProject: async (id) => {
+    duplicateProject: async (id, withChats = false) => {
       await flushSave();
       const src = id === get().doc.id ? get().doc : await loadProject<ThesisDoc>(id);
       if (!src) return id;
       const copy = normalizeDoc({ ...JSON.parse(JSON.stringify(src)), id: crypto.randomUUID(), name: t("{{name}} 副本", { name: src.name }), updatedAt: new Date().toISOString() });
       await saveProject(copy.id, copy);
       for (const key of await listImageKeys()) if (key.startsWith(`${id}/`)) await copyImageRaw(key, `${copy.id}/${key.slice(id.length + 1)}`);
+      if (withChats) for (const k of await kv.keys('meta')) { const key = String(k); if (key === `agent:${id}` || key.startsWith(`agent:${id}:`)) await kv.set('meta', `agent:${copy.id}${key.slice(`agent:${id}`.length)}`, await kv.get('meta', key)); }
       await get().refreshProjects();
       return copy.id;
     },

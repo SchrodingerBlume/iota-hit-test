@@ -1,8 +1,8 @@
 // 跟模型来回：发对话与工具表，流式收字；模型要调工具就在本地跑、把结果回给它，直到它不再调。
 // 两种接口各一个驱动，对话记录按接口各自的原样存（一个会话只用一家）
 import type Anthropic from '@anthropic-ai/sdk';
-import { webOf, type AiConfig } from './config';
-import { TOOLS, SYSTEM_PROMPT, runTool, toolsFor, setWebConfig, type ToolDef } from './tools';
+import { webOf, webNativeOf, type AiConfig } from './config';
+import { runTool, toolsFor, setWebConfig, type ToolDef } from './tools';
 import { pdfText, type Attachment } from './files';
 
 export interface AgentEvents {
@@ -20,16 +20,16 @@ async function exec(name: string, input: Record<string, unknown>): Promise<{ res
   catch (e) { return { result: `工具出错：${(e as Error).message}`, isError: true }; }
 }
 
-export async function runTurn(c: AiConfig, t: Transcript, userText: string, files: Attachment[], ev: AgentEvents, signal: AbortSignal): Promise<void> {
-  if (t.api === 'anthropic') return anthropicTurn(c, t.messages, userText, files, ev, signal);
-  return openaiTurn(c, t.messages, userText, files, ev, signal);
+export async function runTurn(c: AiConfig, t: Transcript, userText: string, files: Attachment[], system: string, ev: AgentEvents, signal: AbortSignal): Promise<void> {
+  if (t.api === 'anthropic') return anthropicTurn(c, t.messages, userText, files, system, ev, signal);
+  return openaiTurn(c, t.messages, userText, files, system, ev, signal);
 }
 
 // ── Anthropic Messages（官方 SDK，浏览器里直连要 dangerouslyAllowBrowser）────────────────────
-async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], userText: string, files: Attachment[], ev: AgentEvents, signal: AbortSignal) {
+async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], userText: string, files: Attachment[], system: string, ev: AgentEvents, signal: AbortSignal) {
   const { default: Client } = await import('@anthropic-ai/sdk');
   const client = new Client({ apiKey: c.apiKey, baseURL: base(c.baseUrl), dangerouslyAllowBrowser: true, maxRetries: 1 });
-  const tools: Anthropic.ToolUnion[] = TOOLS.map((d) => ({ name: d.name, description: d.description, input_schema: d.parameters as Anthropic.Tool.InputSchema }));
+  const tools: Anthropic.ToolUnion[] = toolsFor(c).map((d) => ({ name: d.name, description: d.description, input_schema: d.parameters as Anthropic.Tool.InputSchema }));
   // 联网走 Anthropic 自带的服务端工具：新一代模型用带动态过滤的那版，老模型只有基础搜索
   if (webOf(c).enabled) {
     if (/opus-5|opus-4-[678]|sonnet-5|sonnet-4-6|fable|mythos/.test(c.model)) tools.push({ type: 'web_search_20260209', name: 'web_search', max_uses: 8 } as any, { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 8 } as any);
@@ -43,7 +43,7 @@ async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], us
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const stream = client.messages.stream({
       model: c.model, max_tokens: 16000,
-      system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+      system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
       tools, messages,
     }, { signal });
     stream.on('text', (delta) => ev.onText(delta));
@@ -67,11 +67,20 @@ async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], us
 // ── OpenAI 兼容 chat/completions（DeepSeek、Kimi、通义、智谱、OpenRouter、Ollama…），SSE 自己解 ──
 interface ToolCallAcc { id: string; name: string; args: string }
 
-async function openaiTurn(c: AiConfig, messages: any[], userText: string, files: Attachment[], ev: AgentEvents, signal: AbortSignal) {
+async function openaiTurn(c: AiConfig, messages: any[], userText: string, files: Attachment[], system: string, ev: AgentEvents, signal: AbortSignal) {
   const w = webOf(c);
   setWebConfig({ reader: w.reader, searchKey: w.searchKey });
-  const tools = toolsFor(c).map((d: ToolDef) => ({ type: 'function', function: { name: d.name, description: d.description, parameters: d.parameters } }));
-  if (!messages.length) messages.push({ role: 'system', content: SYSTEM_PROMPT });
+  const tools: any[] = toolsFor(c).map((d: ToolDef) => ({ type: 'function', function: { name: d.name, description: d.description, parameters: d.parameters } }));
+  // 自带联网的几家：Kimi 是内置函数 $web_search（模型调了要把参数原样回给它、搜索在它那边做），智谱是 web_search 工具，
+  // 通义 / OpenRouter 是请求体里的开关
+  const native = w.enabled ? webNativeOf(c) : undefined;
+  const extra: Record<string, unknown> = {};
+  if (native === 'kimi') tools.push({ type: 'builtin_function', function: { name: '$web_search' } });
+  else if (native === 'zhipu') tools.push({ type: 'web_search', web_search: { enable: true, search_result: true } });
+  else if (native === 'dashscope') extra.enable_search = true;
+  else if (native === 'openrouter') extra.plugins = [{ id: 'web' }];
+  // 系统提示每轮刷新（记忆、预设可能变了）
+  if (messages[0]?.role === 'system') messages[0] = { role: 'system', content: system }; else messages.unshift({ role: 'system', content: system });
   const parts: any[] = [];
   for (const f of files) {
     if (f.kind === 'image') parts.push({ type: 'image_url', image_url: { url: `data:${f.type};base64,${f.data}` } });
@@ -83,7 +92,7 @@ async function openaiTurn(c: AiConfig, messages: any[], userText: string, files:
     const r = await fetch(`${base(c.baseUrl)}/chat/completions`, {
       method: 'POST', signal,
       headers: { 'Content-Type': 'application/json', ...(c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {}) },
-      body: JSON.stringify({ model: c.model, messages, tools, stream: true }),
+      body: JSON.stringify({ model: c.model, messages, tools, stream: true, ...extra }),
     });
     if (!r.ok) throw new Error(`http ${r.status}${await describeBody(r)}`);
     let text = '';
@@ -112,6 +121,7 @@ async function openaiTurn(c: AiConfig, messages: any[], userText: string, files:
     for (const [i, v] of list.entries()) {
       let input: Record<string, unknown> = {};
       try { input = JSON.parse(v.args || '{}'); } catch { /* 参数不是合法 JSON */ }
+      if (v.name === '$web_search') { ev.onTool('web_search', { query: (input as any).search_query ?? (input as any).query ?? '' }, '（Kimi 自己搜的）', false); messages.push({ role: 'tool', tool_call_id: v.id || `call_${round}_${i}`, name: '$web_search', content: v.args || '{}' }); continue; }
       const { result, isError } = await exec(v.name, input);
       ev.onTool(v.name, input, result, isError);
       messages.push({ role: 'tool', tool_call_id: v.id || `call_${round}_${i}`, content: result });

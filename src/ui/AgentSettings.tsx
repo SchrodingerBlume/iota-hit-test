@@ -1,107 +1,199 @@
-// Agent 设置：选服务方（或自定义地址）、贴密钥、挑模型、试连。存本机
+// Agent 设置：三页——模型（存好几套接口，一套全局默认，这篇文档可以另指定）、记忆（跨模型跨文档的一段话，
+// 开关 + 能自己改）、提示词（全局预设 + 这篇文档的预设）。都存本机
 import { useEffect, useState } from 'react';
-import { Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions, Button, Input, Dropdown, Option, Combobox, Checkbox } from '@fluentui/react-components';
+import { Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions, Button, Input, Dropdown, Option, Combobox, Checkbox, TabList, Tab, Textarea, Switch, Tooltip } from '@fluentui/react-components';
+import { Add20Regular, Delete20Regular, Checkmark16Regular, Star16Filled, Document16Regular } from '@fluentui/react-icons';
 import { useAgent } from '../ai/state';
-import { PRESETS, emptyConfig, saveConfig, listModels, configReady, webOf, type AiConfig } from '../ai/config';
+import { PRESETS, newProvider, listModels, configReady, webOf, webNativeOf, providerLabel, type AiProvider, type AiSettings } from '../ai/config';
 import { testConnection, describeError } from '../ai/agent';
 import { t as tx } from '../i18n';
-import { t as tr } from '../i18n';
 
 const caret = <i className="rb-caret" />;
+type Page = 'models' | 'memory' | 'prompts';
+const NATIVE_NOTE: Record<string, string> = {
+  anthropic: tx("走 Anthropic 自带的网页搜索与抓取（按次计费，见其价目）。"),
+  kimi: tx("走 Kimi 自带的联网搜索（$web_search，按其价目计费）。"),
+  dashscope: tx("走通义自带的联网搜索（enable_search）。"),
+  zhipu: tx("走智谱自带的联网搜索（web_search 工具，按其价目计费）。"),
+  openrouter: tx("走 OpenRouter 的 web 插件（按其价目计费）。"),
+};
 
 export function AgentSettings() {
   const open = useAgent((s) => s.settingsOpen);
   const setOpen = useAgent((s) => s.setSettingsOpen);
-  const saved = useAgent((s) => s.config);
-  const setConfig = useAgent((s) => s.setConfig);
-  const [c, setC] = useState<AiConfig>(emptyConfig());
+  const settings = useAgent((s) => s.settings);
+  const setSettings = useAgent((s) => s.setSettings);
+  const docProviderId = useAgent((s) => s.docProviderId);
+  const docPreset = useAgent((s) => s.docPreset);
+  const setDocOverride = useAgent((s) => s.setDocOverride);
+  const [page, setPage] = useState<Page>('models');
+  const [draft, setDraft] = useState<AiSettings | null>(null);
+  const [sel, setSel] = useState<string | null>(null);
   const [models, setModels] = useState<string[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
-  useEffect(() => { if (open) { setC(saved ?? emptyConfig()); setModels([]); setNote(null); } }, [open, saved]);
-  const preset = PRESETS.find((p) => p.key === c.preset) ?? PRESETS[PRESETS.length - 1];
-  const pick = (key: string) => {
+  const [preset, setPreset] = useState(docPreset);
+  const [docSel, setDocSel] = useState(docProviderId);
+  useEffect(() => {
+    if (!open || !settings) return;
+    const d: AiSettings = JSON.parse(JSON.stringify(settings));
+    if (!d.providers.length) { const p = newProvider(); d.providers = [p]; d.globalId = p.id; }
+    setDraft(d); setSel(d.globalId ?? d.providers[0].id); setModels([]); setNote(null); setPreset(docPreset); setDocSel(docProviderId); setPage('models');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  if (!draft) return null;
+  const cur = draft.providers.find((p) => p.id === sel) ?? draft.providers[0];
+  const patchCur = (p: Partial<AiProvider>) => setDraft({ ...draft, providers: draft.providers.map((x) => (x.id === cur.id ? { ...x, ...p } : x)) });
+  const presetOf = PRESETS.find((p) => p.key === cur.preset);
+  const pickPreset = (key: string) => {
     const p = PRESETS.find((x) => x.key === key)!;
-    setC({ preset: p.key, api: p.api, baseUrl: p.baseUrl, model: p.model, apiKey: c.preset === key ? c.apiKey : '' });
+    patchCur({ preset: p.key, api: p.api, baseUrl: p.baseUrl, model: p.model, apiKey: cur.preset === key ? cur.apiKey : '' });
     setModels([]); setNote(null);
+  };
+  const add = () => { const p = newProvider(); setDraft({ ...draft, providers: [...draft.providers, p], globalId: draft.globalId ?? p.id }); setSel(p.id); setModels([]); setNote(null); };
+  const remove = () => {
+    const rest = draft.providers.filter((x) => x.id !== cur.id);
+    setDraft({ ...draft, providers: rest, globalId: draft.globalId === cur.id ? rest[0]?.id ?? null : draft.globalId });
+    setSel(rest[0]?.id ?? null);
+    if (docSel === cur.id) setDocSel(null);
   };
   const fetchModels = async () => {
     setBusy(tx("正在取模型列表…")); setNote(null);
-    try { const ms = await listModels(c); setModels(ms); if (!ms.length) setNote({ ok: false, text: tx("服务方没返回模型列表，自己填模型名") }); }
+    try { const ms = await listModels(cur); setModels(ms); if (!ms.length) setNote({ ok: false, text: tx("服务方没返回模型列表，自己填模型名") }); }
     catch (e) { setNote({ ok: false, text: describeError(e) }); }
     finally { setBusy(null); }
   };
   const test = async () => {
     setBusy(tx("正在试连…")); setNote(null);
-    try { const r = await testConnection(c); setNote(r.tools === false ? { ok: false, text: tx("通了（它回：{{r}}），但这个模型不调工具——接上了也只能聊天，读不了、改不了文档；换个支持函数调用的模型", { r: r.reply || '…' }) } : { ok: true, text: tx("通了，它回：{{r}}{{t}}", { r: r.reply || '…', t: r.tools ? tx("；工具调用正常") : '' }) }); }
+    try { const r = await testConnection(cur); setNote(r.tools === false ? { ok: false, text: tx("通了（它回：{{r}}），但这个模型不调工具——接上了也只能聊天，读不了、改不了文档；换个支持函数调用的模型", { r: r.reply || '…' }) } : { ok: true, text: tx("通了，它回：{{r}}{{t}}", { r: r.reply || '…', t: r.tools ? tx("；工具调用正常") : '' }) }); }
     catch (e) { setNote({ ok: false, text: describeError(e) }); }
     finally { setBusy(null); }
   };
-  const save = async () => { await saveConfig(c); setConfig(c); setOpen(false); };
-  const forget = async () => { await saveConfig(null); setConfig(null); setOpen(false); };
+  const save = async () => {
+    const clean: AiSettings = { ...draft, providers: draft.providers.filter((p) => p.baseUrl.trim() || p.apiKey.trim() || p.model.trim()) };
+    if (clean.globalId && !clean.providers.some((p) => p.id === clean.globalId)) clean.globalId = clean.providers[0]?.id ?? null;
+    await setSettings(clean);
+    const doc = clean.providers.some((p) => p.id === docSel) ? docSel : null;
+    if (preset !== docPreset || doc !== docProviderId) await setDocOverride({ preset, providerId: doc });
+    setOpen(false);
+  };
+  const w = webOf(cur);
+  const native = webNativeOf(cur);
+  const isGlobal = draft.globalId === cur.id;
+  const isDoc = docSel === cur.id;
   return (
     <Dialog open={open} onOpenChange={(_, d) => { if (!d.open) setOpen(false); }}>
       <DialogSurface className="ag-dialog">
         <DialogBody>
           <DialogTitle>{tx("Agent 设置")}</DialogTitle>
           <DialogContent>
-            <p className="field-hint muted">{tx("站里不带任何模型，你接自己的：填服务方的密钥，请求从这台浏览器直接发给它，密钥只存在本机。")}</p>
-            <div className="ag-grid">
-              <span className="zt-lab">{tx("服务")}</span>
-              <Dropdown size="small" expandIcon={caret} style={{ minWidth: 0 }} value={preset.label} selectedOptions={[preset.key]} onOptionSelect={(_, d) => pick(d.optionValue!)}>
-                {PRESETS.map((p) => <Option key={p.key} value={p.key} text={p.label}>{p.label}</Option>)}
-              </Dropdown>
-              {preset.key === 'custom' && (<>
-                <span className="zt-lab">{tx("接口")}</span>
-                <Dropdown size="small" expandIcon={caret} style={{ minWidth: 0 }} value={c.api === 'anthropic' ? 'Anthropic Messages' : tr("OpenAI 兼容（chat/completions）")} selectedOptions={[c.api]} onOptionSelect={(_, d) => setC({ ...c, api: d.optionValue as AiConfig['api'] })}>
-                  <Option value="openai" text={tr("OpenAI 兼容（chat/completions）")}>{tr("OpenAI 兼容（chat/completions）")}</Option>
-                  <Option value="anthropic" text="Anthropic Messages">Anthropic Messages</Option>
-                </Dropdown>
-              </>)}
-              <span className="zt-lab">{tx("地址")}</span>
-              <Input size="small" value={c.baseUrl} placeholder={c.api === 'anthropic' ? 'https://api.anthropic.com' : 'https://…/v1'} onChange={(_, d) => setC({ ...c, baseUrl: d.value })} />
-              <span className="zt-lab">{tx("密钥")}</span>
-              <span className="ag-keyrow">
-                <Input size="small" type="password" className="zt-key" value={c.apiKey} placeholder={/localhost|127\.0\.0\.1/.test(c.baseUrl) ? tx("本机服务一般不用") : 'sk-…'} onChange={(_, d) => setC({ ...c, apiKey: d.value })} />
-                {preset.keysUrl && <a href={preset.keysUrl} target="_blank" rel="noreferrer">{tx("去申请 ↗")}</a>}
-              </span>
-              <span className="zt-lab">{tx("模型")}</span>
-              <span className="ag-keyrow">
-                <Combobox size="small" freeform expandIcon={caret} style={{ minWidth: 0, flex: 1 }} value={c.model} selectedOptions={[c.model]} placeholder={tx("模型名")} onInput={(e) => setC({ ...c, model: (e.target as HTMLInputElement).value })} onOptionSelect={(_, d) => { if (d.optionValue) setC({ ...c, model: d.optionValue }); }}>
-                  {models.map((m) => <Option key={m} value={m} text={m}>{m}</Option>)}
-                </Combobox>
-                <Button size="small" disabled={!!busy || !c.baseUrl.trim()} onClick={fetchModels}>{tx("取列表")}</Button>
-              </span>
-            </div>
-            {preset.note && <p className="field-hint muted">{preset.note}</p>}
-            <div className="ag-web">
-              <Checkbox label={tx("允许联网")} checked={webOf(c).enabled} onChange={(_, d) => setC({ ...c, web: { ...webOf(c), enabled: !!d.checked } })} />
-              {webOf(c).enabled && (c.api === 'anthropic'
-                ? <p className="field-hint muted">{tx("走 Anthropic 自带的网页搜索与抓取（按次计费，见其价目）。")}</p>
-                : (
-                  <div className="ag-grid">
-                    <span className="zt-lab">{tx("抓网页")}</span>
-                    <Input size="small" value={webOf(c).reader} placeholder="https://r.jina.ai/" onChange={(_, d) => setC({ ...c, web: { ...webOf(c), reader: d.value } })} />
-                    <span className="zt-lab">{tx("搜索密钥")}</span>
+            <TabList selectedValue={page} onTabSelect={(_, d) => setPage(d.value as Page)} size="small" className="ag-tabs">
+              <Tab value="models">{tx("模型")}</Tab>
+              <Tab value="memory">{tx("记忆")}</Tab>
+              <Tab value="prompts">{tx("提示词")}</Tab>
+            </TabList>
+
+            {page === 'models' && (
+              <div className="ag-models">
+                <aside className="ag-plist">
+                  <div className="ag-plist-head"><span>{tx("已存的接口")}</span><Tooltip content={tx("新增一套")} relationship="label"><Button size="small" appearance="subtle" icon={<Add20Regular />} onClick={add} /></Tooltip></div>
+                  {draft.providers.map((p) => (
+                    <button key={p.id} type="button" className={`ag-pitem ${p.id === cur.id ? 'on' : ''}`} onClick={() => { setSel(p.id); setModels([]); setNote(null); }}>
+                      <span className="ag-pname">{providerLabel(p).trim() === '·' ? tx("未填") : providerLabel(p)}</span>
+                      <span className="ag-pbadges">
+                        {draft.globalId === p.id && <span className="ag-badge" title={tx("全局默认")}><Star16Filled />{tx("默认")}</span>}
+                        {docSel === p.id && <span className="ag-badge is-doc" title={tx("这篇文档指定用它")}><Document16Regular />{tx("本文档")}</span>}
+                      </span>
+                    </button>
+                  ))}
+                  <p className="field-hint muted">{tx("站里不带任何模型：填服务方的密钥，请求从这台浏览器直接发给它，密钥只存在本机。")}</p>
+                </aside>
+                <section className="ag-pform">
+                  <div className="ag-form">
+                    <label>{tx("名称")}</label>
+                    <Input size="small" value={cur.name} placeholder={tx("随便起，不填就显示「服务方 · 模型」")} onChange={(_, d) => patchCur({ name: d.value })} />
+                    <label>{tx("服务")}</label>
+                    <Dropdown size="small" expandIcon={caret} style={{ minWidth: 0 }} value={presetOf?.label ?? cur.preset} selectedOptions={[cur.preset]} onOptionSelect={(_, d) => pickPreset(d.optionValue!)}>
+                      {PRESETS.map((p) => <Option key={p.key} value={p.key} text={p.label}>{p.label}{p.webNative ? <span className="muted"> · {tx("自带联网")}</span> : null}</Option>)}
+                    </Dropdown>
+                    {cur.preset === 'custom' && (<>
+                      <label>{tx("接口")}</label>
+                      <Dropdown size="small" expandIcon={caret} style={{ minWidth: 0 }} value={cur.api === 'anthropic' ? 'Anthropic Messages' : tx("OpenAI 兼容（chat/completions）")} selectedOptions={[cur.api]} onOptionSelect={(_, d) => patchCur({ api: d.optionValue as AiProvider['api'] })}>
+                        <Option value="openai" text={tx("OpenAI 兼容（chat/completions）")}>{tx("OpenAI 兼容（chat/completions）")}</Option>
+                        <Option value="anthropic" text="Anthropic Messages">Anthropic Messages</Option>
+                      </Dropdown>
+                    </>)}
+                    <label>{tx("地址")}</label>
+                    <Input size="small" value={cur.baseUrl} placeholder={cur.api === 'anthropic' ? 'https://api.anthropic.com' : 'https://…/v1'} onChange={(_, d) => patchCur({ baseUrl: d.value })} />
+                    <label>{tx("密钥")}</label>
                     <span className="ag-keyrow">
-                      <Input size="small" type="password" className="zt-key" value={webOf(c).searchKey} placeholder={tx("Jina 的密钥，不填就只能抓网址不能搜")} onChange={(_, d) => setC({ ...c, web: { ...webOf(c), searchKey: d.value } })} />
-                      <a href="https://jina.ai/api-dashboard/" target="_blank" rel="noreferrer">{tx("去申请 ↗")}</a>
+                      <Input size="small" type="password" className="zt-key" value={cur.apiKey} placeholder={/localhost|127\.0\.0\.1/.test(cur.baseUrl) ? tx("本机服务一般不用") : 'sk-…'} onChange={(_, d) => patchCur({ apiKey: d.value })} />
+                      {presetOf?.keysUrl && <a href={presetOf.keysUrl} target="_blank" rel="noreferrer">{tx("去申请 ↗")}</a>}
                     </span>
-                    <span />
-                    <p className="field-hint muted">{tx("这类接口自己不联网：抓网页经阅读代理（网址前面接上它，默认 r.jina.ai，不用密钥），搜索用 Jina 的搜索接口。改成你自己的代理也行。")}</p>
+                    <label>{tx("模型")}</label>
+                    <span className="ag-keyrow">
+                      <Combobox size="small" freeform expandIcon={caret} style={{ minWidth: 0, flex: 1 }} value={cur.model} selectedOptions={[cur.model]} placeholder={tx("模型名")} onInput={(e) => patchCur({ model: (e.target as HTMLInputElement).value })} onOptionSelect={(_, d) => { if (d.optionValue) patchCur({ model: d.optionValue }); }}>
+                        {models.map((m) => <Option key={m} value={m} text={m}>{m}</Option>)}
+                      </Combobox>
+                      <Button size="small" disabled={!!busy || !cur.baseUrl.trim()} onClick={fetchModels}>{tx("取列表")}</Button>
+                    </span>
+                    <label>{tx("联网")}</label>
+                    <div className="ag-web">
+                      <Checkbox label={tx("允许联网")} checked={w.enabled} onChange={(_, d) => patchCur({ web: { ...w, enabled: !!d.checked } })} />
+                      {w.enabled && (native
+                        ? <p className="field-hint muted">{NATIVE_NOTE[native]}</p>
+                        : (<div className="ag-form ag-form-sub">
+                          <label>{tx("抓网页")}</label>
+                          <Input size="small" value={w.reader} placeholder="https://r.jina.ai/" onChange={(_, d) => patchCur({ web: { ...w, reader: d.value } })} />
+                          <label>{tx("搜索密钥")}</label>
+                          <span className="ag-keyrow">
+                            <Input size="small" type="password" className="zt-key" value={w.searchKey} placeholder={tx("Jina 的密钥，不填就只能抓网址不能搜")} onChange={(_, d) => patchCur({ web: { ...w, searchKey: d.value } })} />
+                            <a href="https://jina.ai/api-dashboard/" target="_blank" rel="noreferrer">{tx("去申请 ↗")}</a>
+                          </span>
+                          <span />
+                          <p className="field-hint muted">{tx("这家接口自己不联网：抓网页经阅读代理（网址前面接上它，默认 r.jina.ai，不用密钥），搜索用 Jina 的搜索接口。")}</p>
+                        </div>))}
+                    </div>
                   </div>
-                ))}
-            </div>
-            <div className="zt-row" style={{ marginTop: 8 }}>
-              <Button size="small" disabled={!!busy || !configReady(c)} onClick={test}>{tx("试连")}</Button>
-              {busy && <span className="muted">{busy}</span>}
-              {note && <span className={note.ok ? 'ag-ok' : 'zt-error'}>{note.text}</span>}
-            </div>
+                  {presetOf?.note && <p className="field-hint muted">{presetOf.note}</p>}
+                  <div className="ag-prow">
+                    <Button size="small" disabled={!!busy || !configReady(cur)} onClick={test}>{tx("试连")}</Button>
+                    <Button size="small" appearance={isGlobal ? 'primary' : 'secondary'} icon={isGlobal ? <Checkmark16Regular /> : undefined} disabled={isGlobal} onClick={() => setDraft({ ...draft, globalId: cur.id })}>{isGlobal ? tx("全局默认") : tx("设为全局默认")}</Button>
+                    <Tooltip content={isDoc ? tx("再点一下改回跟全局") : tx("只对当前这篇文档换成这一套")} relationship="description">
+                      <Button size="small" appearance={isDoc ? 'primary' : 'secondary'} icon={isDoc ? <Checkmark16Regular /> : undefined} onClick={() => setDocSel(isDoc ? null : cur.id)}>{tx("本文档用它")}</Button>
+                    </Tooltip>
+                    <span className="spacer" />
+                    <Tooltip content={tx("删除这套")} relationship="label"><Button size="small" appearance="subtle" icon={<Delete20Regular />} onClick={remove} /></Tooltip>
+                  </div>
+                  {busy && <p className="ag-status muted">{busy}</p>}
+                  {note && <p className={`ag-status ${note.ok ? 'ag-ok' : 'zt-error'}`}>{note.text}</p>}
+                </section>
+              </div>
+            )}
+
+            {page === 'memory' && (
+              <div className="ag-page">
+                <Switch label={tx("开启记忆（跨模型、跨文档）")} checked={draft.memory.enabled} onChange={(_, d) => setDraft({ ...draft, memory: { ...draft.memory, enabled: d.checked } })} />
+                <p className="field-hint muted">{tx("开着时这段话会随每次对话一起发给模型；你说「记住……」它就往这里记。存在本机，换模型、换文档都在。关了就不发也不记。")}</p>
+                <Textarea className="ag-area" resize="vertical" value={draft.memory.notes} placeholder={tx("例：我写的是硕士论文，材料学方向；术语用「有限元」不用「有限元素」；每段不超过 200 字……")} onChange={(_, d) => setDraft({ ...draft, memory: { ...draft.memory, notes: d.value } })} />
+                <div className="ag-prow"><span className="muted">{tx("{{n}} 字", { n: draft.memory.notes.length })}</span><span className="spacer" /><Button size="small" appearance="subtle" disabled={!draft.memory.notes} onClick={() => setDraft({ ...draft, memory: { ...draft.memory, notes: '' } })}>{tx("清空")}</Button></div>
+              </div>
+            )}
+
+            {page === 'prompts' && (
+              <div className="ag-page">
+                <h4>{tx("全局预设")}</h4>
+                <p className="field-hint muted">{tx("接在系统提示后面，每篇文档都生效：写作口味、禁忌、固定流程都可以放这儿。")}</p>
+                <Textarea className="ag-area" resize="vertical" value={draft.preset} placeholder={tx("例：改动前先列出要改哪几段再动手；引用统一用 GB/T 7714 的顺序编码制……")} onChange={(_, d) => setDraft({ ...draft, preset: d.value })} />
+                <h4>{tx("这篇文档的预设")}</h4>
+                <p className="field-hint muted">{tx("只对当前文档生效，跟着文档的对话记录存。")}</p>
+                <Textarea className="ag-area" resize="vertical" value={preset} placeholder={tx("例：这篇的研究对象是多孔质气体轴承，术语表见第 2 章……")} onChange={(_, d) => setPreset(d.value)} />
+              </div>
+            )}
           </DialogContent>
           <DialogActions>
-            {saved && <Button appearance="subtle" onClick={forget}>{tx("忘掉密钥")}</Button>}
             <Button appearance="secondary" onClick={() => setOpen(false)}>{tx("取消")}</Button>
-            <Button appearance="primary" disabled={!configReady(c)} onClick={save}>{tx("保存")}</Button>
+            <Button appearance="primary" onClick={save}>{tx("保存")}</Button>
           </DialogActions>
         </DialogBody>
       </DialogSurface>

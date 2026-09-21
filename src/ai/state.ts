@@ -1,10 +1,9 @@
 // Agent 面板的状态：开没开、接的哪家、这一场对话。对话按工程各存各的（本机 IndexedDB meta 里 agent:<工程 id>），换工程就换一份
 import { create } from 'zustand';
-import type { AiConfig } from './config';
-import { loadConfig } from './config';
+import { loadSettings, saveSettings, type AiConfig, type AiSettings } from './config';
 import { runTurn, describeError, type Transcript } from './agent';
 import { readAttachment, type Attachment } from './files';
-import { setAskUser, setAttachments, setOnDerived, type Ask } from './tools';
+import { setAskUser, setAttachments, setOnDerived, setMemoryContext, systemPromptFor, type Ask } from './tools';
 import { kv } from '../model/persist';
 import { useStore } from '../model/store';
 
@@ -16,8 +15,15 @@ export interface Pending { ask: Ask; resolve: (ok: boolean) => void }
 interface AgentState {
   open: boolean;
   setOpen: (v: boolean) => void;
+  /** 存着的几套接口、全局默认、记忆、预设 */
+  settings: AiSettings | undefined;
+  setSettings: (s: AiSettings) => Promise<void>;
+  /** 这篇文档指定用哪套（null = 跟全局）与它自己的预设提示词 */
+  docProviderId: string | null;
+  docPreset: string;
+  setDocOverride: (o: { providerId?: string | null; preset?: string }) => Promise<void>;
+  /** 眼下生效的那一套 */
   config: AiConfig | null | undefined;
-  setConfig: (c: AiConfig | null) => void;
   settingsOpen: boolean;
   setSettingsOpen: (v: boolean) => void;
   items: ChatItem[];
@@ -48,7 +54,7 @@ let boundDoc: string | null = null;
 const uid = () => Math.random().toString(36).slice(2, 9);
 
 interface Saved { items: ChatItem[]; transcript: Transcript | null; sentFiles: Attachment[] }
-interface Index { chats: ChatMeta[]; current: string | null }
+interface Index { chats: ChatMeta[]; current: string | null; providerId?: string | null; preset?: string }
 const indexKey = (doc: string) => `agent:${doc}`;
 const chatKey = (doc: string, chat: string) => `agent:${doc}:${chat}`;
 let saveTimer = 0;
@@ -73,15 +79,36 @@ async function persistChat(doc: string, chat: string, items: ChatItem[], chats: 
   await kv.set('meta', chatKey(doc, chat), size > 40 * 1024 * 1024 ? { ...saved, transcript: null, sentFiles: [] } : saved);
   const meta = chats.find((c) => c.id === chat);
   const next = [{ id: chat, title: meta?.title && meta.title !== '新对话' ? meta.title : titleOf(items), updatedAt: Date.now() }, ...chats.filter((c) => c.id !== chat)];
-  await kv.set('meta', indexKey(doc), { chats: next, current: chat } as Index);
+  const idx = await loadIndex(doc);
+  await kv.set('meta', indexKey(doc), { ...idx, chats: next, current: chat } as Index);
   return next;
+}
+
+/** 算出眼下生效的那一套；换了套就断掉续聊的原始记录（两家接口的消息形状不同） */
+function refresh() {
+  const st = useAgent.getState();
+  const s = st.settings;
+  if (!s) return;
+  const pick = (id: string | null) => (id ? s.providers.find((p) => p.id === id) ?? null : null);
+  const next = pick(st.docProviderId) ?? pick(s.globalId) ?? s.providers[0] ?? null;
+  const cur = st.config;
+  if (cur && next && (cur.api !== next.api || cur.model !== next.model || cur.baseUrl !== next.baseUrl)) transcript = null;
+  useAgent.setState({ config: next });
 }
 
 export const useAgent = create<AgentState>((set, get) => ({
   open: false,
-  setOpen: (v) => { set({ open: v }); if (v) { if (get().config === undefined) void loadConfig().then((c) => set({ config: c })); void get().bind(); } },
+  setOpen: (v) => { set({ open: v }); if (v) { if (get().settings === undefined) void loadSettings().then((st) => { set({ settings: st }); refresh(); }); void get().bind(); } },
+  settings: undefined,
+  setSettings: async (st) => { await saveSettings(st); set({ settings: st }); refresh(); },
+  docProviderId: null,
+  docPreset: '',
+  setDocOverride: async (o) => {
+    set({ docProviderId: o.providerId !== undefined ? o.providerId : get().docProviderId, docPreset: o.preset !== undefined ? o.preset : get().docPreset });
+    refresh();
+    if (boundDoc) { const idx = await loadIndex(boundDoc); await kv.set('meta', indexKey(boundDoc), { ...idx, providerId: get().docProviderId, preset: get().docPreset } as Index); }
+  },
   config: undefined,
-  setConfig: (c) => { set({ config: c }); transcript = null; },
   settingsOpen: false,
   setSettingsOpen: (v) => set({ settingsOpen: v }),
   items: [],
@@ -121,7 +148,9 @@ export const useAgent = create<AgentState>((set, get) => ({
     // 中途停了或出错：这一轮的记录整个撤掉，不然下一轮会带着没回结果的工具调用
     const mark = transcript.messages.length;
     try {
-      await runTurn(c, transcript, text || '（看附件）', files, {
+      const st = get().settings;
+      setMemoryContext({ enabled: !!st?.memory.enabled, notes: st?.memory.notes ?? '', write: async (notes) => { const cur = get().settings; if (cur) await get().setSettings({ ...cur, memory: { ...cur.memory, notes } }); } });
+      await runTurn(c, transcript, text || '（看附件）', files, systemPromptFor(st, get().docPreset), {
         onText: (d) => { buf += d; patch({ text: buf }); },
         onTool: (name, input, result, isError) => { const cur = get().items.find((it) => it.id === reply.id)!; patch({ tools: [...cur.tools, { name, input, result, isError, images: derived.length ? derived : undefined }] }); derived = []; },
       }, aborter.signal);
@@ -145,7 +174,8 @@ export const useAgent = create<AgentState>((set, get) => ({
     if (boundDoc && prev.chatId && prev.items.length) await persistChat(boundDoc, prev.chatId, prev.items, prev.chats);
     boundDoc = id;
     const index = await loadIndex(id);
-    set({ chats: index.chats, chatId: null, items: [], pending: [], ask: null });
+    set({ chats: index.chats, chatId: null, items: [], pending: [], ask: null, docProviderId: index.providerId ?? null, docPreset: index.preset ?? '' });
+    refresh();
     transcript = null; sentFiles = []; setAttachments([]);
     if (index.current && index.chats.some((c) => c.id === index.current)) await get().openChat(index.current);
   },
@@ -155,7 +185,7 @@ export const useAgent = create<AgentState>((set, get) => ({
     if (boundDoc && st.chatId && st.items.length) await persistChat(boundDoc, st.chatId, st.items, st.chats);
     transcript = null; sentFiles = []; setAttachments([]);
     set({ chatId: null, items: [], pending: [], ask: null });
-    if (boundDoc) await kv.set('meta', indexKey(boundDoc), { chats: get().chats, current: null } as Index);
+    if (boundDoc) await kv.set('meta', indexKey(boundDoc), { ...(await loadIndex(boundDoc)), chats: get().chats, current: null } as Index);
   },
   openChat: async (id) => {
     if (!boundDoc) return;
@@ -168,7 +198,7 @@ export const useAgent = create<AgentState>((set, get) => ({
     sentFiles = saved?.sentFiles ?? [];
     setAttachments(sentFiles);
     set({ chatId: id, items: saved?.items ?? [], pending: [], ask: null });
-    await kv.set('meta', indexKey(boundDoc), { chats: get().chats, current: id } as Index);
+    await kv.set('meta', indexKey(boundDoc), { ...(await loadIndex(boundDoc)), chats: get().chats, current: id } as Index);
   },
   deleteChat: async (id) => {
     if (!boundDoc) return;
@@ -177,6 +207,6 @@ export const useAgent = create<AgentState>((set, get) => ({
     const chats = st.chats.filter((c) => c.id !== id);
     set({ chats });
     await kv.del('meta', chatKey(boundDoc, id));
-    await kv.set('meta', indexKey(boundDoc), { chats, current: get().chatId } as Index);
+    await kv.set('meta', indexKey(boundDoc), { ...(await loadIndex(boundDoc)), chats, current: get().chatId } as Index);
   },
 }));

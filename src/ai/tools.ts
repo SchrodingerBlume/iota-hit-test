@@ -15,7 +15,7 @@ import { useCompileState } from '../compiler/client';
 import { parseBibtex, splitNames, type BibEntry } from '../bib/bibtex';
 import { mergeEntries } from '../bib/csl';
 import { pdfRender, pdfImages, type Attachment } from './files';
-import { webOf, type AiConfig } from './config';
+import { webOf, webNativeOf, type AiConfig, type AiSettings } from './config';
 
 export interface ToolDef { name: string; description: string; parameters: Record<string, unknown> }
 /** 要用户点头的改动：面板弹卡片，用户允许了才做 */
@@ -50,12 +50,27 @@ const WEB_TOOLS: ToolDef[] = [
   { name: 'web_fetch', description: '抓一个网页的正文（转成 Markdown）。用户给了网址、或搜索结果里有要细看的页面时用。', parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'], additionalProperties: false } },
   { name: 'web_search', description: '联网搜索，返回前几条结果的标题、网址、摘要。查文献、查数据、核对说法时用；引用时要写出处。', parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false } },
 ];
+const MEMORY_TOOLS: ToolDef[] = [
+  { name: 'memory_read', description: '读用户的长期记忆（跨文档、跨模型的一段话：偏好、口味、常用说法）。系统提示里已经附了一份，通常不用再读。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+  { name: 'memory_write', description: '往长期记忆里记一条（用户明确说「记住」的偏好，或反复出现的要求）。mode=append 追加一行，replace 整段换掉（用来整理、删旧的）。写之前先说一声记什么。', parameters: { type: 'object', properties: { text: { type: 'string' }, mode: { type: 'string', enum: ['append', 'replace'] } }, required: ['text'], additionalProperties: false } },
+];
+/** 记忆与预设由 state 在每轮前塞进来 */
+let memoryCtx: { enabled: boolean; notes: string; write: (notes: string) => Promise<void> } = { enabled: false, notes: '', write: async () => {} };
+export const setMemoryContext = (m: typeof memoryCtx) => { memoryCtx = m; };
 /** 这一家接口用哪些工具：Anthropic 的联网是服务方自带的（在 agent.ts 里加服务端工具），别家走阅读代理 */
 export function toolsFor(c: AiConfig): ToolDef[] {
-  if (c.api === 'anthropic') return TOOLS;
+  const mem = memoryCtx.enabled ? MEMORY_TOOLS : [];
   const w = webOf(c);
-  if (!w.enabled) return TOOLS;
-  return [...TOOLS, WEB_TOOLS[0], ...(w.searchKey.trim() ? [WEB_TOOLS[1]] : [])];
+  if (!w.enabled || webNativeOf(c)) return [...TOOLS, ...mem];
+  return [...TOOLS, WEB_TOOLS[0], ...(w.searchKey.trim() ? [WEB_TOOLS[1]] : []), ...mem];
+}
+/** 系统提示 = 固定那段 + 记忆 + 全局预设 + 这篇文档的预设 */
+export function systemPromptFor(s: AiSettings | undefined, docPreset: string): string {
+  const parts = [SYSTEM_PROMPT];
+  if (memoryCtx.enabled) parts.push(`用户的长期记忆（跨文档、跨模型，用户明确要你记住的偏好；有新的用 memory_write 记）：\n${memoryCtx.notes.trim() || '（还是空的）'}`);
+  if (s?.preset.trim()) parts.push(`用户的预设要求：\n${s.preset.trim()}`);
+  if (docPreset.trim()) parts.push(`这篇文档的额外要求：\n${docPreset.trim()}`);
+  return parts.join('\n\n');
 }
 let webConfig: { reader: string; searchKey: string } = { reader: '', searchKey: '' };
 export const setWebConfig = (w: { reader: string; searchKey: string }) => { webConfig = w; };
@@ -432,6 +447,15 @@ export async function runTool(name: string, input: Record<string, any>): Promise
     case 'settings_set': return settingsSet(input);
     case 'pdf_images': return pdfImagesTool(input);
     case 'pdf_render': return pdfRenderTool(input);
+    case 'memory_read': return memoryCtx.enabled ? (memoryCtx.notes.trim() || '（记忆还是空的）') : '记忆功能没开';
+    case 'memory_write': {
+      if (!memoryCtx.enabled) return '记忆功能没开，用户在 Agent 设置里能打开';
+      const text = String(input.text ?? '').trim(); if (!text) return '要记什么？';
+      const notes = input.mode === 'replace' ? text : [memoryCtx.notes.trim(), text].filter(Boolean).join('\n');
+      if (notes.length > 20000) return '记忆太长了（超过 2 万字），先用 replace 整理一下';
+      memoryCtx.notes = notes; await memoryCtx.write(notes);
+      return `已记住（现在 ${notes.split('\n').length} 条）`;
+    }
     case 'web_fetch': return webFetch(input.url);
     case 'web_search': return webSearch(input.query);
     default: throw new Error(`没有这个工具：${name}`);
