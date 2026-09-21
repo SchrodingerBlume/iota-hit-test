@@ -416,7 +416,7 @@ export function App() {
             {view === 'editor' && <span className="status"><i className={`dot ${dot}`} /><span key={statusText} className="status-text">{statusText}</span></span>}
             {view === 'editor' && (
               <Tooltip content={tx("Agent：接你自己的模型，让它读、改这篇论文")} relationship="label" positioning="below">
-                <Button appearance="subtle" size="small" className={`agent-btn ${agentOpen ? 'on' : ''}`} icon={<BotSparkle20Regular />} onClick={() => { useAgent.getState().setOpen(!agentOpen); if (!agentOpen) { useComments.getState().setOpen(false); if (mode === 'preview') setMode('split'); } }}>Agent</Button>
+                <Button appearance="subtle" size="small" className={`agent-btn ${agentOpen ? 'on' : ''}`} icon={<BotSparkle20Regular />} onClick={() => useAgent.getState().setOpen(!agentOpen)}>Agent</Button>
               </Tooltip>
             )}
 
@@ -474,10 +474,9 @@ export function App() {
             </div>
           </nav>
           {!compact && <Fold className="nav-toggle" open={navOpen} title={navOpen ? tx("收起左侧导航") : tx("展开左侧导航")} onClick={() => setNavOpen(!navOpen)} />}
-          <section className={`work ${commentsOpen ? 'has-comments' : ''} ${agentOpen ? 'has-agent' : ''}`} hidden={mode === 'preview'}>
+          <section className={`work ${commentsOpen ? 'has-comments' : ''}`} hidden={mode === 'preview'}>
             {loaded ? <div className="work-inner" key={`${doc.id}:${section}`} ref={reflowRef}>{panel}</div> : <div className="muted">{tx("正在打开文档…")}</div>}
             {commentsOpen && loaded && <CommentsPane />}
-            {agentOpen && loaded && <AgentPane />}
           </section>
           <LinkDialogHost />
           <Dialog open={about} onOpenChange={(_, d) => setAbout(d.open)}>
@@ -497,6 +496,7 @@ export function App() {
           </Dialog>
           {mode === 'split' && <div className="splitter" title={tx("拖动调整比例（{{v0}}% : {{v1}}%）", { v0: Math.round(ratio * 100), v1: Math.round((1 - ratio) * 100) })} onPointerDown={startDrag} />}
           <div className="preview-slot" hidden={mode === 'editor'}><Preview onRefresh={() => setRefresh((n) => n + 1)} refreshDisabled={!hasDocument} /></div>
+          {agentOpen && loaded && <AgentPane overlay={compact} />}
           <BlockMenu />
         </div>
         {/* 手机：底部一条切换 编辑 / 分栏 / 预览 与目录抽屉，够不着功能区「视图」页时用 */}

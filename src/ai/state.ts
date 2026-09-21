@@ -4,9 +4,12 @@ import type { AiConfig } from './config';
 import { loadConfig } from './config';
 import { runTurn, describeError, type Transcript } from './agent';
 import { readAttachment, type Attachment } from './files';
+import { setAskUser, setAttachments, type Ask } from './tools';
 
 export interface ToolCard { name: string; input: Record<string, unknown>; result: string; isError: boolean }
 export interface ChatItem { id: string; role: 'user' | 'assistant'; text: string; tools: ToolCard[]; files?: Attachment[]; error?: string }
+/** 模型要改设置时弹的授权卡：用户点了才往下走 */
+export interface Pending { ask: Ask; resolve: (ok: boolean) => void }
 
 interface AgentState {
   open: boolean;
@@ -18,6 +21,8 @@ interface AgentState {
   items: ChatItem[];
   running: boolean;
   pending: Attachment[];
+  ask: Pending | null;
+  answer: (ok: boolean) => void;
   attach: (files: File[]) => Promise<void>;
   detach: (id: string) => void;
   send: (text: string) => Promise<void>;
@@ -27,6 +32,7 @@ interface AgentState {
 
 let transcript: Transcript | null = null;
 let aborter: AbortController | null = null;
+let sentFiles: Attachment[] = [];
 const uid = () => Math.random().toString(36).slice(2, 9);
 
 export const useAgent = create<AgentState>((set, get) => ({
@@ -39,6 +45,8 @@ export const useAgent = create<AgentState>((set, get) => ({
   items: [],
   running: false,
   pending: [],
+  ask: null,
+  answer: (ok) => { const a = get().ask; if (a) { set({ ask: null }); a.resolve(ok); } },
   attach: async (files) => {
     for (const f of files) {
       try { const a = await readAttachment(f); set({ pending: [...get().pending, a] }); }
@@ -53,6 +61,9 @@ export const useAgent = create<AgentState>((set, get) => ({
     if (!transcript || transcript.api !== c.api) transcript = { api: c.api, messages: [] } as Transcript;
     const reply: ChatItem = { id: uid(), role: 'assistant', text: '', tools: [] };
     set({ items: [...get().items, { id: uid(), role: 'user', text, tools: [], files }, reply], running: true, pending: [] });
+    sentFiles = [...sentFiles, ...files];
+    setAttachments(sentFiles);
+    setAskUser((ask) => new Promise<boolean>((resolve) => set({ ask: { ask, resolve } })));
     const patch = (p: Partial<ChatItem>) => set({ items: get().items.map((it) => (it.id === reply.id ? { ...it, ...p } : it)) });
     let buf = '';
     aborter = new AbortController();
@@ -71,6 +82,6 @@ export const useAgent = create<AgentState>((set, get) => ({
       set({ running: false });
     }
   },
-  stop: () => { aborter?.abort(); },
-  clear: () => { transcript = null; set({ items: [] }); },
+  stop: () => { get().answer(false); aborter?.abort(); },
+  clear: () => { transcript = null; sentFiles = []; setAttachments([]); set({ items: [] }); },
 }));

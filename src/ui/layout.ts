@@ -1,11 +1,14 @@
 // 三栏布局的偏好：左栏收起、编辑 / 分栏 / 预览三种模式、编辑与预览的分配比例（拖分隔条）。都记在本机。
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useMedia, COMPACT, PORTRAIT } from './useMedia';
+import { useAgent } from '../ai/state';
 
 type Mode = 'editor' | 'split' | 'preview';
 const KEY = 'iota4web-layout';
 const NAV_W = 200;
 const SPLIT_W = 4;
+/** Agent 面板在宽屏上是最右一列；窄屏盖在上面，不占列 */
+export const AGENT_W = 380;
 
 // 两栏按比例分：fr 的系数写成整数、不写成 0.2fr / 0.8fr——一栏碰到 minmax 的下限退成定宽后，
 // 剩下那栏的 fr 之和不到 1，网格按规范把 1fr 当成整段剩余空间、只分给它 0.8 份，右边空出一截
@@ -63,8 +66,9 @@ export function useLayoutPrefs() {
     e.preventDefault();
     const rect = el.getBoundingClientRect();
     const navW = compact || !prefs.navOpen ? 0 : NAV_W;
+    const agentW = !compact && useAgent.getState().open ? AGENT_W : 0;
     const left = rect.left + navW;
-    const width = rect.width - navW - SPLIT_W;
+    const width = rect.width - navW - SPLIT_W - agentW;
     const top = rect.top;
     const height = rect.height - SPLIT_W;
     let nextRatio = prefs.ratio;
@@ -77,7 +81,7 @@ export function useLayoutPrefs() {
         el.style.gridTemplateRows = splitTracks(nextRatio, 0, 0);
       } else {
         const nav = compact ? '' : `${prefs.navOpen ? NAV_W : 0}px `;
-        el.style.gridTemplateColumns = nav + splitTracks(nextRatio, compact ? 0 : 360, compact ? 0 : 320);
+        el.style.gridTemplateColumns = nav + splitTracks(nextRatio, compact ? 0 : 360, compact ? 0 : 320) + (agentW ? ` ${agentW}px` : '');
       }
     };
     const move = (ev: PointerEvent) => {
@@ -99,11 +103,13 @@ export function useLayoutPrefs() {
 
   // 宽屏上左栏收起是列宽归零（列还在，收放才能有过渡）；窄屏它是盖在上面的抽屉，不占列
   const nav = compact ? '' : `${prefs.navOpen ? NAV_W : 0}px `;
+  const agentOpen = useAgent((s) => s.open);
+  const agent = agentOpen && !compact ? ` ${AGENT_W}px` : '';
   const gridColumns = stacked
     ? 'minmax(0, 1fr)'
     : prefs.mode === 'split'
-      ? nav + splitTracks(prefs.ratio, compact ? 0 : 360, compact ? 0 : 320)
-      : `${nav}minmax(0, 1fr)`;
+      ? nav + splitTracks(prefs.ratio, compact ? 0 : 360, compact ? 0 : 320) + agent
+      : `${nav}minmax(0, 1fr)${agent}`;
   const gridRows = stacked ? splitTracks(prefs.ratio, 0, 0) : undefined;
 
   return {

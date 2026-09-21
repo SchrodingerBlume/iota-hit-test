@@ -15,8 +15,8 @@ export type Transcript = { api: 'anthropic'; messages: Anthropic.MessageParam[] 
 const MAX_ROUNDS = 12;
 const base = (u: string) => u.trim().replace(/\/+$/, '');
 
-function exec(name: string, input: Record<string, unknown>): { result: string; isError: boolean } {
-  try { return { result: runTool(name, input), isError: false }; }
+async function exec(name: string, input: Record<string, unknown>): Promise<{ result: string; isError: boolean }> {
+  try { return { result: await runTool(name, input), isError: false }; }
   catch (e) { return { result: `工具出错：${(e as Error).message}`, isError: true }; }
 }
 
@@ -50,7 +50,7 @@ async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], us
     for (const block of msg.content) {
       if (block.type !== 'tool_use') continue;
       const input = (block.input ?? {}) as Record<string, unknown>;
-      const { result, isError } = exec(block.name, input);
+      const { result, isError } = await exec(block.name, input);
       ev.onTool(block.name, input, result, isError);
       results.push({ type: 'tool_result', tool_use_id: block.id, content: result, is_error: isError || undefined });
     }
@@ -102,13 +102,13 @@ async function openaiTurn(c: AiConfig, messages: any[], userText: string, files:
     const list = [...calls.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
     if (!list.length || (finish && finish !== 'tool_calls' && finish !== 'function_call')) { messages.push({ role: 'assistant', content: text }); return; }
     messages.push({ role: 'assistant', content: text || null, tool_calls: list.map((v, i) => ({ id: v.id || `call_${round}_${i}`, type: 'function', function: { name: v.name, arguments: v.args || '{}' } })) });
-    list.forEach((v, i) => {
+    for (const [i, v] of list.entries()) {
       let input: Record<string, unknown> = {};
       try { input = JSON.parse(v.args || '{}'); } catch { /* 参数不是合法 JSON */ }
-      const { result, isError } = exec(v.name, input);
+      const { result, isError } = await exec(v.name, input);
       ev.onTool(v.name, input, result, isError);
       messages.push({ role: 'tool', tool_call_id: v.id || `call_${round}_${i}`, content: result });
-    });
+    }
   }
   ev.onText("\n（工具调用轮数到上限，先停在这儿）");
 }
