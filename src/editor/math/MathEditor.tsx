@@ -6,6 +6,7 @@ import { MathPreview, katexHtml } from './MathPreview';
 import { PALETTE, insertTemplate, nextHole } from './palette';
 import { LayoutGrid, ChevronUp, Keyboard, Code2 } from 'lucide-react';
 import { t as tx } from '../../i18n';
+import { MirrorTextarea } from '../mirror';
 
 // MathLive 字体已随站点分发；禁用远程字体与音效。
 MathfieldElement.fontsDirectory = null;
@@ -147,7 +148,7 @@ export function MathEditor({ value, mode, display, onChange, onMode, autoFocus, 
         </div>
       )}
       {(!latex || showSource) && (
-        <textarea
+        <MirrorTextarea
           ref={ta}
           className="eq-src"
           rows={Math.max(compact ? 1 : 2, Math.min(6, value.split('\n').length))}

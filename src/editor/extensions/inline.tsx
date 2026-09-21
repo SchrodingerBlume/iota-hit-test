@@ -8,6 +8,7 @@ import { useEffect, useRef } from 'react';
 import { MathEditor, forPreview } from '../math/MathEditor';
 import { MathPreview } from '../math/MathPreview';
 import { t } from '../../i18n';
+import { MirrorInput, MirrorTextarea } from '../mirror';
 
 const inlineAtom = (name: string, attrs: Record<string, { default: any }>, View: (p: NodeViewProps) => ReactElement) =>
   Node.create({
@@ -85,7 +86,7 @@ function CiteView({ node, updateAttributes, selected, deleteNode, editor, getPos
             {!list.length && <li className="muted">{t("未找到匹配的条目")}</li>}
           </ul>
           <Field label={t("手动输入引用键")}>
-            <input value={node.attrs.keys ?? ''} placeholder="key1,key2" onChange={(e) => updateAttributes({ keys: e.target.value })} />
+            <MirrorInput value={node.attrs.keys ?? ''} placeholder="key1,key2" onChange={(e) => updateAttributes({ keys: e.target.value })} />
           </Field>
         </>
       )}
@@ -199,7 +200,7 @@ function FootnoteView({ node, updateAttributes, selected, deleteNode, editor, ge
     <InlineChip onSelect={() => { const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }} kind="footnote" openNonce={open.nonce} text={<span ref={wrap}>{mark}</span>} title={text || t("脚注")} selected={selected} editable={editor.isEditable} autoOpen={!text} onDelete={deleteNode}>
       {() => (
         <Field label={t("脚注内容")}>
-          <textarea autoFocus rows={3} data-attr="text" value={text} onChange={(e) => updateAttributes({ text: e.target.value })} />
+          <MirrorTextarea autoFocus rows={3} data-attr="text" value={text} onChange={(e) => updateAttributes({ text: e.target.value })} />
         </Field>
       )}
     </InlineChip>
@@ -215,7 +216,7 @@ function IdxView({ node, updateAttributes, selected, deleteNode, editor, getPos 
     <InlineChip onSelect={() => { const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }} kind="idx" openNonce={open.nonce} text={text || <em>{t("索引项")}</em>} title={t("将所选文字标记为索引项；正文显示不变")} selected={selected} editable={editor.isEditable} autoOpen={!text} onDelete={deleteNode}>
       {(close) => (
         <Field label={t("索引项")} hint={t("标记索引项")}>
-          <input autoFocus value={text} onChange={(e) => updateAttributes({ text: e.target.value })} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); close(); } }} />
+          <MirrorInput autoFocus value={text} onChange={(e) => updateAttributes({ text: e.target.value })} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); close(); } }} />
         </Field>
       )}
     </InlineChip>

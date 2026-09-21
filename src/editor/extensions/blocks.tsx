@@ -15,6 +15,7 @@ import { Trash2, ImageUp, Tag, MoveHorizontal, PencilLine, Check } from 'lucide-
 import { LengthInput } from '../../ui/LengthInput';
 import { parseLength, toPx } from '../../model/length';
 import { t } from '../../i18n';
+import { MirrorInput } from '../mirror';
 
 /** 编辑区里图的显示宽度：绝对长度按 28px/cm 的缩小比例画，百分比按容器，其余按 8cm */
 function figurePx(w: unknown): string {
@@ -107,7 +108,7 @@ function LabelField({ node, updateAttributes, prefix, editable }: { node: NodeVi
   return (
     <label className="blk-tool" title={t("交叉引用用的标签；留空则自动生成")}>
       <Tag />
-      <input value={node.attrs.label ?? ''} placeholder={`${prefix}:${node.attrs.uid ?? ''}`} disabled={!editable} onChange={(e) => updateAttributes({ label: e.target.value.trim() })} />
+      <MirrorInput value={node.attrs.label ?? ''} placeholder={`${prefix}:${node.attrs.uid ?? ''}`} disabled={!editable} onChange={(e) => updateAttributes({ label: e.target.value.trim() })} />
     </label>
   );
 }

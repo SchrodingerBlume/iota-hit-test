@@ -9,6 +9,7 @@ import { levelLabels } from '../../typst/numbering';
 import { labelOf } from '../../typst/pmToTypst';
 import { Hash } from 'lucide-react';
 import { t } from '../../i18n';
+import { MirrorInput } from '../mirror';
 
 function HeadingView({ node, updateAttributes, editor, getPos }: NodeViewProps) {
   const richKey = useRichKey();
@@ -36,7 +37,7 @@ function HeadingView({ node, updateAttributes, editor, getPos }: NodeViewProps) 
         <button type="button" className={`hd-toggle ${numbered ? '' : 'on'}`} contentEditable={false} disabled={!editable} title={numbered ? t("不为此标题编号，例如“引言”或“结束语”") : t("恢复编号")} onMouseDown={(e) => e.preventDefault()} onClick={() => updateAttributes({ numbered: !numbered })}><Hash /></button>
       </div>
       <div className="hd-en" contentEditable={false}>
-        <input
+        <MirrorInput
           data-attr="en"
           value={en}
           placeholder={t("英文标题（用于博士双语目录，可留空）")}

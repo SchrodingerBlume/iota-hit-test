@@ -10,6 +10,7 @@ import { labelOf } from '../../typst/pmToTypst';
 import { THEOREM_KINDS, THEOREM_NAMES, theoremKind, type TheoremKind } from '../../typst/theorem';
 import { AutoInput } from '../../ui/AutoInput';
 import { t } from '../../i18n';
+import { MirrorInput } from '../mirror';
 
 const attr = (k: string, def: any) => ({ default: def, parseHTML: (el: HTMLElement) => el.getAttribute(`data-${k}`) ?? def, renderHTML: (a: any) => ({ [`data-${k}`]: a[k] }) });
 export const kindLabel = (k: TheoremKind) => `${THEOREM_NAMES[k].zh} ${THEOREM_NAMES[k].en}`;
@@ -36,7 +37,7 @@ function TheoremView({ node, updateAttributes, selected, deleteNode, editor, get
         {kind !== 'proof' && (
           <label className="blk-tool" title={t("交叉引用用的标签；留空则自动生成")}>
             <Tag />
-            <input value={node.attrs.label ?? ''} placeholder={`thm:${node.attrs.uid ?? ''}`} disabled={!editable} onChange={(e) => updateAttributes({ label: e.target.value.trim() })} />
+            <MirrorInput value={node.attrs.label ?? ''} placeholder={`thm:${node.attrs.uid ?? ''}`} disabled={!editable} onChange={(e) => updateAttributes({ label: e.target.value.trim() })} />
           </label>
         )}
         <span className="blk-hint">{t("末尾空段落上按 Enter 退出")}</span>

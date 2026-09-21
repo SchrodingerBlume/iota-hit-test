@@ -11,6 +11,7 @@ import { parseDenoteRows, type DenoteRow } from '../../typst/pmToTypst';
 import { useOpenNonce, focusAttrInput } from '../env';
 import { Trash2, Plus, X } from 'lucide-react';
 import { t } from '../../i18n';
+import { MirrorInput } from '../mirror';
 
 const LEADS: { value: string; label: string; hint: string }[] = [
   { value: 'auto', label: t("式中"), hint: t("按文档语言显示“式中”或“where”") },
@@ -68,7 +69,7 @@ function EqDenoteView({ node, updateAttributes, selected, deleteNode, editor, ge
             <span className="denote-sym"><SymbolCell row={r} editable={editable} onChange={(p) => patch(i, p)} /></span>
             <span className="denote-dash">——</span>
             <span className="denote-meaning">
-              <input data-attr={`rows.${i}.meaning`} value={r.meaning} placeholder={t("物理量的名称与单位，如：多孔质材料的平均粒子直径（m）")} disabled={!editable}
+              <MirrorInput data-attr={`rows.${i}.meaning`} value={r.meaning} placeholder={t("物理量的名称与单位，如：多孔质材料的平均粒子直径（m）")} disabled={!editable}
                 onChange={(e) => patch(i, { meaning: e.target.value })}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') { e.preventDefault(); add(i); requestAnimationFrame(() => focusAttrInput(wrap.current, `rows.${i + 1}.meaning`, 0)); }

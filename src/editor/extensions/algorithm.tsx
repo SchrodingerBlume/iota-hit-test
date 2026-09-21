@@ -8,6 +8,7 @@ import { useNumbering } from '../env';
 import { labelOf } from '../../typst/pmToTypst';
 import { AutoInput } from '../../ui/AutoInput';
 import { t as tx } from '../../i18n';
+import { MirrorInput } from '../mirror';
 
 export interface AlgLine { text: string; level: number }
 export function parseLines(v: unknown): AlgLine[] {
@@ -52,14 +53,14 @@ function AlgorithmView({ node, updateAttributes, selected, deleteNode, editor, g
         {io.map((t, i) => (
           <div key={`io${i}`} className="alg-line alg-io">
             <span className="alg-no">–</span>
-            <input value={t} disabled={!editable} placeholder="input: …" onChange={(e) => setIo(io.map((x, k) => (k === i ? e.target.value : x)))} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); const l = [...io]; l.splice(i + 1, 0, ''); setIo(l); } else if (e.key === 'Backspace' && !t) { e.preventDefault(); setIo(io.filter((_, k) => k !== i)); } }} />
+            <MirrorInput value={t} disabled={!editable} placeholder="input: …" onChange={(e) => setIo(io.map((x, k) => (k === i ? e.target.value : x)))} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); const l = [...io]; l.splice(i + 1, 0, ''); setIo(l); } else if (e.key === 'Backspace' && !t) { e.preventDefault(); setIo(io.filter((_, k) => k !== i)); } }} />
             <button type="button" className="alg-btn" title={tx("删除此行")} disabled={!editable} onClick={() => setIo(io.filter((_, k) => k !== i))}><Trash2 /></button>
           </div>
         ))}
         {lines.map((l, i) => (
           <div key={i} className="alg-line" style={{ paddingLeft: `${l.level * 1.6}em` }}>
             <span className="alg-no">{i + 1}</span>
-            <input value={l.text} disabled={!editable} placeholder={i === 0 ? tx("for $t = 1$ to $T$ do（Tab 增加缩进，Enter 新建一行）") : ''} onChange={(e) => setLines(lines.map((x, k) => (k === i ? { ...x, text: e.target.value } : x)))} onKeyDown={(e) => onKey(i, e)} />
+            <MirrorInput value={l.text} disabled={!editable} placeholder={i === 0 ? tx("for $t = 1$ to $T$ do（Tab 增加缩进，Enter 新建一行）") : ''} onChange={(e) => setLines(lines.map((x, k) => (k === i ? { ...x, text: e.target.value } : x)))} onKeyDown={(e) => onKey(i, e)} />
             <span className="alg-tools">
               <button type="button" className="alg-btn" title={tx("减少缩进（Shift+Tab）")} disabled={!editable || !l.level} onClick={() => setLines(lines.map((x, k) => (k === i ? { ...x, level: Math.max(0, x.level - 1) } : x)))}><ChevronLeft /></button>
               <button type="button" className="alg-btn" title={tx("增加缩进（Tab）")} disabled={!editable} onClick={() => setLines(lines.map((x, k) => (k === i ? { ...x, level: Math.min(6, x.level + 1) } : x)))}><ChevronRight /></button>
@@ -75,7 +76,7 @@ function AlgorithmView({ node, updateAttributes, selected, deleteNode, editor, g
         <button type="button" className="blk-tool is-btn" disabled={!editable} onClick={() => { setLines([...lines, { text: '', level: 0 }]); focusLine(lines.length); }}><Plus />{tx("添加一行")}</button>
         <label className="blk-tool" title={tx("交叉引用用的标签；留空则自动生成")}>
           <Tag />
-          <input value={node.attrs.label ?? ''} placeholder={`alg:${node.attrs.uid ?? ''}`} disabled={!editable} onChange={(e) => updateAttributes({ label: e.target.value.trim() })} />
+          <MirrorInput value={node.attrs.label ?? ''} placeholder={`alg:${node.attrs.uid ?? ''}`} disabled={!editable} onChange={(e) => updateAttributes({ label: e.target.value.trim() })} />
         </label>
         <button type="button" className="blk-tool is-btn is-danger" title={tx("删除算法")} disabled={!editable} onClick={deleteNode}><Trash2 /></button>
       </div>
