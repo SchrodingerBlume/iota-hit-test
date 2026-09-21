@@ -1512,6 +1512,11 @@ body.is-resizing .preview-stage { pointer-events: none; }
 .ag-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 14em; }
 .ag-file-x { border: 0; background: none; padding: 0; color: var(--muted); display: inline-flex; cursor: pointer; }
 .ag-file-x:hover { color: var(--danger); }
+.ag-chats { min-width: 260px; max-width: 360px; }
+.ag-chats .fui-MenuItem.is-current { font-weight: 600; color: var(--accent-ink); }
+.ag-chat-side { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; }
+.ag-chat-x { border: 0; background: none; padding: 2px; color: var(--muted); display: inline-flex; cursor: pointer; border-radius: 3px; }
+.ag-chat-x:hover { color: var(--danger); background: var(--danger-soft); }
 .ag-input { display: flex; gap: 6px; align-items: flex-end; padding: 8px 10px 10px; border-top: 1px solid var(--line); }
 .ag-input .fui-Textarea { flex: 1; min-width: 0; }
 .ag-input textarea { min-height: 38px; max-height: 200px; font-size: 13px; }

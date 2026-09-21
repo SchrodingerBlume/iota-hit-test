@@ -6,6 +6,7 @@ import type { Editor } from '@tiptap/core';
 import { useStore, type RichKey } from '../model/store';
 import type { RichDoc, Info, Settings } from '../model/types';
 import { AXES, SWITCHES, resolveSwitch } from '../model/options';
+import { INFO_FIELDS as INFO_DEFS } from '../model/info';
 import { getEditor } from '../editor/registry';
 import { toMarkdown, fromMarkdown } from '../editor/markdown';
 import { inlineFromMarkdown } from '../editor/tableImport';
@@ -40,13 +41,8 @@ export const PARTS: { key: RichKey; label: string; headings: boolean }[] = [
 ];
 const PART_KEYS = PARTS.map((p) => p.key);
 const partEnum = { type: 'string', enum: PART_KEYS, description: '哪一部分：abstractZh 中文摘要、abstractEn 英文摘要、body 正文、conclusion 结论、appendix 附录、acknowledgement 致谢、resume 简历' };
-const INFO_FIELDS: { key: keyof Info; label: string }[] = ([
-  ['title', '题目'], ['titleEn', '英文题目'], ['subtitle', '副题目'], ['subtitleEn', '英文副题目'], ['author', '作者'], ['authorEn', '作者英文名'], ['studentId', '学号'],
-  ['supervisor', '导师'], ['supervisorEn', '导师英文名'], ['coSupervisor', '副导师'], ['coSupervisorEn', '副导师英文名'], ['industrySupervisor', '行业导师'], ['industrySupervisorEn', '行业导师英文名'],
-  ['degreeApplied', '申请学位'], ['degreeAppliedEn', '申请学位（英文）'], ['speciality', '学科 / 专业'], ['specialityEn', '学科 / 专业（英文）'], ['practiceType', '实践成果类型'],
-  ['affiliation', '所在单位'], ['affiliationEn', '所在单位（英文）'], ['defenseDate', '答辩日期'], ['defenseDateEn', '答辩日期（英文）'], ['date', '日期'],
-  ['keywords', '关键词（数组）'], ['keywordsEn', '英文关键词（数组）'], ['secrecy', '密级'], ['classifiedIndex', '国内图书分类号'], ['udc', '国际图书分类号'], ['schoolCode', '学校代码'],
-] as [keyof Info, string][]).map(([key, label]) => ({ key, label }));
+// 论文信息的字段表就是编辑器那张（src/model/info.ts）：名、说明、哪一档才有、年月字段
+const INFO_FIELDS = () => INFO_DEFS.map((f) => ({ key: f.key as keyof Info, label: f.label, hint: [f.hint, f.placeholder ? `例：${f.placeholder}` : '', f.kind === 'month' ? '格式 YYYY-MM' : f.kind === 'keywords' ? '字符串数组' : f.kind === 'textarea' ? '可多行' : ''].filter(Boolean).join('；'), applies: f.applies }));
 const range = { from: { type: 'integer', minimum: 0 }, to: { type: 'integer', minimum: 0 } };
 const place = { part: partEnum, at: { type: 'integer', minimum: 0, description: '插在第几块之前（等于块数就是接在末尾）；给了 replace 就不用' }, replace: { type: 'array', items: { type: 'integer', minimum: 0 }, minItems: 2, maxItems: 2, description: '[from, to]：换掉这一段块' } };
 
@@ -80,7 +76,7 @@ export const TOOLS: ToolDef[] = [
   { name: 'bib_list', description: '参考文献表（或成果表）里有哪些条目：引用键、类型、作者、年份、题名。正文里引用写 [@引用键]。', parameters: { type: 'object', properties: { which: { type: 'string', enum: ['references', 'achievements'] } }, additionalProperties: false } },
   { name: 'bib_add', description: '往参考文献表（或攻读学位期间的成果表）加条目：给 BibTeX，同一引用键的当作更新。字段名照 GB/T 7714：author、title、journal、year、volume、number、pages、booktitle、publisher、address、school、doi、url、urldate、langid。', parameters: { type: 'object', properties: { which: { type: 'string', enum: ['references', 'achievements'] }, bibtex: { type: 'string' } }, required: ['bibtex'], additionalProperties: false } },
   { name: 'info_read', description: '论文信息（题目、作者、导师、学科、关键词……）与档位（学位、阶段、校区、语言、文种）。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-  { name: 'info_write', description: '改论文信息里的字段。patch 是字段名到值的字典（字段名见 info_read）；keywords / keywordsEn 是字符串数组。', parameters: { type: 'object', properties: { patch: { type: 'object', additionalProperties: true } }, required: ['patch'], additionalProperties: false } },
+  { name: 'info_write', description: '改论文信息里的字段。patch 是字段名到值的字典（字段名和说明见 info_read）；keywords / keywordsEn 是字符串数组，答辩日期 defenseDate 与封面日期 date 是年月「YYYY-MM」（如 2026-06）。', parameters: { type: 'object', properties: { patch: { type: 'object', additionalProperties: true } }, required: ['patch'], additionalProperties: false } },
   { name: 'abbreviations', description: '缩略语表与符号表。正文里 @缩略语键 首次出现会自动展开。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'abbreviations_add', description: '往缩略语表 / 符号表加条目（同键当作更新）。缩略语要 key（正文里 @key 用）、long（中文全称）、longEn（英文全称）；符号要 symbol（LaTeX 写法）和 meaning。', parameters: { type: 'object', properties: { abbreviations: { type: 'array', items: { type: 'object', properties: { key: { type: 'string' }, long: { type: 'string' }, longEn: { type: 'string' }, short: { type: 'string' } }, required: ['key', 'long'] } }, symbols: { type: 'array', items: { type: 'object', properties: { symbol: { type: 'string' }, meaning: { type: 'string' } }, required: ['symbol', 'meaning'] } } }, additionalProperties: false } },
   { name: 'settings_list', description: '论文设置里能改的开关和档位：键、说明、可选值、现在的值（auto = 跟模板按档定，旁边写着自动落在哪一档和原因）。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
@@ -225,19 +221,26 @@ function infoRead(): string {
   const { doc } = useStore.getState();
   const s = doc.settings;
   const axes = AXES.filter((a) => !a.applies || a.applies(s)).map((a) => `${String(a.key)}（${a.label}）：${a.choices.find((c) => c.value === s[a.key])?.label ?? String(s[a.key])}`);
-  const lines = INFO_FIELDS.map(({ key, label }) => { const v = doc.info[key]; const t = Array.isArray(v) ? v.join('、') : String(v ?? ''); return `${key}（${label}）：${t || '（空）'}`; });
+  const lines = INFO_FIELDS().filter((f) => !f.applies || f.applies(s)).map(({ key, label, hint }) => { const v = doc.info[key]; const t = Array.isArray(v) ? v.join('、') : String(v ?? ''); return `${key}（${label}${hint ? `，${hint}` : ''}）：${t || '（空）'}`; });
   return [...axes, ...lines].join('\n');
 }
 function infoWrite(patch: Record<string, unknown>): string {
   const out: Partial<Info> = {};
   const bad: string[] = [];
+  const defs = INFO_FIELDS();
   for (const [k, v] of Object.entries(patch ?? {})) {
-    if (!INFO_FIELDS.some((x) => x.key === k)) { bad.push(k); continue; }
-    if (k === 'keywords' || k === 'keywordsEn') (out as any)[k] = Array.isArray(v) ? v.map(String) : String(v).split(/[;；,，、\n]+/).map((x) => x.trim()).filter(Boolean);
-    else (out as any)[k] = String(v ?? '');
+    const def = INFO_DEFS.find((x) => x.key === k);
+    if (!def) { bad.push(k); continue; }
+    if (def.kind === 'keywords') (out as any)[k] = Array.isArray(v) ? v.map(String) : String(v).split(/[;；,，、\n]+/).map((x) => x.trim()).filter(Boolean);
+    else if (def.kind === 'month') {
+      // 年月：2026-06、2026/6、2026年6月、2026.6 都收成 YYYY-MM；空串清掉
+      const m = /^(\d{4})\D+(\d{1,2})/.exec(String(v ?? '').trim());
+      if (String(v ?? '').trim() && !m) { bad.push(`${k}（要写成 YYYY-MM）`); continue; }
+      (out as any)[k] = m ? `${m[1]}-${m[2].padStart(2, '0')}` : '';
+    } else (out as any)[k] = String(v ?? '');
   }
   if (Object.keys(out).length) useStore.getState().setInfo(out);
-  return `已改 ${Object.keys(out).map((k) => INFO_FIELDS.find((f) => f.key === k)!.label).join('、') || '（没有）'}${bad.length ? `；不认识的字段：${bad.join('、')}` : ''}`;
+  return `已改 ${Object.keys(out).map((k) => defs.find((f) => f.key === k)!.label).join('、') || '（没有）'}${bad.length ? `；没改：${bad.join('、')}` : ''}`;
 }
 
 function abbreviations(): string {
@@ -397,12 +400,24 @@ export async function runTool(name: string, input: Record<string, any>): Promise
 }
 
 export const SYSTEM_PROMPT = `你是 iota4web 里的写作助手。iota4web 是哈尔滨工业大学学位论文的所见即所得编辑器，排版由 iota-hit 模板按学校规范自动完成，用户只管内容。
-文档分成几部分（摘要、正文、结论、附录、致谢、简历），每部分是一串块（标题、段落、公式、图、表、列表……），用工具按「部分 + 段号」读和改。
-读回来的是 Markdown：# 是标题（正文按章节层级），$…$ 是行内公式、$$…$$ 是行间公式，[@key] 是引参考文献，@fig:xx / @tab:xx / @eq:xx 是交叉引用，@缩略语键 是缩略语，^[…] 是脚注；\`\`\`iota-node 围起来的 JSON 块和 <!--iota-inline:…--> 注释是编辑器专有的节点，用 replace 时原样保留。
-你能做的：读改各部分的文字；用 table_write 写表（单元格里 \\n 换行，能定列宽方式）、figure_write 插图（工程里的图、用户发来的图片附件、或用 pdf_images / pdf_render 从 PDF 附件里抽出来的图）；往参考文献表 / 成果表加 BibTeX 条目（bib_add）；改论文信息（info_write）；加缩略语和符号；看编译诊断；改论文设置（settings_set，每次都会弹窗请用户允许）。工具表里有 web_search / web_fetch 时能联网：查来的东西要给出处（网址），没有就不要说查过。
+文档分成几部分（摘要、正文、结论、附录、致谢、简历），每部分是一串块（标题、段落、公式、图、表、列表……），用工具按「部分 + 段号」读和改。读回来、写回去的都是下面这种 Markdown，每种节点都有写法：
+- 标题：# 到 ####，尾巴可带属性 {#sec:标签 en="English title" .unnumbered}。
+- 段落：普通 Markdown；**粗** *斜* ~~删~~ \`代码\` [链接](url)；<u>下划线</u> <sub>下标</sub> <sup>上标</sup> <mark>突出</mark> <span color="#ff0000">红字</span> <span font="heiti">黑体</span>（songti/heiti/kaishu/fangsong）<span size="sanhao">三号</span>；段尾 {.noindent} 不缩进；行尾两个空格换行。
+- 行内：$…$ 公式（LaTeX），[@key] 引参考文献（多条 [@a; @b]，带页码 [@key, p. 15]，叙述式 [@key]{.prose}、只印作者 {.author}、只印年份 {.year}），@fig:x / @tab:x / @eq:x / @sec:x / @alg:x / @lst:x / @thm:x 交叉引用，@缩略语键 缩略语（如 @FEM，首次出现自动展开为全称），^[脚注文字] 脚注，[词]{.index} 索引项，<ccwd/> 一个汉字宽的空格。
+- 行间公式：$$ 一行 LaTeX $$，收尾后可带 {#eq:标签} 或 {.unnumbered}。
+- 图：![题注](图片名){#fig:标签 width=8 en="Caption"}（宽度厘米）；分图写成 ::: {.figure #fig:x caption="总题" columns=2} 里放几行 ![子题](图){width=6} :::。
+- 表：GFM 表格（格内换行写 <br>），紧跟一行 Table: 题注 {#tab:标签 en="Caption" fit=window}（fit：content 按内容、window 撑满、fixed 定宽 colWidth=2.5）。
+- 代码块：\`\`\`语言；要编号带题注的代码清单：\`\`\`python {#lst:标签 .listing caption="题注"}。
+- 算法：::: {.algorithm #alg:x caption="题注"} 里先写 > 输入：… / > 输出：…，再每行一条 - 步骤，缩进两格是下一层 :::。
+- 定理族：::: {.theorem #thm:x note="Euler"} … :::，类名可换成 lemma / definition / proposition / corollary / axiom / assumption / example / remark / problem / conjecture / fact / exercise / proof。
+- 公式下面的「式中」说明：::: {.denote} 每行 - $符号$ — 含义 :::。
+- 分页：单独一行 \\newpage。引用块 >、列表 - / 1.、分隔线 --- 照 Markdown。
+- 旧文档里可能出现 \`\`\`iota-node 围栏或 <!--iota-…--> 注释，原样保留就行。
+你能做的：读改各部分的文字；用 table_write 写表（单元格里 \\n 换行，能定列宽方式）、figure_write 插图（工程里的图、用户发来的图片附件、或用 pdf_images / pdf_render 从 PDF 附件里抽出来的图）——直接在 Markdown 里写图和表也行；往参考文献表 / 成果表加 BibTeX 条目（bib_add）；改论文信息（info_write，日期字段是「YYYY-MM」）；加缩略语和符号；看编译诊断；改论文设置（settings_set，每次都会弹窗请用户允许）。工具表里有 web_search / web_fetch 时能联网：查来的东西要给出处（网址），没有就不要说查过。
 规矩：
 - 先 outline 或 read 看清楚再改，改动尽量小，只换需要改的那几块；不要改标题的标签、引用键。
 - 引用文献要先有条目：表里没有就用 bib_add 加进去再在正文里写 [@key]，不要编造文献；拿不准的出处要向用户确认。
+- 缩略语：先用 abbreviations_add 登记（key、中文全称、英文全称），正文里写 @key，模板会在首次出现处展开成「全称（缩写）」、之后只印缩写；不要自己手写「有限元法（FEM）」。
 - 做不到的事直说做不到、为什么，不要绕弯子也不要假装做了；用户可以自己在编辑器里做的，告诉他在哪儿做。
 - 行文照学位论文的规范：客观、书面、不用第一人称口语；中文用全角标点。
 - 中文与西文、数字之间不加空格（不要「盘古之白」，间距由模板排版时自动加）：「采用 Ergun 方程」是错的，要写「采用Ergun方程」；也别把原文里没有的空格加上。

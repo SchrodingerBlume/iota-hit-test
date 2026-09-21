@@ -1,8 +1,8 @@
 // Agent 面板：宽屏上是最右一整列（Word 的 Copilot 窗格那种位置），窄屏盖在右边。跟模型对话，
 // 它读、改文档走 src/ai/tools.ts 那几件工具，每一步在对话里留一张卡；要改设置时弹授权卡等用户点
 import { useEffect, useRef, useState } from 'react';
-import { Button, Textarea, Tooltip } from '@fluentui/react-components';
-import { Settings20Regular, Dismiss20Regular, Send20Regular, Stop20Regular, Broom20Regular, ChevronRight12Regular, ChevronDown12Regular, Attach20Regular, Dismiss12Regular, Image16Regular, DocumentPdf16Regular, DocumentText16Regular, BotSparkle20Regular, ShieldCheckmark20Regular } from '@fluentui/react-icons';
+import { Button, Textarea, Tooltip, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuDivider } from '@fluentui/react-components';
+import { Settings20Regular, Dismiss20Regular, Send20Regular, Stop20Regular, Add20Regular, History20Regular, Delete16Regular, ChevronRight12Regular, ChevronDown12Regular, Attach20Regular, Dismiss12Regular, Image16Regular, DocumentPdf16Regular, DocumentText16Regular, BotSparkle20Regular, ShieldCheckmark20Regular } from '@fluentui/react-icons';
 import { useAgent, type ToolCard } from '../ai/state';
 import { useStore } from '../model/store';
 import { configReady, PRESETS } from '../ai/config';
@@ -19,6 +19,7 @@ const QUICK = [
   tx("按现有各章内容，给结论写一段总结的草稿，加在结论的开头"),
 ];
 
+const fmtWhen = (ts: number) => { const d = new Date(ts); const now = new Date(); const same = d.toDateString() === now.toDateString(); return same ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : `${d.getMonth() + 1}/${d.getDate()}`; };
 function partLabel(key: unknown) { return PARTS.find((p) => p.key === key)?.label ?? String(key ?? ''); }
 function cardTitle(c: ToolCard): string {
   const i = c.input;
@@ -78,7 +79,7 @@ function Card({ c }: { c: ToolCard }) {
 }
 
 export function AgentPane({ overlay }: { overlay?: boolean }) {
-  const { items, running, send, stop, clear, config, setOpen, setSettingsOpen, pending, attach, detach, ask, answer } = useAgent();
+  const { items, running, send, stop, config, setOpen, setSettingsOpen, pending, attach, detach, ask, answer, chats, chatId, newChat, openChat, deleteChat } = useAgent();
   const [draft, setDraft] = useState('');
   const [drag, setDrag] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
@@ -99,7 +100,21 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
         <b>Agent</b>
         <button type="button" className="ag-model" title={config ? config.baseUrl : ''} onClick={() => setSettingsOpen(true)}>{ready ? `${preset?.label ?? config!.preset} · ${config!.model}` : tx("还没接模型")}</button>
         <span className="spacer" />
-        <Tooltip content={tx("清空对话")} relationship="label"><Button size="small" appearance="subtle" icon={<Broom20Regular />} disabled={!items.length || running} onClick={clear} /></Tooltip>
+        <Tooltip content={tx("新对话")} relationship="label"><Button size="small" appearance="subtle" icon={<Add20Regular />} disabled={!items.length && !chatId} onClick={() => void newChat()} /></Tooltip>
+        <Menu positioning="below-end">
+          <MenuTrigger disableButtonEnhancement>
+            <Tooltip content={tx("这个文档的对话记录")} relationship="label"><Button size="small" appearance="subtle" icon={<History20Regular />} disabled={!chats.length} /></Tooltip>
+          </MenuTrigger>
+          <MenuPopover className="ag-chats">
+            <MenuList>
+              {chats.map((c) => (
+                <MenuItem key={c.id} className={c.id === chatId ? 'is-current' : ''} onClick={() => void openChat(c.id)} secondaryContent={<span className="ag-chat-side"><span className="muted">{fmtWhen(c.updatedAt)}</span><button type="button" className="ag-chat-x" aria-label={tx("删除这场对话")} onClick={(e) => { e.stopPropagation(); void deleteChat(c.id); }}><Delete16Regular /></button></span>}>{c.title}</MenuItem>
+              ))}
+              <MenuDivider />
+              <MenuItem icon={<Add20Regular />} onClick={() => void newChat()}>{tx("新对话")}</MenuItem>
+            </MenuList>
+          </MenuPopover>
+        </Menu>
         <Tooltip content={tx("Agent 设置")} relationship="label"><Button size="small" appearance="subtle" icon={<Settings20Regular />} onClick={() => setSettingsOpen(true)} /></Tooltip>
         <Tooltip content={tx("关闭")} relationship="label"><Button size="small" appearance="subtle" icon={<Dismiss20Regular />} onClick={() => setOpen(false)} /></Tooltip>
       </div>

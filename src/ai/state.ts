@@ -32,7 +32,14 @@ interface AgentState {
   clear: () => void;
   /** 对话跟着当前工程走：换了工程就存下这份、读那份 */
   bind: () => Promise<void>;
+  /** 一个工程存很多场对话：清单、当前是哪场、新开 / 切换 / 删 */
+  chats: ChatMeta[];
+  chatId: string | null;
+  newChat: () => Promise<void>;
+  openChat: (id: string) => Promise<void>;
+  deleteChat: (id: string) => Promise<void>;
 }
+export interface ChatMeta { id: string; title: string; updatedAt: number }
 
 let transcript: Transcript | null = null;
 let aborter: AbortController | null = null;
@@ -41,13 +48,33 @@ let boundDoc: string | null = null;
 const uid = () => Math.random().toString(36).slice(2, 9);
 
 interface Saved { items: ChatItem[]; transcript: Transcript | null; sentFiles: Attachment[] }
-const keyOf = (id: string) => `agent:${id}`;
-async function persist(id: string, items: ChatItem[]) {
-  if (!items.length) { await kv.del('meta', keyOf(id)); return; }
+interface Index { chats: ChatMeta[]; current: string | null }
+const indexKey = (doc: string) => `agent:${doc}`;
+const chatKey = (doc: string, chat: string) => `agent:${doc}:${chat}`;
+let saveTimer = 0;
+const titleOf = (items: ChatItem[]) => (items.find((i) => i.role === 'user')?.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 28) || '新对话';
+/** 读工程的对话清单；老版本那一份（键上直接是一场对话）折成清单里的第一场 */
+async function loadIndex(doc: string): Promise<Index> {
+  const raw = await kv.get<any>('meta', indexKey(doc));
+  if (raw && Array.isArray(raw.chats)) return raw as Index;
+  if (raw && Array.isArray(raw.items)) {
+    const id = uid();
+    await kv.set('meta', chatKey(doc, id), raw);
+    const index: Index = { chats: [{ id, title: titleOf(raw.items), updatedAt: Date.now() }], current: id };
+    await kv.set('meta', indexKey(doc), index);
+    return index;
+  }
+  return { chats: [], current: null };
+}
+async function persistChat(doc: string, chat: string, items: ChatItem[], chats: ChatMeta[]) {
   // 附件的正文（base64）都在对话记录里，太大就只留这一场的展示、不留能续聊的原始记录
   const saved: Saved = { items, transcript, sentFiles };
   const size = JSON.stringify(saved).length;
-  await kv.set('meta', keyOf(id), size > 40 * 1024 * 1024 ? { ...saved, transcript: null, sentFiles: [] } : saved);
+  await kv.set('meta', chatKey(doc, chat), size > 40 * 1024 * 1024 ? { ...saved, transcript: null, sentFiles: [] } : saved);
+  const meta = chats.find((c) => c.id === chat);
+  const next = [{ id: chat, title: meta?.title && meta.title !== '新对话' ? meta.title : titleOf(items), updatedAt: Date.now() }, ...chats.filter((c) => c.id !== chat)];
+  await kv.set('meta', indexKey(doc), { chats: next, current: chat } as Index);
+  return next;
 }
 
 export const useAgent = create<AgentState>((set, get) => ({
@@ -61,6 +88,8 @@ export const useAgent = create<AgentState>((set, get) => ({
   running: false,
   pending: [],
   ask: null,
+  chats: [],
+  chatId: null,
   answer: (ok) => { const a = get().ask; if (a) { set({ ask: null }); a.resolve(ok); } },
   attach: async (files) => {
     for (const f of files) {
@@ -76,13 +105,17 @@ export const useAgent = create<AgentState>((set, get) => ({
     if (!c || get().running || (!text.trim() && !files.length)) return;
     if (!transcript || transcript.api !== c.api) transcript = { api: c.api, messages: [] } as Transcript;
     const reply: ChatItem = { id: uid(), role: 'assistant', text: '', tools: [] };
+    const save = () => { const st = get(); if (boundDoc && st.chatId) void persistChat(boundDoc, st.chatId, st.items, st.chats).then((chats) => set({ chats })); };
+    if (!get().chatId) { const id = uid(); set({ chatId: id, chats: [{ id, title: '新对话', updatedAt: Date.now() }, ...get().chats] }); }
     set({ items: [...get().items, { id: uid(), role: 'user', text, tools: [], files }, reply], running: true, pending: [] });
+    save();
     sentFiles = [...sentFiles, ...files];
     setAttachments(sentFiles);
     setAskUser((ask) => new Promise<boolean>((resolve) => set({ ask: { ask, resolve } })));
     let derived: Attachment[] = [];
     setOnDerived((a) => { sentFiles = [...sentFiles, a]; derived.push(a); });
-    const patch = (p: Partial<ChatItem>) => set({ items: get().items.map((it) => (it.id === reply.id ? { ...it, ...p } : it)) });
+    // 每一步都落盘（节流），刷新页面也不丢半场对话
+    const patch = (p: Partial<ChatItem>) => { set({ items: get().items.map((it) => (it.id === reply.id ? { ...it, ...p } : it)) }); window.clearTimeout(saveTimer); saveTimer = window.setTimeout(save, 600); };
     let buf = '';
     aborter = new AbortController();
     // 中途停了或出错：这一轮的记录整个撤掉，不然下一轮会带着没回结果的工具调用
@@ -98,21 +131,52 @@ export const useAgent = create<AgentState>((set, get) => ({
     } finally {
       aborter = null;
       set({ running: false });
-      if (boundDoc) void persist(boundDoc, get().items);
+      window.clearTimeout(saveTimer);
+      save();
     }
   },
   stop: () => { get().answer(false); aborter?.abort(); },
-  clear: () => { transcript = null; sentFiles = []; setAttachments([]); set({ items: [] }); if (boundDoc) void kv.del('meta', keyOf(boundDoc)); },
+  clear: () => { const st = get(); if (st.chatId) void st.deleteChat(st.chatId); },
   bind: async () => {
     const id = useStore.getState().doc.id;
     if (!id || id === boundDoc) return;
-    if (get().running) { get().stop(); }
-    if (boundDoc) await persist(boundDoc, get().items);
+    if (get().running) get().stop();
+    const prev = get();
+    if (boundDoc && prev.chatId && prev.items.length) await persistChat(boundDoc, prev.chatId, prev.items, prev.chats);
     boundDoc = id;
-    const saved = await kv.get<Saved>('meta', keyOf(id));
+    const index = await loadIndex(id);
+    set({ chats: index.chats, chatId: null, items: [], pending: [], ask: null });
+    transcript = null; sentFiles = []; setAttachments([]);
+    if (index.current && index.chats.some((c) => c.id === index.current)) await get().openChat(index.current);
+  },
+  newChat: async () => {
+    const st = get();
+    if (st.running) st.stop();
+    if (boundDoc && st.chatId && st.items.length) await persistChat(boundDoc, st.chatId, st.items, st.chats);
+    transcript = null; sentFiles = []; setAttachments([]);
+    set({ chatId: null, items: [], pending: [], ask: null });
+    if (boundDoc) await kv.set('meta', indexKey(boundDoc), { chats: get().chats, current: null } as Index);
+  },
+  openChat: async (id) => {
+    if (!boundDoc) return;
+    const st = get();
+    if (st.chatId === id) return;
+    if (st.running) st.stop();
+    if (st.chatId && st.items.length) await persistChat(boundDoc, st.chatId, st.items, st.chats);
+    const saved = await kv.get<Saved>('meta', chatKey(boundDoc, id));
     transcript = saved?.transcript ?? null;
     sentFiles = saved?.sentFiles ?? [];
     setAttachments(sentFiles);
-    set({ items: saved?.items ?? [], pending: [], ask: null });
+    set({ chatId: id, items: saved?.items ?? [], pending: [], ask: null });
+    await kv.set('meta', indexKey(boundDoc), { chats: get().chats, current: id } as Index);
+  },
+  deleteChat: async (id) => {
+    if (!boundDoc) return;
+    const st = get();
+    if (st.chatId === id) { if (st.running) st.stop(); transcript = null; sentFiles = []; setAttachments([]); set({ chatId: null, items: [], pending: [], ask: null }); }
+    const chats = st.chats.filter((c) => c.id !== id);
+    set({ chats });
+    await kv.del('meta', chatKey(boundDoc, id));
+    await kv.set('meta', indexKey(boundDoc), { chats, current: get().chatId } as Index);
   },
 }));
