@@ -176,6 +176,9 @@ function backtick(s: string): string {
   return `${fence}${s}${fence}`;
 }
 
+/** 结尾是汉字（或中文标点） */
+const CJK_EDGE = /[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]\s*$/;
+const CJK_START = /^\s*[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]/;
 const INLINE_ATOM = new Set(['ref', 'cite', 'mathInline', 'footnote', 'abbr', 'ccwd', 'idx']);
 // 相邻文字节点共有的标记只包一层：编辑器里「H₂O」带下划线存成三个节点，逐个包成
 // #underline[H]#sub[#underline[2]]#underline[O]，模板的下划线就在上下标处断开、错位；
@@ -218,6 +221,16 @@ export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {
         // 用户敲的空格从第二个算起、逐个写成 ~；前面的空格是真空格，可模板在引用前也发弱间距，裸空格会被吃，同样写成 ~
         if (INLINE_ATOM.has(nodes[i - 1]?.type ?? '')) { const n = /^ */.exec(raw)![0].length; if (n) escaped = ' ' + '~'.repeat(n) + escaped.replace(/^~* /, ''); }
         if (INLINE_ATOM.has(nodes[i + 1]?.type ?? '')) { const n = / *$/.exec(raw)![0].length; if (n) escaped = escaped.replace(/~* $/, '') + '~'.repeat(n); }
+        // 汉字加粗 / 强调 / 下划线这类标记两侧，模板补字距的弱间距会把紧挨着的裸空格吃掉——用户在编辑器里敲的空格
+        // 预览里就没了。挨着汉字的那种写成 ~ 留住（西文两侧本来就不吃，照旧，别把断行机会换掉）
+        const edge = (a?: PMNode, b?: PMNode) => !!a && !!b && a.type === 'text' && b.type === 'text' && (marksOf(a, skip).length > 0 || marksOf(b, skip).length > 0);
+        const keepLead = edge(nodes[i - 1], n) && CJK_EDGE.test(nodes[i - 1]!.text ?? '') && /^ /.test(raw);
+        const keepTrail = edge(n, nodes[i + 1]) && CJK_START.test(nodes[i + 1]!.text ?? '') && / $/.test(raw);
+        if (/^ +$/.test(raw)) { if (keepLead || keepTrail) escaped = '~'.repeat(raw.length); }
+        else {
+          if (keepLead) { const k = /^ */.exec(raw)![0].length; escaped = '~'.repeat(k) + escaped.replace(/^ +/, ''); }
+          if (keepTrail) { const k = / *$/.exec(raw)![0].length; escaped = escaped.replace(/ +$/, '') + '~'.repeat(k); }
+        }
         const pos = opts.map?.posOf.get(n);
         const marks = marksOf(n, skip);
         const isCode = marks.some((m) => m.type === 'code');

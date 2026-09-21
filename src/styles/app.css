@@ -401,10 +401,16 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 [data-font="heiti"] { font-family: "Heiti SC", "SimHei", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
 [data-font="kaishu"] { font-family: "Kaiti SC", "STKaiti", KaiTi, "FandolKai", "Noto Serif CJK SC", serif; }
 [data-font="fangsong"] { font-family: "STFangsong", FangSong, "Noto Serif CJK SC", serif; }
-[data-size="chuhao"] { font-size: 3.5em; } [data-size="xiaochu"] { font-size: 3em; } [data-size="yihao"] { font-size: 2.1667em; } [data-size="xiaoyi"] { font-size: 2em; }
-[data-size="erhao"] { font-size: 1.8333em; } [data-size="xiaoer"] { font-size: 1.5em; } [data-size="sanhao"] { font-size: 1.3333em; } [data-size="xiaosan"] { font-size: 1.25em; }
-[data-size="sihao"] { font-size: 1.1667em; } [data-size="xiaosi"] { font-size: 1em; } [data-size="wuhao"] { font-size: 0.875em; } [data-size="xiaowu"] { font-size: 0.75em; }
-[data-size="liuhao"] { font-size: 0.625em; } [data-size="xiaoliu"] { font-size: 0.5417em; }
+/* 字号是绝对的：按编辑区正文（小四 12pt = --rich-size）折算，标题里也一样大，跟预览一致 */
+.rich { --pt: calc(var(--rich-size, 16.5px) / 12); }
+[data-size="chuhao"] { font-size: calc(42 * var(--pt)); } [data-size="xiaochu"] { font-size: calc(36 * var(--pt)); } [data-size="yihao"] { font-size: calc(26 * var(--pt)); } [data-size="xiaoyi"] { font-size: calc(24 * var(--pt)); }
+[data-size="erhao"] { font-size: calc(22 * var(--pt)); } [data-size="xiaoer"] { font-size: calc(18 * var(--pt)); } [data-size="sanhao"] { font-size: calc(16 * var(--pt)); } [data-size="xiaosan"] { font-size: calc(15 * var(--pt)); }
+[data-size="sihao"] { font-size: calc(14 * var(--pt)); } [data-size="xiaosi"] { font-size: calc(12 * var(--pt)); } [data-size="wuhao"] { font-size: calc(10.5 * var(--pt)); } [data-size="xiaowu"] { font-size: calc(9 * var(--pt)); }
+[data-size="liuhao"] { font-size: calc(7.5 * var(--pt)); } [data-size="xiaoliu"] { font-size: calc(6.5 * var(--pt)); }
+/* 上下标照模板（Word 的数）：0.65 倍，上标抬正文的 0.33em、下标沉 0.08em；line-height 0 免得把行撑高 */
+.rich sub, .rich sup { font-size: 0.65em; line-height: 0; vertical-align: baseline; position: relative; }
+.rich sup { top: -0.5em; }
+.rich sub { top: 0.12em; }
 .rich code { background: var(--panel-2); padding: 0 4px; border-radius: var(--r-xs); font-size: 0.88em; }
 .rich .is-flash { animation: flash 1.2s var(--ease) both; }
 @keyframes flash { 0% { background: var(--orange-soft-2); box-shadow: 0 0 0 6px var(--orange-soft-2); } 100% { background: transparent; box-shadow: 0 0 0 6px transparent; } }
