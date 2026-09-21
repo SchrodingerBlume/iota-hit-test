@@ -484,6 +484,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                   </Row>
                   <Row>
                     <B title={tx("连续空段落将保留为空行。")} icon={<ArrowEnter20Regular />} disabled={none} run={() => chain().splitBlock().run()} />
+                    <B title={tx("插入一个汉字宽的空格")} icon={<Spacebar20Regular />} disabled={none} run={() => ins.insertInline('ccwd', { n: 1 })} />
                     <span className="rb-split">
                       <B title={tx("显示/隐藏编辑标记")} icon={<TextParagraph20Regular />} on={marksOn} run={toggleMarks} />
                       <Menu checkedValues={{ k: (['paragraph', 'space', 'gutter'] as const).filter((k) => markKinds[k]) }} onCheckedValueChange={(_, d) => { for (const k of ['paragraph', 'space', 'gutter'] as const) usePreviewMarks.getState().setKind(k, d.checkedItems.includes(k)); }} positioning="below-start">
@@ -522,9 +523,6 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
             <>
               <Group label={tx("页面")}>
                 <B title={tx("分页符")} big icon={<DocumentPageBreak20Regular />} disabled={none || !blocks} run={ins.insertPageBreak}>{tx("分页符")}</B>
-                <Stack>
-                  <B title={tx("插入一个汉字宽的空格")} icon={<Spacebar20Regular />} disabled={none} run={() => ins.insertInline('ccwd', { n: 1 })}>{tx("空格")}</B>
-                </Stack>
               </Group>
               <Group label={tx("表格和图片")}>
                 <Popover open={pop === 'table'} onOpenChange={(_, d) => setPop(d.open ? 'table' : null)} positioning="below-start" trapFocus={false}>
