@@ -119,7 +119,7 @@ export const TOOLS: ToolDef[] = [
   { name: 'insert', description: '在某一部分第 at 块之前插入 Markdown（at 等于块数就是接在末尾）。', parameters: { type: 'object', properties: { part: partEnum, at: { type: 'integer', minimum: 0 }, markdown: { type: 'string' } }, required: ['part', 'at', 'markdown'], additionalProperties: false } },
   { name: 'delete', description: '删掉某一部分第 from 到 to 块（含两端）。', parameters: { type: 'object', properties: { part: partEnum, ...range }, required: ['part', 'from', 'to'], additionalProperties: false } },
   { name: 'table_write', description: '插一张表或换掉现有的表（给 replace 就是换）。rows 是二维数组，第一行是表头（header 为 true 时）；单元格里写 \\n 就是格内换行，也认 **粗** *斜* `代码` $公式$。fit：content 按内容分列宽、window 撑满版心平分、fixed 每列都是 colWidth 厘米。', parameters: { type: 'object', properties: { ...place, rows: { type: 'array', items: { type: 'array', items: { type: 'string' } }, minItems: 1 }, header: { type: 'boolean' }, caption: { type: 'string', description: '中文题注（表题）' }, captionEn: { type: 'string' }, label: { type: 'string', description: '交叉引用用的标签，形如 tab:xxx' }, fit: { type: 'string', enum: ['content', 'window', 'fixed'] }, colWidth: { type: 'number', description: 'fixed 时每列宽，厘米' } , placement }, required: ['part', 'rows'], additionalProperties: false } },
-  { name: 'figure_write', description: '插一张图或换掉现有的图。image 是工程里已有的图片名（见 images），或用户在对话里发来的图片附件的文件名——会先存进工程。', parameters: { type: 'object', properties: { ...place, image: { type: 'string' }, caption: { type: 'string', description: '中文题注（图题）' }, captionEn: { type: 'string' }, label: { type: 'string', description: '形如 fig:xxx' }, width: { type: 'number', description: '图宽，厘米（版心约 15 厘米）' }, placement }, required: ['part', 'image'], additionalProperties: false } },
+  { name: 'figure_write', description: '插一张图或换掉现有的图。image 填工程里已有的图片名（见 images）或用户在对话里发来的图片附件的文件名（用户消息末尾列着）——附件会先存进工程；大小写、扩展名对不上也能认，latest = 最近发来的那张。', parameters: { type: 'object', properties: { ...place, image: { type: 'string' }, caption: { type: 'string', description: '中文题注（图题）' }, captionEn: { type: 'string' }, label: { type: 'string', description: '形如 fig:xxx' }, width: { type: 'number', description: '图宽，厘米（版心约 15 厘米）' }, placement }, required: ['part', 'image'], additionalProperties: false } },
   { name: 'images', description: '工程里有哪些图片，以及用户这场对话里发来的图片附件、从 PDF 里抽出来的图。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'pdf_images', description: '把用户发来的 PDF 附件里嵌的位图抽出来存成图片（file 是附件文件名，page 不给就整份、最多 60 页），回每张的名字与像素尺寸；矢量图抽不出来，用 pdf_render 截那一页。抽出来的图能直接 figure_write。', parameters: { type: 'object', properties: { file: { type: 'string' }, page: { type: 'integer', minimum: 1 } }, required: ['file'], additionalProperties: false } },
   { name: 'pdf_render', description: '把 PDF 附件的某一页画成图片（scale 1 约 72 dpi，默认 2），可以只截页面的一块：crop 是页面比例 [x, y, w, h]（0–1）。矢量图、公式截图用它。回图片名与尺寸，能直接 figure_write。', parameters: { type: 'object', properties: { file: { type: 'string' }, page: { type: 'integer', minimum: 1 }, scale: { type: 'number' }, crop: { type: 'array', items: { type: 'number' }, minItems: 4, maxItems: 4 } }, required: ['file', 'page'], additionalProperties: false } },
@@ -220,13 +220,36 @@ function tableNode(input: Record<string, any>) {
   return { type: 'tableFigure', attrs, content: [{ type: 'table', content: rows.map((r, ri) => ({ type: 'tableRow', content: Array.from({ length: width }, (_, ci) => cellNode(r[ci] ?? '', header && ri === 0)) })) }] };
 }
 
-async function figureNode(input: Record<string, any>): Promise<any | string> {
+/** 模型给的图片名对不上原名是常事（大小写、少了扩展名、多了路径、只记得一半）：先精确，再宽松，最后「最新 / 唯一那张」 */
+const normName = (n: string) => n.toLowerCase().replace(/^.*[\\/]/, '').replace(/\.(png|jpe?g|gif|webp|svg)$/i, '').replace(/[\s_\-（）()]+/g, '');
+function findImage(raw: string): { where: 'project' | 'attachment'; name: string; note?: string } | string {
+  const name = raw.trim();
+  const proj = useStore.getState().doc.images.map((i) => i.name);
+  const att = attachments.filter((a) => a.kind === 'image').map((a) => a.name);
+  if (proj.includes(name)) return { where: 'project', name };
+  if (att.includes(name)) return { where: 'attachment', name };
+  if (/^(latest|newest|last|最新|最近|刚发的|刚才的)$/i.test(name) && att.length) return { where: 'attachment', name: att[att.length - 1], note: `用了最近发来的「${att[att.length - 1]}」` };
+  const key = normName(name);
+  const pick = (list: string[]): string | undefined => {
+    if (!key) return undefined;
+    const exact = list.filter((n) => normName(n) === key);
+    if (exact.length === 1) return exact[0];
+    const part = list.filter((n) => normName(n).includes(key) || key.includes(normName(n)));
+    return part.length === 1 ? part[0] : undefined;
+  };
+  const a = pick(att); if (a) return { where: 'attachment', name: a, note: `按「${name}」找到的是附件「${a}」` };
+  const p = pick(proj); if (p) return { where: 'project', name: p, note: `按「${name}」找到的是工程里的「${p}」` };
+  if (att.length === 1) return { where: 'attachment', name: att[0], note: `没有叫「${name}」的图，对话里只发来一张「${att[0]}」，用了它` };
+  return `没有叫「${name}」的图片。工程里有：${proj.join('、') || '（无）'}；对话里发来的：${att.join('、') || '（无）'}。image 填其中一个原名（或 latest = 最近发来的那张）；用户要插的图还没发来就请他发`;
+}
+async function figureNode(input: Record<string, any>): Promise<{ node: any; note?: string } | string> {
   const store = useStore.getState();
-  let name = String(input.image ?? '').trim();
+  const found = findImage(String(input.image ?? ''));
+  if (typeof found === 'string') return found;
+  let name = found.name;
   const dims: { width?: number; height?: number } = {};
-  if (!store.doc.images.some((i) => i.name === name)) {
-    const att = attachments.find((a) => a.kind === 'image' && a.name === name);
-    if (!att) return `没有叫「${name}」的图片：既不在工程里，用户也没在对话里发过；先用 images 看看有哪些`;
+  if (found.where === 'attachment') {
+    const att = attachments.find((a) => a.kind === 'image' && a.name === name)!;
     const blob = new Blob([Uint8Array.from(atob(att.data), (c) => c.charCodeAt(0))], { type: att.type });
     name = safeImageName(att.name, new Set(store.doc.images.map((i) => i.name)));
     await putImage(name, blob);
@@ -239,7 +262,7 @@ async function figureNode(input: Record<string, any>): Promise<any | string> {
   const width = Number(input.width) || (px ? Math.min(14, Math.max(4, Math.round((px / 96) * 2.54 * 10) / 10)) : 8);
   const attrs: Record<string, unknown> = { image: name, width };
   for (const k of ['caption', 'captionEn', 'label', 'placement']) if (input[k]) attrs[k] = input[k];
-  return { type: 'figure', attrs };
+  return { node: { type: 'figure', attrs }, note: found.note };
 }
 
 function selectionText(): string {
@@ -673,36 +696,62 @@ export async function runTool(name: string, input: Record<string, any>): Promise
   const d0 = useStore.getState().doc;
   // 排版的计数与诊断要在动手之前记：短文档写完 0.1 秒就排完了，事后再记就错过了
   const c0 = { ...useCompileState.getState(), ser: useSerializeWarnings.getState().warnings };
-  const out = await dispatch(name, input);
+  let out = await dispatch(name, input);
+  // 先前有写入还没等到排版结果的：已经出来的接在这次结果后面（不等）
+  const earlier = await flushChecks(false);
+  if (earlier) out += `\n\n${earlier}`;
   if (!WRITES.has(name)) return out;
   // 编辑器 → store 有 100–150 ms 的节流，等它过去再看文档换没换
   await new Promise((r) => setTimeout(r, 250));
-  return useStore.getState().doc === d0 ? out : afterWrite(out, c0);
+  if (useStore.getState().doc === d0) return out;
+  // 写完不傻等排版：短文档一两秒内出结果就直接接上，长文档的检查挂着，下一次工具调用或这一轮末尾再收
+  const check = track(afterWrite(c0));
+  const quick = await Promise.race([check.p, new Promise<null>((r) => setTimeout(() => r(null), 1500))]);
+  if (quick !== null) { pendingChecks = pendingChecks.filter((c) => c !== check); return quick ? `${out}\n\n${quick}` : out; }
+  return out;
 }
-/** 写完等排版落地（长文档先只编一章、停手一两秒后才整编，所以等到安静下来），新冒出来的错误接在结果后面
- *  （定位到第几块、附那块现在的 Markdown），模型好自己改。序列化时查出的（引用目标不存在、文献没登记）也算 */
-async function afterWrite(msg: string, c0: { status: string; compileCount: number; diagnostics: Diagnostic[]; ser: string[] }): Promise<string> {
-  if (c0.status !== 'ready') return msg;
+interface Check { p: Promise<string>; done: boolean; value: string }
+let pendingChecks: Check[] = [];
+function track(p: Promise<string>): Check {
+  const c: Check = { p, done: false, value: '' };
+  p.then((v) => { c.done = true; c.value = v; }, () => { c.done = true; });
+  pendingChecks.push(c);
+  return c;
+}
+/** 收还挂着的排版检查：wait=true 等它们全出来（一轮末尾），false 只拿已经出来的（下一次工具调用时） */
+export async function flushChecks(wait: boolean): Promise<string> {
+  if (wait) await Promise.all(pendingChecks.map((c) => c.p.catch(() => '')));
+  const ready = pendingChecks.filter((c) => c.done);
+  pendingChecks = pendingChecks.filter((c) => !c.done);
+  return ready.map((c) => c.value).filter(Boolean).join('\n\n');
+}
+export const dropChecks = () => { pendingChecks = []; };
+/** 写完等排版落地（长文档先只编一章、停手一两秒后才整编，所以等到安静下来），新冒出来的错误说给模型
+ *  （定位到第几块、附那块现在的 Markdown）。序列化时查出的（引用目标不存在、文献没登记）也算。没问题回空串 */
+async function afterWrite(c0: { status: string; compileCount: number; diagnostics: Diagnostic[]; ser: string[] }): Promise<string> {
+  if (c0.status !== 'ready') return '';
   const t0 = Date.now();
   let last = Date.now(), count = c0.compileCount;
-  report('写进去了，等排版看有没有报错…');
-  while (Date.now() - t0 < 60000) {
-    await new Promise((r) => setTimeout(r, 150));
-    const s = useCompileState.getState();
-    if (s.compiling || s.bgCompiling) report(s.bgCompiling ? '写进去了，等整篇重排…' : '写进去了，等排版看有没有报错…');
-    if (s.compileCount !== count) { count = s.compileCount; last = Date.now(); }
-    if (s.compiling || s.bgCompiling) { last = Date.now(); continue; }
-    if (Date.now() - last > (count === c0.compileCount ? 5000 : 3200)) break;
-  }
-  if (count === c0.compileCount) return msg;
   // 错误全报；警告只报这次写完新冒出来的（找不到的引用、重复的标签这类），先前就有的不算
   const key = (d: Diagnostic) => `${d.severity}|${d.message}`;
   const before = new Set([...c0.diagnostics.map(key), ...c0.ser.map((m) => `ser|${m}`)]);
-  const list = useCompileState.getState().diagnostics.filter((d) => d.severity === 'error' || !before.has(key(d))).map(describeDiag);
-  for (const m of useSerializeWarnings.getState().warnings) if (!before.has(`ser|${m}`)) list.push(`- [警告] ${m}`);
-  if (!list.length) return msg;
-  const head = list.some((l) => l.startsWith('- [错误]')) ? '写进去之后排版报错了，请看着改（改完会再排一次）' : '写进去之后排版多了警告，看看是不是写错了';
-  return `${msg}\n\n${head}：\n${list.join('\n')}`;
+  const collect = () => {
+    const list = useCompileState.getState().diagnostics.filter((d) => d.severity === 'error' || !before.has(key(d))).map(describeDiag);
+    for (const m of useSerializeWarnings.getState().warnings) if (!before.has(`ser|${m}`)) list.push(`- [警告] ${m}`);
+    if (!list.length) return '';
+    const head = list.some((l) => l.startsWith('- [错误]')) ? '写进去之后排版报错了，请看着改（改完会再排一次）' : '写进去之后排版多了警告，看看是不是写错了';
+    return `${head}：\n${list.join('\n')}`;
+  };
+  while (Date.now() - t0 < 60000) {
+    await new Promise((r) => setTimeout(r, 150));
+    const s = useCompileState.getState();
+    // 一有排版结果就看：已经有问题就立刻报（短文档零点几秒就出来）；没问题再等它安静下来，长文档停手后的整编可能另有说法
+    if (s.compileCount !== count) { count = s.compileCount; last = Date.now(); const early = collect(); if (early) return early; }
+    if (s.compiling || s.bgCompiling) { last = Date.now(); continue; }
+    if (Date.now() - last > (count === c0.compileCount ? 5000 : 3200)) break;
+  }
+  if (count === c0.compileCount) return '';
+  return collect();
 }
 /** 一条诊断说给模型听：落在哪一部分第几块、人话 + Typst 原话、那一块现在的 Markdown */
 function describeDiag(d: Diagnostic): string {
@@ -733,7 +782,7 @@ async function dispatch(name: string, input: Record<string, any>): Promise<strin
     case 'insert': { const p = need(); const at = Number(input.at); return splice(p.key, at, at - 1, parseMd(String(input.markdown ?? ''), p.headings), '已插入'); }
     case 'delete': return splice(need().key, Number(input.from), Number(input.to), [], '已删');
     case 'table_write': { const p = need(); if (!Array.isArray(input.rows) || !input.rows.length) return 'rows 得是二维数组'; const w = placeOf(input, p.key); if (typeof w === 'string') return w; return splice(p.key, w.from, w.to, [tableNode(input)], '表已写入'); }
-    case 'figure_write': { const p = need(); const node = await figureNode(input); if (typeof node === 'string') return node; const w = placeOf(input, p.key); if (typeof w === 'string') return w; return splice(p.key, w.from, w.to, [node], '图已写入'); }
+    case 'figure_write': { const p = need(); const f = await figureNode(input); if (typeof f === 'string') return f; const w = placeOf(input, p.key); if (typeof w === 'string') return w; return splice(p.key, w.from, w.to, [f.node], '图已写入') + (f.note ? `（${f.note}）` : ''); }
     case 'images': return imagesText();
     case 'selection': return selectionText();
     case 'diagnostics': return diagnosticsText();
@@ -792,7 +841,9 @@ export const SYSTEM_PROMPT = `你是 HιT webapp 里的写作助手（名字读 
 你能做的：读改各部分的文字；用 table_write 写表（单元格里 \\n 换行，能定列宽方式）、figure_write 插图（工程里的图、用户发来的图片附件、或用 pdf_images / pdf_render 从 PDF 附件里抽出来的图）——直接在 Markdown 里写图和表也行；往参考文献表 / 成果表加 BibTeX 条目（bib_add）；改论文信息（info_write，日期字段是「YYYY-MM」）；加缩略语和符号；看编译诊断；改论文设置（settings_set，每次都会弹窗请用户允许）。工具表里有 web_search / web_fetch 时能联网：查来的东西要给出处（网址），没有就不要说查过。
 用户问导出 Word（.docx，顶栏「下载」里）：封面 / 内封照校方范例抄、正文按排版出的 PDF 逐页对拍过，浮动图表在 Word 里是图文框；已知差别只有两处——续表没有「（续表）」题，博士论文第 1 页落在偶数页时 Word 会自己补一张白页（双面奇偶页眉的规矩）。
 规矩：
-- 先 outline 或 read 看清楚再改，改动尽量小，只换需要改的那几块；不要改标题的标签、引用键。
+- 用户说清楚了就直接做完，不要一步一问、不要先请示再动手、不要只做一半等确认：所有改动都在撤消里能回退，改错了可以再改。只有几种理解会导致明显不同的结果时才问一句，问之前先把不依赖答案的部分做掉。要你写就写出完整的段落，不要只给提纲或占位符。
+- 快：read 一次最多 80 块，一次把整章 / 整个部分读完，不要读几块改几块；replace 一次换一段连续范围，几处不相干的改动、几个不相干的查询放在同一轮里一起调用；不用为了「确认」而重复读。
+- 先 outline 或 read 看清楚再改，只换需要改的那几块；不要改标题的标签、引用键。
 - 引用文献要先有条目：表里没有就用 bib_add 加进去再在正文里写 [@key]，不要编造文献；拿不准的出处要向用户确认。
 - 缩略语：先用 abbreviations_add 登记（key、中文全称、英文全称），正文里写 @key，模板会在首次出现处展开成「全称（缩写）」、之后只印缩写；不要自己手写「有限元法（FEM）」。
 - 做不到的事直说做不到、为什么，不要绕弯子也不要假装做了；用户可以自己在编辑器里做的，告诉他在哪儿做。
@@ -801,5 +852,5 @@ export const SYSTEM_PROMPT = `你是 HιT webapp 里的写作助手（名字读 
 - 图表善用浮动（placement）：大图、整页的表让它浮到页顶或页底，正文就不会留大片空白。但编号是照正文顺序编的，浮动块会漂到后面的页，规范要求全文编号由小到大、先见文后见图——插了浮动图表、改了 placement 或挪了图之后，用 check_order 按排版结果查一遍，乱了就调（往前挪、去浮动、改 bottom）。
 - Markdown 写不出的（合并单元格、批注、某个属性），用 schema 看节点结构，再 read_json / write_json 直接改节点 JSON；平常改文字还是用 Markdown。
 - 中文与西文、数字之间不加空格（不要「盘古之白」，间距由模板排版时自动加）：「采用 Ergun 方程」是错的，要写「采用Ergun方程」；也别把原文里没有的空格加上。
-- 每次改完用一两句话说明改了什么；不确定用户想要什么就先问。
+- 每次改完用一两句话说明改了什么。
 - 回答用用户的语言，简短；代码和公式用 Markdown 的写法（\`\`\` 围栏、$…$）。`;

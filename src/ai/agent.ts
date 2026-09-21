@@ -2,7 +2,7 @@
 // 两种接口各一个驱动，对话记录按接口各自的原样存（一个会话只用一家）
 import type Anthropic from '@anthropic-ai/sdk';
 import { webOf, webNativeOf, type AiConfig } from './config';
-import { runTool, toolsFor, setWebConfig, serverSandboxOn, collectBytes, setReporter, type ToolDef } from './tools';
+import { runTool, toolsFor, setWebConfig, serverSandboxOn, collectBytes, setReporter, flushChecks, dropChecks, askUser, type ToolDef } from './tools';
 import { pdfText, type Attachment } from './files';
 
 export interface AgentEvents {
@@ -16,9 +16,25 @@ export interface AgentEvents {
 /** 一次会话的原始记录：两家接口的消息形状不同，装在各自的数组里 */
 export type Transcript = { api: 'anthropic'; messages: Anthropic.MessageParam[] } | { api: 'openai'; messages: any[] };
 
-const MAX_ROUNDS = 12;
+// 工具轮数不设死上限：每 30 轮弹一张卡问用户还接不接着，拒绝就停；300 轮是防死循环的兜底
+const ASK_EVERY = 30;
+const HARD_MAX = 300;
+async function mayContinue(round: number): Promise<boolean> {
+  if (round >= HARD_MAX) return false;
+  if (round === 0 || round % ASK_EVERY) return true;
+  return askUser({ head: '工具已经连续调用了不少轮', title: `第 ${round} 轮了，还让它接着做？`, lines: ['「允许」接着做，「拒绝」就停在这儿（做到一半的改动都在撤消里）。'] });
+}
+/** 一轮说完了：先前写入挂着的排版检查全收上来，有报错就作为新的一句发回去让它改（一次对话最多补两回） */
+async function pendingFix(fixes: number): Promise<string | null> {
+  if (fixes >= 2) { dropChecks(); return null; }
+  const diag = await flushChecks(true);
+  return diag || null;
+}
 const base = (u: string) => u.trim().replace(/\/+$/, '');
 
+/** 图片块上没有文件名，模型看见图却不知道叫什么，插图时就瞎猜：附件清单接在这句话后面 */
+const KIND: Record<Attachment['kind'], string> = { image: '图片', pdf: 'PDF', text: '文本' };
+const withFileNames = (text: string, files: Attachment[]) => (files.length ? `${text}\n\n（本条消息的附件：${files.map((f) => `${f.name}〔${KIND[f.kind]}〕`).join('、')}。插图时 figure_write 的 image 就填这里的文件名）` : text);
 async function exec(name: string, input: Record<string, unknown>): Promise<{ result: string; isError: boolean }> {
   try { return { result: await runTool(name, input), isError: false }; }
   catch (e) { return { result: `工具出错：${(e as Error).message}`, isError: true }; }
@@ -55,9 +71,11 @@ async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], us
       } catch (e) { console.warn('[agent] 附件没传进容器', f.name, e); }
     }
   }
-  messages.push({ role: 'user', content: parts.length ? [...parts, { type: 'text', text: userText }] : userText });
+  messages.push({ role: 'user', content: parts.length ? [...parts, { type: 'text', text: withFileNames(userText, files) }] : userText });
   setReporter(ev.onStatus);
-  for (let round = 0; round < MAX_ROUNDS; round++) {
+  let fixes = 0;
+  for (let round = 0; ; round++) {
+    if (!(await mayContinue(round))) { ev.onText(round >= HARD_MAX ? '\n（工具调用轮数太多，先停在这儿）' : '\n（按你的要求停在这儿）'); return; }
     ev.onStatus(round ? '工具结果发回去了，等模型接着说…' : '等模型回复…');
     const stream = client.messages.stream({
       model: c.model, max_tokens: 16000,
@@ -71,7 +89,15 @@ async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], us
     messages.push({ role: 'assistant', content: msg.content });
     await reportServerTools(client, msg.content, ev);
     if (msg.stop_reason === 'refusal') { ev.onText("\n（模型拒绝了这次请求）"); return; }
-    if (msg.stop_reason !== 'tool_use') return;
+    if (msg.stop_reason !== 'tool_use') {
+      const diag = await pendingFix(fixes);
+      if (!diag) return;
+      fixes++;
+      ev.onTool('diagnostics', {}, diag, true);
+      ev.onText('\n');
+      messages.push({ role: 'user', content: `${diag}\n\n（这是排版结果，不是我说的话——请直接修正，改完简短说一句）` });
+      continue;
+    }
     const results: Anthropic.ToolResultBlockParam[] = [];
     for (const block of msg.content) {
       if (block.type !== 'tool_use') continue;
@@ -83,7 +109,6 @@ async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], us
     }
     messages.push({ role: 'user', content: results });
   }
-  ev.onText("\n（工具调用轮数到上限，先停在这儿）");
 }
 
 /** 服务方沙盒在这一条消息里干了什么：每次 bash / 文件编辑配成一张卡，产出的文件按 file_id 下回来收成附件 */
@@ -139,9 +164,11 @@ async function openaiTurn(c: AiConfig, messages: any[], userText: string, files:
     else if (f.kind === 'pdf') parts.push({ type: 'text', text: await pdfText(f.data, f.name) });
     else parts.push({ type: 'text', text: `${f.name}\n${f.data}` });
   }
-  messages.push({ role: 'user', content: parts.length ? [...parts, { type: 'text', text: userText }] : userText });
+  messages.push({ role: 'user', content: parts.length ? [...parts, { type: 'text', text: withFileNames(userText, files) }] : userText });
   setReporter(ev.onStatus);
-  for (let round = 0; round < MAX_ROUNDS; round++) {
+  let fixes = 0;
+  for (let round = 0; ; round++) {
+    if (!(await mayContinue(round))) { ev.onText(round >= HARD_MAX ? '\n（工具调用轮数太多，先停在这儿）' : '\n（按你的要求停在这儿）'); return; }
     ev.onStatus(round ? '工具结果发回去了，等模型接着说…' : '等模型回复…');
     const r = await fetch(`${base(c.baseUrl)}/chat/completions`, {
       method: 'POST', signal,
@@ -170,7 +197,16 @@ async function openaiTurn(c: AiConfig, messages: any[], userText: string, files:
       if (ch.finish_reason) finish = ch.finish_reason;
     }
     const list = [...calls.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
-    if (!list.length || (finish && finish !== 'tool_calls' && finish !== 'function_call')) { messages.push({ role: 'assistant', content: text }); return; }
+    if (!list.length || (finish && finish !== 'tool_calls' && finish !== 'function_call')) {
+      messages.push({ role: 'assistant', content: text });
+      const diag = await pendingFix(fixes);
+      if (!diag) return;
+      fixes++;
+      ev.onTool('diagnostics', {}, diag, true);
+      ev.onText('\n');
+      messages.push({ role: 'user', content: `${diag}\n\n（这是排版结果，不是我说的话——请直接修正，改完简短说一句）` });
+      continue;
+    }
     messages.push({ role: 'assistant', content: text || null, tool_calls: list.map((v, i) => ({ id: v.id || `call_${round}_${i}`, type: 'function', function: { name: v.name, arguments: v.args || '{}' } })) });
     for (const [i, v] of list.entries()) {
       let input: Record<string, unknown> = {};
@@ -182,7 +218,6 @@ async function openaiTurn(c: AiConfig, messages: any[], userText: string, files:
       messages.push({ role: 'tool', tool_call_id: v.id || `call_${round}_${i}`, content: result });
     }
   }
-  ev.onText("\n（工具调用轮数到上限，先停在这儿）");
 }
 
 async function describeBody(r: Response): Promise<string> {

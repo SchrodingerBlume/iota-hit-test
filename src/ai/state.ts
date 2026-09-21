@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { loadSettings, saveSettings, type AiConfig, type AiSettings } from './config';
 import { runTurn, describeError, type Transcript } from './agent';
 import { readAttachment, type Attachment } from './files';
-import { setAskUser, setAttachments, setOnDerived, setMemoryContext, setSandboxContext, systemPromptFor, type Ask } from './tools';
+import { setAskUser, setAttachments, setOnDerived, setMemoryContext, setSandboxContext, systemPromptFor, dropChecks, type Ask } from './tools';
 import { kv } from '../model/persist';
 import { useStore } from '../model/store';
 
@@ -182,6 +182,7 @@ export const useAgent = create<AgentState>((set, get) => ({
     try {
       const st = get().settings;
       setMemoryContext({ enabled: !!st?.memory.enabled, notes: st?.memory.notes ?? '', write: async (notes) => { const cur = get().settings; if (cur) await get().setSettings({ ...cur, memory: { ...cur.memory, notes } }); } });
+      dropChecks();
       setSandboxContext(st?.sandbox ?? { browser: true, server: false, bridge: { enabled: false, url: '', token: '', confirm: true } });
       const liveOf = () => get().items.find((it) => it.id === reply.id)?.live;
       patch({ live: { status: '准备系统提示…', since: Date.now() } });
