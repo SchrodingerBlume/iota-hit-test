@@ -401,6 +401,8 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 [data-font="heiti"] { font-family: "Heiti SC", "SimHei", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
 [data-font="kaishu"] { font-family: "Kaiti SC", "STKaiti", KaiTi, "FandolKai", "Noto Serif CJK SC", serif; }
 [data-font="fangsong"] { font-family: "STFangsong", FangSong, "Noto Serif CJK SC", serif; }
+[data-font="serif"] { font-family: "Times New Roman", Times, var(--serif); }
+[data-font="sans"] { font-family: Arial, Helvetica, var(--sans); }
 /* 字号是绝对的：按编辑区正文（小四 12pt = --rich-size）折算，标题里也一样大，跟预览一致 */
 .rich { --pt: calc(var(--rich-size, 16.5px) / 12); }
 [data-size="chuhao"] { font-size: calc(42 * var(--pt)); } [data-size="xiaochu"] { font-size: calc(36 * var(--pt)); } [data-size="yihao"] { font-size: calc(26 * var(--pt)); } [data-size="xiaoyi"] { font-size: calc(24 * var(--pt)); }

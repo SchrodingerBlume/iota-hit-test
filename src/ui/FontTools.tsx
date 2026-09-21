@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { Editor } from '@tiptap/core';
 import { Dropdown, Option, Popover, PopoverTrigger, PopoverSurface, Tooltip, Button } from '@fluentui/react-components';
 import { TextColor20Regular, Highlight20Regular, FontIncrease20Regular, FontDecrease20Regular } from '@fluentui/react-icons';
-import { ZIHAO, INLINE_FONTS, BLOCK_SIZE, type FontRole } from '../model/zihao';
+import { ZIHAO, FONT_ROLES, BLOCK_SIZE, type FontRole } from '../model/zihao';
 import { B, refocusPreviewAfter } from '../editor/tools';
 import { t as tx } from '../i18n';
 
@@ -19,13 +19,13 @@ function blockSize(ed: Editor): string {
 
 export function FontFamilyPicker({ ed }: { ed: Editor | null }) {
   const role: FontRole | undefined = ed?.getAttributes('fontFamily').role;
-  const cur = INLINE_FONTS.find((f) => f.key === role);
+  const cur = FONT_ROLES.find((f) => f.key === role);
   return (
-    <Tooltip content={tx("中文字体")} relationship="description" positioning="below" withArrow>
+    <Tooltip content={tx("字体：中文四个角色，西文两个（弯引号、西文标点归西文字体）")} relationship="description" positioning="below" withArrow>
       <Dropdown size="small" className="rb-font" expandIcon={caret} disabled={!ed} value={cur?.label ?? tx("默认")} selectedOptions={[role ?? 'auto']}
         onOptionSelect={(_, d) => refocusPreviewAfter(() => { const c = ed!.chain().focus(); (d.optionValue === 'auto' ? c.unsetFontFamily() : c.setFontFamily(d.optionValue as FontRole)).run(); })}>
         <Option value="auto" text={tx("默认")}>{tx("默认（使用样式）")}</Option>
-        {INLINE_FONTS.map((f) => <Option key={f.key} value={f.key} text={f.label}><span data-font={f.key}>{f.label}</span></Option>)}
+        {FONT_ROLES.map((f) => <Option key={f.key} value={f.key} text={f.label}><span data-font={f.key}>{f.label}</span></Option>)}
       </Dropdown>
     </Tooltip>
   );

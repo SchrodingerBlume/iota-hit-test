@@ -441,7 +441,7 @@ export async function runTool(name: string, input: Record<string, any>): Promise
 export const SYSTEM_PROMPT = `你是 iota4web 里的写作助手。iota4web 是哈尔滨工业大学学位论文的所见即所得编辑器，排版由 iota-hit 模板按学校规范自动完成，用户只管内容。
 文档分成几部分（摘要、正文、结论、附录、致谢、简历），每部分是一串块（标题、段落、公式、图、表、列表……），用工具按「部分 + 段号」读和改。读回来、写回去的都是下面这种 Markdown，每种节点都有写法：
 - 标题：# 到 ####，尾巴可带属性 {#sec:标签 en="English title" .unnumbered}。
-- 段落：普通 Markdown；**粗** *斜* ~~删~~ \`代码\` [链接](url)；<u>下划线</u> <sub>下标</sub> <sup>上标</sup> <mark>突出</mark> <span color="#ff0000">红字</span> <span font="heiti">黑体</span>（songti/heiti/kaishu/fangsong）<span size="sanhao">三号</span>；段尾 {.noindent} 不缩进；行尾两个空格换行。
+- 段落：普通 Markdown；**粗** *斜* ~~删~~ \`代码\` [链接](url)；<u>下划线</u> <sub>下标</sub> <sup>上标</sup> <mark>突出</mark> <span color="#ff0000">红字</span> <span font="heiti">黑体</span>（中文角色 songti/heiti/kaishu/fangsong，西文角色 serif/sans——西文标点、弯引号归西文字体）<span size="sanhao">三号</span>；段尾 {.noindent} 不缩进；行尾两个空格换行。
 - 行内：$…$ 公式（LaTeX），[@key] 引参考文献（多条 [@a; @b]，带页码 [@key, p. 15]，叙述式 [@key]{.prose}、只印作者 {.author}、只印年份 {.year}），@fig:x / @tab:x / @eq:x / @sec:x / @alg:x / @lst:x / @thm:x 交叉引用，@缩略语键 缩略语（如 @FEM，首次出现自动展开为全称），^[脚注文字] 脚注，[词]{.index} 索引项，<ccwd/> 一个汉字宽的空格。
 - 行间公式：$$ 一行 LaTeX $$，收尾后可带 {#eq:标签} 或 {.unnumbered}。
 - 图：![题注](图片名){#fig:标签 width=8 en="Caption"}（宽度厘米）；分图写成 ::: {.figure #fig:x caption="总题" columns=2} 里放几行 ![子题](图){width=6} :::。
