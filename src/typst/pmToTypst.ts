@@ -23,6 +23,16 @@ export function parseJsonArr<T>(v: unknown): T[] { if (Array.isArray(v)) return 
 const parseSubs = (v: unknown) => parseJsonArr<{ image: string; width: string | number; caption: string }>(v);
 const parseIo = (v: unknown) => parseJsonArr<string>(v);
 const parseLines = (v: unknown) => parseJsonArr<{ text: string; level: number }>(v);
+/** 图注 / 表注：接在图或表正身之后（模板 note，排在写的位置）；引导词空着 = 默认「注：」，「无」= 不印 */
+function notesOf(n: PMNode, opts: SerializeOptions): string {
+  const notes = parseJsonArr<{ lead: string; text: string }>(n.attrs?.notes).filter((x) => (x.text ?? '').trim());
+  return notes.map((x, i) => {
+    const lead = (x.lead ?? '').trim();
+    const arg = !lead ? '' : lead === '无' || lead === 'none' ? '(lead: none)' : `(lead: [${escapeText(lead)}])`;
+    const body = opts.map ? mark('attr', opts.map.key, opts.map.posOf.get(n) ?? 0, (opts.map.posOf.get(n) ?? 0) + 1, escapeText(x.text.trim()), { attr: `notes.${i}.text`, raw: x.text.trim() }) : escapeText(x.text.trim());
+    return ` + note${arg}[${body}]`;
+  }).join('');
+}
 import type { RichKey } from '../model/store';
 
 export interface PMNode {
@@ -428,7 +438,7 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
         const letter = (i: number) => 'abcdefghijklmnopqrstuvwxyz'[i] ?? String(i + 1);
         const subsArg = `#subs(${subs.map((s, i) => `[${(s.caption ?? '').trim() ? captionText(s.caption ?? '', opts) : '#box[]'}${label ? ` <${label}-${letter(i)}>` : ''}]`).join(', ')},)`;
         const width = lengthTypst(n.attrs?.width ?? 8, 'cm', '8cm');
-        return floatWrap(n, 'image', tag(opts, n, 'node', `#figure(\n  image(${JSON.stringify(`${opts.imageDir ?? 'images'}/${n.attrs.image}`)}, width: ${width}),\n  caption: [${caption(n, opts)}${subsArg}],${placementArg(n)}\n)`) + (label ? ` <${label}>` : ''));
+        return floatWrap(n, 'image', tag(opts, n, 'node', `#figure(\n  image(${JSON.stringify(`${opts.imageDir ?? 'images'}/${n.attrs.image}`)}, width: ${width})${notesOf(n, opts)},\n  caption: [${caption(n, opts)}${subsArg}],${placementArg(n)}\n)`) + (label ? ` <${label}>` : ''));
       }
       if (subs.length) {
         // 分图交给模板的 subs() 排：一行里各图等高、整组撑到 width（默认版心 90%），columns 定每行几张（0 = 一行排完）；
@@ -454,19 +464,19 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
           under ? `captions: (${shown.map(capItem).join(', ')},)` : '',
         ].filter(Boolean);
         const subsArg = under ? '' : `#subs(${subs.map(capItem).join(', ')},)`;
-        const body = `#figure(\n  subs(\n    ${args.join(',\n    ')},\n  ),\n  caption: [${caption(n, opts)}${subsArg}],${placementArg(n)}\n)`;
+        const body = `#figure(\n  subs(\n    ${args.join(',\n    ')},\n  )${notesOf(n, opts)},\n  caption: [${caption(n, opts)}${subsArg}],${placementArg(n)}\n)`;
         return floatWrap(n, 'image', tag(opts, n, 'node', body) + (label ? ` <${label}>` : ''));
       }
       const img = String(n.attrs?.image ?? '');
       if (!img) return '';
       const width = lengthTypst(n.attrs?.width ?? 8, 'cm', '8cm');
-      return floatWrap(n, 'image', tag(opts, n, 'node', `#figure(\n  image(${JSON.stringify(`${opts.imageDir ?? 'images'}/${img}`)}, width: ${width}),\n  caption: [${caption(n, opts)}],${placementArg(n)}\n)`) + (label ? ` <${label}>` : ''));
+      return floatWrap(n, 'image', tag(opts, n, 'node', `#figure(\n  image(${JSON.stringify(`${opts.imageDir ?? 'images'}/${img}`)}, width: ${width})${notesOf(n, opts)},\n  caption: [${caption(n, opts)}],${placementArg(n)}\n)`) + (label ? ` <${label}>` : ''));
     }
     case 'tableFigure': {
       const table = (n.content ?? []).find((c) => c.type === 'table');
       if (!table) return '';
       const label = labelOf(n.attrs, 'tab');
-      return floatWrap(n, 'table', tag(opts, n, 'node', `#figure(\n  kind: table,\n  caption: [${caption(n, opts)}],${placementArg(n)}\n  ${serializeTable(table, opts, String(n.attrs?.fit ?? 'content'), n.attrs?.colWidth ?? 2.5, n.attrs?.cols ?? {})},\n)`) + (label ? ` <${label}>` : ''));
+      return floatWrap(n, 'table', tag(opts, n, 'node', `#figure(\n  kind: table,\n  caption: [${caption(n, opts)}],${placementArg(n)}\n  ${serializeTable(table, opts, String(n.attrs?.fit ?? 'content'), n.attrs?.colWidth ?? 2.5, n.attrs?.cols ?? {})}${notesOf(n, opts)},\n)`) + (label ? ` <${label}>` : ''));
     }
     case 'equation': {
       const src = String(n.attrs?.src ?? '').trim();

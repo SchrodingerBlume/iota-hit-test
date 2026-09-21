@@ -75,6 +75,8 @@ export interface Settings {
   bibTitleCase: Tri<'sentence' | 'title'>;
   bibNameCase: Tri<'upper' | 'asis'>;
   bibSortZh: Tri<'pinyin' | 'bihua'>;
+  /** 图注 / 表注块的宽（模板 note-width，只从工程 JSON 改）："80%" / "10cm"；不写跟所在的图表 */
+  noteWidth?: string;
   /** omni-gb7714 其余的 90 来项（只从工程 JSON 里改）：键照它的参数名，值是字符串就当 Typst 字符串发（"author-date"），
    *  写成 Typst 原话的长度 / auto / none / 字典（"0.65em"、"(doi: false)"）原样发；这里的键压过上面那几项折出来的 */
   gb7714?: Record<string, unknown>;

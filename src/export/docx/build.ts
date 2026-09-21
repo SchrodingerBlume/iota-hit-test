@@ -20,7 +20,7 @@ import { renderTypstMath, type MathImage } from './typstMath';
 import type { BibEntry } from '../../bib/bibtex';
 import { splitNames } from '../../bib/bibtex';
 
-import { fonts, fontsFor, NO_BORDERS, hasCJK } from './units';
+import { fonts, fontsFor, NO_BORDERS, hasCJK, PT } from './units';
 import { coverPage, titlepageZh, titlepageEn, defensePage, declarationsPage, pageBreak } from './pages';
 import { resolveSwitch, SWITCHES } from '../../model/options';
 import { queryFacts, stylesXml, gapTwips, headingLevels, shown, tw, asianOf, type Facts, type PageSetup } from './template';
@@ -207,6 +207,19 @@ function image(ctx: Ctx, name: string, widthCm: number): ParagraphChild | null {
 }
 const cmOf = (v: unknown, fallback: number) => { const m = /^\s*([\d.]+)\s*(cm|mm|pt|in|%)?\s*$/.exec(String(v ?? '')); if (!m) return typeof v === 'number' ? v : fallback; const n = parseFloat(m[1]); return m[2] === 'mm' ? n / 10 : m[2] === 'pt' ? n / 72 * 2.54 : m[2] === 'in' ? n * 2.54 : m[2] === '%' ? n / 100 * 14.6 : n; };
 
+/** 图注 / 表注（模板 note）：跟题注同字号字体，左起不缩进，引导词「注：」后面的续行悬挂到引导词之后 */
+function notePara(ctx: Ctx, n: PMNode): Paragraph[] {
+  let notes: { lead: string; text: string }[] = [];
+  try { notes = JSON.parse(String(n.attrs?.notes || '[]')); } catch { /* */ }
+  const zh = ctx.s.lang !== 'en';
+  return notes.filter((x) => (x.text ?? '').trim()).map((x) => {
+    const lead = (x.lead ?? '').trim();
+    const head = !lead ? (zh ? '注：' : 'Note: ') : lead === '无' || lead === 'none' ? '' : lead + (hasCJK(lead) ? '' : ' ');
+    const size = ctx.F.styles.figure.caption.size ?? 10.5;
+    const hang = Math.round([...head].reduce((w, c) => w + (hasCJK(c) ? size : size * 0.5), 0) * PT);
+    return new Paragraph({ style: 'Caption', alignment: AlignmentType.LEFT, keepNext: true, indent: { firstLine: 0, left: hang, hanging: hang }, children: [new TextRun({ text: head }), ...inline(ctx, [{ type: 'text', text: x.text.trim() }])] });
+  });
+}
 function figure(ctx: Ctx, n: PMNode): Block[] {
   const num = numOf(ctx, n, 'fig');
   let subs: { image: string; caption?: string; width?: unknown }[] = [];
@@ -215,7 +228,7 @@ function figure(ctx: Ctx, n: PMNode): Block[] {
   // 合成图配连排分图题：图照单图排，分图题在图题下一行「(a) … (b) …」
   if (subs.length && n.attrs?.image && !subs.some((s) => s.image)) {
     const img = image(ctx, String(n.attrs.image), cmOf(n.attrs?.width, 8));
-    return [new Paragraph({ style: 'Figure', children: img ? [img] : [] }), ...captionPara(ctx, num, String(n.attrs?.caption ?? ''), String(n.attrs?.captionEn ?? ''), { kind: 'figure', node: n, prefix: 'fig', last: false }), new Paragraph({ style: 'FigureCaption', children: [new TextRun({ text: subs.map((s, i) => `(${letter(i)}) ${s.caption ?? ''}`).join('  ') })] })];
+    return [new Paragraph({ style: 'Figure', children: img ? [img] : [] }), ...notePara(ctx, n), ...captionPara(ctx, num, String(n.attrs?.caption ?? ''), String(n.attrs?.captionEn ?? ''), { kind: 'figure', node: n, prefix: 'fig', last: false }), new Paragraph({ style: 'FigureCaption', children: [new TextRun({ text: subs.map((s, i) => `(${letter(i)}) ${s.caption ?? ''}`).join('  ') })] })];
   }
   if (subs.length) {
     const cols = Math.max(1, Math.min(4, Number(n.attrs?.columns) || 2));
@@ -225,11 +238,11 @@ function figure(ctx: Ctx, n: PMNode): Block[] {
       while (cells.length < cols) cells.push(new TableCell({ borders: NO_BORDERS, children: [new Paragraph('')] }));
       rows.push(new TableRow({ children: cells }));
     }
-    return [gapPara(gapTwips(ctx.F.styles.figure.image.above, ctx.P)), new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE }, alignment: AlignmentType.CENTER }), ...captionPara(ctx, num, String(n.attrs?.caption ?? ''), String(n.attrs?.captionEn ?? ''), { kind: 'figure', node: n, prefix: 'fig' })];
+    return [gapPara(gapTwips(ctx.F.styles.figure.image.above, ctx.P)), new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE }, alignment: AlignmentType.CENTER }), ...notePara(ctx, n), ...captionPara(ctx, num, String(n.attrs?.caption ?? ''), String(n.attrs?.captionEn ?? ''), { kind: 'figure', node: n, prefix: 'fig' })];
   }
   const img = image(ctx, String(n.attrs?.image ?? ''), cmOf(n.attrs?.width, 8));
   // 装图段（Figure：段前 = 图块之上、与下段同页）+ 题注（Caption：段后 = 图块之下）
-  return [new Paragraph({ style: 'Figure', children: img ? [img] : [new TextRun({ text: `[图 ${n.attrs?.image ?? ''}]` })] }), ...captionPara(ctx, num, String(n.attrs?.caption ?? ''), String(n.attrs?.captionEn ?? ''), { kind: 'figure', node: n, prefix: 'fig' })];
+  return [new Paragraph({ style: 'Figure', children: img ? [img] : [new TextRun({ text: `[图 ${n.attrs?.image ?? ''}]` })] }), ...notePara(ctx, n), ...captionPara(ctx, num, String(n.attrs?.caption ?? ''), String(n.attrs?.captionEn ?? ''), { kind: 'figure', node: n, prefix: 'fig' })];
 }
 
 /** 表：模板 figure.table 那张「表格」卡——三条线（stroke 的 top / header / bottom，没写的边就是无线）、单元格边距（inset）、表块上下那几行 */
@@ -255,6 +268,7 @@ function tableFigure(ctx: Ctx, n: PMNode): Block[] {
   return [
     ...captionPara(ctx, num, String(n.attrs?.caption ?? ''), String(n.attrs?.captionEn ?? ''), { kind: 'table', node: n, prefix: 'tab' }),
     new Table({ rows: trs, width: fit === 'window' ? { size: 100, type: WidthType.PERCENTAGE } : { size: 0, type: WidthType.AUTO }, alignment: AlignmentType.CENTER, borders: { ...NO_BORDERS, insideHorizontal: NO_BORDERS.top, insideVertical: NO_BORDERS.top }, margins: { top: pad('top'), bottom: pad('bottom'), left: pad('left'), right: pad('right') } }),
+    ...notePara(ctx, n),
     gapPara(gapTwips(T.below, ctx.P)),
   ];
 }

@@ -7,7 +7,7 @@ import { CellSelection, TableMap } from '@tiptap/pm/tables';
 import { useEffect, useRef, useState } from 'react';
 import { imageUrl } from '../imageCache';
 import { useEditorEnv, useNumbering, useOpenNonce, focusAttrInput } from '../env';
-import { labelOf } from '../../typst/pmToTypst';
+import { labelOf, parseJsonArr } from '../../typst/pmToTypst';
 import { MathEditor, forPreview } from '../math/MathEditor';
 import { MathPreview } from '../math/MathPreview';
 import { AutoInput } from '../../ui/AutoInput';
@@ -42,6 +42,27 @@ function Caption({ node, updateAttributes, kindName, editable, prefix }: { node:
     </div>
   );
 }
+
+/** 图注 / 表注（模板 note）：一条一行，引导词空着 = 默认「注：」，写「无」= 不印，别的照写（a.） */
+export interface FigNote { lead: string; text: string }
+export const parseNotes = (v: unknown): FigNote[] => parseJsonArr<FigNote>(v);
+function Notes({ node, updateAttributes, editable }: { node: NodeViewProps['node']; updateAttributes: NodeViewProps['updateAttributes']; editable: boolean }) {
+  const notes = parseNotes(node.attrs.notes);
+  if (!notes.length) return null;
+  const set = (list: FigNote[]) => updateAttributes({ notes: JSON.stringify(list) });
+  return (
+    <div className="fig-notes" contentEditable={false}>
+      {notes.map((n, i) => (
+        <div key={i} className="fig-note">
+          <AutoInput className="fig-note-lead" data-attr={`notes.${i}.lead`} disabled={!editable} value={n.lead} placeholder={t("注：")} minWidth={28} onChange={(e) => set(notes.map((x, k) => (k === i ? { ...x, lead: e.target.value } : x)))} />
+          <AutoInput className="fig-note-text" data-attr={`notes.${i}.text`} disabled={!editable} value={n.text} placeholder={t("注的内容")} minWidth={120} onChange={(e) => set(notes.map((x, k) => (k === i ? { ...x, text: e.target.value } : x)))} />
+          <button type="button" className="blk-tool is-btn is-danger" title={t("删除这条注")} disabled={!editable} onClick={() => set(notes.filter((_, k) => k !== i))}><Trash2 /></button>
+        </div>
+      ))}
+    </div>
+  );
+}
+const addNote = (node: NodeViewProps['node'], updateAttributes: NodeViewProps['updateAttributes']) => updateAttributes({ notes: JSON.stringify([...parseNotes(node.attrs.notes), { lead: '', text: '' }]) });
 
 /** 悬停 / 选中时浮出的工具条 */
 /** 块操作柄：悬停显示，支持拖动和整块选择。 */
@@ -182,6 +203,7 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
           </label>
         )}
       </div>
+      <Notes node={node} updateAttributes={updateAttributes} editable={editable} />
       <Caption node={node} updateAttributes={updateAttributes} kindName={t("图")} editable={editable} prefix={num} />
       {captionOnly && (
         <div className="subcaps" contentEditable={false}>
@@ -196,6 +218,7 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
           <LengthInput value={node.attrs.width ?? 8} defaultUnit="cm" disabled={!editable} onChange={(v) => updateAttributes({ width: v ?? 8 })} width={84} />
         </label>
         <LabelField node={node} updateAttributes={updateAttributes} prefix="fig" editable={editable} />
+        <button type="button" className="blk-tool is-btn" title={t("图注：排在图之下、图题之上，与图同宽")} disabled={!editable} onClick={() => addNote(node, updateAttributes)}><PencilLine />{t("图注")}</button>
         <button type="button" className="blk-tool is-btn" title={t("添加分图")} disabled={!editable} onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.onchange = async () => { const files = [...(input.files ?? [])]; const add: SubFig[] = []; for (const f of files) { const r = await env.addImage(f); add.push({ image: r.name, width: '', caption: '' }); } const base = subs.length ? subs : (name ? [{ image: name, width: '', caption: '' }] : []); setSubs([...base, ...add]); }; input.click(); }}><PencilLine />{t("分图")}</button>
         {!!name && (!subs.length || captionOnly) && <button type="button" className="blk-tool is-btn" title={t("分图题注置于总题注下方")} disabled={!editable} onClick={() => setSubs([...subs, { image: '', width: '', caption: '' }])}><PencilLine />{t("分图题注")}</button>}
         {!subs.length && <label className="blk-tool is-btn" title={t("更改图片")}><ImageUp /><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>}
@@ -216,7 +239,8 @@ export const Figure = Node.create({
     // subs：分图（JSON），非空时母图由分图组成；columns 每行几张；subMode under = 分图题排在分图之下（#subfigure），
     // caption = 分图题跟在图题之下连排（#subs）
     // subLabel：(a)(b) 打在图上的哪个角（none / tl / tr / bl / br），subLabelFill 标签黑字或白字（深色图用）
-    return { image: attr('image', ''), width: attr('width', 8), caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null), placement: attr('placement', 'none'), breakable: attr('breakable', 'auto'), subs: attr('subs', '[]'), columns: attr('columns', 2), subMode: attr('subMode', 'under'), subLabel: attr('subLabel', 'none'), subLabelFill: attr('subLabelFill', 'black') };
+    // notes：图注（JSON [{lead, text}]），模板 note：排在图之下、图题之上
+    return { image: attr('image', ''), width: attr('width', 8), caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null), placement: attr('placement', 'none'), breakable: attr('breakable', 'auto'), subs: attr('subs', '[]'), columns: attr('columns', 2), subMode: attr('subMode', 'under'), subLabel: attr('subLabel', 'none'), subLabelFill: attr('subLabelFill', 'black'), notes: attr('notes', '[]') };
   },
   parseHTML() { return [{ tag: 'div[data-node="figure"]' }]; },
   renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { 'data-node': 'figure' })]; },
@@ -281,8 +305,10 @@ function TableFigureView({ node, updateAttributes, selected, deleteNode, editor,
       {editable && <RowColHandles wrap={wrap} editor={editor} getPos={getPos} node={node} hover={hover || selected} />}
       <Caption node={node} updateAttributes={updateAttributes} kindName={t("表")} editable={editable} prefix={num} />
       <NodeViewContent className="tab-body" />
+      <Notes node={node} updateAttributes={updateAttributes} editable={editable} />
       <Tools>
         <LabelField node={node} updateAttributes={updateAttributes} prefix="tab" editable={editable} />
+        <button type="button" className="blk-tool is-btn" title={t("表注：排在表之下，与表同宽")} disabled={!editable} onClick={() => addNote(node, updateAttributes)}><PencilLine />{t("表注")}</button>
         <span className="blk-hint">{t("将光标置于单元格内，可在功能区添加或删除行列。")}</span>
         <button type="button" className="blk-tool is-btn is-danger" title={t("删除整张表")} disabled={!editable} onClick={deleteNode}><Trash2 /></button>
       </Tools>
@@ -333,7 +359,7 @@ export const TableFigure = Node.create({
   draggable: true,
   addAttributes() {
     // fit：Word 的「自动调整」——content 根据内容、window 根据窗口（撑满版心）、fixed 固定列宽（colWidth 厘米）；拖过列线的列另算
-    return { caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null), placement: attr('placement', 'none'), breakable: attr('breakable', 'auto'), fit: attr('fit', 'content'), colWidth: attr('colWidth', 2.5), cols: attr('cols', null) };
+    return { caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null), placement: attr('placement', 'none'), breakable: attr('breakable', 'auto'), fit: attr('fit', 'content'), colWidth: attr('colWidth', 2.5), cols: attr('cols', null), notes: attr('notes', '[]') };
   },
   parseHTML() { return [{ tag: 'div[data-node="tableFigure"]' }]; },
   renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { 'data-node': 'tableFigure' }), 0]; },
