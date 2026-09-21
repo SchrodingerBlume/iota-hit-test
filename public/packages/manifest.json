@@ -7,24 +7,24 @@
       "name": "iota-hit",
       "version": "0.1.0",
       "file": "local-iota-hit-0.1.0.tar.gz",
-      "size": 149940,
-      "sha": "aeb0d6a79a08"
+      "size": 150047,
+      "sha": "796f7168f250"
     },
     {
       "namespace": "local",
       "name": "banshi",
       "version": "0.1.0",
       "file": "local-banshi-0.1.0.tar.gz",
-      "size": 59221,
-      "sha": "6c416cb7a6b2"
+      "size": 59404,
+      "sha": "b9bede2fba45"
     },
     {
       "namespace": "local",
       "name": "omni-gb7714",
       "version": "0.1.0",
       "file": "local-omni-gb7714-0.1.0.tar.gz",
-      "size": 300786,
-      "sha": "fce78ff9c86b"
+      "size": 299658,
+      "sha": "8c5811112a4b"
     },
     {
       "namespace": "preview",
