@@ -184,6 +184,8 @@ export function stylesXml(F: Facts, s: Settings, o: { hangingChars: number }): {
   const image = { ...fig.image, 'first-line-indent': { chars: 0 } as Chars, align: 'center', sticky: true, below: undefined, 'snap-to-grid': true };
   // 封面内封那些不贴网格的行（范例里 snapToGrid 0 的段）
   styles.push(styleXml('NoGrid', 'No Grid', { basedOn: 'Normal', next: 'NoGrid', pPr: '<w:pPr><w:snapToGrid w:val="0"/></w:pPr>' }));
+  // 正文样式不贴网格（模板 body 的 snap-to-grid: false 写进了 Normal），封面 / 内封里要贴网格的段用这一条
+  styles.push(styleXml('Grid', 'Grid', { basedOn: 'Normal', next: 'Grid', pPr: '<w:pPr><w:snapToGrid/></w:pPr>' }));
   styles.push(styleXml('Figure', 'Figure', { basedOn: 'Normal', next: 'Caption', pPr: pPr(image, P), rPr: rPr(fig.image, F, zh) }));
   // 题注本身不带段前段后；图题（在图下）的段后 = 图块之下，表题（在表上）的段前 = 表块之上——分成三条，
   // 段落上就不必再清零（*Lines 那几个属性从样式继承下来后，段上光写 before=0 压不住）
