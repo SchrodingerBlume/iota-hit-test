@@ -329,14 +329,6 @@ export const SWITCHES: SwitchDef<any>[] = [
         : { value: true, mixed: t("自动检测字体"), reason: t("按字体") }),
   },
   {
-    key: 'emphKaishu',
-    label: t("倾斜文字使用楷体"),
-    hint: t("楷体 / 倾斜"),
-    choices: onOff,
-    group: t("字体"),
-    resolve: () => ({ value: false, reason: t("倾斜") }),
-  },
-  {
     key: 'bibliographyFull',
     label: t("参考文献列出范围"),
     hint: t("列出全部条目或仅列已引用条目"),
@@ -690,7 +682,6 @@ export const defaultSettings = (): Settings => ({
   abbreviationIndexed: 'auto',
   titleSpread: 'auto',
   fakeBold: 'auto',
-  emphKaishu: 'auto',
   hyphenate: 'auto',
   abstractKeywordsAbove: 'auto',
   emDash: 'auto',

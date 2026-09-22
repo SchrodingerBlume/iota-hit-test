@@ -835,7 +835,7 @@ let canvas: CanvasRenderingContext2D | null = null;
 function measureText(text: string, px: number): number {
   canvas ??= document.createElement('canvas').getContext('2d');
   if (!canvas) return text.length * px;
-  canvas.font = `${px}px "Noto Serif CJK SC", "Times New Roman", serif`;
+  canvas.font = `${px}px "TeX Gyre Termes", "Noto Serif CJK SC", "Times New Roman", serif`;
   return canvas.measureText(text).width;
 }
 

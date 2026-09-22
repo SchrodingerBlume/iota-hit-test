@@ -54,8 +54,13 @@
   --fast: 160ms;
   --base: 280ms;
   --sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", "Segoe UI", sans-serif;
-  --serif: "Songti SC", "Noto Serif CJK SC", "SimSun", "Times New Roman", serif;
+  --serif: "TeX Gyre Termes", "Noto Serif CJK SC", "Songti SC", "SimSun", "Times New Roman", serif;
   --mono: "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  /* 编辑区用站内那套字体（src/fonts/bundled.ts 从引擎缓存里装进 document.fonts），西文在前、汉字落到 Noto；还没装上时先用系统的 */
+  --rich-serif: "TeX Gyre Termes", "Noto Serif CJK SC", "Times New Roman", "Songti SC", "SimSun", serif;
+  --rich-sans: "TeX Gyre Heros", "Noto Sans CJK SC", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --rich-kai: "TeX Gyre Termes", "FandolKai", "Kaiti SC", "STKaiti", KaiTi, serif;
+  --rich-mono: "DejaVu Sans Mono", Menlo, Consolas, monospace;
 }
 :root[data-theme="dark"] {
   --orange: #ff9d1f;
@@ -407,7 +412,7 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 
 .editor-body { padding: 36px 56px 72px; }
 @container (max-width: 640px) { .editor-body { padding: 24px 16px 56px; } }
-.rich { outline: none; font-family: var(--serif); font-size: 16.5px; line-height: 1.95; max-width: 720px; margin: 0 auto; color: var(--ink); }
+.rich { outline: none; font-family: var(--rich-serif); font-size: 16.5px; line-height: 1.95; max-width: 720px; margin: 0 auto; color: var(--ink); }
 .rich > * + * { margin-top: 0.35em; }
 .rich p { margin: 0; text-indent: 2em; }
 /* 「不首行缩进」的段：左边挂一个 ⇤，一眼看出它是特殊段（Word 没有这个记号，这里的续段是模板的概念） */
@@ -418,7 +423,7 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .pv-mark.is-space { text-align: center; }
 .rich p.no-indent::before { content: '⇤'; position: absolute; left: -1.3em; top: 0; color: var(--accent); opacity: 0.55; font-size: 0.85em; font-family: var(--sans); pointer-events: none; }
 /* 编辑标记开着：编辑区的段末与标题末也画 ¶（与预览同一个开关） */
-.rich.show-marks > p::after, .rich.show-marks li > p::after, .rich.show-marks blockquote > p::after { content: '¶'; color: var(--accent); opacity: 0.5; margin-left: 1px; font-family: "Times New Roman", serif; pointer-events: none; }
+.rich.show-marks > p::after, .rich.show-marks li > p::after, .rich.show-marks blockquote > p::after { content: '¶'; color: var(--accent); opacity: 0.5; margin-left: 1px; font-family: var(--rich-serif); pointer-events: none; }
 /* 空段：ProseMirror 用一个 <br> 撑行高，¶ 会掉到第二行把空段撑成两行；开着标记时 ¶ 自己撑行，br 藏起来 */
 /* 空段、以换行结尾的段：ProseMirror 末尾补的 br 只为撑行，开着标记时 ¶ 自己撑行，br 藏起来 */
 .rich.show-marks p > br.ProseMirror-trailingBreak:last-child { display: none; }
@@ -431,7 +436,7 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .rich ul, .rich ol { padding-left: 2.2em; margin: 0.2em 0; }
 .rich li { padding-left: 0.2em; }
 .rich li p { text-indent: 0; }
-.rich pre { font-family: var(--mono); font-size: 13px; background: var(--panel-2); padding: 12px 14px; border-radius: var(--r-s); line-height: 1.55; white-space: pre-wrap; margin: 0.6em 0; }
+.rich pre { font-family: var(--rich-mono); font-size: 13px; background: var(--panel-2); padding: 12px 14px; border-radius: var(--r-s); line-height: 1.55; white-space: pre-wrap; margin: 0.6em 0; }
 .rich blockquote { border-left: 3px solid var(--line-2); margin: 0; padding-left: 12px; color: var(--muted); }
 .rich strong { font-weight: 700; }
 .rich a.lnk { color: var(--accent-ink); text-decoration: underline; text-decoration-color: var(--accent-soft-2); text-underline-offset: 2px; }
@@ -465,16 +470,15 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .comment-actions > :first-child { flex: 1; }
 @container (max-width: 900px) { .work-cols.has-comments { grid-template-columns: minmax(0, 1fr) 200px; gap: 12px; } .comments-pane { font-size: 12px; padding-left: 8px; } }
 @container (max-width: 560px) { .work-cols.has-comments { grid-template-columns: 1fr; } .comments-pane { position: static; max-height: none; border-left: 0; border-top: 1px solid var(--line); padding: 8px 0 0; } }
-/* 强调：默认像 Word——西文真斜体、汉字合成斜切；「强调排楷体」开了才换楷体（不斜） */
-.rich em { font-style: italic; font-family: "Times New Roman", var(--serif); }
-[data-emph="kaishu"] .rich em { font-synthesis: none; font-family: "Times New Roman", "Kaiti SC", "STKaiti", KaiTi, "FandolKai", serif; }
+/* 强调就是斜：西文真斜体、汉字合成斜切（模板 fake-italic: true 那套）；要楷体的自己换字族 */
+.rich em { font-style: italic; font-synthesis: style; }
 /* 行内换字族 / 字号：编辑区只是示意，以预览为准；字号按小四 12pt 折成倍数 */
-[data-font="songti"] { font-family: var(--serif); }
-[data-font="heiti"] { font-family: "Heiti SC", "SimHei", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
-[data-font="kaishu"] { font-family: "Kaiti SC", "STKaiti", KaiTi, "FandolKai", "Noto Serif CJK SC", serif; }
-[data-font="fangsong"] { font-family: "STFangsong", FangSong, "Noto Serif CJK SC", serif; }
-[data-font="serif"] { font-family: "Times New Roman", Times, var(--serif); }
-[data-font="sans"] { font-family: Arial, Helvetica, var(--sans); }
+[data-font="songti"] { font-family: var(--rich-serif); }
+[data-font="heiti"] { font-family: var(--rich-sans); }
+[data-font="kaishu"] { font-family: var(--rich-kai); }
+[data-font="fangsong"] { font-family: "TeX Gyre Termes", "STFangsong", FangSong, "Noto Serif CJK SC", serif; }
+[data-font="serif"] { font-family: var(--rich-serif); }
+[data-font="sans"] { font-family: var(--rich-sans); }
 /* 字号是绝对的：按编辑区正文（小四 12pt = --rich-size）折算，标题里也一样大，跟预览一致 */
 .rich { --pt: calc(var(--rich-size, 16.5px) / 12); }
 [data-size="chuhao"] { font-size: calc(42 * var(--pt)); } [data-size="xiaochu"] { font-size: calc(36 * var(--pt)); } [data-size="yihao"] { font-size: calc(26 * var(--pt)); } [data-size="xiaoyi"] { font-size: calc(24 * var(--pt)); }
@@ -493,9 +497,9 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 /* 标题：编号 + 中文名一行，英文名下面一行小字 */
 .hd { margin: 1.4em 0 0.5em !important; }
 .hd-row { display: flex; align-items: baseline; gap: 0.5em; }
-.hd-num { flex: none; font-family: var(--sans); font-weight: 700; color: var(--orange); white-space: nowrap; user-select: none; }
+.hd-num { flex: none; font-family: var(--rich-sans); font-weight: 700; color: var(--orange); white-space: nowrap; user-select: none; }
 .hd-num:empty { display: none; }
-.hd .hd-zh { flex: 1; margin: 0; font-family: var(--sans); font-weight: 700; line-height: 1.35; min-width: 2em; color: var(--hit); }
+.hd .hd-zh { flex: 1; margin: 0; font-family: var(--rich-sans); font-weight: 700; line-height: 1.35; min-width: 2em; color: var(--hit); }
 :root[data-theme="dark"] .hd .hd-zh { color: var(--accent-ink); }
 .hd-1 .hd-row { font-size: 24px; }
 .hd-2 .hd-row { font-size: 19px; }
@@ -503,7 +507,7 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .hd-4 .hd-row { font-size: 16px; }
 .hd-1 { margin-top: 1.6em !important; padding-bottom: 0.3em; border-bottom: 1px solid var(--line); }
 .hd-en { padding-left: 0; margin-top: 2px; }
-.hd-en input { width: 100%; border: 0; background: none; font-family: "Times New Roman", serif; font-style: italic; font-size: 13.5px; color: var(--muted); padding: 1px 0; opacity: 0.55; transition: opacity var(--fast) var(--ease), color var(--fast) var(--ease); }
+.hd-en input { width: 100%; border: 0; background: none; font-family: var(--rich-serif); font-style: italic; font-size: 13.5px; color: var(--muted); padding: 1px 0; opacity: 0.55; transition: opacity var(--fast) var(--ease), color var(--fast) var(--ease); }
 .hd.has-en .hd-en input, .hd:hover .hd-en input, .hd-en input:focus { opacity: 1; }
 .hd-en input:focus { outline: none; color: var(--ink); border-bottom: 1px dashed var(--accent); }
 .hd-en input::placeholder { color: var(--muted); }
@@ -574,19 +578,19 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .blk-hint { color: var(--muted); font-size: 11px; padding: 0 4px; }
 
 /* 题注 */
-.cap { text-align: center; margin-top: 8px; font-family: var(--serif); text-indent: 0; }
+.cap { text-align: center; margin-top: 8px; font-family: var(--rich-serif); text-indent: 0; }
 .cap-zh { display: flex; justify-content: center; align-items: baseline; gap: 0.6em; font-size: 14.5px; }
 .cap-num { font-weight: 600; color: var(--ink); white-space: nowrap; }
-.cap-en { font-size: 12.5px; font-family: "Times New Roman", serif; color: var(--muted); margin-top: 2px; }
+.cap-en { font-size: 12.5px; font-family: var(--rich-serif); color: var(--muted); margin-top: 2px; }
 .auto-input { position: relative; display: inline-block; vertical-align: baseline; max-width: 100%; }
 .auto-input input { max-width: 100%; border: 0; border-bottom: 1px dashed transparent; background: none; padding: 0 2px; font: inherit; color: inherit; text-align: center; transition: border-color var(--fast) var(--ease); }
 .auto-input input:hover { border-bottom-color: var(--line-2); }
 .auto-input input:focus { outline: none; border-bottom-color: var(--accent); }
 .auto-input input::placeholder { color: var(--muted); opacity: 0.6; }
-.cap-input-en input { font-family: "Times New Roman", serif; }
+.cap-input-en input { font-family: var(--rich-serif); }
 
 /* 图注 / 表注：题注字号、左起，引导词一格 */
-.fig-notes { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; font-family: var(--serif); font-size: 13px; }
+.fig-notes { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; font-family: var(--rich-serif); font-size: 13px; }
 .fig-note { display: flex; align-items: baseline; gap: 4px; }
 .fig-note .auto-input input { text-align: left; }
 .fig-note .fig-note-text { flex: 1; }
@@ -600,7 +604,7 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 /* 表 */
 .tab .cap { margin: 0 0 6px; }
 .tab-body { overflow-x: auto; }
-.tab-body table { border-collapse: collapse; margin: 0 auto; font-family: var(--serif); font-size: 14px; }
+.tab-body table { border-collapse: collapse; margin: 0 auto; font-family: var(--rich-serif); font-size: 14px; }
 .tab-body td, .tab-body th { border: 1px solid var(--ink-2); padding: 3px 10px; min-width: 44px; position: relative; text-align: center; }
 .tab-body th { font-weight: 700; }
 .tab-body td p, .tab-body th p { margin: 0; text-indent: 0; }
@@ -611,7 +615,7 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 .eq-line { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 40px; cursor: pointer; }
 .eq-render { justify-self: center; padding: 4px 12px; font-size: var(--rich-size, 16.5px); }
 .eq-render .math-preview.katex-host .katex { font-size: 1em; }
-.eq-number { justify-self: end; font-family: var(--serif); font-size: 15px; color: var(--ink); }
+.eq-number { justify-self: end; font-family: var(--rich-serif); font-size: 15px; color: var(--ink); }
 .eq-line:hover .eq-render { background: var(--panel-2); border-radius: var(--r-s); }
 .eq-editor { animation: pop var(--fast) var(--ease) both; }
 .eq-editor-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
@@ -1035,7 +1039,7 @@ body.is-dragging-window iframe, body.is-dragging-window .preview-stage { pointer
 .pv-caret { position: absolute; width: 1.6px; background: var(--accent); pointer-events: none; animation: caret-blink 1.05s steps(2, start) infinite; box-shadow: 0 0 0 0.5px rgba(255,255,255,0.6); }
 .pv-caret.is-idle { animation: none; background: transparent; border-left: 1.6px dashed var(--accent); opacity: 0.55; box-shadow: none; }
 @keyframes caret-blink { 50% { opacity: 0; } }
-.pv-overlay { position: absolute; white-space: pre; font-family: "Noto Serif CJK SC", "Times New Roman", serif; color: #000; background: var(--paper); pointer-events: none; z-index: 1; padding-right: 1px; }
+.pv-overlay { position: absolute; white-space: pre; font-family: var(--rich-serif); color: #000; background: var(--paper); pointer-events: none; z-index: 1; padding-right: 1px; }
 .pv-overlay.is-composing { border-bottom: 2px solid var(--accent); background: var(--accent-soft); }
 .pv-overlay.is-fading { opacity: 0; background: transparent; transition: opacity 200ms ease-out; }
 .pv-gone { position: absolute; background: var(--paper); pointer-events: none; z-index: 1; }
@@ -1051,7 +1055,7 @@ body.is-dragging-window iframe, body.is-dragging-window .preview-stage { pointer
 .style-control small { font-size: 11.5px; line-height: 1.4; }
 .style-row { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 /* 编辑标记（Word 的 ¶）：只在覆盖层上画，不进排版结果 */
-.pv-mark { position: absolute; pointer-events: none; user-select: none; z-index: 2; font-family: "Times New Roman", "Noto Serif CJK SC", serif; color: var(--accent); opacity: 0.55; white-space: pre; }
+.pv-mark { position: absolute; pointer-events: none; user-select: none; z-index: 2; font-family: var(--rich-serif); color: var(--accent); opacity: 0.55; white-space: pre; }
 .pv-input { position: absolute; width: 1px; min-width: 1px; padding: 0; margin: 0; border: 0; outline: 0; opacity: 0.01; resize: none; overflow: hidden; background: transparent; color: transparent; caret-color: transparent; font-size: 16px; z-index: 0; }
 .preview.is-compiling .pv-layer { opacity: 1; }
 
@@ -1214,7 +1218,7 @@ body.is-dragging-window iframe, body.is-dragging-window .preview-stage { pointer
 .blk.thm { padding-left: 14px; border-left: 3px solid var(--line-2); font-family: var(--serif); font-size: inherit; line-height: inherit; }
 .blk.thm.is-selected { border-left-color: var(--accent); }
 .thm-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
-.thm-head .cap-num { font-family: "Heiti SC", "Noto Sans CJK SC", "SimHei", var(--sans); font-weight: 500; }
+.thm-head .cap-num { font-family: var(--rich-sans); font-weight: 500; }
 .thm-kind { font: inherit; font-family: var(--sans); font-size: 12px; color: var(--muted); border: 1px solid transparent; border-radius: var(--r-s); background: transparent; padding: 0 2px; cursor: pointer; max-width: 9em; }
 .thm-kind:hover, .thm-kind:focus { border-color: var(--line-2); color: var(--ink); outline: none; }
 .thm-note input { text-align: left; }

@@ -15,7 +15,7 @@ const body: RichDoc = {
     h(1, '绪论', 'Introduction', 'intro'),
     h(2, '课题背景及研究的目的和意义', 'Background, objective and significance of the subject', 'bg'),
     p(t('发展国防工业、微电子工业等尖端技术需要精密和超精密的仪器设备，精密仪器设备要求高速、高精度、低摩擦……这一段是普通正文：首行缩进两个字，行距、字号全由模板定，这里只管写字。')),
-    p(t('选中文字可以'), t('加粗', [{ type: 'bold' }]), t('、'), t('强调', [{ type: 'italic' }]), t('（排成楷体）、上标m'), t('2', [{ type: 'superscript' }]), t('，也可以插入行内公式'), { type: 'mathInline', attrs: { src: 'p = \\rho R T', mode: 'latex' } }, t('，引用文献'), { type: 'cite', attrs: { keys: 'willis1828' } }, t('，或者提一句缩略语'), { type: 'abbr', attrs: { key: 'FEM' } }, t('。缩略语首次出现时自动展开，后文只显示缩写。')),
+    p(t('选中文字可以'), t('加粗', [{ type: 'bold' }]), t('、'), t('强调', [{ type: 'italic' }]), t('（斜切）、换成'), t('楷体', [{ type: 'fontFamily', attrs: { role: 'kaishu' } }]), t('、上标m'), t('2', [{ type: 'superscript' }]), t('，也可以插入行内公式'), { type: 'mathInline', attrs: { src: 'p = \\rho R T', mode: 'latex' } }, t('，引用文献'), { type: 'cite', attrs: { keys: 'willis1828' } }, t('，或者提一句缩略语'), { type: 'abbr', attrs: { key: 'FEM' } }, t('。缩略语首次出现时自动展开，后文只显示缩写。')),
     h(2, '气体润滑轴承的分类', 'Classification of gas-lubricated bearing', 'cls'),
     p(t('根据间隙内气膜压力的产生原理，气体轴承可以分为四种基本形式，其结构如'), { type: 'ref', attrs: { target: 'fig:bearing' } }, t('所示。')),
     { type: 'figure', attrs: { image: SAMPLE_IMAGE, width: 7, caption: '气体静压轴承', captionEn: 'Externally pressurized gas bearing', uid: 'bearing', label: 'fig:bearing' } },

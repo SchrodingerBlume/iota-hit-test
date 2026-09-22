@@ -104,14 +104,13 @@ function inline(ctx: Ctx, nodes: PMNode[] = [], base: { size?: number; font?: st
       case 'text': {
         const has = (t: string) => marks.some((m) => m.type === t);
         const link = marks.find((m) => m.type === 'link');
-        // 强调：默认像 Word 斜切（汉字也伪斜）；开了「强调排楷体」汉字换楷体、西文斜体。latin-bold（英文报告的标题）：只有西文那一截加粗，汉字照旧
-        const kai = ctx.s.emphKaishu === true;
+        // 强调一律像 Word 斜切（汉字也伪斜）。latin-bold（英文报告的标题）：只有西文那一截加粗，汉字照旧
         const pieces = base.latinBold && !has('bold') ? (n.text ?? '').split(/(?<=[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef])(?=[^\u4e00-\u9fff\u3000-\u303f\uff00-\uffef])|(?<=[^\u4e00-\u9fff\u3000-\u303f\uff00-\uffef])(?=[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef])/) : [n.text ?? ''];
         for (const piece of pieces) {
           const run = new TextRun({
-            text: piece, bold: has('bold') || (base.latinBold && !hasCJK(piece)) || undefined, italics: (has('italic') && !(kai && hasCJK(piece))) || undefined, underline: has('underline') ? {} : undefined, strike: has('strike') || undefined,
+            text: piece, bold: has('bold') || (base.latinBold && !hasCJK(piece)) || undefined, italics: has('italic') || undefined, underline: has('underline') ? {} : undefined, strike: has('strike') || undefined,
             superScript: has('superscript') || undefined, subScript: has('subscript') || undefined,
-            font: has('code') ? fonts(ctx.F.fonts.mono, ctx.F.fonts.mono) : has('italic') && kai ? fontsFor(piece, ctx.F.fonts.kaishu, ctx.F.fonts.serif) : base.font ? fontsFor(piece, base.font, ctx.F.fonts.serif) : undefined, size: base.size,
+            font: has('code') ? fonts(ctx.F.fonts.mono, ctx.F.fonts.mono) : base.font ? fontsFor(piece, base.font, ctx.F.fonts.serif) : undefined, size: base.size,
           });
           push(link ? new ExternalHyperlink({ link: String(link.attrs?.href ?? ''), children: [run] }) : run);
         }

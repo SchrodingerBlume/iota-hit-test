@@ -94,8 +94,6 @@ export interface Settings {
   abbreviationIndexed: TriBool;
   titleSpread: TriBool;
   fakeBold: TriBool;
-  /** 强调排楷体：开了才换楷体；默认像 Word 一样斜切（伪斜） */
-  emphKaishu: TriBool;
   /** 西文断字（Typst text.hyphenate）；auto ＝ 模板关着（Word 默认不断字） */
   hyphenate: TriBool;
   /** 摘要正文与关键词之间：auto ＝ 空一行（指南），none ＝ 不空，bottom ＝ 关键词挤到页底（v(1fr)） */

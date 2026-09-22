@@ -386,7 +386,7 @@ export function App() {
     <EditorEnvContext.Provider value={env}>
       <FluentProvider theme={theme === 'dark' ? fluentDark : fluentLight} className="fluent-root">
       <FontRecovery />
-      <div className="app" data-emph={doc.settings.emphKaishu === true ? 'kaishu' : 'italic'}>
+      <div className="app">
         {/* 顶栏并进功能区那一行：左边照 Word 的快速访问工具栏——主页、保存、撤消 / 恢复、导出；右边状态、主题 */}
         {(() => { const canExportPdf = hasDocument && compile.status === 'ready' && !busy; const leading = (
           <span className="rb-leading">

@@ -63,10 +63,9 @@ export function normalizeDoc(raw: Partial<ThesisDoc>): ThesisDoc {
   const base = newDoc();
   const doc: ThesisDoc = { ...base, ...raw, version: 1 } as ThesisDoc;
   doc.settings = { ...base.settings, ...(raw.settings ?? {}) };
-  // 旧工程的「中文伪斜」极性反了过来：原来关（不斜切 = 排楷体）的改成开「强调排楷体」，其余走新默认（伪斜）
-  const rs: any = raw.settings ?? {};
-  if (rs.fakeItalic === false && rs.emphKaishu === undefined) doc.settings.emphKaishu = true;
+  // 强调一律伪斜（要楷体的自己换字族）：旧工程的「中文伪斜」「强调排楷体」两个开关都不要了
   delete (doc.settings as any).fakeItalic;
+  delete (doc.settings as any).emphKaishu;
   doc.info = { ...base.info, ...(raw.info ?? {}) };
   doc.pages = { ...base.pages, ...(raw.pages ?? {}) };
   // 迁移旧工程：将符号表与缩略语表总开关拆分；false 保留，true 转为 auto。
