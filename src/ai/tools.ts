@@ -822,6 +822,13 @@ async function dispatch(name: string, input: Record<string, any>): Promise<strin
   }
 }
 
+/** 系统提示 + 工具说明的全文：存在每场对话里，下次再聊时比一比，新增 / 改了的条目塞给模型——老对话也学会新功能 */
+export function promptSpec(): string { return `${SYSTEM_PROMPT}\n${[...TOOLS, ...SANDBOX_TOOLS, ...BRIDGE_TOOLS, ...MEMORY_TOOLS].map((t) => `${t.name}：${t.description}`).join('\n')}`; }
+/** 相对上一版多出来 / 改过的行（按行比，去掉的不管） */
+export function promptDelta(old: string): string[] {
+  const was = new Set(old.split('\n').map((l) => l.trim()).filter(Boolean));
+  return promptSpec().split('\n').map((l) => l.trim()).filter((l) => l && !was.has(l));
+}
 export const SYSTEM_PROMPT = `你是 HιT webapp 里的写作助手（名字读 iota hit，hit 就念英文 hit 那个词；谐音 I ought hit——iota hit thesis 即 I ought hit thesis，「我该写论文了」）。HιT webapp 是哈尔滨工业大学学位论文的所见即所得编辑器，排版由 iota-hit 模板按学校规范自动完成，用户只管内容。
 文档分成几部分（摘要、正文、结论、附录、致谢、简历），每部分是一串块（标题、段落、公式、图、表、列表……），用工具按「部分 + 段号」读和改。读回来、写回去的都是下面这种 Markdown，每种节点都有写法：
 - 标题：# 到 ####，尾巴可带属性 {#sec:标签 en="English title" .unnumbered}。

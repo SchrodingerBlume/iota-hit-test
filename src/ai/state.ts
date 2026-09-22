@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { loadSettings, saveSettings, type AiConfig, type AiSettings } from './config';
 import { runTurn, describeError, type Transcript } from './agent';
 import { readAttachment, type Attachment } from './files';
-import { setAskUser, setAttachments, setOnDerived, setMemoryContext, setSandboxContext, systemPromptFor, dropChecks, type Ask } from './tools';
+import { setAskUser, setAttachments, setOnDerived, setMemoryContext, setSandboxContext, systemPromptFor, dropChecks, promptSpec, promptDelta, type Ask } from './tools';
 import { kv } from '../model/persist';
 import { useStore } from '../model/store';
 
@@ -55,7 +55,9 @@ let sentFiles: Attachment[] = [];
 let boundDoc: string | null = null;
 const uid = () => Math.random().toString(36).slice(2, 9);
 
-interface Saved { items: ChatItem[]; transcript: Transcript | null; sentFiles: Attachment[] }
+interface Saved { items: ChatItem[]; transcript: Transcript | null; sentFiles: Attachment[]; /** 上次聊时的系统提示 + 工具说明，下次比出新增的注入 */ prompt?: string }
+/** 这场对话上次见过的提示词；null = 还没聊过 */
+let chatPrompt: string | null = null;
 interface Index { chats: ChatMeta[]; current: string | null; providerId?: string | null; preset?: string }
 const indexKey = (doc: string) => `agent:${doc}`;
 const chatKey = (doc: string, chat: string) => `agent:${doc}:${chat}`;
@@ -78,7 +80,7 @@ async function loadIndex(doc: string): Promise<Index> {
 }
 async function persistChat(doc: string, chat: string, items: ChatItem[], chats: ChatMeta[]) {
   // 附件的正文（base64）都在对话记录里，太大就只留这一场的展示、不留能续聊的原始记录
-  const saved: Saved = { items, transcript, sentFiles };
+  const saved: Saved = { items, transcript, sentFiles, prompt: chatPrompt ?? promptSpec() };
   const size = JSON.stringify(saved).length;
   await kv.set('meta', chatKey(doc, chat), size > 40 * 1024 * 1024 ? { ...saved, transcript: null, sentFiles: [] } : saved);
   const meta = chats.find((c) => c.id === chat);
@@ -186,7 +188,15 @@ export const useAgent = create<AgentState>((set, get) => ({
       setSandboxContext(st?.sandbox ?? { browser: true, server: false, bridge: { enabled: false, url: '', token: '', confirm: true } });
       const liveOf = () => get().items.find((it) => it.id === reply.id)?.live;
       patch({ live: { status: '准备系统提示…', since: Date.now() } });
-      await runTurn(c, transcript, text || '（看附件）', files, await systemPromptFor(st, get().docPreset), {
+      // 提示词 / 工具说明比这场对话上次见到的多了什么，接在这句话前面告诉模型；老记录没存过提示词的（空串）整段当新增太长，只提一句
+      let userText = text || '（看附件）';
+      if (chatPrompt !== null && chatPrompt !== promptSpec() && get().items.length > 2) {
+        const delta = chatPrompt ? promptDelta(chatPrompt) : [];
+        const note = chatPrompt ? (delta.length ? `新增或改动的条目：\n${delta.map((l) => `- ${l.replace(/^- /, '')}`).join('\n')}` : '') : '有新功能与新规矩，以现在的系统提示和工具说明为准';
+        if (note) userText = `〔本站的说明自这场对话上次进行后更新了，以现在的系统提示与工具说明为准，之前对话里与之冲突的做法不再沿用。${note}〕\n\n${userText}`;
+      }
+      chatPrompt = promptSpec();
+      await runTurn(c, transcript, userText, files, await systemPromptFor(st, get().docPreset), {
         onText: (d) => { buf += d; patch({ text: buf }); },
         onTool: (name, input, result, isError) => { const cur = get().items.find((it) => it.id === reply.id)!; patch({ tools: [...cur.tools, { name, input, result, isError, images: derived.length ? derived : undefined }], live: { status: '', since: Date.now() } }); derived = []; },
         onToolStart: (name, input) => patch({ live: { tool: { name, input }, status: '', since: Date.now() } }),
@@ -214,14 +224,14 @@ export const useAgent = create<AgentState>((set, get) => ({
     const index = await loadIndex(id);
     set({ chats: sortChats(index.chats), chatId: null, items: [], pending: [], ask: null, docProviderId: index.providerId ?? null, docPreset: index.preset ?? '' });
     refresh();
-    transcript = null; sentFiles = []; setAttachments([]);
+    transcript = null; sentFiles = []; chatPrompt = null; setAttachments([]);
     if (index.current && index.chats.some((c) => c.id === index.current)) await get().openChat(index.current);
   },
   newChat: async () => {
     const st = get();
     if (st.running) st.stop();
     if (boundDoc && st.chatId && st.items.length) await persistChat(boundDoc, st.chatId, st.items, st.chats);
-    transcript = null; sentFiles = []; setAttachments([]);
+    transcript = null; sentFiles = []; chatPrompt = null; setAttachments([]);
     set({ chatId: null, items: [], pending: [], ask: null });
     if (boundDoc) await kv.set('meta', indexKey(boundDoc), { ...(await loadIndex(boundDoc)), chats: get().chats, current: null } as Index);
   },
@@ -234,6 +244,7 @@ export const useAgent = create<AgentState>((set, get) => ({
     const saved = await kv.get<Saved>('meta', chatKey(boundDoc, id));
     transcript = saved?.transcript ?? null;
     sentFiles = saved?.sentFiles ?? [];
+    chatPrompt = saved?.prompt ?? (saved?.items?.length ? '' : null);
     setAttachments(sentFiles);
     set({ chatId: id, items: saved?.items ?? [], pending: [], ask: null });
     await kv.set('meta', indexKey(boundDoc), { ...(await loadIndex(boundDoc)), chats: get().chats, current: id } as Index);
@@ -252,7 +263,7 @@ export const useAgent = create<AgentState>((set, get) => ({
   deleteChat: async (id) => {
     if (!boundDoc) return;
     const st = get();
-    if (st.chatId === id) { if (st.running) st.stop(); transcript = null; sentFiles = []; setAttachments([]); set({ chatId: null, items: [], pending: [], ask: null }); }
+    if (st.chatId === id) { if (st.running) st.stop(); transcript = null; sentFiles = []; chatPrompt = null; setAttachments([]); set({ chatId: null, items: [], pending: [], ask: null }); }
     const chats = st.chats.filter((c) => c.id !== id);
     set({ chats });
     await kv.del('meta', chatKey(boundDoc, id));
