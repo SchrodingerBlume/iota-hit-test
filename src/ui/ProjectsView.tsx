@@ -2,12 +2,13 @@
 // 一张可搜索、可排序的列表，每行悬停出操作；删除走对话框确认，重命名就地改
 import { useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions, Button, Input, Menu, MenuTrigger, MenuPopover, MenuList, MenuItem, MenuItemRadio, MenuDivider, Tooltip } from '@fluentui/react-components';
-import { Document20Regular, DocumentSparkle20Regular, FolderOpen20Regular, ArrowLeft20Regular, Search20Regular, MoreHorizontal20Regular, Rename20Regular, Copy20Regular, Delete20Regular, ArrowDownload20Regular, Open20Regular, ArrowSort20Regular, Pin20Regular, PinOff20Regular } from '@fluentui/react-icons';
+import { Document20Regular, DocumentSparkle20Regular, FolderOpen20Regular, ArrowLeft20Regular, ArrowReset20Regular, Search20Regular, MoreHorizontal20Regular, Rename20Regular, Copy20Regular, Delete20Regular, ArrowDownload20Regular, Open20Regular, ArrowSort20Regular, Pin20Regular, PinOff20Regular } from '@fluentui/react-icons';
 import { kv } from '../model/persist';
 import { useStore, type ProjectMeta } from '../model/store';
 import { AXES, defaultSettings } from '../model/options';
 import type { Settings } from '../model/types';
 import { t as tx } from '../i18n';
+import { ResetDialog } from './ResetDialog';
 
 const label = (s: Settings, key: keyof Settings) => AXES.find((a) => a.key === key)?.choices.find((c) => c.value === s[key])?.label ?? String(s[key]);
 
@@ -81,6 +82,7 @@ export function ProjectsView() {
   const canBack = loaded && projects.some((p) => p.id === doc.id);
   // 新建对话框
   const [tpl, setTpl] = useState<'blank' | 'sample' | null>(null);
+  const [reset, setReset] = useState(false);
   const [name, setName] = useState('');
   const [settings, setSettings] = useState<Settings>(() => defaultSettings());
   const [creating, setCreating] = useState(false);
@@ -148,6 +150,7 @@ export function ProjectsView() {
             <p className="lead">{tx("文档保存在当前浏览器中。跨设备使用或长期保存时，请下载副本。")}</p>
           </div>
           <div className="projects-actions">
+            <Tooltip content={tx("清除引擎缓存、还原默认设置、清除全部项目数据")} relationship="description"><Button appearance="subtle" icon={<ArrowReset20Regular />} onClick={() => setReset(true)}>{tx("重置…")}</Button></Tooltip>
             <Button icon={<FolderOpen20Regular />} disabled={!loaded} onClick={onOpenProject}>{tx("打开文档…")}</Button>
             {canBack && <Button appearance="primary" icon={<ArrowLeft20Regular />} onClick={() => setView('editor')}>{tx("回到「{{name}}」", { name: doc.name })}</Button>}
           </div>
@@ -197,6 +200,7 @@ export function ProjectsView() {
         </footer>
       </div>
 
+      <ResetDialog open={reset} onClose={() => setReset(false)} />
       <Dialog open={tpl !== null} onOpenChange={(_, d) => { if (!d.open) setTpl(null); }}>
         <DialogSurface className="new-proj-dialog">
           <DialogBody>

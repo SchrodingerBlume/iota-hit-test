@@ -785,6 +785,15 @@ html.theme-anim :not(svg, svg *) { transition: background-color 320ms var(--ease
 .new-axes { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
 .new-axes select { padding: 6px 22px 6px 9px; border: 1px solid var(--line-2); border-radius: var(--r-s); background-color: var(--panel); appearance: none; color: var(--ink); }
 .btn-danger-fill { background: var(--danger) !important; border-color: var(--danger) !important; color: #fff !important; }
+/* 重置对话框：三段，最后一段是危险区 */
+.reset-dialog { max-width: 560px; }
+.reset-list { display: grid; gap: 14px; }
+.reset-list section { padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--panel-2); }
+.reset-list section.is-danger { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); background: var(--danger-soft); }
+.reset-list h4 { margin: 0 0 4px; font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.reset-list section.is-danger h4 { color: var(--danger); }
+.reset-list p { margin: 0 0 10px; font-size: 12.5px; line-height: 1.55; }
+.reset-list .fui-Input { width: 100%; }
 @media (max-width: 900px) {
   .projects { padding-inline: 24px; }
   .proj-row { grid-template-columns: 36px minmax(0, 1fr) auto; }
