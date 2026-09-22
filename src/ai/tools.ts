@@ -23,6 +23,8 @@ import { webOf, webNativeOf, type AiConfig, type AiSettings } from './config';
 import { pyBox, jsBox, type SandboxFile, type SandboxFont } from './sandbox';
 import { bridgeRun, bridgeLs, bridgeRead, bridgeWrite, defaultBridge, type BridgeConfig } from './bridge';
 import { GUIDES, guideFor, loadGuide, guideToc, guideSection, guideSearch } from './guides';
+import { queryFacts } from '../export/docx/template';
+import { parseSubs, subLayout, type SubFig } from '../typst/subfigs';
 
 export interface ToolDef { name: string; description: string; parameters: Record<string, unknown> }
 /** 要用户点头的改动：面板弹卡片，用户允许了才做 */
@@ -97,6 +99,10 @@ export async function systemPromptFor(s: AiSettings | undefined, docPreset: stri
   const parts = [SYSTEM_PROMPT, `今天是 ${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}（${'日一二三四五六'[now.getDay()]}），用户说「今天 / 这个月 / 明年」按它算。`];
   if (memoryCtx.enabled) parts.push(`用户的长期记忆（跨文档、跨模型，用户明确要你记住的偏好；有新的用 memory_write 记）：\n${memoryCtx.notes.trim() || '（还是空的）'}`);
   try {
+    const W = await textWidthCm();
+    parts.push(`版心宽 ${W} cm（正文页的可排宽度）：单图 width 不能超过它，一般 8–13 cm；分图一行 n 张各不超过 (${W} × 0.9 − (n−1)×0.42) / n cm（整组默认版心 90%，间距默认一个字），最好不写 width、让模板一行等高铺满，要钉高就写 height；写超了工具会拒绝。images 工具给了每张的像素尺寸，可算长宽比。`);
+  } catch { /* 没算出来就不提 */ }
+  try {
     const g = await loadGuide(guideFor(useStore.getState().doc.settings));
     parts.push(`这篇文档适用的学校规范：《${g.title}》。目录：${guideToc(g)}。凡是规范、格式、写法、该不该有某一页的问题，先用 guide 工具读相关条目再答，回答时点出条目号；改文档也照它。`);
   } catch { /* 指南没取到就不提 */ }
@@ -119,7 +125,9 @@ export const TOOLS: ToolDef[] = [
   { name: 'insert', description: '在某一部分第 at 块之前插入 Markdown（at 等于块数就是接在末尾）。', parameters: { type: 'object', properties: { part: partEnum, at: { type: 'integer', minimum: 0 }, markdown: { type: 'string' } }, required: ['part', 'at', 'markdown'], additionalProperties: false } },
   { name: 'delete', description: '删掉某一部分第 from 到 to 块（含两端）。', parameters: { type: 'object', properties: { part: partEnum, ...range }, required: ['part', 'from', 'to'], additionalProperties: false } },
   { name: 'table_write', description: '插一张表或换掉现有的表（给 replace 就是换）。rows 是二维数组，第一行是表头（header 为 true 时）；单元格里写 \\n 就是格内换行，也认 **粗** *斜* `代码` $公式$。fit：content 按内容分列宽、window 撑满版心平分、fixed 每列都是 colWidth 厘米。', parameters: { type: 'object', properties: { ...place, rows: { type: 'array', items: { type: 'array', items: { type: 'string' } }, minItems: 1 }, header: { type: 'boolean' }, caption: { type: 'string', description: '中文题注（表题）' }, captionEn: { type: 'string' }, label: { type: 'string', description: '交叉引用用的标签，形如 tab:xxx' }, fit: { type: 'string', enum: ['content', 'window', 'fixed'] }, colWidth: { type: 'number', description: 'fixed 时每列宽，厘米' } , placement }, required: ['part', 'rows'], additionalProperties: false } },
-  { name: 'figure_write', description: '插一张图或换掉现有的图。image 填工程里已有的图片名（见 images）或用户在对话里发来的图片附件的文件名（用户消息末尾列着）——附件会先存进工程；大小写、扩展名对不上也能认，latest = 最近发来的那张。', parameters: { type: 'object', properties: { ...place, image: { type: 'string' }, caption: { type: 'string', description: '中文题注（图题）' }, captionEn: { type: 'string' }, label: { type: 'string', description: '形如 fig:xxx' }, width: { type: 'number', description: '图宽，厘米（版心约 15 厘米）' }, placement }, required: ['part', 'image'], additionalProperties: false } },
+  { name: 'figure_write', description: '插一张图或一组分图，或换掉现有的图。单图填 image；分图填 subs（每张 {image, caption, width?, height?, place?, mark?, markFill?, captionEn?, label?}）加整组的 columns / gutter / width / subMode / subLabel 等，模板自动编 (a)(b)。图名填工程里已有的图片名（见 images，那里有像素尺寸可算长宽比）或用户在对话里发来的图片附件的文件名（用户消息末尾列着）——附件会先存进工程；大小写、扩展名对不上也能认，latest = 最近发来的那张。宽度受版心限制（系统提示里给了版心宽），超了会拒绝；分图最好不写 width，模板让一行等高铺满整组宽。', parameters: { type: 'object', properties: { ...place, image: { type: 'string' }, caption: { type: 'string', description: '中文题注（图题）' }, captionEn: { type: 'string' }, label: { type: 'string', description: '形如 fig:xxx' }, width: { type: ['number', 'string'], description: '单图：图宽，厘米，不能超过版心；分图：整组宽，字符串如 "12cm" 或 "90%"（默认版心 90%）' }, placement,
+      subs: { type: 'array', description: '分图：每张一个对象', items: { type: 'object', properties: { image: { type: 'string' }, caption: { type: 'string', description: '分图题，不带 (a)' }, captionEn: { type: 'string' }, width: { type: 'string', description: '钉宽，如 "5cm"；不写 = 自动，同一行等高铺满' }, height: { type: 'string', description: '钉高，如 "3cm"' }, place: { type: 'string', enum: ['next', 'row', 'below', 'beside'], description: '排法：next 接着排（按 columns 切行）、row 另起一行、below 叠在前一格之下、beside 在叠里与前一张并排；写了 place 就全按 place 排' }, mark: { type: 'string', enum: ['auto', 'none', 'tl', 'tr', 'bl', 'br'] }, markFill: { type: 'string', enum: ['auto', 'black', 'white'] }, label: { type: 'string', description: '自定义引用标签（默认 fig:x-a）' } }, required: ['image'], additionalProperties: false } },
+      columns: { type: 'integer', description: '分图每行几张（0 = 一行排完，默认 2）' }, gutter: { type: 'string', description: '分图之间的间距，如 "6pt"（默认一个字）' }, subMode: { type: 'string', enum: ['under', 'inline'], description: '分图题排在分图之下（默认）或连排在总题注下' }, subLabel: { type: 'string', enum: ['none', 'tl', 'tr', 'bl', 'br'], description: '(a)(b) 印在小图哪个角' }, subLabelFill: { type: 'string', enum: ['black', 'white'] }, subLabelPattern: { type: 'string', description: '图上标签写法，如 "(A)"' }, subLabelSize: { type: 'string', description: 'wuhao / xiaowu / liuhao / xiaosi' }, subLabelFont: { type: 'string', enum: ['sans', 'serif', 'heiti', 'songti', 'kaishu'] } }, required: ['part'], additionalProperties: false } },
   { name: 'images', description: '工程里有哪些图片，以及用户这场对话里发来的图片附件、从 PDF 里抽出来的图。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'pdf_images', description: '把用户发来的 PDF 附件里嵌的位图抽出来存成图片（file 是附件文件名，page 不给就整份、最多 60 页），回每张的名字与像素尺寸；矢量图抽不出来，用 pdf_render 截那一页。抽出来的图能直接 figure_write。', parameters: { type: 'object', properties: { file: { type: 'string' }, page: { type: 'integer', minimum: 1 } }, required: ['file'], additionalProperties: false } },
   { name: 'pdf_render', description: '把 PDF 附件的某一页画成图片（scale 1 约 72 dpi，默认 2），可以只截页面的一块：crop 是页面比例 [x, y, w, h]（0–1）。矢量图、公式截图用它。回图片名与尺寸，能直接 figure_write。', parameters: { type: 'object', properties: { file: { type: 'string' }, page: { type: 'integer', minimum: 1 }, scale: { type: 'number' }, crop: { type: 'array', items: { type: 'number' }, minItems: 4, maxItems: 4 } }, required: ['file', 'page'], additionalProperties: false } },
@@ -220,6 +228,59 @@ function tableNode(input: Record<string, any>) {
   return { type: 'tableFigure', attrs, content: [{ type: 'table', content: rows.map((r, ri) => ({ type: 'tableRow', content: Array.from({ length: width }, (_, ci) => cellNode(r[ci] ?? '', header && ri === 0)) })) }] };
 }
 
+// ── 版心：图不能比它宽 ───────────────────────────────────────────────────────
+// 正文页的版心宽问模板要（docx 导出那条 query 顺手给了页面设置），按文档设置缓存；问不到按终稿 A4 两边各 3 cm = 15 cm
+let textWidthCache: { key: string; cm: number } | null = null;
+export async function textWidthCm(): Promise<number> {
+  const doc = useStore.getState().doc;
+  const key = JSON.stringify(doc.settings);
+  if (textWidthCache?.key === key) return textWidthCache.cm;
+  let cm = 15;
+  try { const f = await queryFacts(doc); const m = f.layout.main; cm = Math.round(((m['paper-width'] - m.margin.left - m.margin.right) / 72) * 2.54 * 100) / 100; } catch { /* 用默认 */ }
+  textWidthCache = { key, cm };
+  return cm;
+}
+/** 长度折成厘米：数字按厘米，"3cm" / "30mm" / "12pt" / "1in"；百分比按 base；认不出 undefined */
+function lenCm(v: unknown, base: number): number | undefined {
+  if (typeof v === 'number') return v;
+  const t = String(v ?? '').trim();
+  const m = /^([\d.]+)\s*(cm|mm|pt|in|%)?$/.exec(t);
+  if (!m) return undefined;
+  const n = Number(m[1]); const u = m[2] ?? 'cm';
+  return u === 'cm' ? n : u === 'mm' ? n / 10 : u === 'pt' ? (n / 72) * 2.54 : u === 'in' ? n * 2.54 : (n / 100) * base;
+}
+/** 图 / 分图写进去之前查宽：单图 width 不能超版心；分图按排法折成行，一行里写了宽的加起来（加间距）不能超整组宽。
+ *  超了回一句说明（版心多宽、这一行最多多宽），模型自己改；没写宽的不查——模板会自动分 */
+async function checkFigureWidths(nodes: any[]): Promise<string> {
+  const W = await textWidthCm();
+  for (const n of nodes) {
+    if (n?.type !== 'figure') continue;
+    const a = n.attrs ?? {};
+    const subs = parseSubs(a.subs);
+    if (!subs.length) {
+      const w = lenCm(a.width, W);
+      if (w !== undefined && w > W + 0.05) return `图「${a.caption || a.image}」宽 ${w} cm 超过版心 ${W} cm，改成 ≤ ${W}（一般 8–13 cm 合适）再写`;
+      continue;
+    }
+    const group = lenCm(typeof a.width === 'string' ? a.width : undefined, W) ?? W * 0.9;
+    const gutter = lenCm(a.subGutter, W) ?? 0.42;
+    const rows = subLayout(subs, Number(a.columns) || 2);
+    const sum = (ws: (number | undefined)[]) => ws.reduce<number | undefined>((acc, w) => (acc === undefined ? w : w === undefined ? acc : acc + w), undefined);
+    const cellW = (c: any): number | undefined => {
+      if (typeof c === 'number') return lenCm(subs[c].width, group);
+      const ws = c.stack.map((it: any) => (typeof it === 'number' ? lenCm(subs[it].width, group) : sum(it.pair.map((i: number) => lenCm(subs[i].width, group))))).filter((x: number | undefined): x is number => x !== undefined);
+      return ws.length ? Math.max(...ws) : undefined;
+    };
+    for (const [ri, row] of rows.entries()) {
+      const known = row.map(cellW).filter((x): x is number => x !== undefined);
+      if (!known.length) continue;
+      const total = known.reduce((x, y) => x + y, 0) + gutter * (row.length - 1);
+      if (total > group + 0.05) return `分图第 ${ri + 1} 行写的宽加起来 ${total.toFixed(1)} cm（含间距）超过整组宽 ${group.toFixed(1)} cm（版心 ${W} cm）：这一行 ${row.length} 张各不超过 ${((group - gutter * (row.length - 1)) / row.length).toFixed(1)} cm，或者别写 width 让模板等高铺满`;
+    }
+  }
+  return '';
+}
+
 /** 模型给的图片名对不上原名是常事（大小写、少了扩展名、多了路径、只记得一半）：先精确，再宽松，最后「最新 / 唯一那张」 */
 const normName = (n: string) => n.toLowerCase().replace(/^.*[\\/]/, '').replace(/\.(png|jpe?g|gif|webp|svg)$/i, '').replace(/[\s_\-（）()]+/g, '');
 function findImage(raw: string): { where: 'project' | 'attachment'; name: string; note?: string } | string {
@@ -242,7 +303,46 @@ function findImage(raw: string): { where: 'project' | 'attachment'; name: string
   if (att.length === 1) return { where: 'attachment', name: att[0], note: `没有叫「${name}」的图，对话里只发来一张「${att[0]}」，用了它` };
   return `没有叫「${name}」的图片。工程里有：${proj.join('、') || '（无）'}；对话里发来的：${att.join('、') || '（无）'}。image 填其中一个原名（或 latest = 最近发来的那张）；用户要插的图还没发来就请他发`;
 }
+/** 图名找到后落到工程里（附件先存进工程），回工程里的名 */
+async function settleImage(raw: string): Promise<{ name: string; note?: string } | string> {
+  const store = useStore.getState();
+  const found = findImage(raw);
+  if (typeof found === 'string') return found;
+  let name = found.name;
+  if (found.where === 'attachment') {
+    const att = attachments.find((a) => a.kind === 'image' && a.name === name)!;
+    const blob = new Blob([Uint8Array.from(atob(att.data), (c) => c.charCodeAt(0))], { type: att.type });
+    name = safeImageName(att.name, new Set(store.doc.images.map((i) => i.name)));
+    await putImage(name, blob);
+    const d = await imageDimensions(blob);
+    store.setImages([...useStore.getState().doc.images, { name, mime: att.type, ...(d ?? {}) }]);
+  }
+  return { name, note: found.note };
+}
 async function figureNode(input: Record<string, any>): Promise<{ node: any; note?: string } | string> {
+  if (Array.isArray(input.subs) && input.subs.length) {
+    const subs: SubFig[] = [];
+    const notes: string[] = [];
+    for (const raw of input.subs) {
+      const r = await settleImage(String(raw?.image ?? ''));
+      if (typeof r === 'string') return r;
+      if (r.note) notes.push(r.note);
+      const sub: SubFig = { image: r.name, width: raw.width ? String(raw.width) : '', caption: String(raw.caption ?? '') };
+      if (raw.captionEn) sub.captionEn = String(raw.captionEn);
+      if (raw.height) sub.height = String(raw.height);
+      if (raw.place && raw.place !== 'next') sub.place = raw.place;
+      if (raw.mark && raw.mark !== 'auto') sub.mark = raw.mark;
+      if (raw.markFill && raw.markFill !== 'auto') sub.markFill = raw.markFill;
+      if (raw.label) sub.label = String(raw.label);
+      subs.push(sub);
+    }
+    const attrs: Record<string, unknown> = { image: subs[0].image, subs: JSON.stringify(subs), columns: input.columns !== undefined ? Number(input.columns) : 2 };
+    for (const k of ['caption', 'captionEn', 'label', 'placement', 'subMode', 'subLabel', 'subLabelFill', 'subLabelPattern', 'subLabelSize', 'subLabelFont']) if (input[k]) attrs[k] = input[k];
+    if (input.gutter) attrs.subGutter = String(input.gutter);
+    if (typeof input.width === 'string' && input.width.trim()) attrs.width = input.width.trim();
+    return { node: { type: 'figure', attrs }, note: notes.join('；') || undefined };
+  }
+  if (!String(input.image ?? '').trim()) return '单图要填 image，分图要填 subs';
   const store = useStore.getState();
   const found = findImage(String(input.image ?? ''));
   if (typeof found === 'string') return found;
@@ -656,10 +756,11 @@ function readJson(key: RichKey, from: number, to: number): string {
   if (from > to) return `段号超出范围（共 ${blocks.length} 块）`;
   return JSON.stringify(blocks.slice(from, to + 1).map((b, i) => ({ '#': from + i, ...b })), null, 1);
 }
-function writeJson(key: RichKey, from: number, to: number, nodes: unknown): string {
+async function writeJson(key: RichKey, from: number, to: number, nodes: unknown): Promise<string> {
   if (!Array.isArray(nodes)) return 'nodes 得是节点数组';
   const clean = nodes.map((n: any) => { const { '#': _i, ...rest } = n ?? {}; return rest; });
   for (const n of clean) if (!n || typeof n.type !== 'string') return '每个节点都要有 type';
+  const bad = await checkFigureWidths(clean); if (bad) return bad;
   return splice(key, from, to, clean, '已按 JSON 写入');
 }
 
@@ -778,11 +879,11 @@ async function dispatch(name: string, input: Record<string, any>): Promise<strin
   switch (name) {
     case 'outline': return outlineText();
     case 'read': return readText(need().key, Number(input.from), Number(input.to));
-    case 'replace': { const p = need(); return splice(p.key, Number(input.from), Number(input.to), parseMd(String(input.markdown ?? ''), p.headings), '已换'); }
-    case 'insert': { const p = need(); const at = Number(input.at); return splice(p.key, at, at - 1, parseMd(String(input.markdown ?? ''), p.headings), '已插入'); }
+    case 'replace': { const p = need(); const nodes = parseMd(String(input.markdown ?? ''), p.headings); const bad = await checkFigureWidths(nodes); if (bad) return bad; return splice(p.key, Number(input.from), Number(input.to), nodes, '已换'); }
+    case 'insert': { const p = need(); const at = Number(input.at); const nodes = parseMd(String(input.markdown ?? ''), p.headings); const bad = await checkFigureWidths(nodes); if (bad) return bad; return splice(p.key, at, at - 1, nodes, '已插入'); }
     case 'delete': return splice(need().key, Number(input.from), Number(input.to), [], '已删');
     case 'table_write': { const p = need(); if (!Array.isArray(input.rows) || !input.rows.length) return 'rows 得是二维数组'; const w = placeOf(input, p.key); if (typeof w === 'string') return w; return splice(p.key, w.from, w.to, [tableNode(input)], '表已写入'); }
-    case 'figure_write': { const p = need(); const f = await figureNode(input); if (typeof f === 'string') return f; const w = placeOf(input, p.key); if (typeof w === 'string') return w; return splice(p.key, w.from, w.to, [f.node], '图已写入') + (f.note ? `（${f.note}）` : ''); }
+    case 'figure_write': { const p = need(); const f = await figureNode(input); if (typeof f === 'string') return f; const bad = await checkFigureWidths([f.node]); if (bad) return bad; const w = placeOf(input, p.key); if (typeof w === 'string') return w; return splice(p.key, w.from, w.to, [f.node], '图已写入') + (f.note ? `（${f.note}）` : ''); }
     case 'images': return imagesText();
     case 'selection': return selectionText();
     case 'diagnostics': return diagnosticsText();
