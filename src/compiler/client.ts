@@ -461,13 +461,13 @@ export async function queryDoc(probe: string, selector: string): Promise<{ resul
 }
 
 /** 编一段 Typst 数学：等引擎就绪，不排队（片段很小，插在正文编译之间无妨） */
-export function compileSnippet(src: string, display: boolean, latex = false): Promise<{ artifact: ArrayBuffer | null; error?: string }> {
+export function compileSnippet(src: string, display: boolean, latex = false, hang = false): Promise<{ artifact: ArrayBuffer | null; error?: string }> {
   return new Promise((resolve) => {
     const go = () => {
       if (!fg.ready) { setTimeout(go, 300); return; }
       const id = nextId++;
       fg.snippetWaiters.set(id, resolve);
-      fg.send({ type: 'snippet', id, src, display, latex });
+      fg.send({ type: 'snippet', id, src, display, latex, hang });
     };
     go();
   });

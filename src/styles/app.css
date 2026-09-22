@@ -882,7 +882,10 @@ html.theme-anim :not(svg, svg *) { transition: background-color 320ms var(--ease
 .math-preview.katex-host .katex { font-size: 1.15em; }
 .math-preview.katex-host .katex-display { margin: 0; }
 .chip-math .math-preview.katex-host .katex { font-size: 1em; }
-.chip-math { padding: 0 2px; vertical-align: middle; }
+/* 行内公式跟正文对基线：KaTeX 自己带基线，别把它裹成 inline-block 居中；Typst 那份 svg 的 vertical-align 由 MathPreview 量好写在行内样式上 */
+.chip-math .math-preview { display: inline; line-height: inherit; vertical-align: baseline; }
+.chip-math .math-preview.typst-host svg { vertical-align: baseline; }
+.chip-math { padding: 0 2px; vertical-align: baseline; }
 .math-src-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .math-editor .eq-src { font-family: var(--mono); resize: none; width: 100%; line-height: 1.5; color: var(--ink); text-align: left; border: 1px solid var(--line-2); border-radius: var(--r-s); padding: 6px 8px; background: var(--panel); font-size: 13px; }
 .math-editor .eq-src:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }

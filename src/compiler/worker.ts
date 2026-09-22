@@ -318,11 +318,15 @@ async function wasmMemory(): Promise<number> {
   try { const w = await (compilerWrapper as unknown as { default: () => Promise<{ memory: WebAssembly.Memory }> }).default(); return w.memory.buffer.byteLength; } catch { return 0; }
 }
 
+/** 行内公式片段里挂在基线下面的那段（pt）；页下边距 2pt，基线离页底 = 2 + 这个数 */
+export const SNIPPET_HANG = 24;
 async function snippet(msg: Extract<ToWorker, { type: 'snippet' }>) {
   if (!compiler) return;
   // LaTeX 写法走 mitex（导出 Word 时 MathML → OMML 转不过的，退回来画成图）
   const tick = '`'.repeat(Math.max(3, (msg.src.match(/`+/g) ?? []).reduce((m, x) => Math.max(m, x.length + 1), 0)));
-  const body = msg.latex ? `#import "@preview/mitex:0.2.7": mitex, mi\n${msg.display ? `#mitex(${tick}${msg.src}${tick})` : `#mi(${tick}${msg.src}${tick})`}` : msg.display ? `$ ${msg.src} $` : `$${msg.src}$`;
+  // 行内的在同一行挂一个零宽、只往基线下面伸 HANG 的盒子：行的深度就固定是 HANG，主线程按「页高 − 下边距 − HANG」找到基线，好跟正文对齐
+  const hang = msg.display || !msg.hang ? '' : `#box(width: 0pt, height: ${SNIPPET_HANG}pt, baseline: 100%)`;
+  const body = msg.latex ? `#import "@preview/mitex:0.2.7": mitex, mi\n${msg.display ? `#mitex(${tick}${msg.src}${tick})` : `#mi(${tick}${msg.src}${tick})${hang}`}` : msg.display ? `$ ${msg.src} $` : `$${msg.src}$${hang}`;
   const src = `#set page(width: auto, height: auto, margin: (x: 1pt, y: 2pt), fill: none)
 #set text(size: 11pt, font: ("Times New Roman", "TeX Gyre Termes", "Noto Serif CJK SC"))
 #show math.equation: set text(font: ("Cambria Math", "TeX Gyre Termes Math"))

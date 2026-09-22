@@ -23,7 +23,7 @@ export type ToWorker =
   /** main：正式排版用的 main.typ（不带预览记号），与预览编的那份不同 */
   | { type: 'pdf'; id: number; main: string }
   /** 编一个 Typst 数学片段，给编辑器里的公式预览用 */
-  | { type: 'snippet'; id: number; src: string; display: boolean; latex?: boolean }
+  | { type: 'snippet'; id: number; src: string; display: boolean; latex?: boolean; /** 行内片段在基线下挂一段固定深度，主线程好找基线（编辑区预览用） */ hang?: boolean }
   /** 编一份小文档再 query 它的 metadata（导出 Word 时问模板要样式表与版面） */
   | { type: 'query'; id: number; main: string; selector: string; files?: Record<string, string>; inputs?: Record<string, string>; images?: { name: string; data: ArrayBuffer }[]; removeImages?: string[] }
   /** 增删用户字体（本机读的或自己选的文件），字节只住在 worker；改完整表重建 */
