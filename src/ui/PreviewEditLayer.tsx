@@ -13,7 +13,7 @@ import { useOpenRequest } from '../editor/openRequest';
 import { useBlockMenu } from '../editor/BlockMenu';
 import { isJumpModifier, openLink } from '../editor/jump';
 import { useComments } from '../editor/comments';
-import { buildIndex, mergeIndex, patchIndex, linesOfRange, caretRect, hitPos, hitTest, lineStep, selectionRects, paragraphMarks, EMPTY_INDEX, type CaretRect, type Glyph, type Hit, type Line } from './previewEdit';
+import { buildIndex, mergeIndex, patchIndex, linesOfRange, caretRect, attrCaret, hitPos, hitTest, lineStep, selectionRects, paragraphMarks, EMPTY_INDEX, type CaretRect, type Glyph, type Hit, type Line } from './previewEdit';
 import { t as tx } from '../i18n';
 import { useInputState } from '../editor/inputState';
 import { applyLineShift, restoreLineShift } from './previewShift';
@@ -129,6 +129,8 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   const compositionActive = useRef(false);
   const compositionCommit = useRef<string | null>(null);
   const [composing, setComposing] = useState<string | null>(null);
+  // 就地改题注 / 脚注文字这类节点属性：节点在现在这一版里的位置、哪个属性、光标在值里第几个字
+  const [attrEdit, setAttrEdit] = useState<{ key: RichKey; pos: number; attr: string; offset: number } | null>(null);
   /** 字形表追上来那一刻，刚才暂印的字淡出，与真字形交叉 */
   const [fading, setFading] = useState<{ key: RichKey; text: string } | null>(null);
   const [geom, setGeom] = useState<PageGeom[]>([]);
@@ -257,19 +259,20 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   const pendingLen = pendingText.length;
   const caret = useMemo((): CaretRect | null => {
     if (!sel || !activeKey) return null;
+    if (attrEdit && attrEdit.key === activeKey) { const old = oldPos(attrEdit.pos, 1); return old === null ? null : attrCaret(index, activeKey, old, attrEdit.attr, attrEdit.offset); }
     const head = sel.empty && pendingLen ? Math.max(0, sel.head - pendingLen) : sel.head;
     const p = oldPos(head, sel.head === sel.to ? -1 : 1);
     if (p === null) return null;
     return caretRect(index, activeKey, p, prefer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sel, activeKey, index, stale, pendingLen]);
+  }, [sel, activeKey, index, stale, pendingLen, attrEdit]);
   const rects = useMemo(() => {
-    if (!sel || !activeKey || sel.empty) return [];
+    if (!sel || !activeKey || sel.empty || attrEdit) return [];
     const a = oldPos(sel.from, 1), b = oldPos(sel.to, -1);
     if (a === null || b === null) return [];
     return selectionRects(index, activeKey, a, b, caret ? { page: caret.page, y: caret.y } : prefer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sel, activeKey, index, caret, stale]);
+  }, [sel, activeKey, index, caret, stale, attrEdit]);
   // 批注圈的范围：预览里淡黄底（与编辑区同色），当前那条深一点
   const activeComment = useComments((s) => s.active);
   const commentRects = useMemo(() => {
@@ -421,9 +424,36 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
 
   const focusInput = () => inputRef.current?.focus({ preventScroll: true });
 
+  // 属性值按路径读写（题注是 caption，表注是 notes.0.text 这种）；改完是一笔普通事务，能撤消
+  const getPath = (o: any, path: string): unknown => path.split('.').reduce((a, k) => a?.[k], o);
+  const setPath = (o: any, path: string, v: unknown): any => { const [k, ...rest] = path.split('.'); const c = Array.isArray(o) ? [...o] : { ...(o ?? {}) }; c[k] = rest.length ? setPath(o?.[k], rest.join('.'), v) : v; return c; };
+  const attrValue = (ed: Editor): string | null => { if (!attrEdit) return null; const n = ed.state.doc.nodeAt(attrEdit.pos); const v = n ? getPath(n.attrs, attrEdit.attr) : null; return typeof v === 'string' ? v : null; };
+  const attrWrite = (ed: Editor, value: string, offset: number) => {
+    if (!attrEdit) return;
+    const n = ed.state.doc.nodeAt(attrEdit.pos);
+    if (!n) { setAttrEdit(null); return; }
+    ed.view.dispatch(ed.state.tr.setNodeMarkup(attrEdit.pos, undefined, setPath(n.attrs, attrEdit.attr, value)));
+    setAttrEdit({ ...attrEdit, offset });
+  };
+  const attrInsert = (ed: Editor, text: string) => { const v = attrValue(ed); if (v === null) return; const o = Math.min(attrEdit!.offset, v.length); attrWrite(ed, v.slice(0, o) + text + v.slice(o), o + text.length); };
+  /** 属性值里光标前 / 后那个字素有几个码元 */
+  const graphemeLen = (v: string, o: number, dir: -1 | 1) => { const side = dir < 0 ? v.slice(0, o) : v.slice(o); if (!side) return 0; const Seg = (Intl as any).Segmenter; if (!Seg) return 1; const segs = [...new Seg(undefined, { granularity: 'grapheme' }).segment(side)] as { segment: string }[]; return (dir < 0 ? segs[segs.length - 1] : segs[0])?.segment.length ?? 1; };
+  const attrKey = (ed: Editor, k: string, shift: boolean): boolean => {
+    const v = attrValue(ed);
+    if (v === null) { setAttrEdit(null); return false; }
+    const o = Math.min(attrEdit!.offset, v.length);
+    if (k === 'ArrowLeft' || k === 'ArrowRight') { const d = k === 'ArrowLeft' ? -1 : 1; setAttrEdit({ ...attrEdit!, offset: Math.max(0, Math.min(v.length, o + d * graphemeLen(v, o, d))) }); return true; }
+    if (k === 'Home') { setAttrEdit({ ...attrEdit!, offset: 0 }); return true; }
+    if (k === 'End') { setAttrEdit({ ...attrEdit!, offset: v.length }); return true; }
+    if (k === 'Backspace') { const n = graphemeLen(v, o, -1); if (n) attrWrite(ed, v.slice(0, o - n) + v.slice(o), o - n); return true; }
+    if (k === 'Delete') { const n = graphemeLen(v, o, 1); if (n) attrWrite(ed, v.slice(0, o) + v.slice(o + n), o); return true; }
+    if (k === 'Enter' || k === 'Tab' || k === 'ArrowUp' || k === 'ArrowDown') { void shift; return true; }
+    return false;
+  };
+
   /** 一个「属性」字形（题注、脚注文字、论文信息）：把对应的输入框打开、光标放到那个字 */
   const openAttr = async (g: Glyph, side: 'before' | 'after') => {
-    const offset = side === 'before' ? g.from : g.to;
+    const offset = Math.max(0, (side === 'before' ? g.from : g.to) - (g.kind === 'attr' ? g.seg.pmFrom : 0));
     if (g.kind === 'info') {
       const st = useStore.getState();
       st.setView('editor'); st.setSection(sectionOfInfo(g.seg.attr ?? ""));
@@ -501,15 +531,17 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     prefer.current = { page: g.page, y: g.y };
     goalX.current = null;
     if (g.kind === 'info' || g.kind === 'attr') {
-      if (detail >= 2 || g.kind === 'info') void openAttr(g, hit.side);
-      else {
-        const ed = await activate(g.key as RichKey);
-        const pos = ed ? nowPos(g.key as RichKey, g.seg.pmFrom) : null;
-        if (ed && pos !== null) setSelection(ed, pos, pos, true);
-        focusInput();
-      }
+      if (detail >= 2 || g.kind === 'info' || !g.seg.attr) { setAttrEdit(null); void openAttr(g, hit.side); return; }
+      // 单击题注 / 脚注文字：就地改——节点选中（编辑区跟着），光标落在值里那个字
+      const ed = await activate(g.key as RichKey);
+      const pos = ed ? nowPos(g.key as RichKey, g.seg.pmFrom) : null;
+      if (!ed || pos === null) return;
+      setSelection(ed, pos, pos, true);
+      setAttrEdit({ key: g.key as RichKey, pos, attr: g.seg.attr, offset: Math.max(0, (hit.side === 'before' ? g.from : g.to) - g.seg.pmFrom) });
+      focusInput();
       return;
     }
+    setAttrEdit(null);
     const ed = await activate(g.key as RichKey);
     if (!ed) return;
     const key = g.key as RichKey;
@@ -655,7 +687,10 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     const ed = editor;
     const k = e.key;
     if (k !== 'ArrowUp' && k !== 'ArrowDown') goalX.current = null;
-    if (k === 'Escape') { inputRef.current?.blur(); return; }
+    if (k === 'Escape') { setAttrEdit(null); inputRef.current?.blur(); return; }
+    if (attrEdit && !mod && !e.altKey) { if (attrKey(ed, k, e.shiftKey)) { e.preventDefault(); return; } }
+    if (attrEdit && mod && (k === 'z' || k === 'y')) { e.preventDefault(); if (k === 'y' || e.shiftKey) ed.commands.redo(); else ed.commands.undo(); return; }
+    if (attrEdit && mod) { e.preventDefault(); return; }
     if (k === 'Home' || (isMac && mod && k === 'ArrowLeft')) { e.preventDefault(); lineEdge(ed, 'start', e.shiftKey); return; }
     if (k === 'End' || (isMac && mod && k === 'ArrowRight')) { e.preventDefault(); lineEdge(ed, 'end', e.shiftKey); return; }
     if (k === 'ArrowLeft' || k === 'ArrowRight') { e.preventDefault(); moveH(ed, k === 'ArrowLeft' ? -1 : 1, e.shiftKey, e.altKey || (!isMac && e.ctrlKey)); return; }
@@ -700,7 +735,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     const text = el.value;
     el.value = '';
     if (!text || !editor || !activeKey) return;
-    insertText(editor, text);
+    if (attrEdit) attrInsert(editor, text); else insertText(editor, text);
   };
   const onCompositionStart = () => {
     if (!compositionActive.current) {
@@ -721,7 +756,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     window.setTimeout(() => { compositionCommit.current = null; }, 0);
     setComposing(null);
     if (inputRef.current) inputRef.current.value = '';
-    if (text && editor && activeKey) insertText(editor, text);
+    if (text && editor && activeKey) { if (attrEdit) attrInsert(editor, text); else insertText(editor, text); }
   };
   useEffect(() => () => {
     if (compositionActive.current) {
@@ -796,7 +831,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
       {caretPx && overlayText && (
         <span className={`pv-overlay ${composing !== null ? 'is-composing' : ''} ${fadingText ? 'is-fading' : ''}`} style={{ left: caretPx.left, top: caretPx.top, height: caretH, fontSize: caretH * 0.92, lineHeight: `${caretH}px` }}>{overlayText}</span>
       )}
-      {caretPx && sel?.empty !== false && (
+      {caretPx && (sel?.empty !== false || attrEdit) && (
         <div className={`pv-caret ${focused ? '' : 'is-idle'}`} style={{ left: caretLeft, top: caretPx.top, height: caretH }} />
       )}
       <textarea
@@ -815,6 +850,7 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
           compositionCommit.current = null;
           setSurface({ focused: false });
           setComposing(null);
+          setAttrEdit(null);
         }}
         onKeyDown={onKeyDown}
         onInput={onInput}

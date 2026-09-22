@@ -262,6 +262,24 @@ export const hitPos = (hit: Hit) => (hit.side === 'before' ? hit.glyph.from : hi
 
 export interface CaretRect { page: number; x: number; y: number; h: number; line: Line }
 
+/** 属性（题注、脚注文字这类）里的光标：node 是节点在字形表那一版的位置，offset 是属性值里的偏移；
+ *  值比排出来的长（刚打了字还没重排）就停在最后一个字后面 */
+export function attrCaret(index: GlyphIndex, key: string, node: number, attr: string, offset: number): CaretRect | null {
+  // 属性字形的 from / to 是「节点位置 + 值里的偏移」
+  const gs = (index.byKey.get(key) ?? []).filter((g) => g.kind === 'attr' && g.seg.attr === attr && g.seg.pmFrom === node && g.from < g.to);
+  if (!gs.length) return null;
+  const at = node + offset;
+  const lineOf = (g: Glyph): Line => index.lineOf.get(g) ?? { page: g.page, y: g.y, h: g.h, glyphs: [g] };
+  const after = gs.find((g) => g.to === at);
+  if (after) return { page: after.page, x: after.x + after.w, y: after.y, h: after.h, line: lineOf(after) };
+  const before = gs.find((g) => g.from === at);
+  if (before) return { page: before.page, x: before.x, y: before.y, h: before.h, line: lineOf(before) };
+  const last = gs.reduce((a, g) => (g.to > a.to ? g : a));
+  if (at > last.to) return { page: last.page, x: last.x + last.w, y: last.y, h: last.h, line: lineOf(last) };
+  const first = gs.reduce((a, g) => (g.from < a.from ? g : a));
+  return { page: first.page, x: first.x, y: first.y, h: first.h, line: lineOf(first) };
+}
+
 /** 挑候选：先同一页离 prefer 最近的，其次页码最近的 */
 function pick<T extends { page: number; y: number }>(cands: T[], prefer: { page: number; y: number } | null): T | null {
   if (!cands.length) return null;
