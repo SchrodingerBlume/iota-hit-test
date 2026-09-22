@@ -30,6 +30,7 @@ import { B, Sep, useEditorTick, useInsertActions, TableAlignTools, FontSizeTool,
 import { searchKey, selectCurrentMatch } from '../editor/extensions/Search';
 import { levelLabels } from '../typst/numbering';
 import { ChoiceMenu } from './RibbonSettings';
+import { parseSubs, explicitLayout } from '../typst/subfigs';
 import { useEditorEnv } from '../editor/env';
 import { useOpenRequest } from '../editor/openRequest';
 import { usePreviewZoom } from './previewZoom';
@@ -718,9 +719,17 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               <Group label={tx("分图")}>
                 <span className="rb-keep rb-inline">
                   <Rows>
-                    <Row><ChoiceMenu label={tx("每行")} choices={[{ value: '0', label: tx("一行排完") }, ...[1, 2, 3, 4].map((n) => ({ value: String(n), label: tx("{{n}} 张", { n: n }) }))]} value={String(Math.max(0, Math.min(4, Number(a.columns) ?? 2)))} onChange={(v) => chain().updateAttributes('figure', { columns: Number(v) }).run()} /></Row>
+                    <Row>
+                      <ChoiceMenu label={tx("每行")} hint={explicitLayout(parseSubs(a.subs)) ? tx("分图上写了排法，按各张的排法排") : undefined} choices={[{ value: '0', label: tx("一行排完") }, ...[1, 2, 3, 4].map((n) => ({ value: String(n), label: tx("{{n}} 张", { n: n }) }))]} value={String(Math.max(0, Math.min(4, Number(a.columns) ?? 2)))} disabled={explicitLayout(parseSubs(a.subs))} onChange={(v) => chain().updateAttributes('figure', { columns: Number(v) }).run()} />
+                      <label className="tb-field" title={tx("图与图之间的间距（空 = 一个字）")}>{tx("间距")}{' '}<LengthInput value={a.subGutter ?? ''} defaultUnit="pt" allowed={['pt', 'em', 'mm', 'cm']} placeholder={tx("一个字")} onChange={(v) => chain().updateAttributes('figure', { subGutter: v ?? '' }).run()} width={88} /></label>
+                    </Row>
                     <Row><ChoiceMenu label={tx("分图题注")} hint={tx("分图题注位置")} choices={[{ value: 'under', label: tx("分图之下") }, { value: 'caption', label: tx("图题之下连排") }]} value={(a.subMode as string) || 'under'} onChange={(v) => chain().updateAttributes('figure', { subMode: v }).run()} /></Row>
-                    <Row><ChoiceMenu label={tx("图上标签")} hint={tx("将 (a)、(b) 显示在图片角落")} choices={[{ value: 'none', label: tx("不著录") }, { value: 'tl', label: tx("左上") }, { value: 'tr', label: tx("右上") }, { value: 'bl', label: tx("左下") }, { value: 'br', label: tx("右下") }]} value={(a.subLabel as string) || 'none'} onChange={(v) => chain().updateAttributes('figure', { subLabel: v }).run()} /><ChoiceMenu label={tx("标签色")} choices={[{ value: 'black', label: tx("黑色") }, { value: 'white', label: tx("白色（适合深色图片）") }]} value={(a.subLabelFill as string) || 'black'} onChange={(v) => chain().updateAttributes('figure', { subLabelFill: v }).run()} /></Row>
+                    <Row><ChoiceMenu label={tx("图上标签")} hint={tx("将 (a)、(b) 显示在图片角落；单张另有交代的在分图上改")} choices={[{ value: 'none', label: tx("不著录") }, { value: 'tl', label: tx("左上") }, { value: 'tr', label: tx("右上") }, { value: 'bl', label: tx("左下") }, { value: 'br', label: tx("右下") }]} value={(a.subLabel as string) || 'none'} onChange={(v) => chain().updateAttributes('figure', { subLabel: v }).run()} /><ChoiceMenu label={tx("标签色")} choices={[{ value: 'black', label: tx("黑色") }, { value: 'white', label: tx("白色（适合深色图片）") }]} value={(a.subLabelFill as string) || 'black'} onChange={(v) => chain().updateAttributes('figure', { subLabelFill: v }).run()} /></Row>
+                    <Row>
+                      <ChoiceMenu label={tx("标签写法")} hint={tx("图上标签的写法；跟全文 = 分图号写法那一项")} choices={[{ value: '', label: tx("跟全文") }, ...['(a)', 'a', 'a.', '（a）', '(A)', 'A', '(1)', '1'].map((v) => ({ value: v, label: v }))]} value={(a.subLabelPattern as string) || ''} onChange={(v) => chain().updateAttributes('figure', { subLabelPattern: v }).run()} />
+                      <ChoiceMenu label={tx("标签字号")} choices={[{ value: '', label: tx("五号") }, { value: 'xiaowu', label: tx("小五") }, { value: 'liuhao', label: tx("六号") }, { value: 'xiaosi', label: tx("小四") }]} value={(a.subLabelSize as string) || ''} onChange={(v) => chain().updateAttributes('figure', { subLabelSize: v }).run()} />
+                      <ChoiceMenu label={tx("标签字体")} choices={[{ value: '', label: tx("无衬线") }, { value: 'serif', label: tx("衬线") }, { value: 'heiti', label: tx("黑体") }, { value: 'songti', label: tx("宋体") }, { value: 'kaishu', label: tx("楷体") }]} value={(a.subLabelFont as string) || ''} onChange={(v) => chain().updateAttributes('figure', { subLabelFont: v }).run()} />
+                    </Row>
                   </Rows>
                 </span>
               </Group>

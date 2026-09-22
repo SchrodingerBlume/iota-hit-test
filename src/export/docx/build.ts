@@ -9,6 +9,7 @@ import JSZip from 'jszip';
 import type { ThesisDoc, Settings, RichDoc, Comment } from '../../model/types';
 import type { PMNode } from '../../typst/pmToTypst';
 import { labelOf, CAPTION_CITE, captionCiteKeys, parseDenoteRows } from '../../typst/pmToTypst';
+import { parseSubs, subLayout, subNumber, CORNERS, type SubFig, type SubItem } from '../../typst/subfigs';
 import { computeNumbering, type NumberInfo } from '../../typst/numbering';
 import { resolvePage } from '../../model/pages';
 import { wordLinebreakOptions } from '../../typst/serialize';
@@ -122,9 +123,9 @@ function inline(ctx: Ctx, nodes: PMNode[] = [], base: { size?: number; font?: st
         const target = String(n.attrs?.target ?? '');
         const t = ctx.nums.get(target);
         if (!t) { push(new TextRun({ text: '??', size: base.size })); break; }
-        // 分图（fig:x-b）没有自己的书签：域指母图的号，(b) 照文字接在后面
-        const sub = /-([a-z])$/.exec(target);
-        if (sub && ctx.nums.has(target.slice(0, -2)) && t.number.endsWith(`(${sub[1]})`)) { push(new SimpleField(`REF ${bmName(target.slice(0, -2))} \\h`, tidy(t.number.slice(0, -3)))); push(new TextRun({ text: `(${sub[1]})`, size: base.size })); break; }
+        // 分图没有自己的书签：域指母图的号，(b) 照文字接在后面
+        const parent = t.parent ? ctx.nums.get(t.parent) : undefined;
+        if (parent && t.number.startsWith(parent.number)) { push(new SimpleField(`REF ${bmName(t.parent!)} \\h`, tidy(parent.number))); push(new TextRun({ text: t.number.slice(parent.number.length), size: base.size })); break; }
         // 号那一段是 REF 域指着题注 / 标题里的书签，前后的「式」「节」照文字
         const ref = tidy(t.ref), num = tidy(t.number);
         const at = num ? ref.indexOf(num) : -1;
@@ -234,27 +235,48 @@ function floatWrap(ctx: Ctx, n: PMNode, inner: Block[]): Block[] {
   const mark = (name: string) => new Paragraph({ children: [new Bookmark({ id: name, children: [] })] });
   return [mark(`FLOAT_${p === 'bottom' ? 'bottom' : 'top'}_${gapTwips(T.above, ctx.P)}_${ctx.textWidth}`), ...inner, mark('FLOATEND')];
 }
-const subKey = (image: string, letter: string, n: PMNode) => `${image}#${letter}${n.attrs?.subLabel}${n.attrs?.subLabelFill}`;
+/** 分图这一张的图上标签怎么印：角与字色，单张 mark / markFill 另有交代的按单张，none 不印 */
+const subMark = (n: PMNode, s: SubFig): { corner: string; fill: string } | null => {
+  const corner = s.mark && s.mark !== 'auto' ? s.mark : String(n.attrs?.subLabel ?? 'none');
+  if (!(CORNERS as readonly string[]).includes(corner)) return null;
+  return { corner, fill: s.markFill && s.markFill !== 'auto' ? s.markFill : String(n.attrs?.subLabelFill ?? 'black') };
+};
+const subKey = (image: string, num: string, m: { corner: string; fill: string }) => `${image}#${num}${m.corner}${m.fill}`;
 function figure(ctx: Ctx, n: PMNode): Block[] {
   const num = numOf(ctx, n, 'fig');
-  let subs: { image: string; caption?: string; width?: unknown }[] = [];
-  try { subs = JSON.parse(String(n.attrs?.subs || '[]')); } catch { /* */ }
-  const letter = (i: number) => 'abcdefghijklmnopqrstuvwxyz'[i] ?? String(i + 1);
+  const subs = parseSubs(n.attrs?.subs);
+  const pattern = sw<string>('subcaptionNumbering', ctx.s);
+  const subNum = (i: number) => subNumber(pattern, i + 1);
+  // 图上标签的写法可以跟整图另定（subLabelPattern），画进图里那份的键按它
+  const markNum = (i: number) => subNumber(String(n.attrs?.subLabelPattern || '') || pattern, i + 1);
+  const bilingual = ctx.s.lang !== 'en' && sw<boolean>('subcaptionBilingual', ctx.s);
+  const subCap = (s: SubFig, i: number) => `${subNum(i)} ${s.caption ?? ''}${bilingual && (s.captionEn ?? '').trim() ? `  ${s.captionEn!.trim()}` : ''}`;
   // 合成图配连排分图题：图照单图排，分图题在图题下一行「(a) … (b) …」
   if (subs.length && n.attrs?.image && !subs.some((s) => s.image)) {
     const img = image(ctx, String(n.attrs.image), cmOf(n.attrs?.width, 8));
-    return [new Paragraph({ style: 'Figure', children: img ? [img] : [] }), ...notePara(ctx, n), ...captionPara(ctx, num, String(n.attrs?.caption ?? ''), String(n.attrs?.captionEn ?? ''), { kind: 'figure', node: n, prefix: 'fig', last: false }), new Paragraph({ style: 'FigureCaption', children: [new TextRun({ text: subs.map((s, i) => `(${letter(i)}) ${s.caption ?? ''}`).join('  ') })] })];
+    return [new Paragraph({ style: 'Figure', children: img ? [img] : [] }), ...notePara(ctx, n), ...captionPara(ctx, num, String(n.attrs?.caption ?? ''), String(n.attrs?.captionEn ?? ''), { kind: 'figure', node: n, prefix: 'fig', last: false }), new Paragraph({ style: 'FigureCaption', children: [new TextRun({ text: subs.map(subCap).join('  ') })] })];
   }
   if (subs.length) {
-    const cols = Math.max(1, Math.min(4, Number(n.attrs?.columns) || 2));
-    const rows: TableRow[] = [];
-    for (let r = 0; r < subs.length; r += cols) {
-      // 图上标签：预先把 (a) 画进图里的那一份（labelImages）
-      const cells = subs.slice(r, r + cols).map((s, k) => new TableCell({ borders: NO_BORDERS, verticalAlign: VerticalAlign.BOTTOM, children: [centered([image(ctx, ctx.images.has(subKey(s.image, letter(r + k), n)) ? subKey(s.image, letter(r + k), n) : s.image, cmOf(s.width, 6))].filter((x): x is ParagraphChild => !!x)), new Paragraph({ style: 'Caption', children: [new TextRun({ text: `(${letter(r + k)}) ${s.caption ?? ''}` })] })] }));
-      while (cells.length < cols) cells.push(new TableCell({ borders: NO_BORDERS, children: [new Paragraph('')] }));
-      rows.push(new TableRow({ children: cells }));
-    }
-    return [gapPara(gapTwips(ctx.F.styles.figure.image.above, ctx.P)), new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE }, alignment: AlignmentType.CENTER }), ...notePara(ctx, n), ...captionPara(ctx, num, String(n.attrs?.caption ?? ''), String(n.attrs?.captionEn ?? ''), { kind: 'figure', node: n, prefix: 'fig' })];
+    // 行 / 格 / 叠照 place（没写的按每行几张）：一行一张无边框表，叠是格里竖着的几段、叠里并排的再套一张表；
+    // 图上标签预先画进图里的那一份（labelImages）；图与图的间距（gutter，默认一个字）折成格的左右边距
+    const shown = subs.filter((s) => s.image);
+    const gut = Math.round((n.attrs?.subGutter ? cmOf(n.attrs.subGutter, 0.42) : 0.42) / 2.54 * 1440 / 2);
+    const one = (i: number, w: number): (Paragraph | Table)[] => {
+      const s = shown[i]; const m = subMark(n, s);
+      const key = m && ctx.images.has(subKey(s.image, markNum(i), m)) ? subKey(s.image, markNum(i), m) : s.image;
+      return [centered([image(ctx, key, s.width && s.width !== 'auto' ? cmOf(s.width, w) : w)].filter((x): x is ParagraphChild => !!x)), new Paragraph({ style: 'Caption', children: [new TextRun({ text: subCap(s, i) })] })];
+    };
+    const cellOf = (kids: (Paragraph | Table)[], margin = gut) => new TableCell({ borders: NO_BORDERS, verticalAlign: VerticalAlign.BOTTOM, margins: { top: 0, bottom: 0, left: margin, right: margin }, children: kids });
+    const rows = subLayout(shown, Number(n.attrs?.columns));
+    const textCm = ctx.textWidth / 1440 * 2.54 * 0.9;
+    const item = (it: SubItem, w: number): (Paragraph | Table)[] => (typeof it === 'number' ? one(it, w) : [new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, alignment: AlignmentType.CENTER, borders: { ...NO_BORDERS, insideHorizontal: NO_BORDERS.top, insideVertical: NO_BORDERS.top }, rows: [new TableRow({ children: it.pair.map((k) => cellOf(one(k, w / it.pair.length), Math.round(gut / 2))) })] })]);
+    const tables = rows.map((row) => {
+      const w = textCm / row.length;
+      return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, alignment: AlignmentType.CENTER, borders: { ...NO_BORDERS, insideHorizontal: NO_BORDERS.top, insideVertical: NO_BORDERS.top }, rows: [new TableRow({ children: row.map((c) => cellOf(typeof c === 'number' ? one(c, w) : c.stack.flatMap((it) => item(it, w)))) })] });
+    });
+    // 行与行之间隔一个间距（模板 v(g)）；两张表挨着 Word 会并成一张
+    const rowsOut = tables.flatMap((tb, i) => (i ? [gapPara(2 * gut), tb] : [tb]));
+    return [gapPara(gapTwips(ctx.F.styles.figure.image.above, ctx.P)), ...rowsOut, ...notePara(ctx, n), ...captionPara(ctx, num, String(n.attrs?.caption ?? ''), String(n.attrs?.captionEn ?? ''), { kind: 'figure', node: n, prefix: 'fig' })];
   }
   const img = image(ctx, String(n.attrs?.image ?? ''), cmOf(n.attrs?.width, 8));
   // 装图段（Figure：段前 = 图块之上、与下段同页）+ 题注（Caption：段后 = 图块之下）
@@ -569,19 +591,16 @@ async function loadImages(ctx: Ctx) {
 /** 分图的图上标签（模板 subs(numbering: (alignment: 角, fill:))）：Word 里没有叠在图上的字，把「(a)」直接画进图的一份拷贝里——
  *  字号照题注（按图在版面上的宽换算成像素），角照 subLabel，黑字 / 白字照 subLabelFill，离边 3 磅 */
 async function labelImages(ctx: Ctx) {
-  const jobs: { node: PMNode; sub: { image: string; width?: unknown }; letter: string }[] = [];
+  const pattern = sw<string>('subcaptionNumbering', ctx.s);
+  const jobs: { node: PMNode; sub: SubFig; num: string; m: { corner: string; fill: string } }[] = [];
   const walk = (n: PMNode) => {
-    if (n.type === 'figure' && ['tl', 'tr', 'bl', 'br'].includes(String(n.attrs?.subLabel ?? 'none'))) {
-      let subs: { image: string; width?: unknown }[] = [];
-      try { subs = JSON.parse(String(n.attrs?.subs || '[]')); } catch { /* */ }
-      subs.forEach((sub, i) => { if (sub.image) jobs.push({ node: n, sub, letter: 'abcdefghijklmnopqrstuvwxyz'[i] ?? String(i + 1) }); });
-    }
+    if (n.type === 'figure') parseSubs(n.attrs?.subs).filter((s) => s.image).forEach((sub, i) => { const m = subMark(n, sub); if (m) jobs.push({ node: n, sub, num: subNumber(String(n.attrs?.subLabelPattern || '') || pattern, i + 1), m }); });
     for (const c of n.content ?? []) walk(c);
   };
   for (const k of ['body', 'appendix'] as const) walk(ctx.doc[k] as PMNode);
-  const size = ctx.F.styles.figure.caption.size ?? 10.5;
+  const zihao: Record<string, number> = { xiaosi: 12, wuhao: 10.5, xiaowu: 9, liuhao: 7.5 };
   for (const j of jobs) {
-    const key = subKey(j.sub.image, j.letter, j.node);
+    const key = subKey(j.sub.image, j.num, j.m);
     const img = ctx.images.get(j.sub.image);
     if (!img || ctx.images.has(key)) continue;
     try {
@@ -590,11 +609,13 @@ async function labelImages(ctx: Ctx) {
       const g = canvas.getContext('2d'); if (!g) continue;
       g.drawImage(bmp, 0, 0);
       const scale = bmp.width / (cmOf(j.sub.width, 6) / 2.54 * 72);
-      const corner = String(j.node.attrs?.subLabel), pad = 3 * scale;
-      g.font = `${size * scale}px "Times New Roman", "SimSun", serif`;
-      g.fillStyle = j.node.attrs?.subLabelFill === 'white' ? '#fff' : '#000';
+      const { corner } = j.m, pad = 3 * scale;
+      const size = zihao[String(j.node.attrs?.subLabelSize ?? '')] ?? 10.5;
+      const font = String(j.node.attrs?.subLabelFont ?? '');
+      g.font = `${size * scale}px ${font === 'serif' || font === 'songti' ? '"Times New Roman", "SimSun", serif' : font === 'heiti' ? '"SimHei", sans-serif' : font === 'kaishu' ? '"KaiTi", serif' : 'Arial, "SimHei", sans-serif'}`;
+      g.fillStyle = j.m.fill === 'white' ? '#fff' : '#000';
       g.textBaseline = corner.startsWith('t') ? 'top' : 'bottom'; g.textAlign = corner.endsWith('l') ? 'left' : 'right';
-      g.fillText(`(${j.letter})`, corner.endsWith('l') ? pad : bmp.width - pad, corner.startsWith('t') ? pad : bmp.height - pad);
+      g.fillText(j.num, corner.endsWith('l') ? pad : bmp.width - pad, corner.startsWith('t') ? pad : bmp.height - pad);
       const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/png'));
       if (blob) ctx.images.set(key, { data: await blob.arrayBuffer(), type: 'png', width: bmp.width, height: bmp.height });
     } catch { /* 画不了就用原图 */ }
@@ -750,7 +771,6 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
     numbering: { config: [] },
     footnotes: ctx.footnotes,
     comments: { children: ctx.comments },
-    features: { updateFields: true },
     evenAndOddHeaderAndFooters: alternating,
     compatabilityModeVersion: W.compat,
     // 版式兼容选项照范例的 settings.xml：中文 Word 新建文档就带的那几条——表格里的行高对齐网格（不然表格一行排不到一个网格行）、
@@ -818,6 +838,12 @@ async function postprocess(blob: Blob, W: ReturnType<typeof wordLinebreakOptions
   dx = foldSectPr(dx);
   // 脚注号画圈（模板用 quan 包画 ①②…）：Word 的 decimalEnclosedCircle，全文连续编号（模板不按页重编）；每一节的节属性里都写（settings.xml 里那份只是默认）
   dx = dx.replace(/<w:sectPr>([\s\S]*?)(<w:(?:type|pgSz)\b)/g, (_, refs, tag) => `<w:sectPr>${refs}<w:footnotePr><w:numFmt w:val="decimalEnclosedCircle"/></w:footnotePr>${tag}`);
+  // 不写 settings 的 updateFields（Word 打开就弹「是否更新该文档中的这些域」）：目录域本来就是 dirty 的，Word 开时静默算；
+  // 英文目录的 PAGEREF 域也标 dirty，页码一并算出来；REF 域带着现成的号，不用更新
+  dx = dx.replace(/<w:fldSimple w:instr="PAGEREF /g, '<w:fldSimple w:dirty="true" w:instr="PAGEREF ');
+  // docx 库给每张图的 docPr 都写 id=1，按出现顺序重编
+  let dp2 = 0;
+  dx = dx.replace(/<wp:docPr id="\d+"/g, () => `<wp:docPr id="${++dp2}"`);
   // docx 库给每个书签都写 id=1；Word 认得但不合规，按出现顺序重编
   let bm = 0;
   dx = dx.replace(/<w:bookmarkStart w:name="([^"]*)" w:id="\d+"\/>([\s\S]*?)<w:bookmarkEnd w:id="\d+"\/>/g, (_, name, body) => { bm++; return `<w:bookmarkStart w:name="${name}" w:id="${bm}"/>${body}<w:bookmarkEnd w:id="${bm}"/>`; });

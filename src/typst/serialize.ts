@@ -232,6 +232,9 @@ function settingsArgs(s: Settings): string[] {
   // 强调：默认像 Word 斜切（模板的 fake-italic: true）；开了「强调排楷体」才走模板自己的 auto（有楷体换楷体）
   args.push(`fake-italic: ${s.emphKaishu === true ? 'auto' : 'true'}`);
   if (s.emDash !== 'auto') args.push(`em-dash: ${JSON.stringify(s.emDash)}`);
+  if (s.subcaptionNumbering !== 'auto') args.push(`subcaption-numbering: ${JSON.stringify(s.subcaptionNumbering)}`);
+  if (s.subcaptionSeparator !== 'auto') args.push(`subcaption-separator: ${JSON.stringify(s.subcaptionSeparator)}`);
+  if (s.subcaptionGap !== 'auto') args.push(`subcaption-gap: ${s.subcaptionGap}`);
   if (s.noteWidth && /^\d+(\.\d+)?(%|cm|mm|pt|em)$/.test(s.noteWidth.trim())) args.push(`note-width: ${s.noteWidth.trim()}`);
   const styles = stylesArg(s.styles ?? {});
   if (styles) args.push(styles);

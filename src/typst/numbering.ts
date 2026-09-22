@@ -7,7 +7,8 @@
 import type { Settings, StyleKey } from '../model/types';
 import { SWITCHES, resolveSwitch } from '../model/options';
 import type { PMNode } from './pmToTypst';
-import { labelOf, parseJsonArr } from './pmToTypst';
+import { labelOf, safeLabel } from './pmToTypst';
+import { parseSubs, subNumber, subRef } from './subfigs';
 import { THEOREM_NAMES, theoremKind, joinHead } from './theorem';
 
 export type Part = 'body' | 'appendix' | 'other';
@@ -23,6 +24,8 @@ export interface NumberInfo {
   level?: number;
   /** 标题各级的计数（导出 Word 的英文目录按它拼 Chapter 1 / 1.1） */
   path?: number[];
+  /** 分图：母图的标签（导出 Word 时 REF 域指母图、(a) 照字接） */
+  parent?: string;
 }
 
 const HANZI = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
@@ -80,6 +83,7 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
   const figByChapter = sw<boolean>('captionNumberingByChapter', s);
   const eqByChapter = sw<boolean>('equationNumberingByChapter', s);
   const thmByChapter = sw<boolean>('theoremNumberingByChapter', s);
+  const subPattern = sw<string>('subcaptionNumbering', s);
   const appPattern = sw<'letters' | 'roman' | 'numbers' | 'hanzi' | 'words'>('appendixNumbering', s);
   const en = s.lang === 'en';
   const hass = s.category === 'hass';
@@ -190,7 +194,14 @@ export function computeNumbering(doc: PMNode | null | undefined, settings: Setti
       const label = labelOf(n.attrs, 'fig');
       const num = figLike('图 ', 'Fig. ', figByChapter, fig);
       { const info: NumberInfo = { kind: 'fig', label, number: num, ref: num, title: n.attrs?.caption ?? '' }; byNode?.set(n, info); if (label) out.set(label, info); }
-      if (label) parseJsonArr<{ caption?: string }>(n.attrs?.subs).forEach((s, i) => { const l = 'abcdefghijklmnopqrstuvwxyz'[i] ?? String(i + 1); out.set(`${label}-${l}`, { kind: 'fig', label: `${label}-${l}`, number: `${num}(${l})`, ref: `${num}(${l})`, title: `(${l}) ${s.caption ?? ''}` }); });
+      // 分图：默认标签 fig:x-a，自己写了标签的按自己的；号照 subcaption-numbering（引用印「图 1-1 (a)」，全角的不补空格）
+      parseSubs(n.attrs?.subs).forEach((sub, i) => {
+        const own = safeLabel(String(sub.label ?? '').trim());
+        const l = own || (label ? `${label}-${'abcdefghijklmnopqrstuvwxyz'[i] ?? String(i + 1)}` : '');
+        if (!l) return;
+        const r = subRef(num, subPattern, i + 1);
+        out.set(l, { kind: 'fig', label: l, number: r, ref: r, title: `${subNumber(subPattern, i + 1)} ${sub.caption ?? ''}`, parent: label || undefined });
+      });
       return;
     }
     if (n.type === 'tableFigure') {

@@ -8,6 +8,11 @@ import { useEffect, useRef, useState } from 'react';
 import { imageUrl } from '../imageCache';
 import { useEditorEnv, useNumbering, useOpenNonce, focusAttrInput } from '../env';
 import { labelOf, parseJsonArr } from '../../typst/pmToTypst';
+import { parseSubs, subLayout, subNumber, type SubFig } from '../../typst/subfigs';
+import { SWITCHES, resolveSwitch } from '../../model/options';
+import { useStore } from '../../model/store';
+import type { Settings } from '../../model/types';
+const sw = <V,>(key: string, s: Settings): V => resolveSwitch<V>(SWITCHES.find((d) => d.key === key)!, s).effective;
 import { MathEditor, forPreview } from '../math/MathEditor';
 import { MathPreview } from '../math/MathPreview';
 import { AutoInput } from '../../ui/AutoInput';
@@ -135,31 +140,47 @@ function LabelField({ node, updateAttributes, prefix, editable }: { node: NodeVi
 }
 
 // ── 插图 ────────────────────────────────────────────────────────
-/** 分图：每张一个 {image, width, caption, captionEn} */
-export interface SubFig { image: string; width: string | number; caption: string; captionEn?: string }
-export function parseSubs(v: unknown): SubFig[] {
-  if (Array.isArray(v)) return v as SubFig[];
-  if (typeof v !== 'string' || !v) return [];
-  try { const a = JSON.parse(v); return Array.isArray(a) ? a : []; } catch { return []; }
-}
+export { parseSubs, type SubFig } from '../../typst/subfigs';
 
-function SubFigureCell({ sub, index, editable, onChange, onRemove, letter, labelBase, corner, fill }: { sub: SubFig; index: number; editable: boolean; onChange: (p: Partial<SubFig>) => void; onRemove: () => void; letter: string; labelBase: string; corner: string; fill: string }) {
+/** 分图一格：图、题、英文题；悬停出工具——宽 / 高钉死、排法（接着排 / 另起一行 / 叠在前一格下 / 叠里并排）、
+ *  图上标签这一张单独的角与字色、自定义标签、换图、删除 */
+function SubFigureCell({ sub, index, editable, onChange, onRemove, num, markNum, labelBase, corner, fill, bilingual }: { sub: SubFig; index: number; editable: boolean; onChange: (p: Partial<SubFig>) => void; onRemove: () => void; num: string; markNum: string; labelBase: string; corner: string; fill: string; bilingual: boolean }) {
   const env = useEditorEnv();
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => { let alive = true; void imageUrl(sub.image).then((u) => { if (alive) setUrl(u); }); return () => { alive = false; }; }, [sub.image, env.images]);
   const pick = async (file: File) => { const r = await env.addImage(file); onChange({ image: r.name }); };
   const auto = sub.width === undefined || sub.width === '' || sub.width === 'auto';
+  const autoH = !sub.height || sub.height === 'auto';
+  const mark = sub.mark && sub.mark !== 'auto' ? sub.mark : corner;
+  const markFill = sub.markFill && sub.markFill !== 'auto' ? sub.markFill : fill;
+  const letter = 'abcdefghijklmnopqrstuvwxyz'[index] ?? String(index + 1);
+  const own = (sub.label ?? '').trim();
   return (
-    <div className="subfig" title={t("分图 ({{letter}})，标签 {{labelBase}}-{{v2}}", { letter: letter, labelBase: labelBase, v2: letter })}>
-      {url ? <span className="subfig-img"><img src={url} alt="" style={{ width: auto ? '100%' : figurePx(sub.width), maxWidth: '100%' }} draggable={false} />{corner !== 'none' && <span className={`subfig-mark is-${corner} is-${fill}`}>({letter})</span>}</span> : (
+    <div className="subfig" title={t("分图 {{num}}，标签 {{label}}", { num: num, label: own || `${labelBase}-${letter}` })}>
+      {url ? <span className="subfig-img"><img src={url} alt="" style={{ width: auto ? '100%' : figurePx(sub.width), height: autoH ? undefined : figurePx(sub.height), maxWidth: '100%', objectFit: 'contain' }} draggable={false} />{mark !== 'none' && <span className={`subfig-mark is-${mark} is-${markFill}`}>{markNum}</span>}</span> : (
         <label className="fig-drop fig-drop-sm"><ImageUp /><span>{sub.image ? t("未找到 {{image}}", { image: sub.image }) : t("选择图片")}</span><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>
       )}
-      <div className="subfig-cap"><span className="cap-num">({letter})</span><AutoInput className="cap-input" disabled={!editable} value={sub.caption} placeholder={t("分图题注")} minWidth={40} onChange={(e) => onChange({ caption: e.target.value })} /></div>
+      <div className="subfig-cap"><span className="cap-num">{num}</span><AutoInput className="cap-input" disabled={!editable} value={sub.caption} placeholder={t("分图题注")} minWidth={40} onChange={(e) => onChange({ caption: e.target.value })} /></div>
+      {bilingual && <div className="subfig-cap"><span className="cap-num">{num}</span><AutoInput className="cap-input" disabled={!editable} value={sub.captionEn ?? ''} placeholder={t("英文分图题注")} minWidth={40} onChange={(e) => onChange({ captionEn: e.target.value })} /></div>}
       <div className="subfig-tools">
-        <LengthInput value={auto ? '' : sub.width} defaultUnit="cm" placeholder={t("自动")} disabled={!editable} onChange={(v) => onChange({ width: v ?? '' })} width={70} />
-        <label className="blk-tool is-btn" title={t("更改图片")}><ImageUp /><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>
-        <button type="button" className="blk-tool is-btn is-danger" title={t("删除分图 ({{letter}})", { letter: letter })} disabled={!editable} onClick={onRemove}><Trash2 /></button>
-        <span className="muted" style={{ fontSize: 11 }}>#{index + 1}</span>
+        <span className="subfig-tool-row">
+          <LengthInput value={auto ? '' : sub.width} defaultUnit="cm" placeholder={t("宽")} title={t("钉死的宽；空着跟同一行等高")} disabled={!editable} onChange={(v) => onChange({ width: v ?? '' })} width={64} />
+          <LengthInput value={autoH ? '' : sub.height} defaultUnit="cm" placeholder={t("高")} title={t("钉死的高；空着跟同一行等高")} disabled={!editable} onChange={(v) => onChange({ height: v ?? '' })} width={64} />
+          <select className="thm-kind" value={sub.place ?? 'next'} disabled={!editable || index === 0} title={t("排法：这一张放在哪里")} onChange={(e) => onChange({ place: e.target.value as SubFig['place'] })}>
+            <option value="next">{t("接着排")}</option><option value="row">{t("另起一行")}</option><option value="below">{t("叠在前一格下")}</option><option value="beside">{t("叠里与前一张并排")}</option>
+          </select>
+        </span>
+        <span className="subfig-tool-row">
+          <select className="thm-kind" value={sub.mark ?? 'auto'} disabled={!editable} title={t("这一张的图上标签")} onChange={(e) => onChange({ mark: e.target.value as SubFig['mark'] })}>
+            <option value="auto">{t("标签跟整图")}</option><option value="none">{t("不印标签")}</option><option value="tl">{t("左上")}</option><option value="tr">{t("右上")}</option><option value="bl">{t("左下")}</option><option value="br">{t("右下")}</option>
+          </select>
+          {mark !== 'none' && <select className="thm-kind" value={sub.markFill ?? 'auto'} disabled={!editable} title={t("这一张标签的字色")} onChange={(e) => onChange({ markFill: e.target.value as SubFig['markFill'] })}>
+            <option value="auto">{t("字色跟整图")}</option><option value="black">{t("黑字")}</option><option value="white">{t("白字")}</option>
+          </select>}
+          <label className="blk-tool" title={t("这一张的引用标签；留空则 {{label}}", { label: `${labelBase}-${letter}` })}><Tag /><MirrorInput value={sub.label ?? ''} placeholder={`${labelBase}-${letter}`} disabled={!editable} onChange={(e) => onChange({ label: e.target.value.trim() })} /></label>
+          <label className="blk-tool is-btn" title={t("更改图片")}><ImageUp /><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>
+          <button type="button" className="blk-tool is-btn is-danger" title={t("删除分图 {{num}}", { num: num })} disabled={!editable} onClick={onRemove}><Trash2 /></button>
+        </span>
       </div>
     </div>
   );
@@ -169,8 +190,10 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
   const env = useEditorEnv();
   const subs = parseSubs(node.attrs.subs);
   const setSubs = (s: SubFig[]) => updateAttributes({ subs: JSON.stringify(s) });
-  const columns = Number(node.attrs.columns) >= 1 ? Math.min(6, Number(node.attrs.columns)) : Math.max(1, subs.length);
-  const letters = 'abcdefghijklmnopqrstuvwxyz';
+  const settings = useStore((st) => st.doc.settings);
+  const subPattern = sw<string>('subcaptionNumbering', settings);
+  const subBilingual = sw<boolean>('subcaptionBilingual', settings) && settings.lang !== 'en';
+  const numOf = (i: number) => subNumber(subPattern, i + 1);
   const wrap = useRef<HTMLDivElement>(null);
   const open = useOpenNonce(getPos);
   useEffect(() => { if (open.nonce) requestAnimationFrame(() => focusAttrInput(wrap.current, open.attr ?? 'caption', open.offset)); }, [open]);
@@ -192,8 +215,18 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
       <Handle editor={editor} getPos={getPos} />
       <div className="fig-body" contentEditable={false}>
         {subs.length && !captionOnly ? (
-          <div className="subfig-grid" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-            {subs.map((s, i) => <SubFigureCell key={i} sub={s} index={i} letter={letters[i] ?? String(i + 1)} labelBase={labelOf(node.attrs as any, 'fig')} corner={String(node.attrs.subLabel ?? 'none')} fill={String(node.attrs.subLabelFill ?? 'black')} editable={editable} onChange={(p) => setSubs(subs.map((x, k) => (k === i ? { ...x, ...p } : x)))} onRemove={() => setSubs(subs.filter((_, k) => k !== i))} />)}
+          // 行 / 格 / 叠照 place 排（没写的按每行几张）：每行一个网格，叠竖着摞，叠里并排的横着放
+          <div className="subfig-grid">
+            {(() => {
+              const cell = (i: number) => <SubFigureCell key={i} sub={subs[i]} index={i} num={numOf(i)} markNum={subNumber(String(node.attrs.subLabelPattern || '') || subPattern, i + 1)} labelBase={labelOf(node.attrs as any, 'fig')} corner={String(node.attrs.subLabel ?? 'none')} fill={String(node.attrs.subLabelFill ?? 'black')} bilingual={subBilingual} editable={editable} onChange={(p) => setSubs(subs.map((x, k) => (k === i ? { ...x, ...p } : x)))} onRemove={() => setSubs(subs.filter((_, k) => k !== i))} />;
+              return subLayout(subs, Number(node.attrs.columns)).map((row, r) => (
+                <div key={r} className="subfig-row" style={{ gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))` }}>
+                  {row.map((c, k) => (typeof c === 'number' ? cell(c) : (
+                    <div key={`s${k}`} className="subfig-stack">{c.stack.map((it, j) => (typeof it === 'number' ? cell(it) : <div key={`p${j}`} className="subfig-pair">{it.pair.map(cell)}</div>))}</div>
+                  )))}
+                </div>
+              ));
+            })()}
           </div>
         ) : url ? <img src={url} alt="" style={{ width: figurePx(node.attrs.width), maxWidth: '100%' }} draggable={false} /> : (
           <label className="fig-drop">
@@ -208,7 +241,7 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
       {captionOnly && (
         <div className="subcaps" contentEditable={false}>
           {subs.map((s, i) => (
-            <span key={i} className="subfig-cap"><span className="cap-num">({letters[i] ?? i + 1})</span><AutoInput className="cap-input" disabled={!editable} value={s.caption} placeholder={t("分图题注")} minWidth={40} onChange={(e) => setSubs(subs.map((x, k) => (k === i ? { ...x, caption: e.target.value } : x)))} /><button type="button" className="blk-tool is-btn is-danger" title={t("删除此分图题注")} disabled={!editable} onClick={() => setSubs(subs.filter((_, k) => k !== i))}><Trash2 /></button></span>
+            <span key={i} className="subfig-cap"><span className="cap-num">{numOf(i)}</span><AutoInput className="cap-input" disabled={!editable} value={s.caption} placeholder={t("分图题注")} minWidth={40} onChange={(e) => setSubs(subs.map((x, k) => (k === i ? { ...x, caption: e.target.value } : x)))} />{subBilingual && <AutoInput className="cap-input" disabled={!editable} value={s.captionEn ?? ''} placeholder={t("英文")} minWidth={40} onChange={(e) => setSubs(subs.map((x, k) => (k === i ? { ...x, captionEn: e.target.value } : x)))} />}<button type="button" className="blk-tool is-btn is-danger" title={t("删除此分图题注")} disabled={!editable} onClick={() => setSubs(subs.filter((_, k) => k !== i))}><Trash2 /></button></span>
           ))}
         </div>
       )}
@@ -236,11 +269,12 @@ export const Figure = Node.create({
   selectable: true,
   addAttributes() {
     // placement：浮动（none / auto / top / bottom，Typst 的 figure(placement:)）；breakable：跨页三态（auto 按模板：图不拆、表可拆）
-    // subs：分图（JSON），非空时母图由分图组成；columns 每行几张；subMode under = 分图题排在分图之下（#subfigure），
-    // caption = 分图题跟在图题之下连排（#subs）
-    // subLabel：(a)(b) 打在图上的哪个角（none / tl / tr / bl / br），subLabelFill 标签黑字或白字（深色图用）
+    // subs：分图（JSON，见 typst/subfigs.ts），非空时母图由分图组成；columns 每行几张（分图上写了 place 的按 place 排）；
+    // subMode under = 分图题排在分图之下（#subfigure），caption = 分图题跟在图题之下连排（#subs）；subGutter 图与图的间距
+    // subLabel：(a)(b) 打在图上的哪个角（none / tl / tr / bl / br），subLabelFill 标签黑字或白字（深色图用），
+    // subLabelPattern / subLabelSize / subLabelFont 标签的写法（空 = 跟 subcaption-numbering）、字号（zihao 名）、字体角色（空 = sans）
     // notes：图注（JSON [{lead, text}]），模板 note：排在图之下、图题之上
-    return { image: attr('image', ''), width: attr('width', 8), caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null), placement: attr('placement', 'none'), breakable: attr('breakable', 'auto'), subs: attr('subs', '[]'), columns: attr('columns', 2), subMode: attr('subMode', 'under'), subLabel: attr('subLabel', 'none'), subLabelFill: attr('subLabelFill', 'black'), notes: attr('notes', '[]') };
+    return { image: attr('image', ''), width: attr('width', 8), caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null), placement: attr('placement', 'none'), breakable: attr('breakable', 'auto'), subs: attr('subs', '[]'), columns: attr('columns', 2), subMode: attr('subMode', 'under'), subGutter: attr('subGutter', ''), subLabel: attr('subLabel', 'none'), subLabelFill: attr('subLabelFill', 'black'), subLabelPattern: attr('subLabelPattern', ''), subLabelSize: attr('subLabelSize', ''), subLabelFont: attr('subLabelFont', ''), notes: attr('notes', '[]') };
   },
   parseHTML() { return [{ tag: 'div[data-node="figure"]' }]; },
   renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { 'data-node': 'figure' })]; },

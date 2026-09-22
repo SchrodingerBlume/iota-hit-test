@@ -82,6 +82,10 @@ export interface Settings {
   gb7714?: Record<string, unknown>;
   equationNumberingFullwidth: TriBool;
   subcaptionBilingual: TriBool;
+  /** 分图号写法（模板 subcaption-numbering，Typst 编号模式）、连排分图题之间的分隔、图题与连排分图题之间的间距 */
+  subcaptionNumbering: Tri<'(a)' | 'a' | 'a.' | '（a）' | '(A)' | 'A' | '(1)' | '1'>;
+  subcaptionSeparator: Tri<';' | '；' | ',' | '，' | ' '>;
+  subcaptionGap: Tri<'none' | '0.5em' | '1em'>;
   heading1Pagebreak: TriBool;
   openright: TriBool;
   enumHanging: TriBool;

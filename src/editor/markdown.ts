@@ -123,10 +123,12 @@ function block(n: Node): string {
     case 'figure': {
       const subs = parseJsonList(a.subs);
       if (subs.length) {
-        const inner = subs.map((s: any) => `![${esc(String(s.caption ?? ''))}](${s.image ?? ''})${fmtAttrs({ width: s.width === '' || s.width === 'auto' ? undefined : s.width, en: s.captionEn })}`).join('\n\n');
-        // 整组宽只认带单位的字符串（数字是单图那档的像素折算，对整组没意义）；columns=0 一行排完
+        // 每张分图：宽 / 高钉死、排法（place=row/below/beside）、单张的图上标签（mark / markFill）、自定义标签（#id）
+        const inner = subs.map((s: any) => `![${esc(String(s.caption ?? ''))}](${s.image ?? ''})${fmtAttrs({ width: s.width === '' || s.width === 'auto' ? undefined : s.width, height: s.height && s.height !== 'auto' ? s.height : undefined, en: s.captionEn, place: s.place && s.place !== 'next' ? s.place : undefined, mark: s.mark && s.mark !== 'auto' ? s.mark : undefined, markFill: s.markFill && s.markFill !== 'auto' ? s.markFill : undefined }, { id: s.label ? String(s.label) : undefined })}`).join('\n\n');
+        // 整组宽只认带单位的字符串（数字是单图那档的像素折算，对整组没意义）；columns=0 一行排完；gutter 图与图的间距；
+        // subLabelPattern / subLabelSize / subLabelFont 图上标签的写法、字号、字体
         const groupWidth = typeof a.width === 'string' && a.width.trim() && a.width !== 'auto' ? a.width : undefined;
-        return div(fmtAttrs({ caption: a.caption, en: a.captionEn, columns: a.columns !== 2 ? a.columns : undefined, width: groupWidth, subMode: a.subMode !== 'under' ? a.subMode : undefined, subLabel: a.subLabel && a.subLabel !== 'none' ? a.subLabel : undefined, subLabelFill: a.subLabelFill === 'white' ? 'white' : undefined, placement: a.placement !== 'none' ? a.placement : undefined }, { id: a.label ? String(a.label) : undefined, classes: ['figure'] }), inner);
+        return div(fmtAttrs({ caption: a.caption, en: a.captionEn, columns: a.columns !== 2 ? a.columns : undefined, width: groupWidth, gutter: a.subGutter || undefined, subMode: a.subMode !== 'under' ? a.subMode : undefined, subLabel: a.subLabel && a.subLabel !== 'none' ? a.subLabel : undefined, subLabelFill: a.subLabelFill === 'white' ? 'white' : undefined, subLabelPattern: a.subLabelPattern || undefined, subLabelSize: a.subLabelSize || undefined, subLabelFont: a.subLabelFont || undefined, placement: a.placement !== 'none' ? a.placement : undefined }, { id: a.label ? String(a.label) : undefined, classes: ['figure'] }), inner);
       }
       return `![${esc(String(a.caption ?? ''))}](${String(a.image ?? '')})${captionAttrs(a, { width: a.width !== 8 ? a.width : undefined })}${notesMd(a)}`;
     }
@@ -307,9 +309,13 @@ function divNode(attrsSrc: string, body: string, headings: boolean): Node {
   const label = id ?? attrs.label ?? '';
   if (kind === 'figure') {
     const inner = blocks(body, false);
-    const subs = inner.filter((n) => n.type === 'figure').map((f) => ({ image: f.attrs?.image ?? '', width: f.attrs?.width ?? '', caption: f.attrs?.caption ?? '', captionEn: f.attrs?.captionEn ?? '' }));
+    const pick = <T extends string>(v: unknown, ok: readonly T[]): T | undefined => (ok.includes(v as T) ? (v as T) : undefined);
+    const subs = inner.filter((n) => n.type === 'figure').map((f) => {
+      const x = f.attrs?.extra ?? {};
+      return { image: f.attrs?.image ?? '', width: f.attrs?.width ?? '', caption: f.attrs?.caption ?? '', captionEn: f.attrs?.captionEn ?? '', ...(f.attrs?.label ? { label: f.attrs.label } : {}), ...(x.height ? { height: String(x.height) } : {}), ...(pick(x.place, ['row', 'below', 'beside'] as const) ? { place: x.place } : {}), ...(pick(x.mark, ['none', 'tl', 'tr', 'bl', 'br'] as const) ? { mark: x.mark } : {}), ...(pick(x.markFill, ['black', 'white'] as const) ? { markFill: x.markFill } : {}) };
+    });
     const corner = ['tl', 'tr', 'bl', 'br'].includes(String(attrs.subLabel)) ? attrs.subLabel : 'none';
-    return { type: 'figure', attrs: { image: subs[0]?.image ?? '', caption: attrs.caption ?? '', captionEn: attrs.en ?? '', label, subs: JSON.stringify(subs), columns: num(attrs.columns) ?? 2, subMode: attrs.subMode ?? 'under', subLabel: corner, subLabelFill: attrs.subLabelFill === 'white' ? 'white' : 'black', placement: attrs.placement ?? 'none', ...(typeof attrs.width === 'string' && attrs.width ? { width: attrs.width } : {}) } } as Node;
+    return { type: 'figure', attrs: { image: subs[0]?.image ?? '', caption: attrs.caption ?? '', captionEn: attrs.en ?? '', label, subs: JSON.stringify(subs), columns: num(attrs.columns) ?? 2, subMode: attrs.subMode ?? 'under', subGutter: typeof attrs.gutter === 'string' ? attrs.gutter : '', subLabel: corner, subLabelFill: attrs.subLabelFill === 'white' ? 'white' : 'black', subLabelPattern: typeof attrs.subLabelPattern === 'string' ? attrs.subLabelPattern : '', subLabelSize: typeof attrs.subLabelSize === 'string' ? attrs.subLabelSize : '', subLabelFont: typeof attrs.subLabelFont === 'string' ? attrs.subLabelFont : '', placement: attrs.placement ?? 'none', ...(typeof attrs.width === 'string' && attrs.width ? { width: attrs.width } : {}) } } as Node;
   }
   if (kind === 'algorithm') {
     const io: string[] = [], lines: { text: string; level: number }[] = [];
@@ -435,7 +441,8 @@ function tokensToBlocks(tokens: Token[], headings: boolean, divs: { attrs: strin
         // 一段只有一张图：图 + 属性
         if (content.length === 1 && content[0].type === 'figure') {
           const f = content[0];
-          f.attrs = { ...f.attrs, ...(notes.length ? { notes: JSON.stringify(notes) } : {}), ...(pa?.id ? { label: pa.id } : {}), ...(pa?.attrs.en ? { captionEn: pa.attrs.en } : {}), ...(len(pa?.attrs.width) !== undefined ? { width: len(pa?.attrs.width) } : {}), ...(pa?.attrs.placement ? { placement: pa.attrs.placement } : {}), ...(pa?.attrs.breakable ? { breakable: pa.attrs.breakable } : {}) };
+          // 分图容器里那几张图才用得着的键（height / place / mark…）先留在 extra 里，容器组装时取；单图上不认
+          f.attrs = { ...f.attrs, ...(notes.length ? { notes: JSON.stringify(notes) } : {}), ...(pa?.id ? { label: pa.id } : {}), ...(pa?.attrs.en ? { captionEn: pa.attrs.en } : {}), ...(len(pa?.attrs.width) !== undefined ? { width: len(pa?.attrs.width) } : {}), ...(pa?.attrs.placement ? { placement: pa.attrs.placement } : {}), ...(pa?.attrs.breakable ? { breakable: pa.attrs.breakable } : {}), ...(pa ? { extra: pa.attrs } : {}) };
           push(f); break;
         }
         // 不是图也不是表题：拆出去的 Note 行还是正文，整段按原样重来
@@ -486,5 +493,8 @@ function tokensToBlocks(tokens: Token[], headings: boolean, divs: { attrs: strin
 export function fromMarkdown(source: string, headings = true): RichDoc {
   mathStash = [];
   const content = blocks(source, headings);
+  // 单图上暂存的分图键（extra）不进文档
+  const strip = (n: Node) => { if (n.type === 'figure' && n.attrs?.extra) delete n.attrs.extra; for (const c of n.content ?? []) strip(c); };
+  content.forEach(strip);
   return { type: 'doc', content: content.length ? content : [{ type: 'paragraph' }] };
 }
