@@ -455,6 +455,15 @@ textarea.mono { font-family: var(--mono); font-size: 12px; min-height: 260px; li
 /* 批注面板：右边一栏（像 Word 的批注窗格） */
 .work-cols.has-comments { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
 .comments-pane { position: sticky; top: 0; max-height: calc(100vh - 160px); overflow: auto; border-left: 1px solid var(--line); padding-left: 12px; font-size: 13px; }
+/* 在编辑区右边时：卡片按被批注那行的高度绝对定位（CommentsPane 量出来写 top），窗格撑到正文那么高跟着一起滚；引线画在左边那条缝里 */
+.comments-pane.is-anchored { position: relative; top: auto; max-height: none; overflow: visible; border-left: 0; padding-left: 0; }
+.comments-pane.is-anchored .comments-head { position: sticky; top: 0; z-index: 2; background: var(--preview-bg); padding-bottom: 4px; }
+.comments-pane.is-anchored .comment-card { position: absolute; left: 0; right: 0; margin: 0; transition: top 260ms var(--ease); }
+.comments-pane.is-anchored .comment-card.is-active { z-index: 1; }
+.comments-links { display: none; position: absolute; right: 100%; top: 0; pointer-events: none; overflow: visible; z-index: 1; }
+.comments-pane.is-anchored .comments-links { display: block; }
+.comments-links path { fill: none; stroke: rgba(202, 138, 4, 0.45); stroke-width: 1; stroke-dasharray: 3 3; }
+.comments-links path.on { stroke: rgba(202, 138, 4, 0.95); stroke-width: 1.5; stroke-dasharray: none; }
 .comments-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-weight: 600; }
 .comments-head > span:first-child { display: inline-flex; align-items: center; gap: 4px; flex: none; white-space: nowrap; }
 .comments-head .comments-author { flex: 1 1 60px; min-width: 0; max-width: 130px; margin-left: auto; }
