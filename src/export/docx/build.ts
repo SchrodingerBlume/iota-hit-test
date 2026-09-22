@@ -162,7 +162,14 @@ function inline(ctx: Ctx, nodes: PMNode[] = [], base: { size?: number; font?: st
         push(new TextRun({ text: first ? (ctx.s.lang === 'en' ? `${a!.longEn || a!.long} (${short})` : `${a!.long}（${a!.longEn ? `${a!.longEn}，` : ''}${short}）`) : short, size: base.size }));
         break;
       }
-      case 'ccwd': push(new TextRun({ text: '　'.repeat(Number(n.attrs?.n ?? 1)) })); break;
+      case 'ccwd': {
+        // 几个字宽的空白：整数个全角空格；半个字用一个半角空格（Word 里贴着汉字的空格就是半格），别的零头用横向缩放过的全角空格
+        const v = Number(n.attrs?.n), count = Number.isFinite(v) && v > 0 ? Math.min(20, v) : v === 0 || !Number.isFinite(v) ? 1 : 0;
+        const whole = Math.floor(count), frac = Math.round((count - whole) * 100) / 100;
+        if (whole) push(new TextRun({ text: '　'.repeat(whole) }));
+        if (frac === 0.5) push(new TextRun({ text: ' ' })); else if (frac) push(new TextRun({ text: '　', scale: Math.round(frac * 100) }));
+        break;
+      }
       case 'idx': push(new TextRun({ text: String(n.attrs?.text ?? ''), size: base.size })); break;
       default: if (n.content) out.push(...inline(ctx, n.content, base));
     }

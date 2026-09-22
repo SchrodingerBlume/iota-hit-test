@@ -298,7 +298,7 @@ export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {
         atom(tag(opts, n, 'node', `#footnote[${tag(opts, n, 'attr', escapeText(text), { attr: 'text', raw: text })}]`));
         break;
       }
-      case 'ccwd': { const count = Math.max(-20, Math.min(20, Number(n.attrs?.n) || 1)); atom(tag(opts, n, 'node', `#ccwd(${count})`)); break; }
+      case 'ccwd': { const v = Number(n.attrs?.n); const count = Number.isFinite(v) && v !== 0 ? Math.max(-20, Math.min(20, Math.round(v * 20) / 20)) : 1; atom(tag(opts, n, 'node', `#ccwd(${count})`)); break; }
       case 'idx': if (n.attrs?.text) atom(tag(opts, n, 'node', `#idx[${escapeText(String(n.attrs.text))}]`)); break;
       default:
         if (n.content) emit(serializeInline(n.content, opts), false);

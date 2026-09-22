@@ -238,11 +238,22 @@ function IdxView({ node, updateAttributes, selected, deleteNode, editor, getPos 
 }
 export const Idx = inlineAtom('idx', { text: { default: '' } }, IdxView);
 
-// ── 空一个汉字（#ccwd） ──────────────────────────────────────────
-function CcwdView({ node, selected, editor, getPos }: NodeViewProps) {
+// ── 空几个字（#ccwd，模板 h-chars）：几个字宽的空白，可以是半个字（0.5）、也可以是负的退格 ──
+const CCWD_PRESETS = [0.25, 0.5, 1, 2, 4];
+export const ccwdN = (v: unknown) => { const n = Number(v); return Number.isFinite(n) && n !== 0 ? Math.max(-20, Math.min(20, Math.round(n * 20) / 20)) : 1; };
+function CcwdView({ node, updateAttributes, selected, deleteNode, editor, getPos }: NodeViewProps) {
+  const n = ccwdN(node.attrs.n);
+  const label = n === 0.5 ? '½' : n === 0.25 ? '¼' : n === 1 ? '' : String(n);
   return (
-    <InlineChip onSelect={() => { const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }} kind="ccwd" text="␣" title={t("插入 {{n}} 个汉字宽的空格", { n: node.attrs.n })} selected={selected} editable={false}>
-      {() => null}
+    <InlineChip onSelect={() => { const p = getPos(); if (p !== undefined) editor.chain().focus().setNodeSelection(p).run(); }} kind="ccwd" text={<span className="chip-ccwd-box" style={{ width: `${Math.max(0.25, Math.min(4, Math.abs(n)))}em` }}>{label}</span>} title={t("{{n}} 个字宽的空格（单击改宽度）", { n: n })} selected={selected} editable={editor.isEditable} onDelete={deleteNode}>
+      {(close) => (
+        <Field label={t("空几个字")} hint={t("一个字 = 当前字号 + 字符网格增量；可以是半个字，负数退格")}>
+          <span className="ccwd-presets">
+            {CCWD_PRESETS.map((v) => <button key={v} type="button" className={`btn btn-xs ${n === v ? 'on' : ''}`} onClick={() => { updateAttributes({ n: v }); close(); }}>{v === 0.5 ? '½' : v === 0.25 ? '¼' : v}</button>)}
+            <input type="number" step={0.25} min={-20} max={20} value={n} onChange={(e) => { const v = Number(e.target.value); if (Number.isFinite(v) && v !== 0) updateAttributes({ n: ccwdN(v) }); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); close(); } }} style={{ width: 64 }} />
+          </span>
+        </Field>
+      )}
     </InlineChip>
   );
 }

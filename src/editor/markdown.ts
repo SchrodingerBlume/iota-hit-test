@@ -79,7 +79,7 @@ function inline(nodes: Node[] = []): string {
       case 'abbr': return `@${n.attrs?.key ?? ''}`;
       case 'footnote': return `^[${String(n.attrs?.text ?? '')}]`;
       case 'idx': return `[${esc(String(n.attrs?.text ?? ''))}]{.index}`;
-      case 'ccwd': return Number(n.attrs?.n ?? 1) === 1 ? '<ccwd/>' : `<ccwd n="${n.attrs?.n}"/>`;
+      case 'ccwd': return Number(n.attrs?.n ?? 1) === 1 ? '<ccwd/>' : `<ccwd n="${Number(n.attrs?.n)}"/>`;
       case 'text': break;
       default: return `<!--iota-inline:${JSON.stringify(n).replace(/--/g, '-\\u002d')}-->`;
     }
@@ -176,7 +176,7 @@ const REF_PREFIX = /^(fig|tab|eq|sec|alg|lst|app|thm|sub):/;
 function inlineSyntax(text: string): Node[] {
   const out: Node[] = [];
   const bal = '(?:[^\\[\\]\\n]|\\[[^\\[\\]\\n]*\\])*';
-  const re = new RegExp(`${MATH_OPEN}(\\d+)${MATH_CLOSE}|\\$typst:\\s*([^$\\n]+?)\\$|\\$([^$\\n]+?)\\$(?!\\d)|\\[(@[^\\]\\n]+)\\]\\{\\.index\\}|\\[(${bal})\\]\\{\\.index\\}|\\[(@[^\\]\\n]+)\\](?:\\{\\.(prose|author|year)\\})?|(?<![\\w@\\\\])@([A-Za-z][\\w:.-]*[\\w])|\\^\\[(${bal})\\]|<ccwd(?:\\s+n="?(\\d+)"?)?\\s*\\/?>`, 'g');
+  const re = new RegExp(`${MATH_OPEN}(\\d+)${MATH_CLOSE}|\\$typst:\\s*([^$\\n]+?)\\$|\\$([^$\\n]+?)\\$(?!\\d)|\\[(@[^\\]\\n]+)\\]\\{\\.index\\}|\\[(${bal})\\]\\{\\.index\\}|\\[(@[^\\]\\n]+)\\](?:\\{\\.(prose|author|year)\\})?|(?<![\\w@\\\\])@([A-Za-z][\\w:.-]*[\\w])|\\^\\[(${bal})\\]|<ccwd(?:\\s+n="?(-?[\\d.]+)"?)?\\s*\\/?>`, 'g');
   let last = 0; let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
     out.push(...textNode(text.slice(last, m.index)));
@@ -253,7 +253,7 @@ function inlines(tokens: Token[] = []): Node[] {
         const raw = String(t.raw ?? '');
         const legacy = /^<!--iota-inline:(.*?)-->$/.exec(raw.trim());
         if (legacy) { out.push(decode(legacy[1])); break; }
-        const ccwd = /^<ccwd(?:\s+n="?(\d+)"?)?\s*\/?>$/.exec(raw.trim());
+        const ccwd = /^<ccwd(?:\s+n="?(-?[\d.]+)"?)?\s*\/?>$/.exec(raw.trim());
         if (ccwd) { out.push({ type: 'ccwd', attrs: { n: Number(ccwd[1] ?? 1) } } as Node); break; }
         const tag = tagMark(raw);
         if (!tag) { out.push(...apply(textNode(raw))); break; }
