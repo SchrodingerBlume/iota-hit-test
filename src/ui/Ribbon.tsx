@@ -27,6 +27,7 @@ import { GitDialog } from './GitDialog';
 import { ZoteroDialog } from './ZoteroDialog';
 import { startAutoHistory } from '../history/history';
 import { B, Sep, useEditorTick, useInsertActions, TableAlignTools, FontSizeTool, refocusPreviewAfter } from '../editor/tools';
+import { useFocusedField, insertIntoField } from '../editor/fieldFocus';
 import { searchKey, selectCurrentMatch } from '../editor/extensions/Search';
 import { levelLabels } from '../typst/numbering';
 import { ChoiceMenu } from './RibbonSettings';
@@ -190,6 +191,8 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const ed = useActiveEditor();
   const meta = activeKey ? getEditorMeta(activeKey) : undefined;
   const ins = useInsertActions(ed);
+  // 焦点在普通输入框（论文信息、题注那些）：汉字宽空格插的是「　」本身
+  const field = useFocusedField();
   const inTable = !!ed?.isActive('table');
   const inFigure = !!ed?.isActive('figure');
   // 上下文页：光标进表格 / 选中插图时自动切过去，离开时切回（用户自己点过别的页就不再管）
@@ -498,7 +501,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                   </Row>
                   <Row>
                     <B title={tx("连续空段落将保留为空行。")} icon={<ArrowEnter20Regular />} disabled={none} run={() => chain().splitBlock().run()} />
-                    <B title={tx("插入一个汉字宽的空格")} icon={<Spacebar20Regular />} disabled={none} run={() => ins.insertInline('ccwd', { n: 1 })} />
+                    <B title={tx("插入一个汉字宽的空格")} icon={<Spacebar20Regular />} disabled={none && !field} run={() => { if (field) insertIntoField(field, '　'); else ins.insertInline('ccwd', { n: 1 }); }} />
                     <span className="rb-split">
                       <B title={tx("显示/隐藏编辑标记")} icon={<TextParagraph20Regular />} on={marksOn} run={toggleMarks} />
                       <Menu checkedValues={{ k: (['paragraph', 'space', 'gutter'] as const).filter((k) => markKinds[k]) }} onCheckedValueChange={(_, d) => { for (const k of ['paragraph', 'space', 'gutter'] as const) usePreviewMarks.getState().setKind(k, d.checkedItems.includes(k)); }} positioning="below-start">
