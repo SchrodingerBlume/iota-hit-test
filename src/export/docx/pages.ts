@@ -19,14 +19,14 @@ const pick = (doc: ThesisDoc, page: 'cover' | 'titlepage', k: keyof Info): strin
 const lines = (s: string) => s.split('\n').map((x) => x.trim()).filter(Boolean);
 /** 一段在 Word 里会折成几行：按版心宽（磅）贪心折，西文按词、中文按字；量宽用 canvas（西文 Times 本机都有，中文没有的按一字一格） */
 let ctx2d: CanvasRenderingContext2D | null = null;
-function measure(t: string, size: number, bold: boolean, latin: string): number {
+export function measure(t: string, size: number, bold: boolean, latin: string): number {
   if (hasCJK(t)) return [...t].reduce((w, c) => w + (hasCJK(c) ? size : size * 0.5), 0);
   ctx2d ??= document.createElement('canvas').getContext('2d');
   if (!ctx2d) return t.length * size * 0.55;
   ctx2d.font = `${bold ? 'bold ' : ''}${size}pt "${latin}"`;
   return ctx2d.measureText(t).width * 0.75; // px → pt
 }
-function wrap(t: string, size: number, width: number, bold = false, latin = FONT.en): string[] {
+export function wrap(t: string, size: number, width: number, bold = false, latin = FONT.en): string[] {
   const units = hasCJK(t) ? [...t] : t.split(/(?<= )/);
   const out: string[] = []; let cur = '';
   for (const u of units) {

@@ -236,9 +236,10 @@ export function serializeInline(nodes: PMNode[] = [], opts: SerializeOptions = {
       case 'text': {
         const raw = n.text ?? '';
         let escaped = escapeText(raw);
-        // 引用 / 公式后面照 Typst 的写法带一个语法空格（@fig 所示 里那个，模板的弱间距会吃掉它），
-        // 用户敲的空格从第二个算起、逐个写成 ~；前面的空格是真空格，可模板在引用前也发弱间距，裸空格会被吃，同样写成 ~
-        if (INLINE_ATOM.has(nodes[i - 1]?.type ?? '')) { const n = /^ */.exec(raw)![0].length; if (n) escaped = ' ' + '~'.repeat(n) + escaped.replace(/^~* /, ''); }
+        // 交叉引用后面的裸空格会被模板的弱间距吃掉（引文后面挨着汉字时也是），用户敲的空格得逐个写成 ~、前面再垫一个语法空格；
+        // 公式、脚注、索引项、缩略语后面的裸空格不会被吃，照写（连打的从第二个起写成 ~），不然一个空格印成两个
+        const prev = nodes[i - 1]?.type ?? '';
+        if (INLINE_ATOM.has(prev)) { const n = /^ */.exec(raw)![0].length; if (n) { const eaten = prev === 'ref' || (prev === 'cite' && CJK_START.test(raw)); escaped = ' ' + '~'.repeat(eaten ? n : n - 1) + escaped.replace(/^~* /, ''); } }
         if (INLINE_ATOM.has(nodes[i + 1]?.type ?? '')) { const n = / *$/.exec(raw)![0].length; if (n) escaped = escaped.replace(/~* $/, '') + '~'.repeat(n); }
         // 汉字加粗 / 强调 / 下划线这类标记两侧，模板补字距的弱间距会把紧挨着的裸空格吃掉——用户在编辑器里敲的空格
         // 预览里就没了。挨着汉字的那种写成 ~ 留住（西文两侧本来就不吃，照旧，别把断行机会换掉）

@@ -22,8 +22,8 @@ import { renderTypstMath, type MathImage } from './typstMath';
 import type { BibEntry } from '../../bib/bibtex';
 import { splitNames } from '../../bib/bibtex';
 
-import { fonts, fontsFor, NO_BORDERS, hasCJK, PT } from './units';
-import { coverPage, titlepageZh, titlepageEn, defensePage, declarationsPage } from './pages';
+import { fonts, fontsFor, NO_BORDERS, hasCJK, PT, FONT } from './units';
+import { coverPage, titlepageZh, titlepageEn, defensePage, declarationsPage, measure, wrap } from './pages';
 import { resolveSwitch, SWITCHES } from '../../model/options';
 import { queryFacts, stylesXml, gapTwips, headingLevels, shown, tw, asianOf, type Facts, type PageSetup } from './template';
 import { THEOREM_NAMES, theoremKind, joinHead } from '../../typst/theorem';
@@ -514,14 +514,26 @@ function abstractPages(ctx: Ctx): Block[] {
   return out;
 }
 
-/** 符号表、缩略语表的两列悬挂（模板 src/pages/terms.typ）：标签列 = 最宽的标签（不超版心 1/3，下限 2.5cm）+ 0.5cm 间距，两列都顶格靠左。
- *  标签是公式时后面垫一个零宽空格：光一个公式的段 Word 当显示公式居中排 */
-function termRow(ctx: Ctx, labels: string[]) {
-  const approx = (t: string) => [...t].reduce((w, c) => w + (hasCJK(c) ? 12 : 6), 0);
-  const cap = (ctx.textWidth / 20) / 3;
-  const labelW = Math.max(2.5 / 2.54 * 72, ...labels.map(approx).filter((w) => w <= cap)) + 0.5 / 2.54 * 72;
-  const cell = (kids: ParagraphChild[], w?: number) => new TableCell({ borders: NO_BORDERS, margins: { top: 0, bottom: 0, left: 0, right: 0 }, width: w ? { size: tw(w), type: WidthType.DXA } : undefined, children: [new Paragraph({ indent: { firstLine: 0 }, alignment: AlignmentType.LEFT, children: kids })] });
-  return (a: ParagraphChild[], b: string) => new TableRow({ children: [cell([...a, new TextRun({ text: '\u200b' })], labelW), cell([new TextRun({ text: b })])] });
+/** 符号表、缩略语表的两列悬挂（模板 src/pages/terms.typ 的 auto-label-width）：首列多宽由整张表的高定——候选宽度是各标签的宽
+ *  （下限 2.5cm、不超版心一半），逐个试排，每行取两格里高的那个求和，标签比列宽的那几行只推自己的说明、每推一行记一行的罚，
+ *  总高最小的胜（同高取宽的）。Word 里推说明的那几行做成一格跨两栏、悬挂缩进到说明栏；标签是公式时后面垫一个零宽空格：光一个公式的段 Word 当显示公式居中排 */
+interface TermRow { label: ParagraphChild[]; labelText: string; desc: string }
+function termTable(ctx: Ctx, rows: TermRow[], all: TermRow[] = rows): Table {
+  const size = ctx.P['font-size'] ?? 12;
+  const sep = 0.5 / 2.54 * 72, min = 2.5 / 2.54 * 72, textW = ctx.textWidth / PT;
+  // 标签的宽：公式按源码估（命令算一个字、字母六成字宽），文字按字量
+  const labelW = (t: string) => (/\\/.test(t) ? [...t.replace(/\\[a-zA-Z]+/g, 'x').replace(/[{}^_$]/g, '')].reduce((w, c) => w + (hasCJK(c) ? size : size * 0.6), 0) : measure(t, size, false, FONT.en));
+  const allW = all.map((r) => labelW(r.labelText));
+  const candidates = [...new Set([min, ...allW.filter((w) => w > min && w <= textW / 2)].map((w) => Math.round(w * 100) / 100))].sort((a, b) => a - b);
+  const cost = (width: number) => { const rest = textW - width - sep; return all.reduce((sum, r, i) => sum + Math.max(1, wrap(r.desc, size, rest).length) + (allW[i] > width ? 1 : 0), 0); };
+  let best = candidates[0], bestCost = cost(best);
+  for (const w of candidates.slice(1)) { const c = cost(w); if (c <= bestCost) { best = w; bestCost = c; } }
+  const widths = rows.map((r) => labelW(r.labelText));
+  const cell = (kids: ParagraphChild[], w?: number, span?: number, hang?: number) => new TableCell({ borders: NO_BORDERS, margins: { top: 0, bottom: 0, left: 0, right: 0 }, columnSpan: span, width: w ? { size: tw(w), type: WidthType.DXA } : undefined, children: [new Paragraph({ indent: hang ? { left: tw(hang), hanging: tw(hang) } : { firstLine: 0 }, alignment: AlignmentType.LEFT, children: kids })] });
+  const trs = rows.map((r, i) => (widths[i] > best
+    ? new TableRow({ children: [cell([...r.label, new TextRun({ text: ' ' }), new TextRun({ text: r.desc })], undefined, 2, best + sep)] })
+    : new TableRow({ children: [cell([...r.label, new TextRun({ text: '​' })], best + sep), cell([new TextRun({ text: r.desc })])] })));
+  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: [tw(best + sep), ctx.textWidth - tw(best + sep)], rows: trs });
 }
 function nomenclature(ctx: Ctx): Block[] {
   const { doc } = ctx;
@@ -530,25 +542,20 @@ function nomenclature(ctx: Ctx): Block[] {
   const wantAbbr = resolvePage(doc, 'abbreviationsPage').value && doc.abbreviations.length;
   if (!wantSym && !wantAbbr) return out;
   // 两张都排且合成一页：「符号及缩略语」一个标题，两段各一个小标题（模板 nomenclatureMerged）
+  const symRows: TermRow[] = doc.symbols.map((e) => ({ label: [mathXml(e.symbol, e.mode === 'typst' ? 'typst' : 'latex', ctx) ?? new TextRun({ text: e.symbol })], labelText: e.symbol, desc: e.meaning }));
+  const abbrRows: TermRow[] = doc.abbreviations.map((a) => ({ label: [new TextRun({ text: a.short || a.key })], labelText: a.short || a.key, desc: ctx.s.lang === 'en' ? a.longEn || a.long : a.long + (a.longEn ? `（${a.longEn}）` : '') }));
+  // 两张都排且合成一页：「符号及缩略语」一个标题，两段各一个小标题（模板 nomenclatureMerged），首列宽按两张表的全部行一起算
   if (wantSym && wantAbbr && resolvePage(doc, 'nomenclatureMerged').value) {
-    const row = termRow(ctx, [...doc.symbols.map((e) => e.symbol), ...doc.abbreviations.map((a) => a.short || a.key)]);
     // 合并页的小标题默认照成果页的组名（模板 nomenclature form: auto → "achievements"，group-heading）
     const sub = (t: string) => new Paragraph({ style: 'GroupHeading', keepNext: true, children: [new TextRun({ text: t })] });
     out.push(...titlePara(ctx, "符号及缩略语", 'Nomenclature'), sub("物理量名称及符号表"));
-    out.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: doc.symbols.map((e) => row([mathXml(e.symbol, e.mode === 'typst' ? 'typst' : 'latex', ctx) ?? new TextRun({ text: e.symbol })], e.meaning)) }));
+    out.push(termTable(ctx, symRows, [...symRows, ...abbrRows]));
     out.push(sub("缩略语表"));
-    out.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: doc.abbreviations.map((a) => row([new TextRun({ text: a.short || a.key })], ctx.s.lang === 'en' ? a.longEn || a.long : a.long + (a.longEn ? `（${a.longEn}）` : ''))) }));
+    out.push(termTable(ctx, abbrRows, [...symRows, ...abbrRows]));
     return out;
   }
-  const row = termRow(ctx, [...doc.symbols.map((e) => e.symbol), ...doc.abbreviations.map((a) => a.short || a.key)]);
-  if (wantSym) {
-    out.push(...titlePara(ctx, "物理量名称及符号表", 'List of Physical Quantities and Symbols'));
-    out.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: doc.symbols.map((e) => row([mathXml(e.symbol, e.mode === 'typst' ? 'typst' : 'latex', ctx) ?? new TextRun({ text: e.symbol })], e.meaning)) }));
-  }
-  if (wantAbbr) {
-    out.push(...titlePara(ctx, "缩略语表", 'List of Abbreviations'));
-    out.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: doc.abbreviations.map((a) => row([new TextRun({ text: a.short || a.key })], ctx.s.lang === 'en' ? a.longEn || a.long : a.long + (a.longEn ? `（${a.longEn}）` : ''))) }));
-  }
+  if (wantSym) { out.push(...titlePara(ctx, "物理量名称及符号表", 'List of Physical Quantities and Symbols')); out.push(termTable(ctx, symRows)); }
+  if (wantAbbr) { out.push(...titlePara(ctx, "缩略语表", 'List of Abbreviations')); out.push(termTable(ctx, abbrRows)); }
   return out;
 }
 
@@ -850,6 +857,8 @@ async function postprocess(blob: Blob, W: ReturnType<typeof wordLinebreakOptions
   // 首行缩进清零的段：Normal 写的是 firstLineChars（按字），直接格式里光写 firstLine=0 压不过它，Chars 也要清零
   const dp = 'word/document.xml';
   let dx = (await zip.file(dp)!.async('string')).replace(/<w:ind w:firstLine="0"\/>/g, '<w:ind w:firstLineChars="0" w:firstLine="0"/>').replace(/<w:ind w:left="(\d+)" w:firstLine="0"\/>/g, '<w:ind w:left="$1" w:firstLineChars="0" w:firstLine="0"/>');
+  // 悬挂缩进同理：样式里的 firstLineChars 会压过直接格式的 hanging，一并清零
+  dx = dx.replace(/<w:ind ([^>]*w:hanging="[^"]*"[^>]*)\/>/g, (m, a: string) => (a.includes('firstLineChars') ? m : `<w:ind w:firstLineChars="0" ${a}/>`));
   dx = frameFloats(dx);
   dx = foldSectPr(dx);
   // 脚注号画圈（模板用 quan 包画 ①②…）：Word 的 decimalEnclosedCircle，全文连续编号（模板不按页重编）；每一节的节属性里都写（settings.xml 里那份只是默认）
