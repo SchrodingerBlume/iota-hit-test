@@ -22,6 +22,7 @@ import { EditorEnvContext, type EditorEnv } from '../editor/env';
 import { imageBytes, putImage, safeImageName, imageDimensions } from '../editor/imageCache';
 import { ProjectsView } from './ProjectsView';
 import { FontRecovery } from './FontRecovery';
+import { FontOnboarding } from './FontOnboarding';
 import { useFontState } from '../fonts/userFonts';
 import { SettingsPanel } from './SettingsPanel';
 import { InfoPanel, CoverPanel, TitlepagePanel } from './InfoPanel';
@@ -386,6 +387,7 @@ export function App() {
     <EditorEnvContext.Provider value={env}>
       <FluentProvider theme={theme === 'dark' ? fluentDark : fluentLight} className="fluent-root">
       <FontRecovery />
+      <FontOnboarding />
       <div className="app">
         {/* 顶栏并进功能区那一行：左边照 Word 的快速访问工具栏——主页、保存、撤消 / 恢复、导出；右边状态、主题 */}
         {(() => { const canExportPdf = hasDocument && compile.status === 'ready' && !busy; const leading = (

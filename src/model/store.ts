@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { ThesisDoc, Settings, Info, RichDoc, Pages, Abbreviation, SymbolEntry, Defense, DefensePerson, ImageAsset, NomenclatureOptions, DeclarationsOptions, Comment, OpenrightKey, TriBool, LocalInfoPage } from './types';
 import { emptyDoc } from './types';
 import { defaultSettings } from './options';
+import { rememberedFontset } from '../fonts/pref';
 import { defaultInfo } from './info';
 import { kv, saveProject, loadProject, deleteProjectRecord, allProjects, getActiveProjectId, setActiveProjectId, loadLegacyDoc, clearLegacyDoc, setImageNamespace, saveImage, loadImage, listImageKeys, copyImageRaw, deleteImageKey } from './persist';
 import { clearImageCache } from '../editor/imageCache';
@@ -22,7 +23,7 @@ export const newDoc = (): ThesisDoc => ({
   id: crypto.randomUUID(),
   name: t("未命名论文"),
   updatedAt: new Date().toISOString(),
-  settings: defaultSettings(),
+  settings: { ...defaultSettings(), fontset: rememberedFontset() ?? 'webapp' },
   info: defaultInfo(),
   abstractZh: emptyDoc(),
   abstractEn: emptyDoc(),
