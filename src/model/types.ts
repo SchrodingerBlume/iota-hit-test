@@ -93,7 +93,6 @@ export interface Settings {
   abbreviationLinks: TriBool;
   abbreviationIndexed: TriBool;
   titleSpread: TriBool;
-  fakeBold: TriBool;
   /** 西文断字（Typst text.hyphenate）；auto ＝ 模板关着（Word 默认不断字） */
   hyphenate: TriBool;
   /** 摘要正文与关键词之间：auto ＝ 空一行（指南），none ＝ 不空，bottom ＝ 关键词挤到页底（v(1fr)） */

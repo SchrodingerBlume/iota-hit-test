@@ -65,8 +65,10 @@ export function normalizeDoc(raw: Partial<ThesisDoc>): ThesisDoc {
   const doc: ThesisDoc = { ...base, ...raw, version: 1 } as ThesisDoc;
   doc.settings = { ...base.settings, ...(raw.settings ?? {}) };
   // 强调一律伪斜（要楷体的自己换字族）：旧工程的「中文伪斜」「强调排楷体」两个开关都不要了
+  // 模拟中文粗体也不要开关：模板自己按字体定（缺粗体面就描边）
   delete (doc.settings as any).fakeItalic;
   delete (doc.settings as any).emphKaishu;
+  delete (doc.settings as any).fakeBold;
   doc.info = { ...base.info, ...(raw.info ?? {}) };
   doc.pages = { ...base.pages, ...(raw.pages ?? {}) };
   // 迁移旧工程：将符号表与缩略语表总开关拆分；false 保留，true 转为 auto。

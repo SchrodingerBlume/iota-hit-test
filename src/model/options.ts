@@ -317,18 +317,6 @@ export const SWITCHES: SwitchDef<any>[] = [
       : { value: 'cjk', reason: t("按原件使用中文破折号") }),
   },
   {
-    key: 'fakeBold',
-    label: t("模拟中文粗体"),
-    hint: t("模拟加粗"),
-    choices: onOff,
-    group: t("字体"),
-    resolve: (s) => (s.fontset === 'windows'
-      ? { value: true, reason: t("中易宋体和楷体缺少粗体字形，使用描边模拟加粗。") }
-      : s.fontset === 'macos'
-        ? { value: false, mixed: t("自动检测字体"), reason: t("按字体") }
-        : { value: true, mixed: t("自动检测字体"), reason: t("按字体") }),
-  },
-  {
     key: 'bibliographyFull',
     label: t("参考文献列出范围"),
     hint: t("列出全部条目或仅列已引用条目"),
@@ -681,7 +669,6 @@ export const defaultSettings = (): Settings => ({
   abbreviationLinks: 'auto',
   abbreviationIndexed: 'auto',
   titleSpread: 'auto',
-  fakeBold: 'auto',
   hyphenate: 'auto',
   abstractKeywordsAbove: 'auto',
   emDash: 'auto',

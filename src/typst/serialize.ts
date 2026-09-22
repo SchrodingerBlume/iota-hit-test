@@ -223,7 +223,6 @@ function settingsArgs(s: Settings): string[] {
     ['abbreviationLinks', 'abbreviation-links'],
     ['abbreviationIndexed', 'abbreviation-indexed'],
     ['titleSpread', 'two-hanzi'],
-    ['fakeBold', 'fake-bold'],
   ];
   for (const [key, param] of bools) {
     const v = s[key];
