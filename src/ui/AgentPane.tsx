@@ -2,7 +2,7 @@
 // 它读、改文档走 src/ai/tools.ts 那几件工具，每一步在对话里留一张卡；要改设置时弹授权卡等用户点
 import { useEffect, useRef, useState } from 'react';
 import { Button, Textarea, Tooltip, Popover, PopoverTrigger, PopoverSurface, Input, Spinner } from '@fluentui/react-components';
-import { Settings20Regular, Dismiss20Regular, Send20Regular, Stop20Regular, Add20Regular, History20Regular, Delete16Regular, Star16Regular, Star16Filled, Rename16Regular, Checkmark16Regular, ChevronRight12Regular, ChevronDown12Regular, Attach20Regular, Dismiss12Regular, Image16Regular, DocumentPdf16Regular, DocumentText16Regular, BotSparkle20Regular, ShieldCheckmark20Regular } from '@fluentui/react-icons';
+import { Settings20Regular, Dismiss20Regular, Send20Regular, Stop20Regular, Add20Regular, History20Regular, Delete16Regular, WindowMultiple20Regular, PanelRightContract20Regular, Star16Regular, Star16Filled, Rename16Regular, Checkmark16Regular, ChevronRight12Regular, ChevronDown12Regular, Attach20Regular, Dismiss12Regular, Image16Regular, DocumentPdf16Regular, DocumentText16Regular, BotSparkle20Regular, ShieldCheckmark20Regular } from '@fluentui/react-icons';
 import { useAgent, type ToolCard, type ChatMeta, type ChatItem } from '../ai/state';
 import { useStore } from '../model/store';
 import { configReady, providerLabel } from '../ai/config';
@@ -11,6 +11,8 @@ import { fmtSize, type Attachment } from '../ai/files';
 import { AgentSettings } from './AgentSettings';
 import { ChatMarkdown } from './ChatMarkdown';
 import { t as tx } from '../i18n';
+import { useAgentWindow } from './agentWindow';
+import { useMedia, COMPACT } from './useMedia';
 
 const QUICK = [
   tx("润色所选段落，保持原意并直接替换"),
@@ -156,6 +158,8 @@ function Card({ c }: { c: ToolCard }) {
 export function AgentPane({ overlay }: { overlay?: boolean }) {
   const { items, running, send, stop, config, setOpen, setSettingsOpen, pending, attach, detach, ask, answer, chats, chatId, newChat, openChat, deleteChat, renameChat, starChat, settings, docProviderId } = useAgent();
   const [chatsOpen, setChatsOpen] = useState(false);
+  const float = useAgentWindow((s) => s.float);
+  const compact = useMedia(COMPACT);
   const provider = settings?.providers.find((p) => p.id === (docProviderId ?? settings.globalId)) ?? settings?.providers[0];
   const [draft, setDraft] = useState('');
   const [drag, setDrag] = useState(false);
@@ -189,6 +193,7 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
             <ChatList chats={chats} current={chatId} onOpen={(id) => { setChatsOpen(false); void openChat(id); }} onDelete={(id) => void deleteChat(id)} onRename={(id, t) => void renameChat(id, t)} onStar={(id, on) => void starChat(id, on)} onNew={() => { setChatsOpen(false); void newChat(); }} />
           </PopoverSurface>
         </Popover>
+        {!compact && <Tooltip content={float ? tx("停靠回右侧") : tx("浮成小窗")} relationship="label"><Button size="small" appearance="subtle" icon={float ? <PanelRightContract20Regular /> : <WindowMultiple20Regular />} onClick={() => useAgentWindow.getState().setFloat(!useAgentWindow.getState().float)} /></Tooltip>}
         <Tooltip content={tx("Agent 设置")} relationship="label"><Button size="small" appearance="subtle" icon={<Settings20Regular />} onClick={() => setSettingsOpen(true)} /></Tooltip>
         <Tooltip content={tx("关闭")} relationship="label"><Button size="small" appearance="subtle" icon={<Dismiss20Regular />} onClick={() => setOpen(false)} /></Tooltip>
       </div>
