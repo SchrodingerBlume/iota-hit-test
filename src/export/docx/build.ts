@@ -10,6 +10,7 @@ import type { ThesisDoc, Settings, RichDoc, Comment } from '../../model/types';
 import type { PMNode } from '../../typst/pmToTypst';
 import { labelOf, CAPTION_CITE, captionCiteKeys, parseDenoteRows } from '../../typst/pmToTypst';
 import { parseSubs, subLayout, subNumber, CORNERS, type SubFig, type SubItem } from '../../typst/subfigs';
+import { splitDollarMath } from '../../typst/inlineMath';
 import { computeNumbering, type NumberInfo } from '../../typst/numbering';
 import { resolvePage } from '../../model/pages';
 import { wordLinebreakOptions } from '../../typst/serialize';
@@ -55,17 +56,20 @@ interface Ctx {
 const text = (n: PMNode): string => (n.content ?? []).map((c) => (c.type === 'text' ? c.text ?? '' : c.type === 'hardBreak' ? '\n' : c.content ? text(c) : '')).join('');
 
 /** LaTeX 先清一遍再喂 MathLive：\label、\tag、\nonumber、equation 环境壳、\hline 它不认；有几条命令它吐空或吐错，换成它认的写法 */
-const cleanLatex = (src: string) => src
+export const cleanLatex = (src: string) => src
   .replace(/\\(label|tag\*?)\{[^}]*\}/g, '').replace(/\\nonumber|\\notag|\\displaystyle/g, '')
   .replace(/\\begin\{(equation|displaymath)\*?\}|\\end\{(equation|displaymath)\*?\}/g, '').replace(/\\hline/g, '')
   .replace(/\\overline\{/g, '\\bar{').replace(/\\overrightarrow\{/g, '\\vec{').replace(/\\mbox\{/g, '\\text{').replace(/\\hspace\{[^}]*\}/g, '\\quad ')
   .replace(/\\iff\b/g, '\\Leftrightarrow ').replace(/\\longrightarrow\b/g, '\\rightarrow ').replace(/\\longleftarrow\b/g, '\\leftarrow ').replace(/\\not=/g, '\\neq ')
   .replace(/\\bmod\b/g, '\\;\\mathrm{mod}\\;').replace(/\\liminf\b/g, '\\operatorname{lim\\,inf}').replace(/\\limsup\b/g, '\\operatorname{lim\\,sup}')
+  // \operatorname*{argmax}_{j}、\mathop{…}_{j}：MathLive 把算符名整个丢掉只剩下标，改写成 \underset
+  .replace(/\\operatorname\*\{([^{}]*)\}\s*_\{((?:[^{}]|\{[^{}]*\})*)\}/g, '\\underset{$2}{\\mathrm{$1}}').replace(/\\operatorname\*\{([^{}]*)\}/g, '\\mathrm{$1}')
+  .replace(/\\mathop\{\\mathrm\{([^{}]*)\}\}\s*_\{((?:[^{}]|\{[^{}]*\})*)\}/g, '\\underset{$2}{\\mathrm{$1}}')
   .trim();
 /** MathLive 的 MathML 导出会把这几条的内容丢掉（\underbrace{a+b} 只剩 ⏟）或干脆不认——直接退回画图 */
-const UNSUPPORTED = /\\(underbrace|overbrace|underline|overleftrightarrow|overleftarrow|underrightarrow|underleftarrow|phantom|vphantom|hphantom|smash|substack|sideset|ce|SI|si|num|xrightarrow|xleftarrow|stackrel|overset|underset|mathring|widehat|widetilde|cancel|bcancel|xcancel|boxed|color|textcolor|begin\{(?:split|multline|gather|gathered|alignat|flalign|eqnarray)\*?\})/;
+const UNSUPPORTED = /\\(underbrace|overbrace|underline|overleftrightarrow|overleftarrow|underrightarrow|underleftarrow|phantom|vphantom|hphantom|smash|substack|sideset|ce|SI|si|num|xrightarrow|xleftarrow|stackrel|overset|underset|mathring|widehat|widetilde|cancel|bcancel|xcancel|boxed|color|textcolor|begin\{(?:split|multline|gather|gathered|alignat|flalign|eqnarray)\*?\})(?![A-Za-z])/;
 /** LaTeX → OMML；转不过就 null（merror、空、丢内容、抛错都算） */
-function latexOmml(src: string, display: boolean, number: string): ParagraphChild | null {
+export function latexOmml(src: string, display: boolean, number: string): ParagraphChild | null {
   try {
     if (UNSUPPORTED.test(src)) return null;
     const mml = convertLatexToMathMl(cleanLatex(src));
@@ -195,7 +199,10 @@ const captionPara = (ctx: Ctx, num: string, title: PMNode[] | string, en: string
   const numKids: ParagraphChild[] = num ? [opts.node && opts.prefix ? numRun(ctx, opts.node, opts.prefix, num) : new TextRun({ text: num }), new TextRun({ text: '  ' })] : [];
   const figLast = (isLast: boolean) => (opts.kind === 'figure' && last && isLast ? 'FigureCaption' : 'Caption');
   const out = [new Paragraph({ style: opts.kind === 'table' ? 'TableCaption' : figLast(!bilingual), keepNext: opts.kind !== 'figure' || undefined, children: [...numKids, ...kids] })];
-  if (bilingual) out.push(new Paragraph({ style: figLast(true), keepNext: opts.kind !== 'figure' || undefined, children: captionRuns(ctx, en!) }));
+  // 英文题注的号：图 1-1 → Fig. 1-1（深圳校区 Figure）、表 → Table、算法 → Algo.、代码 → Listing
+  const sz = ctx.s.campus === 'shenzhen';
+  const numEn = num.replace(/^图\s*/, sz ? 'Figure ' : 'Fig. ').replace(/^表\s*/, 'Table ').replace(/^算法\s*/, sz ? 'Algorithm ' : 'Algo. ').replace(/^代码\s*/, 'Listing ');
+  if (bilingual) out.push(new Paragraph({ style: figLast(true), keepNext: opts.kind !== 'figure' || undefined, children: [...(num ? [new TextRun({ text: numEn }), new TextRun({ text: '  ' })] : []), ...captionRuns(ctx, en!)] }));
   return out;
 };
 /** 表块之下那几行：Word 的表自己不带段后距，用一个定高的空段 */
@@ -250,6 +257,8 @@ function figure(ctx: Ctx, n: PMNode): Block[] {
   const markNum = (i: number) => subNumber(String(n.attrs?.subLabelPattern || '') || pattern, i + 1);
   const bilingual = ctx.s.lang !== 'en' && sw<boolean>('subcaptionBilingual', ctx.s);
   const subCap = (s: SubFig, i: number) => `${subNum(i)} ${s.caption ?? ''}${bilingual && (s.captionEn ?? '').trim() ? `  ${s.captionEn!.trim()}` : ''}`;
+  // 分图之下的题：中文一行、英文一行（模板双语时各带分图号）
+  const subCaps = (s: SubFig, i: number) => [new Paragraph({ style: 'Caption', children: [new TextRun({ text: `${subNum(i)} ${s.caption ?? ''}` })] }), ...(bilingual && (s.captionEn ?? '').trim() ? [new Paragraph({ style: 'Caption', children: [new TextRun({ text: `${subNum(i)} ${s.captionEn!.trim()}` })] })] : [])];
   // 合成图配连排分图题：图照单图排，分图题在图题下一行「(a) … (b) …」
   if (subs.length && n.attrs?.image && !subs.some((s) => s.image)) {
     const img = image(ctx, String(n.attrs.image), cmOf(n.attrs?.width, 8));
@@ -263,7 +272,7 @@ function figure(ctx: Ctx, n: PMNode): Block[] {
     const one = (i: number, w: number): (Paragraph | Table)[] => {
       const s = shown[i]; const m = subMark(n, s);
       const key = m && ctx.images.has(subKey(s.image, markNum(i), m)) ? subKey(s.image, markNum(i), m) : s.image;
-      return [centered([image(ctx, key, s.width && s.width !== 'auto' ? cmOf(s.width, w) : w)].filter((x): x is ParagraphChild => !!x)), new Paragraph({ style: 'Caption', children: [new TextRun({ text: subCap(s, i) })] })];
+      return [centered([image(ctx, key, s.width && s.width !== 'auto' ? cmOf(s.width, w) : w)].filter((x): x is ParagraphChild => !!x)), ...subCaps(s, i)];
     };
     const cellOf = (kids: (Paragraph | Table)[], margin = gut) => new TableCell({ borders: NO_BORDERS, verticalAlign: VerticalAlign.BOTTOM, margins: { top: 0, bottom: 0, left: margin, right: margin }, children: kids });
     const rows = subLayout(shown, Number(n.attrs?.columns));
@@ -345,10 +354,14 @@ function eqdenote(ctx: Ctx, n: PMNode): Block[] {
   // 符号栏的宽按最宽的符号估（命令算一个字、字母六成字宽、汉字一个字），Word 自动调整会把说明栏挤扁
   const approx = (t: string) => [...t.replace(/\\[a-zA-Z]+/g, 'x').replace(/[{}^_\\$]/g, '')].reduce((w, c) => w + (hasCJK(c) ? 1 : 0.6), 0);
   const symW = Math.round(Math.max(1, ...rows.map((r) => approx(r.symbol ?? ''))) * ch) + Math.round(0.5 * ch);
-  const widths = [leadW, symW, 2 * ch, Math.max(ch, ctx.textWidth - leadW - symW - 2 * ch)];
+  // 破折号那一栏两个字宽还差一点会折成两行，给 2.6 字
+  const dashW = Math.round(2.6 * ch);
+  const widths = [leadW, symW, dashW, Math.max(ch, ctx.textWidth - leadW - symW - dashW)];
   const cell = (kids: ParagraphChild[], jc: (typeof AlignmentType)[keyof typeof AlignmentType], w: number) => new TableCell({ borders: NO_BORDERS, margins: { top: 0, bottom: 0, left: 0, right: 0 }, width: { size: w, type: WidthType.DXA }, children: [new Paragraph({ indent: { firstLine: 0 }, alignment: jc, children: kids })] });
   const sym = (r: { symbol: string; mode: string }) => r.symbol.split(/[、,，]/).map((x) => x.trim()).filter(Boolean).flatMap((x, i) => [...(i ? [new TextRun({ text: '、' })] : []), mathXml(x, r.mode === 'typst' ? 'typst' : 'latex', ctx) ?? new TextRun({ text: x, italics: true })]);
-  const trs = rows.map((r, i) => new TableRow({ children: [cell(i === 0 && lead ? [new TextRun({ text: lead })] : [], AlignmentType.LEFT, widths[0]), cell([...sym(r), new TextRun({ text: '\u200b' })], AlignmentType.RIGHT, widths[1]), cell([new TextRun({ text: '——' })], AlignmentType.CENTER, widths[2]), cell([new TextRun({ text: (r.meaning ?? '').trim() })], AlignmentType.LEFT, widths[3])] }));
+  // 说明里夹的 $…$ 是 LaTeX 公式
+  const meaning = (t: string) => splitDollarMath(t.trim()).map((x) => (x.math ? mathXml(x.src, 'latex', ctx) ?? new TextRun({ text: x.src, italics: true }) : new TextRun({ text: x.text })));
+  const trs = rows.map((r, i) => new TableRow({ children: [cell(i === 0 && lead ? [new TextRun({ text: lead })] : [], AlignmentType.LEFT, widths[0]), cell([...sym(r), new TextRun({ text: '\u200b' })], AlignmentType.RIGHT, widths[1]), cell([new TextRun({ text: '——' })], AlignmentType.CENTER, widths[2]), cell(meaning(r.meaning ?? ''), AlignmentType.LEFT, widths[3])] }));
   return [new Table({ width: { size: ctx.textWidth, type: WidthType.DXA }, columnWidths: widths, layout: 'fixed' as any, borders: { ...NO_BORDERS, insideHorizontal: NO_BORDERS.top, insideVertical: NO_BORDERS.top }, rows: trs })];
 }
 
@@ -469,7 +482,8 @@ function blocks(ctx: Ctx, nodes: PMNode[] = [], part: 'body' | 'appendix' | 'oth
       default: if (n.content) out.push(...blocks(ctx, n.content, part, depth));
     }
   }
-  return out;
+  // 两张表挨着 Word 会并成一张（公式那张三栏表后面紧跟「式中」的四栏表，格子就被挤到一个网格里），中间垫一个 1 缇高的空段
+  return out.flatMap((b, i) => (i && b instanceof Table && out[i - 1] instanceof Table ? [gapPara(1), b] : [b]));
 }
 
 // ── 页 ───────────────────────────────────────────────────────────
@@ -631,7 +645,10 @@ async function renderTypstFormulas(ctx: Ctx) {
       const src = String(n.attrs?.src ?? ''), display = n.type === 'equation';
       if (n.attrs?.mode === 'typst') jobs.set(`${display ? 'D' : 'I'}${src}`, { src, display }); else latexJob(src, display);
     }
-    if (n.type === 'eqdenote') for (const r of parseDenoteRows(n.attrs?.rows)) for (const x of (r.symbol ?? '').split(/[、,，]/).map((t) => t.trim()).filter(Boolean)) { if (r.mode === 'typst') jobs.set(`I${x}`, { src: x, display: false }); else latexJob(x, false); }
+    if (n.type === 'eqdenote') for (const r of parseDenoteRows(n.attrs?.rows)) {
+      for (const x of (r.symbol ?? '').split(/[、,，]/).map((t) => t.trim()).filter(Boolean)) { if (r.mode === 'typst') jobs.set(`I${x}`, { src: x, display: false }); else latexJob(x, false); }
+      for (const x of splitDollarMath(r.meaning ?? '')) if (x.math) latexJob(x.src, false);
+    }
     for (const c of n.content ?? []) walk(c);
   };
   for (const k of ['abstractZh', 'abstractEn', 'body', 'conclusion', 'appendix', 'acknowledgement', 'resume'] as const) walk(ctx.doc[k] as PMNode);

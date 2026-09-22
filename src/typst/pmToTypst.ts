@@ -21,6 +21,7 @@ import { lengthTypst } from '../model/length';
 /** 分图 / 伪代码的属性都是 JSON 串（与 eqdenote 的 rows 同一套路） */
 export function parseJsonArr<T>(v: unknown): T[] { if (Array.isArray(v)) return v as T[]; if (typeof v !== 'string' || !v) return []; try { const a = JSON.parse(v); return Array.isArray(a) ? a : []; } catch { return []; } }
 import { parseSubs, subLayout, CORNERS, type SubFig, type SubItem } from './subfigs';
+import { splitDollarMath } from './inlineMath';
 const parseIo = (v: unknown) => parseJsonArr<string>(v);
 const parseLines = (v: unknown) => parseJsonArr<{ text: string; level: number }>(v);
 /** 图注 / 表注：接在图或表正身之后（模板 note，排在写的位置）；引导词空着 = 默认「注：」，「无」= 不印 */
@@ -512,7 +513,9 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
       const term = (sym: string, mode: string) => sym.split(/[、,，]/).map((x) => x.trim()).filter(Boolean).map((x) => !mathReady(x) ? '#box[]' : mode === 'typst' ? `$${x}$` : `#mi(${backtick(x)})`).join('、');
       const lines = rows.map((r, i) => {
         const meaning = r.meaning.trim();
-        const body = opts.map ? mark('attr', opts.map.key, opts.map.posOf.get(n) ?? 0, (opts.map.posOf.get(n) ?? 0) + 1, escapeText(meaning), { attr: `rows.${i}.meaning`, raw: meaning }) : escapeText(meaning);
+        // 说明里夹的 $…$ 当 LaTeX 公式（#mi），其余照字转义
+        const typ = splitDollarMath(meaning).map((x) => (x.math ? (mathReady(x.src) ? `#mi(${backtick(x.src)})` : '#box[]') : escapeText(x.text))).join('');
+        const body = opts.map ? mark('attr', opts.map.key, opts.map.posOf.get(n) ?? 0, (opts.map.posOf.get(n) ?? 0) + 1, typ, { attr: `rows.${i}.meaning`, raw: meaning }) : typ;
         return `  / ${term(r.symbol, r.mode)}: ${body}`;
       });
       const lead = n.attrs?.lead === 'none' ? 'lead: none' : n.attrs?.lead && n.attrs.lead !== 'auto' ? `lead: [${escapeText(String(n.attrs.lead))}]` : '';

@@ -1072,6 +1072,12 @@ body.is-dragging-window iframe, body.is-dragging-window .preview-stage { pointer
 .denote-dash { color: var(--ink); letter-spacing: -0.1em; }
 .denote-meaning input { width: 100%; border: 0; border-bottom: 1px dashed transparent; background: none; font-family: var(--serif); font-size: 15px; color: var(--ink); padding: 2px 0; outline: 0; }
 .denote-meaning input:hover, .denote-meaning input:focus { border-bottom-color: var(--line-2); }
+.denote-meaning-cell { display: flex; align-items: center; gap: 4px; }
+.denote-meaning-cell input, .denote-rich { flex: 1; min-width: 0; }
+.denote-rich { font-family: var(--serif); font-size: 15px; color: var(--ink); padding: 2px 0; border-bottom: 1px dashed transparent; cursor: text; }
+.denote-rich:hover { border-bottom-color: var(--line-2); }
+.denote-fx { opacity: 0; font-family: var(--serif); font-style: italic; }
+.denote-grid:hover .denote-fx, .denote-meaning-cell:focus-within .denote-fx, .blk.is-selected .denote-fx { opacity: 1; }
 .denote-del { opacity: 0; }
 .denote-grid:hover .denote-del, .blk.is-selected .denote-del { opacity: 1; }
 .denote-pop { position: relative; }

@@ -12,6 +12,7 @@ import { useOpenNonce, focusAttrInput } from '../env';
 import { Trash2, Plus, X } from 'lucide-react';
 import { t } from '../../i18n';
 import { MirrorInput } from '../mirror';
+import { splitDollarMath } from '../../typst/inlineMath';
 
 const LEADS: { value: string; label: string; hint: string }[] = [
   { value: 'auto', label: t("式中"), hint: t("按文档语言显示“式中”或“where”") },
@@ -47,6 +48,36 @@ function SymbolCell({ row, onChange, editable }: { row: DenoteRow; onChange: (r:
   );
 }
 
+/** 说明那一格：文字里可以夹 $…$ 的 LaTeX 公式。没在编辑时把公式渲染出来看，点一下回到输入框；Σ 按钮在光标处插一对 $ */
+function MeaningCell({ row, index, editable, onChange, onKeyDown }: { row: DenoteRow; index: number; editable: boolean; onChange: (v: string) => void; onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void }) {
+  const [editing, setEditing] = useState(false);
+  const ref = useRef<HTMLInputElement>(null);
+  const segs = splitDollarMath(row.meaning);
+  const rich = segs.some((x) => x.math);
+  useEffect(() => { if (editing) { ref.current?.focus(); } }, [editing]);
+  const insertMath = () => {
+    const el = ref.current;
+    const at = el && document.activeElement === el ? el.selectionStart ?? row.meaning.length : row.meaning.length;
+    const next = `${row.meaning.slice(0, at)}$$${row.meaning.slice(at)}`;
+    onChange(next);
+    setEditing(true);
+    requestAnimationFrame(() => { const e2 = ref.current; if (e2) { e2.focus(); e2.setSelectionRange(at + 1, at + 1); } });
+  };
+  return (
+    <span className="denote-meaning-cell">
+      {rich && !editing ? (
+        <span className="denote-rich" title={t("单击编辑；公式写成 $…$")} onClick={() => setEditing(true)}>
+          {segs.map((x, k) => (x.math ? <MathPreview key={k} src={forPreview(x.src, 'latex')} mode="latex" /> : <span key={k}>{x.text}</span>))}
+        </span>
+      ) : (
+        <MirrorInput ref={ref} data-attr={`rows.${index}.meaning`} value={row.meaning} placeholder={t("物理量的名称与单位，如：多孔质材料的平均粒子直径（m）；公式写成 $…$")} disabled={!editable}
+          onChange={(e) => onChange(e.target.value)} onBlur={() => setEditing(false)} onKeyDown={onKeyDown} />
+      )}
+      <button type="button" className="blk-tool is-btn denote-fx" title={t("插入公式（$…$，LaTeX）")} disabled={!editable} onMouseDown={(e) => e.preventDefault()} onClick={insertMath}>Σ</button>
+    </span>
+  );
+}
+
 function EqDenoteView({ node, updateAttributes, selected, deleteNode, editor, getPos }: NodeViewProps) {
   const editable = editor.isEditable;
   const rows = parseDenoteRows(node.attrs.rows);
@@ -69,8 +100,7 @@ function EqDenoteView({ node, updateAttributes, selected, deleteNode, editor, ge
             <span className="denote-sym"><SymbolCell row={r} editable={editable} onChange={(p) => patch(i, p)} /></span>
             <span className="denote-dash">——</span>
             <span className="denote-meaning">
-              <MirrorInput data-attr={`rows.${i}.meaning`} value={r.meaning} placeholder={t("物理量的名称与单位，如：多孔质材料的平均粒子直径（m）")} disabled={!editable}
-                onChange={(e) => patch(i, { meaning: e.target.value })}
+              <MeaningCell row={r} index={i} editable={editable} onChange={(v) => patch(i, { meaning: v })}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') { e.preventDefault(); add(i); requestAnimationFrame(() => focusAttrInput(wrap.current, `rows.${i + 1}.meaning`, 0)); }
                   if (e.key === 'Backspace' && !r.meaning && !r.symbol && rows.length > 1) { e.preventDefault(); remove(i); requestAnimationFrame(() => focusAttrInput(wrap.current, `rows.${Math.max(0, i - 1)}.meaning`, undefined)); }
