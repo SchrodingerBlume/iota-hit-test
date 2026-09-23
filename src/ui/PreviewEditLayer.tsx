@@ -17,6 +17,7 @@ import { buildIndex, mergeIndex, patchIndex, linesOfRange, caretRect, attrCaret,
 import { t as tx } from '../i18n';
 import { useInputState } from '../editor/inputState';
 import { applyLineShift, restoreLineShift } from './previewShift';
+import { calibrate, textWidth, planEcho, rightEdgeOf, leftEdgeOf } from './echoBreak';
 
 const KEY_SECTION: Record<RichKey, Section> = {
   body: 'body', appendix: 'appendix', conclusion: 'conclusion', acknowledgement: 'acknowledgement', resume: 'resume',
@@ -794,7 +795,13 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
   const caretH = caret && caretPx ? caret.h * caretPx.scale : 0;
   const fadingText = !pendingText && composing === null && fading && fading.key === activeKey ? fading.text : '';
   const overlayText = composing !== null ? composing : pendingText || fadingText;
-  const overlayW = useMemo(() => (overlayText && caretH && !fadingText ? measureText(overlayText, caretH * 0.92) : 0), [overlayText, caretH, fadingText]);
+  // 暂印那几个字占多宽：按光标那一行标定出来的字格 / 西文量法算（canvas 的通用字体栈量不准）
+  const echoMetrics = useMemo(() => (caret ? calibrate(caret.line) : null), [caret]);
+  const overlayW = useMemo(() => {
+    if (!overlayText || !caretH || fadingText) return 0;
+    if (echoMetrics) return textWidth(overlayText, echoMetrics) * (caretPx?.scale ?? 1);
+    return measureText(overlayText, caretH * 0.92);
+  }, [overlayText, caretH, fadingText, echoMetrics, caretPx]);
   const caretLeft = caretPx ? caretPx.left + overlayW : 0;
   // 等重排那一会儿：光标后面同一行的字形就地让开暂印的那几个字，删掉的字形当场藏起来（藏不住的仍用纸色遮）
   const [hiddenGone, setHiddenGone] = useState<Set<(typeof gone)[number]>>(() => new Set());
@@ -804,7 +811,13 @@ export function PreviewEditLayer({ docRef, scrollRef, renderTick }: { docRef: Re
     if (!caret || !pageG || (!overlayW && !gone.length) || fadingText) { restoreLineShift(); setHiddenGone((h) => (h.size ? new Set() : h)); return; }
     const scale = caretPx?.scale || 1;
     const onLine = gone.filter((g) => g.page === caret.page && g.y + g.h > caret.y && g.y < caret.y + caret.h && g.x >= caret.x - 0.5);
-    const hidden = applyLineShift(pageG, { caret, dx: overlayW / scale - onLine.reduce((w, g) => w + g.w, 0), hide: gone.filter((g) => g.page === caret.page) });
+    const dx = overlayW / scale - onLine.reduce((w, g) => w + g.w, 0);
+    // 行尾放不下的那截折到下一行（同一页的下一行；页内各行的最右端就是版心右缘）
+    const lines = index.pages[caret.page];
+    const next = lines?.find((l) => l.y > caret.y + caret.h / 2) ?? null;
+    const plan = planEcho(caret, dx, next, rightEdgeOf(lines, caret.x + dx), leftEdgeOf(lines, caret.line.glyphs[0]?.x ?? caret.x));
+    if (import.meta.env.DEV) (window as unknown as { __echo?: unknown }).__echo = { dx, right: rightEdgeOf(lines, 0), next: next && next.y, moves: plan.moves.map((m) => ({ from: [Math.round(m.glyph.x), Math.round(m.glyph.y)], to: [Math.round(m.x), Math.round(m.y)] })) };
+    const hidden = applyLineShift(pageG, { caret, dx, hide: gone.filter((g) => g.page === caret.page), moves: plan.moves });
     setHiddenGone(hidden);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caret, overlayW, gone, fadingText, renderTick]);

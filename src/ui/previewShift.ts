@@ -38,6 +38,8 @@ export interface LineShift<G extends { x: number; y: number; w: number; h: numbe
   dx: number;
   /** 要藏起来的字形（左缘 x 与宽） */
   hide: G[];
+  /** 挪到别处去的字形（行尾放不下、折到下一行的那截）：按原位置认，搬到新位置 */
+  moves?: { glyph: { page: number; x: number; y: number; w: number; h: number }; x: number; y: number }[];
 }
 
 /** 在展示层这一页上套一次；返回真藏起来了的那些（剩下的仍要用纸色遮） */
@@ -45,6 +47,20 @@ export function applyLineShift<G extends { x: number; y: number; w: number; h: n
   restoreLineShift();
   const hidden = new Set<G>();
   const y0 = s.caret.y - 0.5, y1 = s.caret.y + s.caret.h + 0.5;
+  // 先把要搬家的字形搬走（可能在光标那一行，也可能在下一行）
+  if (s.moves?.length) for (const run of pageG.querySelectorAll<SVGGElement>('g.typst-text')) {
+    const M = matrixTo(run, pageG);
+    if (!M.a || !M.d) continue;
+    for (const u of run.querySelectorAll<SVGUseElement>(':scope > use')) {
+      const gx = M.a * (parseFloat(u.getAttribute('x') ?? '0') || 0) + M.e;
+      const m = s.moves.find((mv) => Math.abs(mv.glyph.x - gx) < 0.6 && M.f >= mv.glyph.y - 0.5 && M.f <= mv.glyph.y + mv.glyph.h + 0.5);
+      if (!m) continue;
+      set(u, 'x', String((m.x - M.e) / M.a));
+      // 搬到别的行：y 是字形盒顶，基线按原来那行的偏移搬（M.f 是本行基线）
+      const dy = m.y - m.glyph.y;
+      if (Math.abs(dy) > 0.01) set(u, 'y', String(((parseFloat(u.getAttribute('y') ?? '0') || 0) * M.d + dy) / M.d));
+    }
+  }
   for (const run of pageG.querySelectorAll<SVGGElement>('g.typst-text')) {
     const M = matrixTo(run, pageG);
     if (M.f < y0 || M.f > y1 || !M.a) continue;
@@ -56,14 +72,15 @@ export function applyLineShift<G extends { x: number; y: number; w: number; h: n
       if (g) { set(uses[i], 'visibility', 'hidden'); hidden.add(g); }
     }
     if (!s.dx) continue;
-    if (xs[0] >= s.caret.x - 0.5) {
+    const moved = new Set(s.moves?.map((m) => Math.round(m.glyph.x * 10)) ?? []);
+    if (!moved.size && xs[0] >= s.caret.x - 0.5) {
       // 整段都在插入点之后：挪它上面那层 translate
       const holder = run.parentElement;
       const tr = holder?.getAttribute('transform') ?? '';
       const m = /translate\(([-\d.e]+)[\s,]+([-\d.e]+)\)/.exec(tr);
       if (holder && m) { set(holder, 'transform', tr.replace(m[0], `translate(${(+m[1] + s.dx).toFixed(3)},${m[2]})`)); continue; }
     }
-    for (let i = 0; i < uses.length; i++) if (xs[i] >= s.caret.x - 0.5) set(uses[i], 'x', String((parseFloat(uses[i].getAttribute('x') ?? '0') || 0) + s.dx / M.a));
+    for (let i = 0; i < uses.length; i++) if (xs[i] >= s.caret.x - 0.5 && !moved.has(Math.round(xs[i] * 10))) set(uses[i], 'x', String((parseFloat(uses[i].getAttribute('x') ?? '0') || 0) + s.dx / M.a));
   }
   return hidden;
 }
