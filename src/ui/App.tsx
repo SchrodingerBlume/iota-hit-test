@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore, type Section } from '../model/store';
+import { BUILD } from '../version';
 import type { ThesisDoc } from '../model/types';
 import { startCompiler, requestCompile, requestPara, resetForProject, exportPdf, useCompileState, setFocusPlacer, LONG_DOC } from '../compiler/client';
 import { serializeProject, serializePara, paraEligible, linebreaksInput } from '../typst/serialize';
@@ -305,7 +306,9 @@ export function App() {
     void load();
   }, []);
 
-  useEffect(() => { if (loaded && view === 'editor') startCompiler(); }, [loaded, view]);
+  // 引擎（wasm 30 MB、字体 49 MB，第一次进站要下）在文档列表页就起着：点了「同意」就装，挑工程、解那份几十兆的
+  // JSON 的那几秒它已经在装了；第一次进站省得最多——下那八十兆的工夫用户正在找工程
+  useEffect(() => { if (loaded && agreed) startCompiler(); }, [loaded, agreed]);
 
   // 编辑器周边：文献、可引用对象、缩略语、图片
   const env = useMemo<EditorEnv>(() => ({
@@ -484,6 +487,7 @@ export function App() {
             <DialogBody>
               <DialogTitle><span className="about-title"><Logo size={40} />iota-hit</span></DialogTitle>
               <DialogContent>
+                <p className="muted">{tx("测试版 {{v}}", { v: BUILD })}</p>
                 <p>{tx("哈尔滨工业大学学位论文在线编辑器，使用 iota-hit 模板排版。预览引擎基于 Typst 0.15.1，并采用接近 Microsoft Word 的中文断行规则。全部排版均在浏览器中完成。")}</p>
                 <p>{tx("内置 Noto CJK、FandolKai、TeX Gyre 和 DejaVu Sans Mono 字体；也可读取本机字体并使用 Windows 或 macOS 字体方案。")}</p>
                 <p className="muted">{tx("文档和图片仅保存在当前浏览器中。请定期选择“文件 → 下载副本”进行备份。")}</p>

@@ -66,29 +66,105 @@ export async function renderArtifact(artifact: Uint8Array, container: HTMLElemen
   if (!fresh && !prev) throw new Error('need a full artifact');
   renderer.manipulateData({ renderSession: session!, action: fresh ? 'reset' : 'merge', data: artifact });
   const svgStr = renderer.renderSvgDiff({ renderSession: session } as never);
-  const holder = document.createElement('div');
-  holder.innerHTML = svgStr;
-  const next = holder.firstElementChild as SVGSVGElement | null;
+  const pages = session.retrievePagesInfo() as PageInfo[];
+  // 整份的那一份先只解 defs 与每页的空壳（三百页整解要一秒多），克隆哪页解哪页，剩下的趁空闲补
+  const next = (fresh || !prev ? lazyMaster(svgStr, pages.length) : null) ?? parseSvg(svgStr);
   if (!next) throw new Error('renderer returned no svg');
   hooks.before?.(container);
   let master: SVGSVGElement;
-  if (prev && !fresh) { patchRoot(prev, next); master = prev; }
+  if (prev && !fresh) { flushLazy(prev); patchRoot(prev, next); master = prev; }
   else {
     prev?.remove();
     container.querySelector(':scope > svg.typst-doc')?.remove();
-    master = next;
+    // 藏好了再进文档：先进去后藏的话，浏览器要先为这二十多万个节点算一遍版面
+    master = hide(next);
     container.appendChild(master);
   }
   // 补丁会把根上的属性整个换成新的那份，藏起来的记号每次都要补回去
-  master.classList.add('typst-master');
-  master.classList.remove('typst-doc');
-  master.style.display = 'none';
-  const pages = session.retrievePagesInfo() as PageInfo[];
+  hide(master);
   stampSizes(master, pages);
   syncView(container, master);
   layoutPages(container, pages, perRow);
   hooks.after?.(container, pages);
+  backfillLazy(master);
   return pages;
+}
+
+const hide = (svg: SVGSVGElement) => { svg.classList.add('typst-master'); svg.classList.remove('typst-doc'); svg.style.display = 'none'; return svg; };
+
+function parseSvg(svgStr: string): SVGSVGElement | null {
+  const holder = document.createElement('div');
+  holder.innerHTML = svgStr;
+  return holder.firstElementChild as SVGSVGElement | null;
+}
+
+/** 母本里还没解开的页（整份产物的 SVG 文本按页切好）：用到哪页解哪页 */
+const lazyPages = new WeakMap<SVGSVGElement, (string | null)[]>();
+const PAGE_MARK = '<g class="typst-page"';
+/** 页少时一次解完更省事 */
+const LAZY_FROM = 16;
+
+/** 整份产物：只解出 defs / style 与每页的空壳（开标签照抄，data-tid 在上面，复用与占位都照常判） */
+function lazyMaster(svgStr: string, count: number): SVGSVGElement | null {
+  const first = svgStr.indexOf(PAGE_MARK);
+  if (first < 0 || count < LAZY_FROM) return null;
+  const starts: number[] = [];
+  for (let i = first; i >= 0; i = svgStr.indexOf(PAGE_MARK, i + 1)) starts.push(i);
+  // 切出来的页数与产物报的对不上（页组的记号出现在别处）：不冒险，整份解
+  if (starts.length !== count) return null;
+  const end = svgStr.lastIndexOf('</svg>');
+  const chunks = starts.map((s, k) => svgStr.slice(s, k + 1 < starts.length ? starts[k + 1] : end > s ? end : svgStr.length));
+  const svg = parseSvg(svgStr.slice(0, first) + chunks.map(stubOf).join('') + '</svg>');
+  if (!svg || pagesOf(svg).length !== chunks.length) return null;
+  lazyPages.set(svg, chunks);
+  return svg;
+}
+/** 页组的空壳：开标签 + 闭合（自闭合的原样）。开标签到第一个不在引号里的 `>` 为止 */
+function stubOf(chunk: string): string {
+  let quoted = false;
+  for (let i = 0; i < chunk.length; i++) {
+    const c = chunk[i];
+    if (c === '"') quoted = !quoted;
+    else if (c === '>' && !quoted) return chunk[i - 1] === '/' ? chunk.slice(0, i + 1) : `${chunk.slice(0, i + 1)}</g>`;
+  }
+  return chunk;
+}
+/** 把第 i 页解进它的空壳里 */
+function materialize(svg: SVGSVGElement | null, i: number) {
+  const chunks = svg && lazyPages.get(svg);
+  if (!chunks) return;
+  const chunk = chunks[i];
+  if (chunk == null) return;
+  chunks[i] = null;
+  const stub = pagesOf(svg)[i];
+  const real = parseSvg(`<svg xmlns="${NS}">${chunk}</svg>`)?.firstElementChild;
+  if (stub && real) stub.replaceChildren(...real.childNodes);
+}
+/** 全解开：打补丁前必须先解完（补丁按 data-tid 复用节点，空壳会被当成「这一页没变」留下来） */
+function flushLazy(svg: SVGSVGElement | null) {
+  const chunks = svg && lazyPages.get(svg);
+  if (!chunks) return;
+  for (let i = 0; i < chunks.length; i++) materialize(svg, i);
+  lazyPages.delete(svg);
+}
+/** 剩下的页趁空闲补上（一片最多 8 ms，补完扔掉那份一百多兆的 SVG 文本） */
+const idle: (cb: () => void) => void = (cb) =>
+  typeof requestIdleCallback === 'function' ? void requestIdleCallback(() => cb(), { timeout: 500 }) : void setTimeout(cb, 16);
+function backfillLazy(svg: SVGSVGElement) {
+  const chunks = lazyPages.get(svg);
+  if (!chunks) return;
+  idle(() => {
+    if (!svg.isConnected || !lazyPages.has(svg)) return;
+    const t0 = performance.now();
+    let left = false;
+    for (let i = 0; i < chunks.length; i++) {
+      if (chunks[i] == null) continue;
+      if (performance.now() - t0 > 8) { left = true; break; }
+      materialize(svg, i);
+    }
+    if (left) backfillLazy(svg);
+    else lazyPages.delete(svg);
+  });
 }
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -162,6 +238,7 @@ function shell(m: SVGGElement, src: Src): SVGGElement {
   return g;
 }
 function clone(m: SVGGElement, src: Src): SVGGElement {
+  materialize(m.parentNode as SVGSVGElement, src.i);
   const g = m.cloneNode(true) as SVGGElement;
   g.setAttribute('data-shown', '1');
   g.setAttribute('data-src', `${src.kind}:${src.i}`);
