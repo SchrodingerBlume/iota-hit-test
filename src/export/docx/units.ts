@@ -4,7 +4,7 @@ import { BorderStyle } from 'docx';
 export const PT = 20;                 // 缇
 export const HALF = 2;                // 半磅（字号）
 export const ZIHAO = { yihao: 26, xiaoyi: 24, erhao: 22, xiaoer: 18, sanhao: 16, xiaosan: 15, sihao: 14, xiaosi: 12, wuhao: 10.5, xiaowu: 9 };
-export const FONT = { zh: 'SimSun', hei: 'SimHei', kai: 'KaiTi', en: 'Times New Roman', mono: 'Courier New' };
+export const FONT = { zh: 'SimSun', hei: 'SimHei', kai: 'KaiTi', kaiGb: 'KaiTi_GB2312', lishu: 'LiSu', en: 'Times New Roman', mono: 'Courier New' };
 export const fonts = (zh = FONT.zh, en = FONT.en) => ({ ascii: en, hAnsi: en, eastAsia: zh, cs: en });
 /** 中文段里的省略号、破折号、间隔号、°、× 这些「两可」的字符，Word 按 hAnsi 排就成了西文字体；
  *  中文 Word 文档的 run 都带 hint="eastAsia"，让它们跟中文字体走。含中文或这些字符的 run 才加 */

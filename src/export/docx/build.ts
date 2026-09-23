@@ -23,7 +23,7 @@ import type { BibEntry } from '../../bib/bibtex';
 import { splitNames } from '../../bib/bibtex';
 
 import { fonts, fontsFor, NO_BORDERS, hasCJK, PT, FONT } from './units';
-import { coverPage, titlepageZh, titlepageEn, defensePage, declarationsPage, measure, wrap } from './pages';
+import { coverPage, reportCover, titlepageZh, titlepageEn, defensePage, declarationsPage, measure, wrap } from './pages';
 import { resolveSwitch, SWITCHES } from '../../model/options';
 import { queryFacts, stylesXml, gapTwips, headingLevels, shown, tw, asianOf, type Facts, type PageSetup } from './template';
 import { THEOREM_NAMES, theoremKind, joinHead } from '../../typst/theorem';
@@ -719,7 +719,12 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
   const Lfront = F.layout.front;
   const openright = sw<boolean>('openright', s);
   const coverSections: { L: PageSetup; blocks: Block[] }[] = [];
-  if (resolvePage(doc, 'cover').value) { const LL = pageLayout('cover', Lfront); coverSections.push({ L: LL, blocks: coverPage(doc, LL.margin.top) }); }
+  // 报告档（开题 / 中期）的封面是另一副版式（模板 report/cover.typ），终稿那份照 cover.typ
+  if (resolvePage(doc, 'cover').value) {
+    const LL = pageLayout('cover', Lfront);
+    const w = tw(LL['paper-width'] - LL.margin.left - LL.margin.right);
+    coverSections.push({ L: LL, blocks: isReport ? reportCover(doc, w) : coverPage(doc, LL.margin.top) });
+  }
   if (!isReport && resolvePage(doc, 'titlepage').value) {
     const LL = pageLayout('titlepage', Lfront);
     coverSections.push({ L: LL, blocks: titlepageZh(doc, tw(LL['paper-width'] - LL.margin.left - LL.margin.right)) });

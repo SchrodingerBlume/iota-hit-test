@@ -1,5 +1,5 @@
 // 表单页：封面、中英文内封照校方 Word 范例的段落序列抄（见下），答辩决议、声明按模板排出来的 PDF 逐行量的位置放
-import { Paragraph, TextRun, AlignmentType, LineRuleType, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign, PageBreak, HeightRule, TableLayoutType, Tab, TabStopType, type ParagraphChild } from 'docx';
+import { Paragraph, TextRun, ImportedXmlComponent, AlignmentType, LineRuleType, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign, PageBreak, HeightRule, TableLayoutType, Tab, TabStopType, type ParagraphChild } from 'docx';
 import type { ThesisDoc, Info, DefensePerson } from '../../model/types';
 import { SWITCHES, resolveSwitch } from '../../model/options';
 import { PT, HALF, ZIHAO, FONT, fonts, fontsFor, hasCJK } from './units';
@@ -7,7 +7,12 @@ import { PT, HALF, ZIHAO, FONT, fonts, fontsFor, hasCJK } from './units';
 const DOC_TYPE = { bachelor: "本科毕业论文（设计）", master: "硕士学位论文", doctor: "博士学位论文" } as const;
 const DOC_TYPE_EN = { bachelor: 'Graduation Thesis', master: "Dissertation for the Master's Degree", doctor: "Dissertation for the Doctoral Degree" } as const;
 
-const run = (text: string, size: number, o: { bold?: boolean; zh?: string; en?: string; italics?: boolean } = {}) => new TextRun({ text, size: size * HALF, bold: o.bold, italics: o.italics, font: fontsFor(text, o.zh ?? FONT.zh, o.en ?? FONT.en) });
+const run = (text: string, size: number, o: { bold?: boolean; zh?: string; en?: string; italics?: boolean; spacing?: number; outline?: boolean } = {}) => {
+  const r = new TextRun({ text, size: size * HALF, bold: o.bold, italics: o.italics, characterSpacing: o.spacing || undefined, font: fontsFor(text, o.zh ?? FONT.zh, o.en ?? FONT.en) });
+  // 空心字（报告封面的落款是描边隶书）：docx 库的 IRunOptions 没有这一项，直接往 rPr 里塞 w:outline
+  if (o.outline) { const rPr = (r as unknown as { root: { rootKey?: string; root?: unknown[] }[] }).root.find((x) => x?.rootKey === 'w:rPr'); rPr?.root?.push(new ImportedXmlComponent('w:outline')); }
+  return r;
+};
 const month = (iso: string | undefined, lang: 'zh' | 'en') => {
   const m = /^(\d{4})-(\d{2})/.exec(iso || '') ?? (() => { const d = new Date(); return ['', String(d.getFullYear()), String(d.getMonth() + 1).padStart(2, '0')]; })();
   const y = m[1], mo = Number(m[2]);
@@ -47,9 +52,9 @@ interface Line {
   b?: boolean;
   zh?: string;
   jc?: (typeof AlignmentType)[keyof typeof AlignmentType];
-  /** 段前（缇）、行距（缇；exact 钉死，否则倍数） */
+  /** 段前（缇）、行距（缇；exact 钉死，否则倍数）；line: null = 不写行距（跟样式，范例封面那些段就没写） */
   before?: number;
-  line?: number;
+  line?: number | null;
   exact?: boolean;
   /** 贴文档网格（范例里 snapToGrid 没写 0 的那些） */
   grid?: boolean;
@@ -61,22 +66,25 @@ interface Line {
   /** 段落标记按西文字体算行高（模板 enter() 没给 font 的那种：Times 的 1.15 倍，不是宋体的 1.296875） */
   latinMark?: boolean;
   left?: number;
+  /** 字符间距（缇，照范例的 w:spacing 写）、空心字（报告封面的落款） */
+  spacing?: number;
+  outline?: boolean;
 }
 const E = (sz: number, extra: Partial<Line> = {}): Line => ({ sz, ...extra });
 const C = (t: string, sz: number, extra: Partial<Line> = {}): Line => ({ t, sz, jc: AlignmentType.CENTER, ...extra });
 function linePara(l: Line): Paragraph {
   const kids: ParagraphChild[] = [];
-  if (l.t) l.t.split('\n').forEach((piece, i) => { if (i) kids.push(new TextRun({ break: 1 })); kids.push(run(piece, l.sz / HALF, { bold: l.b, zh: l.zh })); });
+  if (l.t) l.t.split('\n').forEach((piece, i) => { if (i) kids.push(new TextRun({ break: 1 })); kids.push(run(piece, l.sz / HALF, { bold: l.b, zh: l.zh, spacing: l.spacing, outline: l.outline })); });
   if (l.tab) kids.push(new TextRun({ children: [new Tab()] }), run(l.tab, l.sz / HALF, { bold: l.b, zh: l.zh }));
   return new Paragraph({
     tabStops: l.tab ? [{ type: TabStopType.RIGHT, position: l.width ?? 0 }] : undefined,
     style: l.grid ? 'Grid' : 'NoGrid',
     alignment: l.jc ?? (l.right ? AlignmentType.RIGHT : AlignmentType.BOTH),
     indent: { firstLine: l.firstLine ?? 0, left: l.left },
-    spacing: { before: l.before ?? 0, after: 0, line: l.line ?? 240, lineRule: l.exact ? LineRuleType.EXACT : LineRuleType.AUTO },
+    spacing: l.line === null ? { before: l.before ?? 0, after: 0 } : { before: l.before ?? 0, after: 0, line: l.line ?? 240, lineRule: l.exact ? LineRuleType.EXACT : LineRuleType.AUTO },
     // 段落标记：空段的高按标记的西文字体（ascii / hAnsi）算，hint 不管用——要按宋体的 1.296875 倍算（模板 enter(font: "songti")）
     // 就把 ascii / hAnsi 也写成宋体（范例第 15 段那样）；模板 enter() 没给 font 的按 Times 的 1.15 倍
-    run: { size: l.sz, font: l.latinMark ? fonts(l.zh ?? FONT.zh, FONT.en) : { ascii: l.zh ?? FONT.zh, hAnsi: l.zh ?? FONT.zh, eastAsia: l.zh ?? FONT.zh, cs: l.zh ?? FONT.zh, hint: 'eastAsia' } },
+    run: { size: l.sz, bold: l.b, characterSpacing: l.spacing || undefined, font: l.latinMark ? fonts(l.zh ?? FONT.zh, FONT.en) : { ascii: l.zh ?? FONT.zh, hAnsi: l.zh ?? FONT.zh, eastAsia: l.zh ?? FONT.zh, cs: l.zh ?? FONT.zh, hint: 'eastAsia' } },
     children: kids,
   });
 }
@@ -176,6 +184,174 @@ export function coverPage(doc: ThesisDoc, _top: number): Paragraph[] {
     C(month(pick(doc, 'cover', 'date'), 'zh'), XE * 2, { b: true }),
   ];
   return seq.map(linePara);
+}
+
+/** 报告档（开题 / 中期）的封面：照校方 Word 范例抄——
+ *  本部研究生（博士开题-首页修正.docx / 硕士中期-首页修正.docx）：两个空段、校名（楷体_GB2312 小二 加粗 字距 2 磅）、空段、
+ *  报告名（二号 加粗 字距 2 磅）、空段、「题 目：」（小二 加粗，题目接在后面）、（学位论文）三号 居中 段前 12 磅，
+ *  再是六行填空（左缩进 63 磅、1.75 倍行距、不贴网格；标签用半角空格拉开到 6 格宽，值居中排在下划线里，整行 20.5 格 = 328 磅），
+ *  五个空段（1.25 倍），落款「研究生院制」三号 居中。
+ *  深圳本科（zh-proposal.docx / zh-interim.docx）：校名与报告名（华文新魏 初号 加粗 字距 1 磅 横向 90%），下面一张两列表，
+ *  标签列黑体（题目 小二、其余 小三，字之间拉开），值列带下划线。
+ *  本部本科没有官方 Word 范例，照模板 report/cover.typ 排（校名图形换成隶书校名、落款描边隶书） */
+const REPORT_UNDERLINE = 328;
+/** 标签拉到几格宽：字与字之间插半角空格（范例就是这么排的），本来就更宽的照旧 */
+function spreadLabel(text: string, targetPt: number, size: number): string {
+  const cs = [...text];
+  const natural = measure(text, size, true, FONT.zh);
+  const half = size / 2;
+  const slots = cs.length - 1;
+  if (slots <= 0 || natural >= targetPt) return text;
+  const gaps = Math.round((targetPt - natural) / half);
+  if (gaps <= 0) return text;
+  const each = Math.floor(gaps / slots), extra = gaps - each * slots;
+  return cs.map((c, i) => (i < slots ? c + ' '.repeat(each + (i < extra ? 1 : 0)) : c)).join('');
+}
+export function reportCover(doc: ThesisDoc, width: number): (Paragraph | Table)[] {
+  const s = doc.settings;
+  const grad = s.degreeLevel !== 'bachelor';
+  const sz = s.campus === 'shenzhen';
+  const SAN = ZIHAO.sanhao, XE = ZIHAO.xiaoer, ER = ZIHAO.erhao;
+  const stage = s.stage === 'interim' ? '中期报告' : '开题报告';
+  const title = lines(pick(doc, 'cover', 'title')).join('');
+  const date = month(pick(doc, 'cover', 'date'), 'zh');
+  const studentId = doc.info.studentId || '';
+  if (sz && !grad) return shenzhenBachelorReport(doc, { stage, title, date, studentId });
+  if (!grad) return harbinBachelorReport(doc, { stage, title, date, studentId, width });
+  // ── 本部研究生 ──
+  const kindWord = s.degreeType === 'professional' || (s.degreeType === 'auto' && s.form === 'practice')
+    ? `（专业学位${s.form === 'practice' ? '实践成果' : '论文'}）` : '（学位论文）';
+  const rows: [string, string][] = [
+    ['学院（部）', pick(doc, 'cover', 'affiliation')],
+    ['学科/专业学位类别', s.form === 'practice' ? pick(doc, 'cover', 'practiceType') : pick(doc, 'cover', 'speciality')],
+    ['导师', pick(doc, 'cover', 'supervisor')],
+    [s.degreeLevel === 'doctor' ? '博士研究生' : '研究生', pick(doc, 'cover', 'author')],
+    ['学号', studentId],
+    [`${stage}日期`, date],
+  ];
+  const field = (label: string, value: string, first: boolean) => {
+    const text = spreadLabel(label, 6 * SAN, SAN);
+    const labelW = measure(text, SAN, true, FONT.zh);
+    return new Paragraph({
+      style: 'NoGrid', alignment: AlignmentType.LEFT,
+      indent: { left: 63 * PT, firstLine: 0 },
+      spacing: { before: first ? 240 : 0, after: 0, line: 420, lineRule: LineRuleType.AUTO },
+      run: { size: SAN * HALF },
+      children: [run(text, SAN, { bold: true }), ...fillRun(value, Math.max(SAN, REPORT_UNDERLINE - labelW), SAN)],
+    });
+  };
+  // 范例前七段：两个空段、校名、空段、报告名、空段、题目行。范例里这些段贴文档网格（一行两格 = 31.2 磅），
+  // 我们的正文样式关着贴格，直接把行高钉成 31.2 磅（624 缇），落点与范例一致
+  const ROW = 624;
+  const kaiMark: Partial<Line> = { zh: FONT.kaiGb, latinMark: true, b: true, spacing: 40, jc: AlignmentType.CENTER, line: ROW, exact: true };
+  const seq: Line[] = [
+    E(XE * 2, kaiMark), E(XE * 2, kaiMark),
+    C('哈尔滨工业大学', XE * 2, { ...kaiMark }),
+    E(XE * 2, kaiMark),
+    C(`${{ master: '硕士学位', doctor: '博士学位' }[s.degreeLevel as 'master' | 'doctor']}${stage}`, ER * 2, { b: true, spacing: 40, latinMark: true, line: ROW, exact: true }),
+    E(SAN * 2, { b: true, latinMark: true, line: ROW, exact: true }),
+  ];
+  const titleLine = new Paragraph({
+    style: 'NoGrid', alignment: AlignmentType.LEFT, indent: { firstLine: 0 },
+    spacing: { before: 0, after: 0, line: ROW, lineRule: LineRuleType.EXACT }, run: { size: XE * HALF, bold: true },
+    children: [run('题 目：', XE, { bold: true }), run(title, XE, { bold: true })],
+  });
+  const kindLine = linePara(C(kindWord, SAN * 2, { b: true, before: 240, line: ROW, exact: true }));
+  // 范例最后：五个空段（这几个不贴格、1.25 倍行距）再是落款
+  const tail: Line[] = [
+    ...Array.from({ length: 5 }, () => E(SAN * 2, { b: true, latinMark: true, line: 300 })),
+    C('研究生院制', SAN * 2, { b: true, line: ROW, exact: true }),
+  ];
+  return [...seq.map(linePara), titleLine, kindLine, ...rows.map(([l, v], i) => field(l, v, i === 0)), ...tail.map(linePara)];
+}
+/** 填空：值居中排在下划线里，两边用带下划线的空格补齐（空格用字距把宽度调准，范例就是拿空格数凑的） */
+function fillRun(value: string, widthPt: number, size: number): ParagraphChild[] {
+  const valueW = value ? measure(value, size, true, FONT.zh) : 0;
+  const pad = (w: number) => {
+    if (w <= 0.5) return [];
+    const n = Math.max(1, Math.round(w / (size / 2)));
+    const extra = Math.round((w / n - size / 2) * PT);
+    return [new TextRun({ text: ' '.repeat(n), size: size * HALF, bold: true, underline: {}, characterSpacing: extra || undefined, font: fonts(FONT.zh, FONT.en) })];
+  };
+  const room = Math.max(0, widthPt - valueW);
+  return [...pad(room / 2), ...(value ? [new TextRun({ text: value, size: size * HALF, bold: true, underline: {}, font: fontsFor(value, FONT.zh, FONT.en) })] : []), ...pad(room / 2)];
+}
+
+/** 本部本科的报告封面（模板 report/cover.typ，没有官方 Word 范例）：隶书校名、报告名小一、题目、五行填空、描边隶书落款 */
+function harbinBachelorReport(doc: ThesisDoc, o: { stage: string; title: string; date: string; studentId: string; width: number }): (Paragraph | Table)[] {
+  const XS = ZIHAO.xiaosi, SAN = ZIHAO.sanhao, XE = ZIHAO.xiaoer, XY = ZIHAO.xiaoyi;
+  const rows: [string, string][] = [
+    ['专业', pick(doc, 'cover', 'speciality')],
+    ['学生', pick(doc, 'cover', 'author')],
+    ['学号', o.studentId],
+    ['指导教师', pick(doc, 'cover', 'supervisor')],
+    ['日期', o.date],
+  ];
+  const total = 15 * SAN;
+  const field = (label: string, value: string) => {
+    const text = spreadLabel(label, 4 * SAN, SAN);
+    const labelW = measure(text, SAN, true, FONT.zh);
+    return new Paragraph({
+      style: 'NoGrid', alignment: AlignmentType.LEFT, indent: { left: Math.round((o.width / PT - total) / 2) * PT, firstLine: 0 },
+      spacing: { before: 0, after: 0, line: 360, lineRule: LineRuleType.AUTO }, run: { size: SAN * HALF },
+      children: [run(text, SAN, { bold: true }), run('  ', SAN), ...fillRun(value, Math.max(SAN, total - labelW - SAN), SAN)],
+    });
+  };
+  const seq: Line[] = [
+    E(XS * 2), E(XE * 2), E(XE * 2),
+    C('哈尔滨工业大学', XE * 2, { b: true, zh: FONT.lishu }),
+    E(XE * 2),
+    C(`本科毕业论文（设计）${o.stage}`, XY * 2, { b: true, spacing: 40 }),
+    E(SAN * 2), E(SAN * 2),
+  ];
+  const titleLine = new Paragraph({
+    style: 'NoGrid', alignment: AlignmentType.LEFT, indent: { firstLine: 2.5 * XE * PT },
+    spacing: { before: 0, after: 0, line: 300, lineRule: LineRuleType.AUTO }, run: { size: XE * HALF },
+    children: [run('题 目：', XE, { bold: true }), run(o.title, XE, { bold: true })],
+  });
+  const tail: Line[] = [...Array.from({ length: 4 }, () => E(SAN * 2, { line: 360 })), C('哈尔滨工业大学教务处制', XE * 2, { b: true, zh: FONT.lishu, outline: true })];
+  return [...seq.map(linePara), titleLine, ...Array.from({ length: 4 }, () => linePara(E(SAN * 2, { line: 360 }))), ...rows.map(([l, v]) => field(l, v)), ...tail.map(linePara)];
+}
+
+/** 深圳本科的报告封面（范例 zh-proposal.docx / zh-interim.docx）：华文新魏的校名与报告名，下面一张两列表、值带下划线 */
+function shenzhenBachelorReport(doc: ThesisDoc, o: { stage: string; title: string; date: string; studentId: string }): (Paragraph | Table)[] {
+  const XW = 'STXinwei';
+  const head = (t: string) => new Paragraph({
+    style: 'NoGrid', alignment: AlignmentType.CENTER, indent: { firstLine: 0 },
+    spacing: { before: 0, after: 0, line: 288, lineRule: LineRuleType.AUTO }, run: { size: 72 },
+    children: [new TextRun({ text: t, size: 72, bold: true, characterSpacing: 20, scale: 90, font: fonts(XW, FONT.en) })],
+  });
+  const rows: [string, string, number][] = [
+    ['姓名', pick(doc, 'cover', 'author'), 30],
+    ['学号', o.studentId, 30],
+    ['学院', pick(doc, 'cover', 'affiliation'), 30],
+    ['专业', pick(doc, 'cover', 'speciality'), 30],
+    ['指导教师', pick(doc, 'cover', 'supervisor'), 30],
+    ['日期', o.date, 30],
+  ];
+  const cellP = (kids: ParagraphChild[], o2: { jc?: (typeof AlignmentType)[keyof typeof AlignmentType] } = {}) => new Paragraph({
+    style: 'NoGrid', alignment: o2.jc ?? AlignmentType.LEFT, indent: { firstLine: 0 },
+    spacing: { before: 240, after: 0, line: 360, lineRule: LineRuleType.AUTO }, children: kids,
+  });
+  // 标签拉到格宽（2250 缇 = 112.5 磅）减去末尾的冒号，冒号正好落在格的右缘（范例就是这个样子）
+  const label = (t: string, size: number) => new TextRun({ text: `${spreadLabel(t, 112.5 - size / 2, size / 2)}：`, size, font: fonts(FONT.hei, FONT.en) });
+  const value = (t: string, size: number) => new TextRun({ text: t || '  ', size, underline: {}, font: fontsFor(t || ' ', FONT.hei, FONT.en) });
+  const under = (size: number) => new TextRun({ text: ' '.repeat(20), size, underline: {}, font: fonts(FONT.hei, FONT.en) });
+  const cell = (kids: Paragraph[], w: number) => new TableCell({ borders: NO_B, width: { size: w, type: WidthType.DXA }, margins: { top: 0, bottom: 0, left: 0, right: 0 }, children: kids });
+  const trs = [
+    new TableRow({ height: { value: 2251, rule: HeightRule.ATLEAST }, children: [
+      cell([cellP([label('题 目', 36)])], 2250),
+      cell([cellP([value(o.title, 36)]), cellP([under(36)])], 3691),
+    ] }),
+    ...rows.map(([l, v, size]) => new TableRow({ children: [cell([cellP([label(l, size)])], 2250), cell([cellP([value(v, size), under(size)])], 3691)] })),
+  ];
+  return [
+    linePara(E(24, { line: 380, exact: true })),
+    linePara(E(44, { jc: AlignmentType.CENTER, before: 240, line: 300 })),
+    head('哈尔滨工业大学深圳校区'),
+    head(`毕业论文（设计）${o.stage}`),
+    new Table({ rows: trs, layout: TableLayoutType.FIXED, alignment: AlignmentType.CENTER, width: { size: 5941, type: WidthType.DXA }, columnWidths: [2250, 3691], borders: { ...NO_B, insideHorizontal: NO_B.top, insideVertical: NO_B.top } }),
+  ];
 }
 
 const NO_B = { top: { style: BorderStyle.NIL, size: 0 }, bottom: { style: BorderStyle.NIL, size: 0 }, left: { style: BorderStyle.NIL, size: 0 }, right: { style: BorderStyle.NIL, size: 0 } } as const;
