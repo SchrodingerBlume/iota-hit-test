@@ -23,6 +23,7 @@ import { imageBytes, putImage, safeImageName, imageDimensions } from '../editor/
 import { ProjectsView } from './ProjectsView';
 import { FontRecovery } from './FontRecovery';
 import { FontOnboarding } from './FontOnboarding';
+import { DisclaimerGate, DisclaimerText, DevBadge, useDisclaimer } from './Disclaimer';
 import { useFontState } from '../fonts/userFonts';
 import { SettingsPanel } from './SettingsPanel';
 import { InfoPanel, CoverPanel, TitlepagePanel } from './InfoPanel';
@@ -296,6 +297,8 @@ export function App() {
   const commentsOpen = useComments((s) => s.open);
   const agentOpen = useAgent((s) => s.open);
   const [about, setAbout] = useState(false);
+  // 没点「同意」之前不弹别的（字体授权那张会盖在声明上）
+  const agreed = useDisclaimer((s) => s.accepted);
   const outlineFolded = useOutline((s) => s.folded);
 
   useEffect(() => {
@@ -387,7 +390,8 @@ export function App() {
     <EditorEnvContext.Provider value={env}>
       <FluentProvider theme={theme === 'dark' ? fluentDark : fluentLight} className="fluent-root">
       <FontRecovery />
-      <FontOnboarding />
+      <DisclaimerGate />
+      {agreed && <FontOnboarding />}
       <div className="app">
         {/* 顶栏并进功能区那一行：左边照 Word 的快速访问工具栏——主页、保存、撤消 / 恢复、导出；右边状态、主题 */}
         {(() => { const canExportPdf = hasDocument && compile.status === 'ready' && !busy; const leading = (
@@ -433,6 +437,7 @@ export function App() {
           </span>
         ); const trailing = (
           <span className="rb-trailing">
+            <DevBadge />
             {view === 'editor' && <span className="status"><i className={`dot ${dot}`} /><span key={statusText} className="status-text">{statusText}</span></span>}
             {view === 'editor' && (
               <Tooltip content={tx("Agent：配置模型以读取和修改论文")} relationship="label" positioning="below">
@@ -474,6 +479,22 @@ export function App() {
             </Menu>
           </span>
         ); return view === 'projects' ? <Ribbon minimal leading={leading} trailing={trailing} layout={ribbonLayout} /> : <Ribbon leading={leading} trailing={trailing} layout={ribbonLayout} />; })()}
+          <Dialog open={about} onOpenChange={(_, d) => setAbout(d.open)}>
+          <DialogSurface className="style-dialog">
+            <DialogBody>
+              <DialogTitle><span className="about-title"><Logo size={40} />iota-hit</span></DialogTitle>
+              <DialogContent>
+                <p>{tx("哈尔滨工业大学学位论文在线编辑器，使用 iota-hit 模板排版。预览引擎基于 Typst 0.15.1，并采用接近 Microsoft Word 的中文断行规则。全部排版均在浏览器中完成。")}</p>
+                <p>{tx("内置 Noto CJK、FandolKai、TeX Gyre 和 DejaVu Sans Mono 字体；也可读取本机字体并使用 Windows 或 macOS 字体方案。")}</p>
+                <p className="muted">{tx("文档和图片仅保存在当前浏览器中。请定期选择“文件 → 下载副本”进行备份。")}</p>
+                <p className="muted">{tx("导出 Word 时的参考文献由 citeproc-js（Frank Bennett，CPAL 许可）按 GB/T 7714 排版。")}</p>
+                <DisclaimerText />
+                <p className="muted">{tx("Typst 是 Typst GmbH 的商标；本站与 Typst GmbH、typst.ts 及各项目作者无关。随站分发的软件、字体、Typst 包的版权与许可证全文见")}<a href={`${import.meta.env.BASE_URL}licenses.txt`} target="_blank" rel="noopener">{tx("开源许可与声明")}</a>{tx("。")}</p>
+              </DialogContent>
+              <DialogActions><Button appearance="primary" onClick={() => setAbout(false)}>{tx("确定")}</Button></DialogActions>
+            </DialogBody>
+          </DialogSurface>
+        </Dialog>
         {view === 'projects' ? <ProjectsView /> : (<>
         <div className={`main mode-${mode} ${navOpen ? '' : 'nav-closed'} ${compact ? 'is-compact' : ''} ${stacked ? 'is-stacked' : ''}`} ref={mainRef} style={{ gridTemplateColumns: gridColumns, gridTemplateRows: gridRows }}>
           {compact && navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} />}
@@ -509,21 +530,6 @@ export function App() {
             </div>
           </section>
           <LinkDialogHost />
-          <Dialog open={about} onOpenChange={(_, d) => setAbout(d.open)}>
-            <DialogSurface className="style-dialog">
-              <DialogBody>
-                <DialogTitle><span className="about-title"><Logo size={40} />iota-hit</span></DialogTitle>
-                <DialogContent>
-                  <p>{tx("哈尔滨工业大学学位论文在线编辑器，使用 iota-hit 模板排版。预览引擎基于 Typst 0.15.1，并采用接近 Microsoft Word 的中文断行规则。全部排版均在浏览器中完成。")}</p>
-                  <p>{tx("内置 Noto CJK、FandolKai、TeX Gyre 和 DejaVu Sans Mono 字体；也可读取本机字体并使用 Windows 或 macOS 字体方案。")}</p>
-                  <p className="muted">{tx("文档和图片仅保存在当前浏览器中。请定期选择“文件 → 下载副本”进行备份。")}</p>
-                  <p className="muted">{tx("导出 Word 时的参考文献由 citeproc-js（Frank Bennett，CPAL 许可）按 GB/T 7714 排版。")}</p>
-                  <p className="muted">{tx("Typst 是 Typst GmbH 的商标；本站与 Typst GmbH、typst.ts 及各项目作者无关。随站分发的软件、字体、Typst 包的版权与许可证全文见")}<a href={`${import.meta.env.BASE_URL}licenses.txt`} target="_blank" rel="noopener">{tx("开源许可与声明")}</a>{tx("。")}</p>
-                </DialogContent>
-                <DialogActions><Button appearance="primary" onClick={() => setAbout(false)}>{tx("确定")}</Button></DialogActions>
-              </DialogBody>
-            </DialogSurface>
-          </Dialog>
           {shown.includes('editor') && shown.includes('preview') && <div className="splitter" title={tx("拖动调整比例（{{v0}}% : {{v1}}%）", { v0: Math.round(ratio * 100), v1: Math.round((1 - ratio) * 100) })} onPointerDown={(e) => startDrag(e, 'main')} />}
           <div className="preview-slot" hidden={!shown.includes('preview')}><Preview onRefresh={() => setRefresh((n) => n + 1)} refreshDisabled={!hasDocument} /></div>
           {/* Agent 那一块前面的分隔条：宽屏拖的是 Agent 列宽，窄屏上两块之间按 ratio 分 */}

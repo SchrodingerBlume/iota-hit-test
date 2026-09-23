@@ -1351,6 +1351,18 @@ body.is-dragging-window iframe, body.is-dragging-window .preview-stage { pointer
 .brand-btn { border: 0; background: none; padding: 2px; margin-left: 4px; border-radius: var(--r-round); display: inline-flex; cursor: pointer; }
 .brand-btn:hover { background: var(--panel-2); }
 .about-title { display: inline-flex; align-items: center; gap: 10px; font-family: "Times New Roman", serif; }
+/* ── 免责声明：第一次打开挡在前面那道闸 + 顶栏上常留的「开发中」 ── */
+.dc-dialog { max-width: 620px; border-top: 4px solid var(--danger); }
+.dc-title { display: inline-flex; align-items: center; gap: 10px; }
+.dc-text { display: grid; gap: 8px; font-size: 13px; line-height: 1.65; }
+.dc-text p { margin: 0; }
+.dc-lead { display: flex; align-items: center; gap: 8px; padding: 11px 13px; border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--line)); border-left: 4px solid var(--danger); border-radius: var(--r-s); background: var(--danger-soft); color: var(--danger); font-size: 14.5px; font-weight: 700; letter-spacing: 0.01em; }
+.dc-lead svg { width: 20px; height: 20px; flex: none; }
+.dc-ack { margin-top: 12px; font-weight: 600; }
+.dev-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid color-mix(in srgb, var(--orange) 55%, transparent); border-radius: var(--r-pill); background: var(--orange-soft); color: var(--orange-ink); font-size: 11.5px; font-weight: 650; white-space: nowrap; transition: background-color var(--fast) var(--ease); }
+.dev-badge:hover { background: var(--orange-soft-2); }
+.dev-badge svg { width: 13px; height: 13px; }
+@media (max-width: 600px) { .dev-badge span { display: none; } .dev-badge { padding: 2px 5px; } }
 .rb-leading .brand { gap: 7px; margin-right: 2px; font-size: 13.5px; }
 .rb-leading .brand b { font-weight: 650; }
 .rb-leading .brand-mark { width: 24px; height: 24px; border-radius: var(--r-s); font-size: 16px; }
