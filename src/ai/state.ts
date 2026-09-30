@@ -229,7 +229,7 @@ export const useAgent = create<AgentState>((set, get) => ({
         onReasoning: (d) => { if (!rbuf) thinkSince = Date.now(); rbuf += d; patch(rbuf === d ? { reasoning: rbuf, thinkSince } : { reasoning: rbuf }); },
         onTool: (name, input, result, isError) => { const cur = get().items.find((it) => it.id === reply.id)!; const l = cur.live; const ms = l?.tool && l.since ? Date.now() - l.since : undefined; const card: ToolCard = { name, input, result, isError, images: derived.length ? derived : undefined, ms, diff: takeEdit() ?? undefined }; parts = [...parts, { kind: 'tool', card }]; patch({ tools: [...cur.tools, card], parts, live: { status: '', since: Date.now() } }); derived = []; },
         onToolStart: (name, input) => patch({ live: { tool: { name, input }, status: '', since: Date.now() } }),
-        onStatus: (status) => { const l = liveOf(); patch({ live: { tool: l?.tool, status, since: status && status !== l?.status ? Date.now() : l?.since ?? Date.now() } }); },
+        onStatus: (status) => { if (!get().running) return; const l = liveOf(); patch({ live: { tool: l?.tool, status, since: status && status !== l?.status ? Date.now() : l?.since ?? Date.now() } }); },
         onUsage: (u) => { usage = { input: usage.input + u.input, output: usage.output + u.output }; patch({ usage }); },
       }, aborter.signal);
     } catch (e) {

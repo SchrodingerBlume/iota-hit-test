@@ -852,16 +852,20 @@ async function afterWrite(c0: { status: string; compileCount: number; diagnostic
     const head = list.some((l) => l.startsWith('- [错误]')) ? '写进去之后排版报错了，请看着改（改完会再排一次）' : '写进去之后排版多了警告，看看是不是写错了';
     return `${head}：\n${list.join('\n')}`;
   };
-  while (Date.now() - t0 < 60000) {
-    await new Promise((r) => setTimeout(r, 150));
-    const s = useCompileState.getState();
-    // 一有排版结果就看：已经有问题就立刻报（短文档零点几秒就出来）；没问题再等它安静下来，长文档停手后的整编可能另有说法
-    if (s.compileCount !== count) { count = s.compileCount; last = Date.now(); const early = collect(); if (early) return early; }
-    if (s.compiling || s.bgCompiling) { last = Date.now(); continue; }
-    if (Date.now() - last > (count === c0.compileCount ? 5000 : 3200)) break;
-  }
-  if (count === c0.compileCount) return '';
-  return collect();
+  // 等排版的这段时间面板上得有个说法，不然看着像卡住了
+  report('写完了，等排版结果落地再继续…');
+  try {
+    while (Date.now() - t0 < 60000) {
+      await new Promise((r) => setTimeout(r, 150));
+      const s = useCompileState.getState();
+      // 一有排版结果就看：已经有问题就立刻报（短文档零点几秒就出来）；没问题再等它安静下来，长文档停手后的整编可能另有说法
+      if (s.compileCount !== count) { count = s.compileCount; last = Date.now(); const early = collect(); if (early) return early; }
+      if (s.compiling || s.bgCompiling) { last = Date.now(); continue; }
+      if (Date.now() - last > (count === c0.compileCount ? 5000 : 3200)) break;
+    }
+    if (count === c0.compileCount) return '';
+    return collect();
+  } finally { report(''); }
 }
 /** 一条诊断说给模型听：落在哪一部分第几块、人话 + Typst 原话、那一块现在的 Markdown */
 function describeDiag(d: Diagnostic): string {

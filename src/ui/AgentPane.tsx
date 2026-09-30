@@ -127,10 +127,11 @@ function Live({ live, hasText }: { live: ChatItem['live']; hasText: boolean }) {
   const [, tick] = useState(0);
   useEffect(() => { const t = window.setInterval(() => tick((n) => n + 1), 1000); return () => window.clearInterval(t); }, []);
   const secs = live ? Math.max(0, Math.round((Date.now() - live.since) / 1000)) : 0;
-  const long = secs >= 4 ? tx("（{{s}} 秒）", { s: secs }) : '';
+  // 秒数从第一秒就显示：等的时候有个在走的东西，才不像卡住
+  const long = secs >= 1 ? tx("（{{s}} 秒）", { s: secs }) : '';
   if (live?.tool) return <div className="ag-card is-live"><div className="ag-card-head"><Spinner size="extra-tiny" /><span className="ag-live-title">{liveTitle(live.tool.name, live.tool.input)}</span><span className="muted ag-live-secs">{long}</span></div>{live.status && <div className="ag-live-status muted">{live.status}</div>}</div>;
   if (live?.status) return <div className="ag-thinking muted"><Spinner size="extra-tiny" />{live.status}{long}</div>;
-  if (!hasText) return <div className="ag-thinking muted"><Spinner size="extra-tiny" />{tx("正在生成回复…")}{long}</div>;
+  if (!hasText) return <div className="ag-thinking muted"><Spinner size="extra-tiny" />{secs >= 20 ? tx("还在等模型的首个字…（有的服务方排队时慢，可以再等等或换个接口）") : tx("正在生成回复…")}{long}</div>;
   return null;
 }
 const EDIT_TOOLS = new Set(['replace', 'insert', 'delete', 'table_write', 'figure_write', 'bib_add', 'info_write', 'abbreviations_add', 'settings_set', 'write_json']);

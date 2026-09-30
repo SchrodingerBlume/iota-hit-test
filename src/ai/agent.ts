@@ -36,6 +36,45 @@ async function pendingFix(fixes: number): Promise<string | null> {
 }
 const base = (u: string) => u.trim().replace(/\/+$/, '');
 
+// ── 429 / 网络抖动的自动重试：只在「还没收到任何流内容」时重发，不会出现半截输出 ─────────────
+const sleep = (ms: number, signal: AbortSignal) => new Promise<void>((resolve, reject) => {
+  const onAbort = () => { clearTimeout(t); reject(new DOMException('aborted', 'AbortError')); };
+  const t = setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve(); }, ms);
+  signal.addEventListener('abort', onAbort, { once: true });
+});
+/** Retry-After 优先（单位是秒）；没有就 2、4、8… 秒，最多 30 秒 */
+function retryWait(r: Response | null, attempt: number): number {
+  const h = Number(r?.headers.get('retry-after'));
+  if (Number.isFinite(h) && h > 0) return Math.min(60, Math.ceil(h)) * 1000;
+  return Math.min(30, 2 * 2 ** attempt) * 1000;
+}
+/** 刚被限流过的服务方，下一轮开工前先歇一小会儿，别连着撞 */
+let coolUntil = 0;
+async function chatFetch(c: AiConfig, body: Record<string, unknown>, ev: AgentEvents, signal: AbortSignal): Promise<Response> {
+  const url = `${base(c.baseUrl)}/chat/completions`;
+  const init: RequestInit = { method: 'POST', signal, headers: { 'Content-Type': 'application/json', ...(c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {}) }, body: JSON.stringify(body) };
+  while (coolUntil > Date.now()) await sleep(Math.min(2000, coolUntil - Date.now()), signal);
+  for (let attempt = 0; ; attempt++) {
+    let r: Response | null = null;
+    let netErr: unknown = null;
+    try { r = await fetch(url, init); } catch (e) { netErr = e; }
+    if (r?.ok) return r;
+    if (netErr) {
+      if (signal.aborted || attempt >= 3) throw netErr;
+      const wait = retryWait(null, attempt);
+      ev.onStatus(`连不上服务方（网络或跨域），${Math.round(wait / 1000)} 秒后自动重试（第 ${attempt + 1} 次）…`);
+      await sleep(wait, signal);
+      continue;
+    }
+    const retriable = r!.status === 429 || r!.status >= 500;
+    if (!retriable || attempt >= 3) throw new Error(`http ${r!.status}${await describeBody(r!)}`);
+    const wait = retryWait(r, attempt);
+    coolUntil = Date.now() + 1500;
+    ev.onStatus(r!.status === 429 ? `服务方说「请求过于频繁 / 额度不足」，${Math.round(wait / 1000)} 秒后自动重试（第 ${attempt + 1} 次）…` : `服务方返回 http ${r!.status}，${Math.round(wait / 1000)} 秒后自动重试（第 ${attempt + 1} 次）…`);
+    await sleep(wait, signal);
+  }
+}
+
 /** 图片块上没有文件名，模型看见图却不知道叫什么，插图时就瞎猜：附件清单接在这句话后面 */
 const KIND: Record<Attachment['kind'], string> = { image: '图片', pdf: 'PDF', text: '文本' };
 const withFileNames = (text: string, files: Attachment[]) => (files.length ? `${text}\n\n（本条消息的附件：${files.map((f) => `${f.name}〔${KIND[f.kind]}〕`).join('、')}。插图时 figure_write 的 image 就填这里的文件名）` : text);
@@ -52,7 +91,7 @@ export async function runTurn(c: AiConfig, t: Transcript, userText: string, file
 // ── Anthropic Messages（官方 SDK，浏览器里直连要 dangerouslyAllowBrowser）────────────────────
 async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], userText: string, files: Attachment[], system: string, ev: AgentEvents, signal: AbortSignal) {
   const { default: Client } = await import('@anthropic-ai/sdk');
-  const client = new Client({ apiKey: c.apiKey, baseURL: base(c.baseUrl), dangerouslyAllowBrowser: true, maxRetries: 1 });
+  const client = new Client({ apiKey: c.apiKey, baseURL: base(c.baseUrl), dangerouslyAllowBrowser: true, maxRetries: 2 });
   const tools: Anthropic.ToolUnion[] = toolsFor(c).map((d) => ({ name: d.name, description: d.description, input_schema: d.parameters as Anthropic.Tool.InputSchema }));
   // 联网走 Anthropic 自带的服务端工具：新一代模型用带动态过滤的那版，老模型只有基础搜索
   if (webOf(c).enabled) {
@@ -179,12 +218,7 @@ async function openaiTurn(c: AiConfig, messages: any[], userText: string, files:
   for (let round = 0; ; round++) {
     if (!(await mayContinue(round))) { ev.onText(round >= HARD_MAX ? '\n（工具调用轮数太多，先停在这儿）' : '\n（按你的要求停在这儿）'); return; }
     ev.onStatus(round ? '工具结果发回去了，等模型接着说…' : '等模型回复…');
-    const r = await fetch(`${base(c.baseUrl)}/chat/completions`, {
-      method: 'POST', signal,
-      headers: { 'Content-Type': 'application/json', ...(c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {}) },
-      body: JSON.stringify({ model: c.model, messages, tools, stream: true, ...extra }),
-    });
-    if (!r.ok) throw new Error(`http ${r.status}${await describeBody(r)}`);
+    const r = await chatFetch(c, { model: c.model, messages, tools, stream: true, ...extra }, ev, signal);
     let text = '';
     let thinking = false;
     const calls = new Map<number, ToolCallAcc>();
@@ -298,6 +332,6 @@ export function describeError(e: unknown): string {
   if (/http 401|authentication|invalid.*api.key|Unauthorized/i.test(m)) return "密钥不对（401）";
   if (/http 403/.test(m)) return "没有权限（403）：密钥没开这个模型，或余额不足";
   if (/http 404|not_found|does not exist/i.test(m)) return `模型或地址不对（404）：${m}`;
-  if (/http 429|rate.?limit/i.test(m)) return "请求太频繁或额度用完（429）";
+  if (/http 429|rate.?limit/i.test(m)) return "请求太频繁或额度用完（429）：自动重试了几次还是被拒——等一两分钟再发，或在 Agent 设置里换个接口（Kimi 这类按分钟限流的服务，连续工具调用很容易触发）";
   return m;
 }
