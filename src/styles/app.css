@@ -1170,6 +1170,9 @@ body.is-dragging-window iframe, body.is-dragging-window .preview-stage { pointer
 .rb-tablist [role=tab] { padding-top: 3px !important; padding-bottom: 3px !important; min-height: 0 !important; }
 .rb-tabs { align-items: center; }
 .rb-collapse { margin: 0 0 0 4px; }
+/* Alt 键提示（Word 的 KeyTip）：徽标挂在控件左上角，只提示、不吃鼠标事件 */
+.rb-kt-layer { position: absolute; inset: 0; z-index: 40; pointer-events: none; }
+.rb-kt { position: absolute; min-width: 13px; height: 13px; padding: 0 3px; box-sizing: border-box; border-radius: 3px; background: var(--accent); color: #fff; font-size: 10px; line-height: 13px; font-weight: 600; text-align: center; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
 .tb-size, .rb-inline { align-items: center; }
 .rb-items > .rb-inline { align-self: center; }
 /* 表格弹层底下的二级菜单（Word：插入表格… / 文本转换成表格） */

@@ -1,5 +1,5 @@
 // Word 风格的 Fluent UI 功能区。命令始终作用于当前富文本编辑器；页面视图与编辑区共用选区。
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Editor } from '@tiptap/core';
 import type { Mark } from '@tiptap/pm/model';
 import { create } from 'zustand';
@@ -49,6 +49,8 @@ import { useComments, newCommentId } from '../editor/comments';
 import { commentRange } from './CommentsPane';
 import { wordAt } from '../editor/wordAt';
 import { SymbolPicker, SymbolPanel } from './SymbolPicker';
+import { KeyTips } from './keytips';
+import { useStylePreview } from './stylePreview';
 import { t as tx } from '../i18n';
 const FITS = [{ value: 'content', label: tx("根据内容自动调整表格"), hint: tx("根据单元格内容调整列宽") }, { value: 'window', label: tx("根据窗口自动调整表格"), hint: tx("适应版心宽度并平均分配各列") }, { value: 'fixed', label: tx("固定列宽"), hint: tx("各列等宽；可在“插入表格”对话框中设置宽度。") }];
 
@@ -191,6 +193,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const ed = useActiveEditor();
   const meta = activeKey ? getEditorMeta(activeKey) : undefined;
   const ins = useInsertActions(ed);
+  const pv = useStylePreview(ed);
   // 焦点在普通输入框（论文信息、题注那些）：汉字宽空格插的是「　」本身
   const field = useFocusedField();
   const inTable = !!ed?.isActive('table');
@@ -279,7 +282,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
     return () => document.removeEventListener('mousedown', onDown);
   }, [peek]);
   const afterCommand = useCallback(() => { if (collapsed) setPeek(false); setPop(null); }, [collapsed]);
-  const shownTabs = TABS.filter((t) => (t.key !== 'table' || inTable) && (t.key !== 'figure' || inFigure));
+  const shownTabs = useMemo(() => TABS.filter((t) => (t.key !== 'table' || inTable) && (t.key !== 'figure' || inFigure)), [inTable, inFigure]);
   // 选项卡那一栏能有多宽：整行减去左边那几个钮、收起钮、右端状态那一串；放不下的选项卡收进 ▾
   const [tabsMax, setTabsMax] = useState<number | undefined>(undefined);
   useEffect(() => {
@@ -411,6 +414,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   return (
     <div ref={root} className={`ribbon ${none ? 'is-idle' : ''} ${collapsed ? 'is-collapsed' : ''} ${peek ? 'is-peek' : ''}`} onClick={(e) => { const t = e.target as HTMLElement; if (t.closest('.rb-btn') && !t.closest('.rb-keep')) afterCommand(); }}>
       <SymbolPicker onPick={(ch) => { chain().insertContent(ch).run(); }} />
+      {!minimal && <KeyTips root={root} tabs={shownTabs} tab={tab} bodyVisible={bodyVisible} />}
       <HeaderFooterDialog />
       <HistoryDialog />
       <GitDialog />
@@ -446,7 +450,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
       </div>
       {!minimal && (
         <div ref={drawerRef} className={`rb-drawer ${bodyVisible ? '' : 'is-closed'}`} aria-hidden={!bodyVisible}>
-          <div className="rb-drawer-inner">
+          <div className="rb-drawer-inner" role="tabpanel" aria-label={TABS.find((t) => t.key === tab)?.label}>
             <div className="rb-scroll-shell">
               {scrollEdges.left && <button type="button" className="rb-scroll-arrow is-left" aria-label={tx("向左滚动功能区")} onClick={() => scrollerRef.current?.scrollBy({ left: -320, behavior: 'smooth' })}><ChevronLeft20Regular /></button>}
               <div ref={scrollerRef} className="rb-scroller" onWheel={(event) => { const el = scrollerRef.current; if (!el || el.scrollWidth <= el.clientWidth || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return; event.preventDefault(); el.scrollLeft += event.deltaY; }}>
@@ -520,9 +524,9 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               </Group>
               <Group label={tx("样式")}>
                 <div className="rb-styles">
-                  <button type="button" className={`rb-style rb-style-p ${ed?.isActive('paragraph') ? 'on' : ''}`} disabled={none} title={tx("正文段落")} onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(() => chain().setParagraph().run())} onContextMenu={(e) => { e.preventDefault(); useBlockMenu.getState().openStyle(0); }}><span>{tx("正文")}</span></button>
+                  <button type="button" className={`rb-style rb-style-p ${ed?.isActive('paragraph') ? 'on' : ''}`} disabled={none} title={tx("正文段落")} onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => pv.hover(0)} onMouseLeave={pv.leave} onClick={() => { pv.leave(); refocusPreviewAfter(() => chain().setParagraph().run()); }} onContextMenu={(e) => { e.preventDefault(); useBlockMenu.getState().openStyle(0); }}><span>{tx("正文")}</span></button>
                   {levels.map(({ level: l, name, sample }) => (
-                    <button key={l} type="button" className={`rb-style rb-style-h${l} ${ed?.isActive('heading', { level: l }) ? 'on' : ''}`} disabled={none || !headings} title={tx("{{v0}}标题（{{l}} 级）", { v0: name || tx("{{l}} 级", { l: l }), l: l })} onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(() => chain().toggleHeading({ level: l as 1 | 2 | 3 | 4 }).run())} onContextMenu={(e) => { e.preventDefault(); useBlockMenu.getState().openStyle(l); }}><span>{sample}</span><small>{name || tx("{{l}} 级", { l: l })}</small><b className="rb-style-short">H{l}</b></button>
+                    <button key={l} type="button" className={`rb-style rb-style-h${l} ${ed?.isActive('heading', { level: l }) ? 'on' : ''}`} disabled={none || !headings} title={tx("{{v0}}标题（{{l}} 级）", { v0: name || tx("{{l}} 级", { l: l }), l: l })} onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => pv.hover(l as 1 | 2 | 3 | 4)} onMouseLeave={pv.leave} onClick={() => { pv.leave(); refocusPreviewAfter(() => chain().toggleHeading({ level: l as 1 | 2 | 3 | 4 }).run()); }} onContextMenu={(e) => { e.preventDefault(); useBlockMenu.getState().openStyle(l); }}><span>{sample}</span><small>{name || tx("{{l}} 级", { l: l })}</small><b className="rb-style-short">H{l}</b></button>
                   ))}
                   <button type="button" className={`rb-style rb-style-item ${ed?.isActive('orderedList') ? 'on' : ''}`} disabled={none} title={tx("编号列表")} onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(() => chain().toggleOrderedList().run())}><span>（1）</span><small>{tx("项")}</small></button>
                 </div>
