@@ -50,7 +50,6 @@ import { commentRange } from './CommentsPane';
 import { wordAt } from '../editor/wordAt';
 import { SymbolPicker, SymbolPanel } from './SymbolPicker';
 import { KeyTips } from './keytips';
-import { useStylePreview } from './stylePreview';
 import { t as tx } from '../i18n';
 const FITS = [{ value: 'content', label: tx("根据内容自动调整表格"), hint: tx("根据单元格内容调整列宽") }, { value: 'window', label: tx("根据窗口自动调整表格"), hint: tx("适应版心宽度并平均分配各列") }, { value: 'fixed', label: tx("固定列宽"), hint: tx("各列等宽；可在“插入表格”对话框中设置宽度。") }];
 
@@ -193,7 +192,6 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const ed = useActiveEditor();
   const meta = activeKey ? getEditorMeta(activeKey) : undefined;
   const ins = useInsertActions(ed);
-  const pv = useStylePreview(ed);
   // 焦点在普通输入框（论文信息、题注那些）：汉字宽空格插的是「　」本身
   const field = useFocusedField();
   const inTable = !!ed?.isActive('table');
@@ -524,9 +522,9 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
               </Group>
               <Group label={tx("样式")}>
                 <div className="rb-styles">
-                  <button type="button" className={`rb-style rb-style-p ${ed?.isActive('paragraph') ? 'on' : ''}`} disabled={none} title={tx("正文段落")} onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => pv.hover(0)} onMouseLeave={pv.leave} onClick={() => { pv.leave(); refocusPreviewAfter(() => chain().setParagraph().run()); }} onContextMenu={(e) => { e.preventDefault(); useBlockMenu.getState().openStyle(0); }}><span>{tx("正文")}</span></button>
+                  <button type="button" className={`rb-style rb-style-p ${ed?.isActive('paragraph') ? 'on' : ''}`} disabled={none} title={tx("正文段落")} onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(() => chain().setParagraph().run())} onContextMenu={(e) => { e.preventDefault(); useBlockMenu.getState().openStyle(0); }}><span>{tx("正文")}</span></button>
                   {levels.map(({ level: l, name, sample }) => (
-                    <button key={l} type="button" className={`rb-style rb-style-h${l} ${ed?.isActive('heading', { level: l }) ? 'on' : ''}`} disabled={none || !headings} title={tx("{{v0}}标题（{{l}} 级）", { v0: name || tx("{{l}} 级", { l: l }), l: l })} onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => pv.hover(l as 1 | 2 | 3 | 4)} onMouseLeave={pv.leave} onClick={() => { pv.leave(); refocusPreviewAfter(() => chain().toggleHeading({ level: l as 1 | 2 | 3 | 4 }).run()); }} onContextMenu={(e) => { e.preventDefault(); useBlockMenu.getState().openStyle(l); }}><span>{sample}</span><small>{name || tx("{{l}} 级", { l: l })}</small><b className="rb-style-short">H{l}</b></button>
+                    <button key={l} type="button" className={`rb-style rb-style-h${l} ${ed?.isActive('heading', { level: l }) ? 'on' : ''}`} disabled={none || !headings} title={tx("{{v0}}标题（{{l}} 级）", { v0: name || tx("{{l}} 级", { l: l }), l: l })} onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(() => chain().toggleHeading({ level: l as 1 | 2 | 3 | 4 }).run())} onContextMenu={(e) => { e.preventDefault(); useBlockMenu.getState().openStyle(l); }}><span>{sample}</span><small>{name || tx("{{l}} 级", { l: l })}</small><b className="rb-style-short">H{l}</b></button>
                   ))}
                   <button type="button" className={`rb-style rb-style-item ${ed?.isActive('orderedList') ? 'on' : ''}`} disabled={none} title={tx("编号列表")} onMouseDown={(e) => e.preventDefault()} onClick={() => refocusPreviewAfter(() => chain().toggleOrderedList().run())}><span>（1）</span><small>{tx("项")}</small></button>
                 </div>
