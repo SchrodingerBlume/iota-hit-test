@@ -1743,6 +1743,28 @@ body.is-dragging-window iframe, body.is-dragging-window .preview-stage { pointer
 .ag-live-secs { font-size: 11px; margin-left: auto; }
 .ag-live-status { font-size: 11.5px; padding: 0 10px 6px; }
 .ag-thinking { display: flex; align-items: center; gap: 6px; }
+/* 工具卡右侧的小字：这一笔 +N/−M 与跑完的耗时 */
+.ag-card-side { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; }
+.ag-diffnum { display: inline-flex; gap: 4px; font-family: var(--mono); }
+.ag-diffnum .is-add { color: var(--ok); }
+.ag-diffnum .is-del { color: var(--danger); }
+/* 写入类工具展开后画行级 diff（opencode 改动展示那种红绿） */
+.ag-diff { border-top: 1px solid var(--line); padding: 4px 0; max-height: 240px; overflow: auto; font-family: var(--mono); font-size: 11px; line-height: 1.5; }
+.ag-dline { padding: 0 8px; white-space: pre-wrap; word-break: break-word; color: var(--ink-2); }
+.ag-dline.is-add { background: #e9f6ee; color: #1f6f3f; }
+.ag-dline.is-del { background: #fdeeec; color: #a93729; }
+.ag-card-foot { padding: 6px 8px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11.5px; }
+/* 模型的思考流：流着时标题带流光、展开是一片灰字；正文一开始就自己收起来 */
+.ag-think { border: 1px solid var(--line); border-radius: var(--r-s); background: var(--panel); font-size: 12px; overflow: hidden; }
+.ag-think-head { display: flex; align-items: center; gap: 4px; width: 100%; border: 0; background: none; color: var(--muted); padding: 4px 6px; text-align: left; cursor: pointer; font-size: 12px; }
+.ag-think-head:hover { color: var(--ink-2); }
+.ag-think-icon { flex: none; }
+.ag-think-body { border-top: 1px solid var(--line); padding: 6px 9px; max-height: 200px; overflow: auto; white-space: pre-wrap; word-break: break-word; color: var(--muted); line-height: 1.55; font-size: 12px; background: var(--panel-2); }
+.ag-think-head .is-active, .ag-card.is-live .ag-live-title { background: linear-gradient(90deg, var(--muted) 32%, var(--accent-ink) 50%, var(--muted) 68%); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: ag-shimmer 1.6s linear infinite; }
+@keyframes ag-shimmer { from { background-position: 140% 0; } to { background-position: -40% 0; } }
+/* 用户往上翻着看时：列表底部贴一颗「回到底部」 */
+.ag-jump { position: sticky; bottom: 2px; align-self: center; display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line-2); background: var(--panel); color: var(--ink-2); border-radius: var(--r-pill); padding: 3px 10px; font-size: 11.5px; cursor: pointer; z-index: 2; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08); }
+.ag-jump:hover { color: var(--accent-ink); border-color: var(--accent-soft-2); }
 .ag-howto { border: 1px solid var(--line); border-radius: var(--r-s); padding: 6px 10px; font-size: 12.5px; }
 .ag-howto summary { cursor: pointer; font-weight: 500; color: var(--accent-ink); }
 .ag-howto ol { margin: 6px 0 0; padding-left: 1.4em; line-height: 1.6; }

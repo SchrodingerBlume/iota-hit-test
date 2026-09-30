@@ -2,7 +2,7 @@
 // 它读、改文档走 src/ai/tools.ts 那几件工具，每一步在对话里留一张卡；要改设置时弹授权卡等用户点
 import { useEffect, useRef, useState } from 'react';
 import { Button, Textarea, Tooltip, Popover, PopoverTrigger, PopoverSurface, Input, Spinner } from '@fluentui/react-components';
-import { Settings20Regular, Dismiss20Regular, Send20Regular, Stop20Regular, Add20Regular, History20Regular, Delete16Regular, WindowMultiple20Regular, PanelRightContract20Regular, Star16Regular, Star16Filled, Rename16Regular, Checkmark16Regular, ChevronRight12Regular, ChevronDown12Regular, Attach20Regular, Dismiss12Regular, Image16Regular, DocumentPdf16Regular, DocumentText16Regular, BotSparkle20Regular, ShieldCheckmark20Regular } from '@fluentui/react-icons';
+import { Settings20Regular, Dismiss20Regular, Send20Regular, Stop20Regular, Add20Regular, History20Regular, Delete16Regular, WindowMultiple20Regular, PanelRightContract20Regular, Star16Regular, Star16Filled, Rename16Regular, Checkmark16Regular, ChevronRight12Regular, ChevronDown12Regular, Attach20Regular, Dismiss12Regular, Image16Regular, DocumentPdf16Regular, DocumentText16Regular, BotSparkle20Regular, ShieldCheckmark20Regular, BrainCircuit20Regular, ChevronDoubleDown16Regular } from '@fluentui/react-icons';
 import { useAgent, type ToolCard, type ChatMeta, type ChatItem } from '../ai/state';
 import { useStore } from '../model/store';
 import { configReady, providerLabel } from '../ai/config';
@@ -22,6 +22,8 @@ const QUICK = [
 ];
 
 const fmtWhen = (ts: number) => { const d = new Date(ts); const now = new Date(); const same = d.toDateString() === now.toDateString(); return same ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : `${d.getMonth() + 1}/${d.getDate()}`; };
+/** 工具跑完花了多久：不到 1 秒报毫秒，后面一位小数、整分 */
+const fmtDur = (ms: number): string => ms < 950 ? tx("{{n}} 毫秒", { n: Math.max(1, Math.round(ms)) }) : ms < 60000 ? tx("{{n}} 秒", { n: Math.round(ms / 100) / 10 }) : tx("{{m}} 分 {{s}} 秒", { m: Math.floor(ms / 60000), s: Math.round((ms % 60000) / 1000) });
 function partLabel(key: unknown) { return PARTS.find((p) => p.key === key)?.label ?? String(key ?? ''); }
 function cardTitle(c: ToolCard): string {
   const i = c.input;
@@ -99,7 +101,7 @@ function Live({ live, hasText }: { live: ChatItem['live']; hasText: boolean }) {
   useEffect(() => { const t = window.setInterval(() => tick((n) => n + 1), 1000); return () => window.clearInterval(t); }, []);
   const secs = live ? Math.max(0, Math.round((Date.now() - live.since) / 1000)) : 0;
   const long = secs >= 4 ? tx("（{{s}} 秒）", { s: secs }) : '';
-  if (live?.tool) return <div className="ag-card is-live"><div className="ag-card-head"><Spinner size="extra-tiny" /><span>{liveTitle(live.tool.name, live.tool.input)}</span><span className="muted ag-live-secs">{long}</span></div>{live.status && <div className="ag-live-status muted">{live.status}</div>}</div>;
+  if (live?.tool) return <div className="ag-card is-live"><div className="ag-card-head"><Spinner size="extra-tiny" /><span className="ag-live-title">{liveTitle(live.tool.name, live.tool.input)}</span><span className="muted ag-live-secs">{long}</span></div>{live.status && <div className="ag-live-status muted">{live.status}</div>}</div>;
   if (live?.status) return <div className="ag-thinking muted"><Spinner size="extra-tiny" />{live.status}{long}</div>;
   if (!hasText) return <div className="ag-thinking muted"><Spinner size="extra-tiny" />{tx("正在生成回复…")}{long}</div>;
   return null;
@@ -140,17 +142,56 @@ function FileChip({ f, onRemove }: { f: Attachment; onRemove?: () => void }) {
   );
 }
 
+function DiffBody({ d }: { d: NonNullable<ToolCard['diff']> }) {
+  return (
+    <div className="ag-diff">
+      {d.lines.map((l, i) => <div key={i} className={`ag-dline is-${l.kind}`}>{`${l.kind === 'add' ? '+' : l.kind === 'del' ? '-' : ' '}${l.text}`}</div>)}
+      {d.more > 0 && <div className="ag-dline is-ctx muted">{tx("还有 {{n}} 行未显示", { n: d.more })}</div>}
+    </div>
+  );
+}
+
+/** 模型的思考流：流着的时候展开、计着秒；开始说正文就自己收起来（用户手动点开过就照用户的） */
+function Think({ text, active, since, ms }: { text: string; active: boolean; since?: number; ms?: number }) {
+  const [open, setOpen] = useState(active);
+  const touched = useRef(false);
+  const [, tick] = useState(0);
+  useEffect(() => { if (!active) return; const t = window.setInterval(() => tick((n) => n + 1), 1000); return () => window.clearInterval(t); }, [active]);
+  useEffect(() => { if (!touched.current) setOpen(active); }, [active]);
+  const secs = active && since ? Math.max(0, Math.round((Date.now() - since) / 1000)) : 0;
+  const head = active ? tx("正在思考…（{{s}} 秒）", { s: secs }) : ms !== undefined ? tx("思考 {{s}} 秒", { s: Math.max(1, Math.round(ms / 1000)) }) : tx("思考过程");
+  return (
+    <div className={`ag-think ${active ? 'is-live' : ''}`}>
+      <button type="button" className="ag-think-head" onClick={() => { touched.current = true; setOpen(!open); }}>
+        {open ? <ChevronDown12Regular /> : <ChevronRight12Regular />}
+        <BrainCircuit20Regular className="ag-think-icon" />
+        <span className={active ? 'is-active' : undefined}>{head}</span>
+      </button>
+      {open && <div className="ag-think-body">{text}</div>}
+    </div>
+  );
+}
+
 function Card({ c }: { c: ToolCard }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(c.isError);
   const detail = c.name === 'replace' || c.name === 'insert' ? `${String(c.input.markdown ?? '')}\n\n— ${c.result}`
     : c.name === 'table_write' ? `${(c.input.rows as string[][] | undefined)?.map((r) => r.join(' | ')).join('\n') ?? ''}\n\n— ${c.result}`
     : c.name === 'bib_add' ? `${String(c.input.bibtex ?? '')}\n\n— ${c.result}`
     : c.name === 'write_json' ? `${JSON.stringify(c.input.nodes, null, 1)}\n\n— ${c.result}` : c.result;
   return (
     <div className={`ag-card ${c.isError ? 'is-error' : EDIT_TOOLS.has(c.name) ? 'is-edit' : ''}`}>
-      <button type="button" className="ag-card-head" onClick={() => setOpen(!open)}>{open ? <ChevronDown12Regular /> : <ChevronRight12Regular />}<span>{cardTitle(c)}</span></button>
+      <button type="button" className="ag-card-head" onClick={() => setOpen(!open)}>
+        {open ? <ChevronDown12Regular /> : <ChevronRight12Regular />}
+        <span>{cardTitle(c)}</span>
+        <span className="ag-card-side">
+          {!!c.diff && (c.diff.add > 0 || c.diff.del > 0) && <span className="ag-diffnum"><span className="is-add">{`+${c.diff.add}`}</span><span className="is-del">{`-${c.diff.del}`}</span></span>}
+          {c.ms !== undefined && <span className="muted">{fmtDur(c.ms)}</span>}
+        </span>
+      </button>
       {!!c.images?.length && <div className="ag-card-imgs">{c.images.map((im) => <img key={im.id} src={`data:${im.type};base64,${im.data}`} alt={im.name} title={im.name} />)}</div>}
-      {open && <pre className="ag-card-body">{detail}</pre>}
+      {open && (c.diff
+        ? <><DiffBody d={c.diff} /><div className="ag-card-foot">{c.result}</div></>
+        : <pre className="ag-card-body">{detail}</pre>)}
     </div>
   );
 }
@@ -163,6 +204,7 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
   const provider = settings?.providers.find((p) => p.id === (docProviderId ?? settings.globalId)) ?? settings?.providers[0];
   const [draft, setDraft] = useState('');
   const [drag, setDrag] = useState(false);
+  const [pinned, setPinned] = useState(true);
   const listRef = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const ready = configReady(config);
@@ -170,11 +212,11 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
   useEffect(() => { void useAgent.getState().bind(); }, [docId]);
   // 贴底才跟着滚：用户往上翻着看的时候，模型一边输出一边把列表拽到底是骚扰；自己发一句、换一场对话就回到底
   const stick = useRef(true);
-  useEffect(() => { const el = listRef.current; if (!el) return; const onScroll = () => { stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48; }; el.addEventListener('scroll', onScroll, { passive: true }); return () => el.removeEventListener('scroll', onScroll); }, []);
+  useEffect(() => { const el = listRef.current; if (!el) return; const onScroll = () => { const p = el.scrollHeight - el.scrollTop - el.clientHeight < 48; stick.current = p; setPinned(p); }; el.addEventListener('scroll', onScroll, { passive: true }); return () => el.removeEventListener('scroll', onScroll); }, []);
   useEffect(() => { const el = listRef.current; if (el && stick.current) el.scrollTop = el.scrollHeight; }, [items, ask]);
-  useEffect(() => { stick.current = true; const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }, [chatId]);
+  useEffect(() => { stick.current = true; setPinned(true); const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }, [chatId]);
   useEffect(() => { if (settings === undefined) useAgent.getState().setOpen(true); }, [settings]);
-  const submit = () => { const t = draft.trim(); if ((!t && !pending.length) || running || !ready) return; setDraft(''); stick.current = true; void send(t); };
+  const submit = () => { const t = draft.trim(); if ((!t && !pending.length) || running || !ready) return; setDraft(''); stick.current = true; setPinned(true); void send(t); };
   const onFiles = (list: FileList | File[] | null | undefined) => { if (list?.length && ready) void attach(Array.from(list)); };
   const last = items[items.length - 1];
   return (
@@ -213,10 +255,11 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
         {items.map((it) => (
           <div key={it.id} className={`ag-msg is-${it.role}`}>
             {it.tools.map((c, i) => <Card key={i} c={c} />)}
+            {it.reasoning && <Think text={it.reasoning} active={running && it.id === last?.id && !it.text} since={it.thinkSince} ms={it.thinkMs} />}
             {!!it.files?.length && <div className="ag-files">{it.files.map((f) => <FileChip key={f.id} f={f} />)}</div>}
             {it.text && (it.role === 'user' ? <div className="ag-text">{it.text}</div> : <div className="ag-text"><ChatMarkdown text={it.text} /></div>)}
             {it.error && <div className="ag-error">{it.error}</div>}
-            {it.role === 'assistant' && running && it.id === last?.id && !ask && <Live live={it.live} hasText={!!it.text} />}
+            {it.role === 'assistant' && running && it.id === last?.id && !ask && (!it.reasoning || it.text) && <Live live={it.live} hasText={!!it.text} />}
           </div>
         ))}
         {ask && (
@@ -231,6 +274,7 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
             </div>
           </div>
         )}
+        {!pinned && <button type="button" className="ag-jump" onClick={() => { stick.current = true; setPinned(true); const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }}><ChevronDoubleDown16Regular />{tx("回到底部")}</button>}
       </div>
       {!!pending.length && <div className="ag-files ag-pending">{pending.map((f) => <FileChip key={f.id} f={f} onRemove={() => detach(f.id)} />)}</div>}
       <div className="ag-input">

@@ -25,6 +25,7 @@ import { bridgeRun, bridgeLs, bridgeRead, bridgeWrite, defaultBridge, type Bridg
 import { GUIDES, guideFor, loadGuide, guideToc, guideSection, guideSearch } from './guides';
 import { queryFacts } from '../export/docx/template';
 import { parseSubs, subLayout, type SubFig } from '../typst/subfigs';
+import { lineDiff, type LineDiff } from './diff';
 
 export interface ToolDef { name: string; description: string; parameters: Record<string, unknown> }
 /** 要用户点头的改动：面板弹卡片，用户允许了才做 */
@@ -179,6 +180,10 @@ function readText(key: RichKey, from: number, to: number): string {
   return blocks.slice(from, to + 1).map((b, i) => `<!-- #${from + i} -->\n${toMarkdown({ type: 'doc', content: [b] })}`).join('\n\n');
 }
 
+/** 最近一次文档写入的行级 diff：面板把它画进工具卡（opencode 那种 +N/−M 与逐行红绿）。取走即清 */
+let lastEdit: LineDiff | null = null;
+export const takeEdit = (): LineDiff | null => { const e = lastEdit; lastEdit = null; return e; };
+
 /** 把 [from, to] 换成 nodes（to = from - 1 就是纯插入，nodes 空就是删）：编辑器挂着走一笔事务，否则改工程 */
 function splice(key: RichKey, from: number, to: number, nodes: any[], what: string): string {
   const ed: Editor | undefined = getEditor(key);
@@ -201,6 +206,8 @@ function splice(key: RichKey, from: number, to: number, nodes: any[], what: stri
     useStore.getState().setRich(key, { type: 'doc', content: next.length ? next : [{ type: 'paragraph' }] });
   }
   const total = blocksOf(key).length;
+  const md = (list: any[]) => list.map((n) => toMarkdown({ type: 'doc', content: [n] })).join('\n\n');
+  lastEdit = lineDiff(from <= to ? md(blocks.slice(from, to + 1)) : '', md(nodes));
   const where = to < from ? `第 ${from} 块前` : `第 ${from}${to > from ? `–${to}` : ''} 块`;
   return `${what}：${where}（这一部分现在共 ${total} 块；用户可在撤消里回退）`;
 }
@@ -794,6 +801,7 @@ async function webSearch(query: string): Promise<string> {
 /** 跑一个工具，回给模型的是纯文本 */
 const WRITES = new Set(['replace', 'insert', 'delete', 'table_write', 'figure_write', 'write_json', 'bib_add', 'abbreviations_add', 'info_write']);
 export async function runTool(name: string, input: Record<string, any>): Promise<string> {
+  lastEdit = null;
   const d0 = useStore.getState().doc;
   // 排版的计数与诊断要在动手之前记：短文档写完 0.1 秒就排完了，事后再记就错过了
   const c0 = { ...useCompileState.getState(), ser: useSerializeWarnings.getState().warnings };

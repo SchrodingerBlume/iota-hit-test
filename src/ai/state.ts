@@ -3,12 +3,13 @@ import { create } from 'zustand';
 import { loadSettings, saveSettings, type AiConfig, type AiSettings } from './config';
 import { runTurn, describeError, type Transcript } from './agent';
 import { readAttachment, type Attachment } from './files';
-import { setAskUser, setAttachments, setOnDerived, setMemoryContext, setSandboxContext, systemPromptFor, dropChecks, promptSpec, promptDelta, type Ask } from './tools';
+import { setAskUser, setAttachments, setOnDerived, setMemoryContext, setSandboxContext, systemPromptFor, dropChecks, takeEdit, promptSpec, promptDelta, type Ask } from './tools';
+import type { LineDiff } from './diff';
 import { kv } from '../model/persist';
 import { useStore } from '../model/store';
 
-export interface ToolCard { name: string; input: Record<string, unknown>; result: string; isError: boolean; images?: Attachment[] }
-export interface ChatItem { id: string; role: 'user' | 'assistant'; text: string; tools: ToolCard[]; files?: Attachment[]; error?: string; /** 正在干什么（只有最后一条、跑着的时候有）：在跑的工具、分步状态、从几点起 */ live?: { tool?: { name: string; input: Record<string, unknown> }; status: string; since: number } }
+export interface ToolCard { name: string; input: Record<string, unknown>; result: string; isError: boolean; images?: Attachment[]; /** 跑完花了多久 */ ms?: number; /** 这一笔文档改动的行级 diff（只有写入类工具有） */ diff?: LineDiff }
+export interface ChatItem { id: string; role: 'user' | 'assistant'; text: string; tools: ToolCard[]; files?: Attachment[]; error?: string; /** 模型这一轮的思考流（有思考的模型才有）与它想了多久 */ reasoning?: string; thinkSince?: number; thinkMs?: number; /** 正在干什么（只有最后一条、跑着的时候有）：在跑的工具、分步状态、从几点起 */ live?: { tool?: { name: string; input: Record<string, unknown> }; status: string; since: number } }
 /** 模型要改设置时弹的授权卡：用户点了才往下走 */
 export interface Pending { ask: Ask; resolve: (ok: boolean) => void }
 
@@ -178,6 +179,9 @@ export const useAgent = create<AgentState>((set, get) => ({
     // 每一步都落盘（节流），刷新页面也不丢半场对话
     const patch = (p: Partial<ChatItem>) => { set({ items: get().items.map((it) => (it.id === reply.id ? { ...it, ...p } : it)) }); window.clearTimeout(saveTimer); saveTimer = window.setTimeout(save, 600); };
     let buf = '';
+    let rbuf = '';
+    let thinkSince = 0;
+    let thinkMs: number | undefined;
     aborter = new AbortController();
     // 中途停了或出错：这一轮的记录整个撤掉，不然下一轮会带着没回结果的工具调用
     const mark = transcript.messages.length;
@@ -197,8 +201,9 @@ export const useAgent = create<AgentState>((set, get) => ({
       }
       chatPrompt = promptSpec();
       await runTurn(c, transcript, userText, files, await systemPromptFor(st, get().docPreset), {
-        onText: (d) => { buf += d; patch({ text: buf }); },
-        onTool: (name, input, result, isError) => { const cur = get().items.find((it) => it.id === reply.id)!; patch({ tools: [...cur.tools, { name, input, result, isError, images: derived.length ? derived : undefined }], live: { status: '', since: Date.now() } }); derived = []; },
+        onText: (d) => { if (rbuf && thinkMs === undefined) thinkMs = Date.now() - thinkSince; buf += d; patch(thinkMs !== undefined ? { text: buf, thinkMs } : { text: buf }); },
+        onReasoning: (d) => { if (!rbuf) thinkSince = Date.now(); rbuf += d; patch(rbuf === d ? { reasoning: rbuf, thinkSince } : { reasoning: rbuf }); },
+        onTool: (name, input, result, isError) => { const cur = get().items.find((it) => it.id === reply.id)!; const l = cur.live; const ms = l?.tool && l.since ? Date.now() - l.since : undefined; patch({ tools: [...cur.tools, { name, input, result, isError, images: derived.length ? derived : undefined, ms, diff: takeEdit() ?? undefined }], live: { status: '', since: Date.now() } }); derived = []; },
         onToolStart: (name, input) => patch({ live: { tool: { name, input }, status: '', since: Date.now() } }),
         onStatus: (status) => { const l = liveOf(); patch({ live: { tool: l?.tool, status, since: status && status !== l?.status ? Date.now() : l?.since ?? Date.now() } }); },
       }, aborter.signal);

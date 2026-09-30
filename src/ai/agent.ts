@@ -7,6 +7,8 @@ import { pdfText, type Attachment } from './files';
 
 export interface AgentEvents {
   onText: (delta: string) => void;
+  /** 模型的思考流（DeepSeek 的 reasoning_content、Anthropic 的 thinking；不是每家都有） */
+  onReasoning: (delta: string) => void;
   onTool: (name: string, input: Record<string, unknown>, result: string, isError: boolean) => void;
   /** 工具开始跑了（结果还没回来）：面板先立一张转圈的卡 */
   onToolStart: (name: string, input: Record<string, unknown>) => void;
@@ -84,6 +86,9 @@ async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], us
     }, { signal });
     let first = true;
     stream.on('text', (delta) => { if (first) { first = false; ev.onStatus(''); } ev.onText(delta); });
+    // 带思考的模型（扩展思考）会先流一段 thinking；没有的就永远不触发
+    let think = false;
+    (stream as any).on('thinking', (delta: string) => { if (!think) { think = true; ev.onStatus(''); } ev.onReasoning(delta); });
     const msg = await stream.finalMessage();
     ev.onStatus('');
     messages.push({ role: 'assistant', content: msg.content });
@@ -177,6 +182,7 @@ async function openaiTurn(c: AiConfig, messages: any[], userText: string, files:
     });
     if (!r.ok) throw new Error(`http ${r.status}${await describeBody(r)}`);
     let text = '';
+    let thinking = false;
     const calls = new Map<number, ToolCallAcc>();
     let finish = '';
     for await (const data of sse(r, signal)) {
@@ -186,6 +192,8 @@ async function openaiTurn(c: AiConfig, messages: any[], userText: string, files:
       const ch = j.choices?.[0]; if (!ch) continue;
       const d = ch.delta ?? {};
       if (typeof d.content === 'string' && d.content) { if (!text) ev.onStatus(''); text += d.content; ev.onText(d.content); }
+      const rc = typeof d.reasoning_content === 'string' ? d.reasoning_content : typeof d.reasoning === 'string' ? d.reasoning : '';
+      if (rc) { if (!thinking) { thinking = true; ev.onStatus(''); } ev.onReasoning(rc); }
       for (const tc of d.tool_calls ?? []) {
         const i = tc.index ?? 0;
         const acc = calls.get(i) ?? { id: '', name: '', args: '' };
