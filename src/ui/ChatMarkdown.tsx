@@ -1,6 +1,6 @@
 // 对话里模型说的话：Markdown 渲成 React（不经 HTML 字符串，模型的话不会变成标签），代码块带语言与复制，
 // $…$ / $$…$$ 用 KaTeX 画。marked 只用来切记号
-import { useState, type ReactNode } from 'react';
+import { useDeferredValue, useState, type ReactNode } from 'react';
 import { marked, type Token, type Tokens } from 'marked';
 import { Copy16Regular, Checkmark16Regular } from '@fluentui/react-icons';
 import { katexHtml } from '../editor/math/MathPreview';
@@ -91,13 +91,15 @@ function blocks(tokens: Token[]): ReactNode[] {
 }
 
 export function ChatMarkdown({ text }: { text: string }) {
-  // 流式输出时围栏可能还没闭合：先补一个，不然半截代码块先按正文渲染、几秒后又跳成代码块
-  const tildes = (text.match(/^~~~/gm) ?? []).length;
-  const backticks = (text.match(/^```/gm) ?? []).length;
-  const src = tildes % 2 ? `${text}\n~~~` : backticks % 2 ? `${text}\n\`\`\`` : text;
+  // 流式输出时让渲染落在低优先级的这一次上（打字不卡主线程）
+  const shown = useDeferredValue(text);
+  // 围栏可能还没闭合：先补一个，不然半截代码块先按正文渲染、几秒后又跳成代码块
+  const tildes = (shown.match(/^~~~/gm) ?? []).length;
+  const backticks = (shown.match(/^```/gm) ?? []).length;
+  const src = tildes % 2 ? `${shown}\n~~~` : backticks % 2 ? `${shown}\n\`\`\`` : shown;
   const ex = extractMath(src);
   let tokens: Token[];
-  try { tokens = marked.lexer(ex.text, { gfm: true, breaks: true }); } catch { return <p className="ag-p">{text}</p>; }
+  try { tokens = marked.lexer(ex.text, { gfm: true, breaks: true }); } catch { return <p className="ag-p">{shown}</p>; }
   mathTable = ex.math;
   return <div className="ag-md">{blocks(tokens)}</div>;
 }

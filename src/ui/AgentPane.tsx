@@ -4,9 +4,12 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, Textarea, Tooltip, Popover, PopoverTrigger, PopoverSurface, Input, Spinner } from '@fluentui/react-components';
 import { Settings20Regular, Dismiss20Regular, Send20Regular, Stop20Regular, Add20Regular, History20Regular, Delete16Regular, WindowMultiple20Regular, PanelRightContract20Regular, Star16Regular, Star16Filled, Rename16Regular, Checkmark16Regular, ChevronRight12Regular, ChevronDown12Regular, Attach20Regular, Dismiss12Regular, Image16Regular, DocumentPdf16Regular, DocumentText16Regular, BotSparkle20Regular, ShieldCheckmark20Regular, BrainCircuit20Regular, ChevronDoubleDown16Regular, Circle16Regular, CheckmarkCircle16Filled, CircleHalfFill16Regular, DismissCircle16Regular, Copy16Regular, ArrowClockwise16Regular, ArrowDownload16Regular, Edit16Regular, Broom16Regular } from '@fluentui/react-icons';
 import { useAgent, type ToolCard, type ChatMeta, type ChatItem } from '../ai/state';
-import { useStore } from '../model/store';
+import { useStore, type RichKey } from '../model/store';
 import { configReady, providerLabel } from '../ai/config';
 import { PARTS } from '../ai/tools';
+import { modelInfoOf, costOf, fmtCost, contextTokensOf } from '../ai/pricing';
+import { getEditor, onRegistryChange } from '../editor/registry';
+import { locateInEditor } from './editorLocate';
 import { fmtSize, type Attachment } from '../ai/files';
 import { AgentSettings } from './AgentSettings';
 import { ChatMarkdown } from './ChatMarkdown';
@@ -20,6 +23,27 @@ const QUICK = [
   tx("检查最近一次排版错误，并给出修改建议"),
   tx("根据各章内容起草总结，并插入结论开头"),
 ];
+
+/** 输入框里打 / 出的命令：几个常用任务是直接发的提示语，压缩 / 导出是面板上的动作 */
+const COMMANDS: { cmd: string; desc: string; text?: string; action?: 'compact' | 'export' }[] = [
+  { cmd: '/润色', desc: tx("润色所选段落，保持原意并直接替换"), text: tx("润色所选段落，保持原意并直接替换") },
+  { cmd: '/校对', desc: tx("通读正文，列出语病、错别字和表意不清之处，暂不修改"), text: tx("通读正文，列出语病、错别字和表意不清之处，暂不修改") },
+  { cmd: '/排版', desc: tx("检查最近一次排版错误，并给出修改建议"), text: tx("检查最近一次排版错误，并给出修改建议") },
+  { cmd: '/摘要', desc: tx("根据各章内容起草总结，并插入结论开头"), text: tx("根据各章内容起草总结，并插入结论开头") },
+  { cmd: '/缩写', desc: tx("把正文里的缩略语和缩略语表对一遍"), text: tx("检查正文里的缩略语，和缩略语表对一遍，缺的登记上") },
+  { cmd: '/压缩', desc: tx("压缩历史对话（保留摘要）"), action: 'compact' },
+  { cmd: '/导出', desc: tx("导出这场对话（Markdown）"), action: 'export' },
+];
+
+/** 卡片上那笔改动是哪一部分的第几块（给「定位」用） */
+function locOf(c: ToolCard): { part: RichKey; from: number; to: number } | null {
+  const i = c.input as any;
+  if (typeof i?.part !== 'string') return null;
+  if (typeof i.from === 'number') return { part: i.part, from: i.from, to: typeof i.to === 'number' ? i.to : i.from };
+  if (typeof i.at === 'number') return { part: i.part, from: i.at, to: i.at - 1 };
+  if (Array.isArray(i.replace) && i.replace.length === 2) return { part: i.part, from: Number(i.replace[0]), to: Number(i.replace[1]) };
+  return null;
+}
 
 const fmtWhen = (ts: number) => { const d = new Date(ts); const now = new Date(); const same = d.toDateString() === now.toDateString(); return same ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : `${d.getMonth() + 1}/${d.getDate()}`; };
 /** 工具跑完花了多久：不到 1 秒报毫秒，后面一位小数、整分 */
@@ -218,20 +242,25 @@ function Lightbox({ src, name, onClose }: { src: string; name: string; onClose: 
 function Card({ c, anchorId, flash, onZoom }: { c: ToolCard; anchorId?: string; flash?: boolean; onZoom?: (src: string, name: string) => void }) {
   const [open, setOpen] = useState(c.isError || c.name === 'todo');
   useEffect(() => { if (flash) setOpen(true); }, [flash]);
+  const loc = locOf(c);
+  const canLoc = !!loc && !!getEditor(loc.part);
   const detail = c.name === 'replace' || c.name === 'insert' ? `${String(c.input.markdown ?? '')}\n\n— ${c.result}`
     : c.name === 'table_write' ? `${(c.input.rows as string[][] | undefined)?.map((r) => r.join(' | ')).join('\n') ?? ''}\n\n— ${c.result}`
     : c.name === 'bib_add' ? `${String(c.input.bibtex ?? '')}\n\n— ${c.result}`
     : c.name === 'write_json' ? `${JSON.stringify(c.input.nodes, null, 1)}\n\n— ${c.result}` : c.result;
   return (
     <div id={anchorId ? `agc-${anchorId}` : undefined} className={`ag-card ${c.isError ? 'is-error' : EDIT_TOOLS.has(c.name) ? 'is-edit' : ''} ${flash ? 'is-flash' : ''}`}>
-      <button type="button" className="ag-card-head" onClick={() => setOpen(!open)}>
-        {open ? <ChevronDown12Regular /> : <ChevronRight12Regular />}
-        <span>{cardTitle(c)}</span>
-        <span className="ag-card-side">
-          {!!c.diff && (c.diff.add > 0 || c.diff.del > 0) && <span className="ag-diffnum"><span className="is-add">{`+${c.diff.add}`}</span><span className="is-del">{`-${c.diff.del}`}</span></span>}
-          {c.ms !== undefined && <span className="muted">{fmtDur(c.ms)}</span>}
-        </span>
-      </button>
+      <div className="ag-card-top">
+        <button type="button" className="ag-card-head" onClick={() => setOpen(!open)}>
+          {open ? <ChevronDown12Regular /> : <ChevronRight12Regular />}
+          <span>{cardTitle(c)}</span>
+          <span className="ag-card-side">
+            {!!c.diff && (c.diff.add > 0 || c.diff.del > 0) && <span className="ag-diffnum"><span className="is-add">{`+${c.diff.add}`}</span><span className="is-del">{`-${c.diff.del}`}</span></span>}
+            {c.ms !== undefined && <span className="muted">{fmtDur(c.ms)}</span>}
+          </span>
+        </button>
+        {canLoc && loc && <button type="button" className="ag-locate" title={tx("在编辑器里定位到这一块")} onClick={() => void locateInEditor(loc.part, loc.from, loc.to)}>{tx("定位")}</button>}
+      </div>
       {!!c.images?.length && <div className="ag-card-imgs">{c.images.map((im) => <img key={im.id} src={`data:${im.type};base64,${im.data}`} alt={im.name} title={im.name} onClick={onZoom ? () => onZoom(`data:${im.type};base64,${im.data}`, im.name) : undefined} />)}</div>}
       {open && (c.name === 'todo'
         ? <TodoBody input={c.input} />
@@ -249,6 +278,9 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
   const [zoom, setZoom] = useState<{ src: string; name: string } | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const [slashSel, setSlashSel] = useState(0);
+  const [, setEdTick] = useState(0);
   const float = useAgentWindow((s) => s.float);
   const compact = useMedia(COMPACT);
   const provider = settings?.providers.find((p) => p.id === (docProviderId ?? settings.globalId)) ?? settings?.providers[0];
@@ -265,6 +297,9 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
   useEffect(() => { const el = listRef.current; if (!el) return; const onScroll = () => { const p = el.scrollHeight - el.scrollTop - el.clientHeight < 48; stick.current = p; setPinned(p); }; el.addEventListener('scroll', onScroll, { passive: true }); return () => el.removeEventListener('scroll', onScroll); }, []);
   useEffect(() => { const el = listRef.current; if (el && stick.current) el.scrollTop = el.scrollHeight; }, [items, ask]);
   useEffect(() => { stick.current = true; setPinned(true); const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }, [chatId]);
+  useEffect(() => { setShowAll(false); }, [chatId]);
+  // 编辑器挂上 / 卸下时重画一遍卡片（「定位」按钮只在对应那节的编辑器挂着时出现）
+  useEffect(() => onRegistryChange(() => setEdTick((n) => n + 1)), []);
   useEffect(() => { if (settings === undefined) useAgent.getState().setOpen(true); }, [settings]);
   // Esc 停掉正在跑的这一轮 / 压缩（设置面板、弹层、编辑框开着时不抢）
   useEffect(() => {
@@ -283,6 +318,21 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
   const onFiles = (list: FileList | File[] | null | undefined) => { if (list?.length && ready) void attach(Array.from(list)); };
   const last = items[items.length - 1];
   const lastUser = [...items].reverse().find((i) => i.role === 'user');
+  // 更早的轮次折起来：一轮 = 一条用户消息 + 它后面的回复（注记跟在前一轮里）
+  const groups: ChatItem[][] = [];
+  for (const it of items) { if (it.role === 'user' || !groups.length) groups.push([it]); else groups[groups.length - 1].push(it); }
+  const hidden = showAll ? 0 : Math.max(0, groups.length - 2);
+  const shownItems = hidden ? groups.slice(hidden).flat() : items;
+  // 花费与上下文占比：牌价认得出这个模型才算，上下文按字符数粗估
+  const modelInfo = config ? modelInfoOf(config.model) : undefined;
+  const totalUsage = items.reduce((a, it) => (it.usage ? { input: a.input + it.usage.input, output: a.output + it.usage.output } : a), { input: 0, output: 0 });
+  const cost = modelInfo && (totalUsage.input || totalUsage.output) ? costOf(modelInfo, totalUsage) : undefined;
+  const ctxTokens = contextTokensOf(items);
+  const ctxPct = modelInfo ? Math.min(100, Math.round((ctxTokens / modelInfo.ctx) * 100)) : undefined;
+  // 输入框里的 / 命令
+  const slashQ = draft.startsWith('/') ? draft.slice(1).trim().toLowerCase() : null;
+  const slashItems = slashQ === null ? [] : COMMANDS.filter((c) => c.cmd.slice(1).toLowerCase().includes(slashQ) || c.desc.toLowerCase().includes(slashQ));
+  useEffect(() => { setSlashSel(0); }, [slashQ]);
   // 清单只留最新那一版：旧卡片不画（老记录没有 parts 也一样）
   const lastTodo = (() => { for (let i = items.length - 1; i >= 0; i--) { const list = items[i].tools; for (let j = list.length - 1; j >= 0; j--) if (list[j].name === 'todo') return list[j]; } return undefined; })();
   // 本场改动汇总：每条带「消息 id-序号」，点开列表能定位回卡片
@@ -291,9 +341,17 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
   const sumDel = editRows.reduce((n, r) => n + (r.card.diff?.del ?? 0), 0);
   const locate = (key: string) => {
     setSumOpen(false);
+    setShowAll(true);
     setFlash(key);
-    document.getElementById(`agc-${key}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    // 展开更早的轮次后卡片才挂上，下一拍再滚
+    window.setTimeout(() => document.getElementById(`agc-${key}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 60);
     window.setTimeout(() => setFlash((f) => (f === key ? null : f)), 1800);
+  };
+  const runSlash = (c: typeof COMMANDS[number]) => {
+    setDraft(''); setSlashSel(0);
+    if (c.action === 'compact') { void compactChat(); return; }
+    if (c.action === 'export') { exportChat(); return; }
+    if (c.text) void send(c.text);
   };
   const openZoom = (src: string, name: string) => setZoom({ src, name });
   const exportChat = () => {
@@ -349,6 +407,14 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
             <button type="button" className="ag-msrow is-manage" onClick={() => setSettingsOpen(true)}><Settings20Regular />{tx("管理模型…")}</button>
           </PopoverSurface>
         </Popover>
+        {ctxPct !== undefined && (
+          <button
+            type="button"
+            className={`ag-ctx ${ctxPct >= 80 ? 'is-high' : ''}`}
+            title={tx("上下文约用了 {{p}}%（约 {{n}} / {{c}} tokens，估算）；点开对话记录可压缩历史", { p: ctxPct, n: fmtTok(ctxTokens), c: fmtTok(modelInfo!.ctx) }) + (cost !== undefined ? tx("；本场花费约 {{c}}", { c: fmtCost(cost) }) : '')}
+            onClick={() => setChatsOpen(true)}
+          >{tx("上下文 {{p}}%", { p: ctxPct === 0 && ctxTokens > 0 ? '<1' : String(ctxPct) })}</button>
+        )}
         {editRows.length > 0 && (
           <Popover positioning="below-start" open={sumOpen} onOpenChange={(_, d) => setSumOpen(d.open)}>
             <PopoverTrigger disableButtonEnhancement>
@@ -403,7 +469,8 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
             {QUICK.map((q) => <button key={q} type="button" className="ag-quick" onClick={() => { stick.current = true; void send(q); }}>{q}</button>)}
           </div>
         )}
-        {items.map((it) => {
+        {hidden > 0 && <button type="button" className="ag-fold" onClick={() => setShowAll(true)}>{tx("更早的 {{n}} 轮对话（点击展开）", { n: hidden })}</button>}
+        {shownItems.map((it) => {
           if (it.note) return <div key={it.id} className="ag-note">{it.note}</div>;
           return (
           <div key={it.id} className={`ag-msg is-${it.role}`}>
@@ -450,6 +517,7 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
                 {it.text && <CopyButton text={it.text} />}
                 {!running && !ask && it.id === last?.id && !it.error && <button type="button" className="ag-act" title={tx("重新生成这条回复")} onClick={() => void regenerate()}><ArrowClockwise16Regular />{tx("重新生成")}</button>}
                 {it.usage && <span className="ag-usage muted" title={tx("这一轮的 token 用量（输入 / 输出）")}>{`↑${fmtTok(it.usage.input)} ↓${fmtTok(it.usage.output)}`}</span>}
+                {it.usage && modelInfo && <span className="ag-usage muted" title={tx("这一轮的花费（按服务方牌价估算）")}>{`≈${fmtCost(costOf(modelInfo, it.usage))}`}</span>}
               </div>
             )}
             {it.role === 'assistant' && running && it.id === last?.id && !ask && (!it.reasoning || it.text) && <Live live={it.live} hasText={!!it.text} />}
@@ -486,7 +554,26 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
       <div className="ag-input">
         <Tooltip content={tx("附件：图片、PDF、文本文件；也可以拖进来或粘贴")} relationship="label"><Button size="small" appearance="subtle" icon={<Attach20Regular />} disabled={!ready || running} onClick={() => fileInput.current?.click()} /></Tooltip>
         <input ref={fileInput} type="file" multiple hidden accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.txt,.md,.bib,.csv,.json,.tex,.typ" onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} />
-        <Textarea resize="vertical" value={draft} placeholder={ready ? (running ? tx("说下一句，Enter 排队，这一轮结束自动发") : tx("输入任务；Enter 发送，Shift+Enter 换行")) : tx("请先在设置中配置模型")} disabled={!ready} onChange={(_, d) => setDraft(d.value)} onPaste={(e) => { const fs = Array.from(e.clipboardData.files); if (fs.length) { e.preventDefault(); onFiles(fs); } }} onKeyDown={(e) => { if (e.key === 'ArrowUp' && !draft && !running && !compacting && !e.nativeEvent.isComposing && lastUser?.text) { e.preventDefault(); setDraft(lastUser.text); return; } if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }} />
+        <div className="ag-ta-wrap">
+          <Textarea resize="vertical" value={draft} placeholder={ready ? (running ? tx("说下一句，Enter 排队，这一轮结束自动发") : tx("输入任务，Enter 发送；输入 / 看命令")) : tx("请先在设置中配置模型")} disabled={!ready} onChange={(_, d) => setDraft(d.value)} onPaste={(e) => { const fs = Array.from(e.clipboardData.files); if (fs.length) { e.preventDefault(); onFiles(fs); } }} onKeyDown={(e) => {
+            if (slashItems.length) {
+              if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const d = e.key === 'ArrowDown' ? 1 : -1; setSlashSel((n) => (n + d + slashItems.length) % slashItems.length); return; }
+              if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); runSlash(slashItems[Math.min(slashSel, slashItems.length - 1)]); return; }
+              if (e.key === 'Escape') { e.preventDefault(); setDraft(''); setSlashSel(0); return; }
+            }
+            if (e.key === 'ArrowUp' && !draft && !running && !compacting && !e.nativeEvent.isComposing && lastUser?.text) { e.preventDefault(); setDraft(lastUser.text); return; }
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); }
+          }} />
+          {slashItems.length > 0 && (
+            <div className="ag-slash" role="listbox" aria-label={tx("命令")}>
+              {slashItems.map((c, i) => (
+                <button key={c.cmd} type="button" role="option" aria-selected={i === slashSel} className={`ag-slashrow ${i === slashSel ? 'on' : ''}`} onMouseEnter={() => setSlashSel(i)} onMouseDown={(e) => { e.preventDefault(); runSlash(c); }}>
+                  <b>{c.cmd}</b><span className="muted">{c.desc}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         {running
           ? <Tooltip content={tx("停止（排队中的消息也会清掉）")} relationship="label"><Button appearance="secondary" icon={<Stop20Regular />} onClick={stop} /></Tooltip>
           : <Tooltip content={tx("发送")} relationship="label"><Button appearance="primary" icon={<Send20Regular />} disabled={!ready || (!draft.trim() && !pending.length)} onClick={submit} /></Tooltip>}
