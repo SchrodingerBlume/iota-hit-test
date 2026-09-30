@@ -1828,6 +1828,17 @@ body.is-dragging-window iframe, body.is-dragging-window .preview-stage { pointer
 .ag-lb-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ag-lb-bar button { border: 0; background: none; color: var(--muted); display: inline-flex; padding: 4px; cursor: pointer; border-radius: 50%; }
 .ag-lb-bar button:hover { color: var(--ink); background: var(--panel-2); }
+/* 系统注记（压缩历史之类）：居中的一条小字 */
+.ag-note { align-self: center; max-width: 100%; color: var(--muted); background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-pill); padding: 3px 12px; font-size: 11.5px; text-align: center; }
+/* 编辑最后一条用户消息 */
+.ag-edit { display: flex; flex-direction: column; gap: 6px; width: 100%; align-items: flex-end; }
+.ag-edit .fui-Textarea { width: 100%; }
+.ag-edit-btns { display: flex; gap: 6px; }
+/* 压缩历史进行中 */
+.ag-compacting { display: flex; align-items: center; gap: 6px; padding: 6px 12px 0; font-size: 12px; }
+/* 对话记录搜索 */
+.ag-chat-search { margin-bottom: 6px; }
+.ag-chat-none { padding: 8px 6px; font-size: 12.5px; }
 .ag-howto { border: 1px solid var(--line); border-radius: var(--r-s); padding: 6px 10px; font-size: 12.5px; }
 .ag-howto summary { cursor: pointer; font-weight: 500; color: var(--accent-ink); }
 .ag-howto ol { margin: 6px 0 0; padding-left: 1.4em; line-height: 1.6; }

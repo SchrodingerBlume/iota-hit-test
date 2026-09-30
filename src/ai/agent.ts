@@ -277,6 +277,21 @@ export async function testConnection(c: AiConfig, signal?: AbortSignal): Promise
   return { reply, tools };
 }
 
+/** 把一段对话文字压成交接摘要（压缩历史用）：不吃工具表、纯文本进纯文本出 */
+export async function summarize(c: AiConfig, text: string, signal?: AbortSignal): Promise<string> {
+  const ask = `下面是一段写作助手与用户的对话记录（含工具调用与结果）。把它压缩成一份交接说明，供同一个助手接着这份工作：保留用户的原始要求、已经改过什么（部分、段号、改了什么）、用户明确的偏好与禁区、未完成的事项和下一步；具体段号、标签、数字、命令不要丢。用中文条目式，尽量不超过 800 字。\n\n${text}`;
+  if (c.api === 'anthropic') {
+    const { default: Client } = await import('@anthropic-ai/sdk');
+    const client = new Client({ apiKey: c.apiKey, baseURL: base(c.baseUrl), dangerouslyAllowBrowser: true, maxRetries: 0 });
+    const m = await client.messages.create({ model: c.model, max_tokens: 2000, messages: [{ role: 'user', content: ask }] }, { signal });
+    return m.content.map((b) => (b.type === 'text' ? b.text : '')).join('').trim();
+  }
+  const r = await fetch(`${base(c.baseUrl)}/chat/completions`, { method: 'POST', signal, headers: { 'Content-Type': 'application/json', ...(c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {}) }, body: JSON.stringify({ model: c.model, messages: [{ role: 'user', content: ask }] }) });
+  if (!r.ok) throw new Error(`http ${r.status}${await describeBody(r)}`);
+  const j = await r.json();
+  return String(j.choices?.[0]?.message?.content ?? '').trim();
+}
+
 export function describeError(e: unknown): string {
   const m = e instanceof Error ? e.message : String(e);
   if (/Failed to fetch|NetworkError|Load failed|Connection error/i.test(m)) return "连不上：网络不通，或服务方不允许网页直连（跨域）。本机模型要打开 CORS；不允许直连的服务可以在本机起个代理";

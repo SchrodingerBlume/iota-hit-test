@@ -2,7 +2,7 @@
 // 它读、改文档走 src/ai/tools.ts 那几件工具，每一步在对话里留一张卡；要改设置时弹授权卡等用户点
 import { useEffect, useRef, useState } from 'react';
 import { Button, Textarea, Tooltip, Popover, PopoverTrigger, PopoverSurface, Input, Spinner } from '@fluentui/react-components';
-import { Settings20Regular, Dismiss20Regular, Send20Regular, Stop20Regular, Add20Regular, History20Regular, Delete16Regular, WindowMultiple20Regular, PanelRightContract20Regular, Star16Regular, Star16Filled, Rename16Regular, Checkmark16Regular, ChevronRight12Regular, ChevronDown12Regular, Attach20Regular, Dismiss12Regular, Image16Regular, DocumentPdf16Regular, DocumentText16Regular, BotSparkle20Regular, ShieldCheckmark20Regular, BrainCircuit20Regular, ChevronDoubleDown16Regular, Circle16Regular, CheckmarkCircle16Filled, CircleHalfFill16Regular, DismissCircle16Regular, Copy16Regular, ArrowClockwise16Regular, ArrowDownload16Regular } from '@fluentui/react-icons';
+import { Settings20Regular, Dismiss20Regular, Send20Regular, Stop20Regular, Add20Regular, History20Regular, Delete16Regular, WindowMultiple20Regular, PanelRightContract20Regular, Star16Regular, Star16Filled, Rename16Regular, Checkmark16Regular, ChevronRight12Regular, ChevronDown12Regular, Attach20Regular, Dismiss12Regular, Image16Regular, DocumentPdf16Regular, DocumentText16Regular, BotSparkle20Regular, ShieldCheckmark20Regular, BrainCircuit20Regular, ChevronDoubleDown16Regular, Circle16Regular, CheckmarkCircle16Filled, CircleHalfFill16Regular, DismissCircle16Regular, Copy16Regular, ArrowClockwise16Regular, ArrowDownload16Regular, Edit16Regular, Broom16Regular } from '@fluentui/react-icons';
 import { useAgent, type ToolCard, type ChatMeta, type ChatItem } from '../ai/state';
 import { useStore } from '../model/store';
 import { configReady, providerLabel } from '../ai/config';
@@ -113,10 +113,15 @@ const EDIT_TOOLS = new Set(['replace', 'insert', 'delete', 'table_write', 'figur
 
 function ChatList({ chats, current, onOpen, onDelete, onRename, onStar, onNew }: { chats: ChatMeta[]; current: string | null; onOpen: (id: string) => void; onDelete: (id: string) => void; onRename: (id: string, title: string) => void; onStar: (id: string, on: boolean) => void; onNew: () => void }) {
   const [editing, setEditing] = useState<{ id: string; title: string } | null>(null);
+  const [q, setQ] = useState('');
   const commit = () => { if (editing) onRename(editing.id, editing.title); setEditing(null); };
+  const kw = q.trim().toLowerCase();
+  const shown = kw ? chats.filter((c) => c.title.toLowerCase().includes(kw)) : chats;
   return (
     <div className="ag-chatlist" role="list">
-      {chats.map((c) => (
+      {chats.length > 4 && <Input size="small" className="ag-chat-search" value={q} onChange={(_, d) => setQ(d.value)} placeholder={tx("搜索对话标题")} />}
+      {!!kw && !shown.length && <div className="ag-chat-none muted">{tx("没有匹配的对话")}</div>}
+      {shown.map((c) => (
         <div key={c.id} role="listitem" className={`ag-chatrow ${c.id === current ? 'is-current' : ''} ${c.starred ? 'is-starred' : ''}`}>
           <button type="button" className={`ag-chat-star ${c.starred ? 'on' : ''}`} aria-label={c.starred ? tx("取消星标") : tx("加星标")} title={c.starred ? tx("取消星标") : tx("加星标")} onClick={() => onStar(c.id, !c.starred)}>{c.starred ? <Star16Filled /> : <Star16Regular />}</button>
           {editing?.id === c.id
@@ -238,11 +243,12 @@ function Card({ c, anchorId, flash, onZoom }: { c: ToolCard; anchorId?: string; 
 }
 
 export function AgentPane({ overlay }: { overlay?: boolean }) {
-  const { items, running, send, stop, regenerate, config, setOpen, setSettingsOpen, pending, queued, dequeue, attach, detach, ask, answer, chats, chatId, newChat, openChat, deleteChat, renameChat, starChat, settings, docProviderId, setDocOverride } = useAgent();
+  const { items, running, compacting, send, stop, regenerate, editResend, compact: compactChat, config, setOpen, setSettingsOpen, pending, queued, dequeue, attach, detach, ask, answer, chats, chatId, newChat, openChat, deleteChat, renameChat, starChat, settings, docProviderId, setDocOverride } = useAgent();
   const [chatsOpen, setChatsOpen] = useState(false);
   const [sumOpen, setSumOpen] = useState(false);
   const [zoom, setZoom] = useState<{ src: string; name: string } | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
   const float = useAgentWindow((s) => s.float);
   const compact = useMedia(COMPACT);
   const provider = settings?.providers.find((p) => p.id === (docProviderId ?? settings.globalId)) ?? settings?.providers[0];
@@ -260,9 +266,9 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
   useEffect(() => { const el = listRef.current; if (el && stick.current) el.scrollTop = el.scrollHeight; }, [items, ask]);
   useEffect(() => { stick.current = true; setPinned(true); const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }, [chatId]);
   useEffect(() => { if (settings === undefined) useAgent.getState().setOpen(true); }, [settings]);
-  // Esc 停掉正在跑的这一轮（设置面板 / 弹层开着时不抢）
+  // Esc 停掉正在跑的这一轮 / 压缩（设置面板、弹层、编辑框开着时不抢）
   useEffect(() => {
-    if (!running) return;
+    if (!running && !compacting) return;
     const h = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented || useAgent.getState().settingsOpen) return;
       const t = e.target as HTMLElement | null;
@@ -272,10 +278,11 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [running, stop]);
+  }, [running, compacting, stop]);
   const submit = () => { const t = draft.trim(); if ((!t && !pending.length) || !ready) return; if (running && !t) return; setDraft(''); stick.current = true; setPinned(true); void send(t); };
   const onFiles = (list: FileList | File[] | null | undefined) => { if (list?.length && ready) void attach(Array.from(list)); };
   const last = items[items.length - 1];
+  const lastUser = [...items].reverse().find((i) => i.role === 'user');
   // 清单只留最新那一版：旧卡片不画（老记录没有 parts 也一样）
   const lastTodo = (() => { for (let i = items.length - 1; i >= 0; i--) { const list = items[i].tools; for (let j = list.length - 1; j >= 0; j--) if (list[j].name === 'todo') return list[j]; } return undefined; })();
   // 本场改动汇总：每条带「消息 id-序号」，点开列表能定位回卡片
@@ -294,6 +301,7 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
     const title = chats.find((c) => c.id === chatId)?.title ?? '对话';
     const lines: string[] = [`# ${title}`, '', `（HιT webapp Agent 对话导出，${new Date().toLocaleString('zh-CN')}）`, ''];
     for (const it of items) {
+      if (it.note) { lines.push(`> ${it.note}`, ''); continue; }
       if (it.role === 'user') {
         lines.push('## 我', '', it.text || '（附件）', '');
         if (it.files?.length) lines.push(`附件：${it.files.map((f) => f.name).join('、')}`, '');
@@ -371,6 +379,10 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
           </PopoverTrigger>
           <PopoverSurface className="ag-chats">
             <ChatList chats={chats} current={chatId} onOpen={(id) => { setChatsOpen(false); void openChat(id); }} onDelete={(id) => void deleteChat(id)} onRename={(id, t) => void renameChat(id, t)} onStar={(id, on) => void starChat(id, on)} onNew={() => { setChatsOpen(false); void newChat(); }} />
+            <button type="button" className="ag-chat-export" disabled={!items.length || compacting} onClick={() => { setChatsOpen(false); void compactChat(); }}>
+              {compacting ? <Spinner size="extra-tiny" /> : <Broom16Regular />}
+              {compacting ? tx("压缩中…") : tx("压缩历史对话（保留摘要）")}
+            </button>
             <button type="button" className="ag-chat-export" disabled={!items.length} onClick={exportChat}><ArrowDownload16Regular />{tx("导出这场对话（Markdown）")}</button>
           </PopoverSurface>
         </Popover>
@@ -391,14 +403,31 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
             {QUICK.map((q) => <button key={q} type="button" className="ag-quick" onClick={() => { stick.current = true; void send(q); }}>{q}</button>)}
           </div>
         )}
-        {items.map((it) => (
+        {items.map((it) => {
+          if (it.note) return <div key={it.id} className="ag-note">{it.note}</div>;
+          return (
           <div key={it.id} className={`ag-msg is-${it.role}`}>
             {it.reasoning && <Think text={it.reasoning} active={running && it.id === last?.id && !it.text} since={it.thinkSince} ms={it.thinkMs} />}
             {it.role === 'user' ? (
-              <>
-                {!!it.files?.length && <div className="ag-files">{it.files.map((f) => <FileChip key={f.id} f={f} onZoom={openZoom} />)}</div>}
-                {it.text && <div className="ag-text">{it.text}</div>}
-              </>
+              editing?.id === it.id ? (
+                <div className="ag-edit">
+                  <Textarea value={editing.text} autoFocus onChange={(_, d) => setEditing({ id: it.id, text: d.value })} onKeyDown={(e) => { if (e.key === 'Escape') setEditing(null); if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); const t = editing.text; setEditing(null); void editResend(t); } }} />
+                  <div className="ag-edit-btns">
+                    <Button size="small" appearance="primary" disabled={!editing.text.trim() && !it.files?.length} onClick={() => { const t = editing.text; setEditing(null); void editResend(t); }}>{tx("重发")}</Button>
+                    <Button size="small" onClick={() => setEditing(null)}>{tx("取消")}</Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {!!it.files?.length && <div className="ag-files">{it.files.map((f) => <FileChip key={f.id} f={f} onZoom={openZoom} />)}</div>}
+                  {it.text && <div className="ag-text">{it.text}</div>}
+                  {it.id === lastUser?.id && !running && !compacting && (
+                    <div className="ag-actions">
+                      <button type="button" className="ag-act" title={tx("编辑这条消息并重发")} onClick={() => setEditing({ id: it.id, text: it.text })}><Edit16Regular />{tx("编辑重发")}</button>
+                    </div>
+                  )}
+                </>
+              )
             ) : (it.parts?.length
               ? it.parts.map((p, i) => p.kind === 'text'
                 ? <div key={i} className="ag-text"><ChatMarkdown text={p.text} /></div>
@@ -425,7 +454,8 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
             )}
             {it.role === 'assistant' && running && it.id === last?.id && !ask && (!it.reasoning || it.text) && <Live live={it.live} hasText={!!it.text} />}
           </div>
-        ))}
+          );
+        })}
         {ask && (
           <div className="ag-ask">
             <div className="ag-ask-head"><ShieldCheckmark20Regular />{ask.ask.head ?? tx("Agent 请求修改设置")}</div>
@@ -452,10 +482,11 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
           ))}
         </div>
       )}
+      {compacting && <div className="ag-compacting muted"><Spinner size="extra-tiny" />{tx("正在压缩历史对话…")}</div>}
       <div className="ag-input">
         <Tooltip content={tx("附件：图片、PDF、文本文件；也可以拖进来或粘贴")} relationship="label"><Button size="small" appearance="subtle" icon={<Attach20Regular />} disabled={!ready || running} onClick={() => fileInput.current?.click()} /></Tooltip>
         <input ref={fileInput} type="file" multiple hidden accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.txt,.md,.bib,.csv,.json,.tex,.typ" onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} />
-        <Textarea resize="vertical" value={draft} placeholder={ready ? (running ? tx("说下一句，Enter 排队，这一轮结束自动发") : tx("输入任务；Enter 发送，Shift+Enter 换行")) : tx("请先在设置中配置模型")} disabled={!ready} onChange={(_, d) => setDraft(d.value)} onPaste={(e) => { const fs = Array.from(e.clipboardData.files); if (fs.length) { e.preventDefault(); onFiles(fs); } }} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }} />
+        <Textarea resize="vertical" value={draft} placeholder={ready ? (running ? tx("说下一句，Enter 排队，这一轮结束自动发") : tx("输入任务；Enter 发送，Shift+Enter 换行")) : tx("请先在设置中配置模型")} disabled={!ready} onChange={(_, d) => setDraft(d.value)} onPaste={(e) => { const fs = Array.from(e.clipboardData.files); if (fs.length) { e.preventDefault(); onFiles(fs); } }} onKeyDown={(e) => { if (e.key === 'ArrowUp' && !draft && !running && !compacting && !e.nativeEvent.isComposing && lastUser?.text) { e.preventDefault(); setDraft(lastUser.text); return; } if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }} />
         {running
           ? <Tooltip content={tx("停止（排队中的消息也会清掉）")} relationship="label"><Button appearance="secondary" icon={<Stop20Regular />} onClick={stop} /></Tooltip>
           : <Tooltip content={tx("发送")} relationship="label"><Button appearance="primary" icon={<Send20Regular />} disabled={!ready || (!draft.trim() && !pending.length)} onClick={submit} /></Tooltip>}

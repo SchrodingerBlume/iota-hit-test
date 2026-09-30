@@ -91,7 +91,11 @@ function blocks(tokens: Token[]): ReactNode[] {
 }
 
 export function ChatMarkdown({ text }: { text: string }) {
-  const ex = extractMath(text);
+  // 流式输出时围栏可能还没闭合：先补一个，不然半截代码块先按正文渲染、几秒后又跳成代码块
+  const tildes = (text.match(/^~~~/gm) ?? []).length;
+  const backticks = (text.match(/^```/gm) ?? []).length;
+  const src = tildes % 2 ? `${text}\n~~~` : backticks % 2 ? `${text}\n\`\`\`` : text;
+  const ex = extractMath(src);
   let tokens: Token[];
   try { tokens = marked.lexer(ex.text, { gfm: true, breaks: true }); } catch { return <p className="ag-p">{text}</p>; }
   mathTable = ex.math;

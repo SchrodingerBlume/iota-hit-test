@@ -1,7 +1,7 @@
 // Agent 面板的状态：开没开、接的哪家、这一场对话。对话按工程各存各的（本机 IndexedDB meta 里 agent:<工程 id>），换工程就换一份
 import { create } from 'zustand';
 import { loadSettings, saveSettings, type AiConfig, type AiSettings } from './config';
-import { runTurn, describeError, type Transcript } from './agent';
+import { runTurn, describeError, summarize, type Transcript } from './agent';
 import { readAttachment, type Attachment } from './files';
 import { setAskUser, setAttachments, setOnDerived, setMemoryContext, setSandboxContext, systemPromptFor, dropChecks, takeEdit, promptSpec, promptDelta, type Ask } from './tools';
 import type { LineDiff } from './diff';
@@ -11,7 +11,7 @@ import { useStore } from '../model/store';
 export interface ToolCard { name: string; input: Record<string, unknown>; result: string; isError: boolean; images?: Attachment[]; /** 跑完花了多久 */ ms?: number; /** 这一笔文档改动的行级 diff（只有写入类工具有） */ diff?: LineDiff }
 /** 一条消息里按真实顺序排下来的段落：模型说的话与工具卡交替（老记录没有 parts，按「卡在前、话在后」渲染） */
 export type MsgPart = { kind: 'text'; text: string } | { kind: 'tool'; card: ToolCard };
-export interface ChatItem { id: string; role: 'user' | 'assistant'; text: string; tools: ToolCard[]; parts?: MsgPart[]; files?: Attachment[]; error?: string; /** 用户按了停止：这一轮停在半路 */ stopped?: boolean; /** 这一轮用掉的 token（服务方给了才有） */ usage?: { input: number; output: number }; /** 模型这一轮的思考流（有思考的模型才有）与它想了多久 */ reasoning?: string; thinkSince?: number; thinkMs?: number; /** 正在干什么（只有最后一条、跑着的时候有）：在跑的工具、分步状态、从几点起 */ live?: { tool?: { name: string; input: Record<string, unknown> }; status: string; since: number } }
+export interface ChatItem { id: string; role: 'user' | 'assistant'; text: string; tools: ToolCard[]; parts?: MsgPart[]; files?: Attachment[]; error?: string; /** 系统注记（压缩历史之类），居中显示的一条小字 */ note?: string; /** 用户按了停止：这一轮停在半路 */ stopped?: boolean; /** 这一轮用掉的 token（服务方给了才有） */ usage?: { input: number; output: number }; /** 模型这一轮的思考流（有思考的模型才有）与它想了多久 */ reasoning?: string; thinkSince?: number; thinkMs?: number; /** 正在干什么（只有最后一条、跑着的时候有）：在跑的工具、分步状态、从几点起 */ live?: { tool?: { name: string; input: Record<string, unknown> }; status: string; since: number } }
 /** 排队里的用户消息：跑着的时候先攒着，这一轮结束自动发 */
 export interface QueuedMsg { id: string; text: string }
 /** 模型要改设置时弹的授权卡：用户点了才往下走 */
@@ -44,6 +44,11 @@ interface AgentState {
   send: (text: string, files?: Attachment[]) => Promise<void>;
   /** 重跑最后一条用户消息（重试出错的回复 / 重新生成）：把那一轮从显示与原始记录里退回去再发一遍 */
   regenerate: () => Promise<void>;
+  /** 编辑最后一条用户消息并重发（同样把那一轮退回去） */
+  editResend: (text: string) => Promise<void>;
+  /** 把此前对话压成一份交接摘要、替换原始记录（显示的历史保留不动）；跑的时候 send 会排队 */
+  compact: () => Promise<void>;
+  compacting: boolean;
   stop: () => void;
   clear: () => void;
   /** 对话跟着当前工程走：换了工程就存下这份、读那份 */
@@ -159,6 +164,7 @@ export const useAgent = create<AgentState>((set, get) => ({
   setSettingsOpen: (v) => set({ settingsOpen: v }),
   items: [],
   running: false,
+  compacting: false,
   pending: [],
   queued: [],
   ask: null,
@@ -178,8 +184,8 @@ export const useAgent = create<AgentState>((set, get) => ({
     const c = get().config;
     const files = filesArg ?? get().pending;
     if (!c || (!text.trim() && !files.length)) return;
-    // 跑着的时候先排队：这一轮结束自动接着发
-    if (get().running) { if (text.trim()) set({ queued: [...get().queued, { id: uid(), text: text.trim() }] }); return; }
+    // 跑着（或正在压缩历史）的时候先排队：这一轮结束自动接着发
+    if (get().running || get().compacting) { if (text.trim()) set({ queued: [...get().queued, { id: uid(), text: text.trim() }] }); return; }
     if (!transcript || transcript.api !== c.api) transcript = rebuildTranscript(c.api, get().items);
     const reply: ChatItem = { id: uid(), role: 'assistant', text: '', tools: [] };
     const save = () => { const st = get(); if (boundDoc && st.chatId) void persistChat(boundDoc, st.chatId, st.items, st.chats).then((chats) => set({ chats })); };
@@ -242,25 +248,77 @@ export const useAgent = create<AgentState>((set, get) => ({
   },
   regenerate: async () => {
     const st = get();
-    if (st.running) return;
+    if (st.running || st.compacting) return;
+    const user = [...st.items].reverse().find((i) => i.role === 'user');
+    if (!user) return;
+    await get().editResend(user.text);
+  },
+  editResend: async (text) => {
+    const st = get();
+    if (st.running || st.compacting) return;
     const items = st.items;
     let ui = -1;
     for (let i = items.length - 1; i >= 0; i--) if (items[i].role === 'user') { ui = i; break; }
     if (ui < 0) return;
     const user = items[ui];
+    const t = text.trim();
+    if (!t && !(user.files ?? []).length) return;
     // 原始记录退回到上次发送前；退不回去（换过接口 / 重开过页面）就清掉，下次发送按显示的对话重建
     if (transcript && lastTurn && lastTurn.mark <= transcript.messages.length) transcript.messages.length = lastTurn.mark;
     else transcript = null;
     lastTurn = null;
     set({ items: items.slice(0, ui) });
-    await get().send(user.text, user.files ?? []);
+    await get().send(t, user.files ?? []);
+  },
+  compact: async () => {
+    const st = get();
+    if (st.running || st.compacting) return;
+    const c = st.config;
+    if (!c || !st.items.length) return;
+    // 把显示里的对话收成一段文字：用户原话、助手的说明、工具调用与结果
+    const brief = (v: unknown, n: number) => { const t = typeof v === 'string' ? v : JSON.stringify(v); return t.length > n ? `${t.slice(0, n)}…` : t; };
+    const lines: string[] = [];
+    for (const it of st.items) {
+      if (it.note) continue;
+      if (it.role === 'user') lines.push(`用户：${it.text || '（只发了附件）'}`);
+      else {
+        for (const t of it.tools) lines.push(`（${t.name} ${brief(t.input, 200)} → ${brief(t.result, 400)}）`);
+        if (it.text) lines.push(`助手：${it.text}`);
+        if (it.error) lines.push(`（出错：${it.error}）`);
+        if (it.stopped) lines.push('（上一轮中途停了）');
+      }
+    }
+    set({ compacting: true });
+    aborter = new AbortController();
+    const count = st.items.length;
+    try {
+      const summary = await summarize(c, lines.join('\n'), aborter.signal);
+      if (!summary) throw new Error('摘要为空');
+      const head = `〔此前工作的交接摘要（对话已压缩，${count} 条消息）〕\n\n${summary}\n\n接着按这份摘要继续；要确认细节时再读文档。`;
+      transcript = c.api === 'anthropic'
+        ? { api: 'anthropic', messages: [{ role: 'user', content: head }, { role: 'assistant', content: '好，我接着来。' }] }
+        : { api: 'openai', messages: [{ role: 'user', content: head }, { role: 'assistant', content: '好，我接着来。' }] };
+      lastTurn = null;
+      set({ items: [...get().items, { id: uid(), role: 'assistant', text: '', tools: [], note: `已压缩历史对话：此前 ${count} 条消息收成一份交接摘要，模型接着摘要继续（上面的记录只是留档）。` }] });
+      const doc = boundDoc, chat = get().chatId;
+      if (doc && chat) await persistChat(doc, chat, get().items, get().chats).then((chats) => set({ chats }));
+    } catch (e) {
+      if (!aborter?.signal.aborted) set({ items: [...get().items, { id: uid(), role: 'assistant', text: '', tools: [], error: `压缩历史失败：${describeError(e)}` }] });
+    } finally {
+      const aborted = aborter?.signal.aborted ?? false;
+      aborter = null;
+      set({ compacting: false });
+      // 压缩期间排队的那条接着发（按了停止的不接着）
+      const q = get().queued;
+      if (!aborted && q.length) { set({ queued: q.slice(1) }); void get().send(q[0].text); }
+    }
   },
   stop: () => { get().answer(false); set({ queued: [] }); aborter?.abort(); },
   clear: () => { const st = get(); if (st.chatId) void st.deleteChat(st.chatId); },
   bind: async () => {
     const id = useStore.getState().doc.id;
     if (!id || id === boundDoc) return;
-    if (get().running) get().stop();
+    if (get().running || get().compacting) get().stop();
     const prev = get();
     if (boundDoc && prev.chatId && prev.items.length) await persistChat(boundDoc, prev.chatId, prev.items, prev.chats);
     boundDoc = id;
@@ -272,7 +330,7 @@ export const useAgent = create<AgentState>((set, get) => ({
   },
   newChat: async () => {
     const st = get();
-    if (st.running) st.stop();
+    if (st.running || st.compacting) st.stop();
     if (boundDoc && st.chatId && st.items.length) await persistChat(boundDoc, st.chatId, st.items, st.chats);
     transcript = null; sentFiles = []; chatPrompt = null; setAttachments([]); lastTurn = null;
     set({ chatId: null, items: [], pending: [], queued: [], ask: null });
@@ -282,7 +340,7 @@ export const useAgent = create<AgentState>((set, get) => ({
     if (!boundDoc) return;
     const st = get();
     if (st.chatId === id) return;
-    if (st.running) st.stop();
+    if (st.running || st.compacting) st.stop();
     if (st.chatId && st.items.length) await persistChat(boundDoc, st.chatId, st.items, st.chats);
     const saved = await kv.get<Saved>('meta', chatKey(boundDoc, id));
     transcript = saved?.transcript ?? null;
@@ -307,7 +365,7 @@ export const useAgent = create<AgentState>((set, get) => ({
   deleteChat: async (id) => {
     if (!boundDoc) return;
     const st = get();
-    if (st.chatId === id) { if (st.running) st.stop(); transcript = null; sentFiles = []; chatPrompt = null; setAttachments([]); lastTurn = null; set({ chatId: null, items: [], pending: [], queued: [], ask: null }); }
+    if (st.chatId === id) { if (st.running || st.compacting) st.stop(); transcript = null; sentFiles = []; chatPrompt = null; setAttachments([]); lastTurn = null; set({ chatId: null, items: [], pending: [], queued: [], ask: null }); }
     const chats = st.chats.filter((c) => c.id !== id);
     set({ chats });
     await kv.del('meta', chatKey(boundDoc, id));
