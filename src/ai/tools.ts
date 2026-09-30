@@ -147,6 +147,7 @@ export const TOOLS: ToolDef[] = [
   { name: 'write_json', description: '用节点 JSON 换掉某一部分第 from 到 to 块（to = from - 1 就是在 from 前插入）。nodes 是块节点数组，按 schema 校验，不合法会报错、什么都不改。', parameters: { type: 'object', properties: { part: partEnum, ...range, nodes: { type: 'array', items: { type: 'object' } } }, required: ['part', 'from', 'to', 'nodes'], additionalProperties: false } },
   { name: 'settings_list', description: '论文设置里能改的开关和档位：键、说明、可选值、现在的值（auto = 跟模板按档定，旁边写着自动落在哪一档和原因）。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'settings_set', description: '改一个设置。会弹窗把这个开关的说明和改动给用户看，用户允许了才改；reason 写清为什么要改，用户看得到。', parameters: { type: 'object', properties: { key: { type: 'string' }, value: { description: '开关的档位值，或 "auto"' }, reason: { type: 'string' } }, required: ['key', 'value', 'reason'], additionalProperties: false } },
+  { name: 'todo', description: '维护当前任务的清单：要动好几个地方、或要几步查证的任务，开始时把步骤列成 3–7 条；之后每完成一步，把完整清单（覆盖上一版）再发一次。text 用动词开头、一条一件事；status 是 pending / in_progress / completed / cancelled，同一时间最多一条 in_progress。一步就完的小事不用它。', parameters: { type: 'object', properties: { todos: { type: 'array', items: { type: 'object', properties: { text: { type: 'string' }, status: { type: 'string', enum: ['pending', 'in_progress', 'completed', 'cancelled'] } }, required: ['text', 'status'], additionalProperties: false } } }, required: ['todos'], additionalProperties: false } },
 ];
 
 const partOf = (key: string) => PARTS.find((p) => p.key === key) ?? null;
@@ -882,6 +883,14 @@ function describeDiag(d: Diagnostic): string {
   const text = h.text === d.message ? d.message : `${h.text}（Typst：${d.message}）`;
   return `- [${d.severity === 'error' ? '错误' : '警告'}] ${loc ? `${loc}：` : ''}${text}${md ? `\n  这一块现在是：\n  ${md.replace(/\n/g, '\n  ')}` : ''}`;
 }
+/** 任务清单：模型每次发完整清单、覆盖上一版；面板把它画成勾选列表，回给模型的是一行行状态 */
+function todoTool(input: Record<string, any>): string {
+  const raw = Array.isArray(input.todos) ? input.todos : [];
+  const rows = raw.map((t: any) => ({ text: String(t?.text ?? '').trim(), status: ['pending', 'in_progress', 'completed', 'cancelled'].includes(t?.status) ? String(t.status) : 'pending' })).filter((t) => t.text);
+  if (!rows.length) return '清单已清空';
+  const done = rows.filter((t) => t.status === 'completed').length;
+  return `清单已更新（${done}/${rows.length} 完成）：\n${rows.map((t) => `- [${t.status}] ${t.text}`).join('\n')}`;
+}
 async function dispatch(name: string, input: Record<string, any>): Promise<string> {
   const need = () => { const p = partOf(String(input.part ?? '')); if (!p) throw new Error(`part 得是 ${PART_KEYS.join(' / ')} 之一`); return p; };
   switch (name) {
@@ -914,6 +923,7 @@ async function dispatch(name: string, input: Record<string, any>): Promise<strin
     case 'write_json': return writeJson(need().key, Number(input.from), Number(input.to), input.nodes);
     case 'settings_list': return settingsList();
     case 'settings_set': return settingsSet(input);
+    case 'todo': return todoTool(input);
     case 'pdf_images': return pdfImagesTool(input);
     case 'pdf_render': return pdfRenderTool(input);
     case 'memory_read': return memoryCtx.enabled ? (memoryCtx.notes.trim() || '（记忆还是空的）') : '记忆功能没开';
@@ -969,5 +979,6 @@ export const SYSTEM_PROMPT = `你是 HιT webapp 里的写作助手（名字读 
 - 图表善用浮动（placement）：大图、整页的表让它浮到页顶或页底，正文就不会留大片空白。但编号是照正文顺序编的，浮动块会漂到后面的页，规范要求全文编号由小到大、先见文后见图——插了浮动图表、改了 placement 或挪了图之后，用 check_order 按排版结果查一遍，乱了就调（往前挪、去浮动、改 bottom）。
 - Markdown 写不出的（合并单元格、批注、某个属性），用 schema 看节点结构，再 read_json / write_json 直接改节点 JSON；平常改文字还是用 Markdown。
 - 中文与西文、数字之间不加空格（不要「盘古之白」，间距由模板排版时自动加）：「采用 Ergun 方程」是错的，要写「采用Ergun方程」；也别把原文里没有的空格加上。
+- 多步任务（要翻好几章、要改好几处、要查了再改）先用 todo 把清单立起来，每完成一步更新一次状态；一步就完的事不用清单，也别把清单内容在正文里再复述一遍。
 - 每次改完用一两句话说明改了什么。
 - 回答用用户的语言，简短；代码和公式用 Markdown 的写法（\`\`\` 围栏、$…$）。`;

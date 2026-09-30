@@ -2,7 +2,7 @@
 // 它读、改文档走 src/ai/tools.ts 那几件工具，每一步在对话里留一张卡；要改设置时弹授权卡等用户点
 import { useEffect, useRef, useState } from 'react';
 import { Button, Textarea, Tooltip, Popover, PopoverTrigger, PopoverSurface, Input, Spinner } from '@fluentui/react-components';
-import { Settings20Regular, Dismiss20Regular, Send20Regular, Stop20Regular, Add20Regular, History20Regular, Delete16Regular, WindowMultiple20Regular, PanelRightContract20Regular, Star16Regular, Star16Filled, Rename16Regular, Checkmark16Regular, ChevronRight12Regular, ChevronDown12Regular, Attach20Regular, Dismiss12Regular, Image16Regular, DocumentPdf16Regular, DocumentText16Regular, BotSparkle20Regular, ShieldCheckmark20Regular, BrainCircuit20Regular, ChevronDoubleDown16Regular } from '@fluentui/react-icons';
+import { Settings20Regular, Dismiss20Regular, Send20Regular, Stop20Regular, Add20Regular, History20Regular, Delete16Regular, WindowMultiple20Regular, PanelRightContract20Regular, Star16Regular, Star16Filled, Rename16Regular, Checkmark16Regular, ChevronRight12Regular, ChevronDown12Regular, Attach20Regular, Dismiss12Regular, Image16Regular, DocumentPdf16Regular, DocumentText16Regular, BotSparkle20Regular, ShieldCheckmark20Regular, BrainCircuit20Regular, ChevronDoubleDown16Regular, Circle16Regular, CheckmarkCircle16Filled, CircleHalfFill16Regular, DismissCircle16Regular, Copy16Regular } from '@fluentui/react-icons';
 import { useAgent, type ToolCard, type ChatMeta, type ChatItem } from '../ai/state';
 import { useStore } from '../model/store';
 import { configReady, providerLabel } from '../ai/config';
@@ -48,6 +48,7 @@ function cardTitle(c: ToolCard): string {
     case 'abbreviations_add': return tx("已添加缩略语或符号");
     case 'settings_list': return tx("已读取论文设置");
     case 'settings_set': return tx("已修改设置：{{key}}", { key: i.key });
+    case 'todo': { const t: any[] = Array.isArray(i.todos) ? (i.todos as any[]) : []; const done = t.filter((x) => x?.status === 'completed').length; return t.length ? tx("任务清单（{{d}}/{{n}} 完成）", { d: done, n: t.length }) : tx("任务清单已清空"); }
     case 'schema': return tx("已读取节点结构");
     case 'read_json': return tx("已读取{{part}} {{rng}} 的 JSON", { part: partLabel(i.part), rng });
     case 'write_json': return tx("已通过 JSON 修改{{part}} {{rng}}", { part: partLabel(i.part), rng });
@@ -172,8 +173,30 @@ function Think({ text, active, since, ms }: { text: string; active: boolean; sin
   );
 }
 
+/** 任务清单：模型每步更新一次，画成勾选列表（进行中的一条高亮） */
+function TodoBody({ input }: { input: Record<string, unknown> }) {
+  const raw = Array.isArray(input.todos) ? (input.todos as any[]) : [];
+  const list = raw.map((t) => ({ text: String(t?.text ?? '').trim(), status: ['pending', 'in_progress', 'completed', 'cancelled'].includes(t?.status) ? String(t.status) : 'pending' })).filter((t) => t.text);
+  if (!list.length) return <div className="ag-todo is-empty">{tx("清单已清空")}</div>;
+  return (
+    <div className="ag-todo">
+      {list.map((t, i) => {
+        const Icon = t.status === 'completed' ? CheckmarkCircle16Filled : t.status === 'in_progress' ? CircleHalfFill16Regular : t.status === 'cancelled' ? DismissCircle16Regular : Circle16Regular;
+        const label = t.status === 'completed' ? tx("已完成") : t.status === 'in_progress' ? tx("进行中") : t.status === 'cancelled' ? tx("已取消") : tx("待办");
+        return <div key={i} className={`ag-todo-row is-${t.status}`} title={label}><Icon className="ag-todo-icon" /><span className="ag-todo-text">{t.text}</span></div>;
+      })}
+    </div>
+  );
+}
+
+/** 复制一条回复的原文（Markdown） */
+function CopyButton({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return <button type="button" className="ag-act" title={tx("复制这条回复")} onClick={() => { void navigator.clipboard.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 1500); }).catch(() => { /* 剪贴板不可用 */ }); }}>{done ? <Checkmark16Regular /> : <Copy16Regular />}{done ? tx("已复制") : tx("复制")}</button>;
+}
+
 function Card({ c }: { c: ToolCard }) {
-  const [open, setOpen] = useState(c.isError);
+  const [open, setOpen] = useState(c.isError || c.name === 'todo');
   const detail = c.name === 'replace' || c.name === 'insert' ? `${String(c.input.markdown ?? '')}\n\n— ${c.result}`
     : c.name === 'table_write' ? `${(c.input.rows as string[][] | undefined)?.map((r) => r.join(' | ')).join('\n') ?? ''}\n\n— ${c.result}`
     : c.name === 'bib_add' ? `${String(c.input.bibtex ?? '')}\n\n— ${c.result}`
@@ -189,7 +212,9 @@ function Card({ c }: { c: ToolCard }) {
         </span>
       </button>
       {!!c.images?.length && <div className="ag-card-imgs">{c.images.map((im) => <img key={im.id} src={`data:${im.type};base64,${im.data}`} alt={im.name} title={im.name} />)}</div>}
-      {open && (c.diff
+      {open && (c.name === 'todo'
+        ? <TodoBody input={c.input} />
+        : c.diff
         ? <><DiffBody d={c.diff} /><div className="ag-card-foot">{c.result}</div></>
         : <pre className="ag-card-body">{detail}</pre>)}
     </div>
@@ -197,7 +222,7 @@ function Card({ c }: { c: ToolCard }) {
 }
 
 export function AgentPane({ overlay }: { overlay?: boolean }) {
-  const { items, running, send, stop, config, setOpen, setSettingsOpen, pending, attach, detach, ask, answer, chats, chatId, newChat, openChat, deleteChat, renameChat, starChat, settings, docProviderId } = useAgent();
+  const { items, running, send, stop, config, setOpen, setSettingsOpen, pending, queued, dequeue, attach, detach, ask, answer, chats, chatId, newChat, openChat, deleteChat, renameChat, starChat, settings, docProviderId } = useAgent();
   const [chatsOpen, setChatsOpen] = useState(false);
   const float = useAgentWindow((s) => s.float);
   const compact = useMedia(COMPACT);
@@ -216,15 +241,55 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
   useEffect(() => { const el = listRef.current; if (el && stick.current) el.scrollTop = el.scrollHeight; }, [items, ask]);
   useEffect(() => { stick.current = true; setPinned(true); const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }, [chatId]);
   useEffect(() => { if (settings === undefined) useAgent.getState().setOpen(true); }, [settings]);
-  const submit = () => { const t = draft.trim(); if ((!t && !pending.length) || running || !ready) return; setDraft(''); stick.current = true; setPinned(true); void send(t); };
+  // Esc 停掉正在跑的这一轮（设置面板 / 弹层开着时不抢）
+  useEffect(() => {
+    if (!running) return;
+    const h = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || useAgent.getState().settingsOpen) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.('[role="dialog"], .fui-DialogSurface, .fui-PopoverSurface')) return;
+      e.preventDefault();
+      stop();
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [running, stop]);
+  const submit = () => { const t = draft.trim(); if ((!t && !pending.length) || !ready) return; if (running && !t) return; setDraft(''); stick.current = true; setPinned(true); void send(t); };
   const onFiles = (list: FileList | File[] | null | undefined) => { if (list?.length && ready) void attach(Array.from(list)); };
   const last = items[items.length - 1];
+  // 清单只留最新那一版：旧卡片不画（老记录没有 parts 也一样）
+  const lastTodo = (() => { for (let i = items.length - 1; i >= 0; i--) { const list = items[i].tools; for (let j = list.length - 1; j >= 0; j--) if (list[j].name === 'todo') return list[j]; } return undefined; })();
+  const edits = items.flatMap((it) => it.tools).filter((c) => !!c.diff && (c.diff.add > 0 || c.diff.del > 0));
+  const sumAdd = edits.reduce((n, c) => n + (c.diff?.add ?? 0), 0);
+  const sumDel = edits.reduce((n, c) => n + (c.diff?.del ?? 0), 0);
   return (
     <aside className={`agent-pane ${overlay ? 'is-overlay' : ''} ${drag ? 'is-drop' : ''}`} onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDrag(true); } }} onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDrag(false); }} onDrop={(e) => { if (!e.dataTransfer.files.length) return; e.preventDefault(); setDrag(false); onFiles(e.dataTransfer.files); }}>
       <div className="ag-head">
         <BotSparkle20Regular className="ag-logo" />
         <b>Agent</b>
         <button type="button" className="ag-model" title={config ? `${config.baseUrl}${docProviderId ? tx("（本文档指定）") : ''}` : ''} onClick={() => setSettingsOpen(true)}>{ready && provider ? providerLabel(provider) : tx("未配置模型")}</button>
+        {edits.length > 0 && (
+          <Popover positioning="below-start">
+            <PopoverTrigger disableButtonEnhancement>
+              <button type="button" className="ag-sum" title={tx("本场对话的文档改动")}>
+                <span className="is-add">{`+${sumAdd}`}</span>
+                <span className="is-del">{`-${sumDel}`}</span>
+                <span className="muted">{tx("{{n}} 处改动", { n: edits.length })}</span>
+              </button>
+            </PopoverTrigger>
+            <PopoverSurface className="ag-sumsurface">
+              <div className="ag-sumlist">
+                {edits.map((c, i) => (
+                  <div key={i} className="ag-sumrow">
+                    <span className="ag-sumtitle">{cardTitle(c)}</span>
+                    <span className="ag-diffnum"><span className="is-add">{`+${c.diff!.add}`}</span><span className="is-del">{`-${c.diff!.del}`}</span></span>
+                  </div>
+                ))}
+              </div>
+              <div className="muted ag-sumhint">{tx("点开对话里对应的卡片可以看逐行 diff")}</div>
+            </PopoverSurface>
+          </Popover>
+        )}
         <span className="spacer" />
         <Tooltip content={tx("新对话")} relationship="label"><Button size="small" appearance="subtle" icon={<Add20Regular />} disabled={!items.length && !chatId} onClick={() => void newChat()} /></Tooltip>
         <Popover positioning="below-end" open={chatsOpen} onOpenChange={(_, d) => setChatsOpen(d.open)}>
@@ -254,11 +319,24 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
         )}
         {items.map((it) => (
           <div key={it.id} className={`ag-msg is-${it.role}`}>
-            {it.tools.map((c, i) => <Card key={i} c={c} />)}
             {it.reasoning && <Think text={it.reasoning} active={running && it.id === last?.id && !it.text} since={it.thinkSince} ms={it.thinkMs} />}
-            {!!it.files?.length && <div className="ag-files">{it.files.map((f) => <FileChip key={f.id} f={f} />)}</div>}
-            {it.text && (it.role === 'user' ? <div className="ag-text">{it.text}</div> : <div className="ag-text"><ChatMarkdown text={it.text} /></div>)}
+            {it.role === 'user' ? (
+              <>
+                {!!it.files?.length && <div className="ag-files">{it.files.map((f) => <FileChip key={f.id} f={f} />)}</div>}
+                {it.text && <div className="ag-text">{it.text}</div>}
+              </>
+            ) : (it.parts?.length
+              ? it.parts.map((p, i) => p.kind === 'text'
+                ? <div key={i} className="ag-text"><ChatMarkdown text={p.text} /></div>
+                : (p.card.name === 'todo' && p.card !== lastTodo ? null : <Card key={i} c={p.card} />))
+              : (
+                <>
+                  {it.tools.map((c, i) => c.name === 'todo' && c !== lastTodo ? null : <Card key={i} c={c} />)}
+                  {it.text && <div className="ag-text"><ChatMarkdown text={it.text} /></div>}
+                </>
+              ))}
             {it.error && <div className="ag-error">{it.error}</div>}
+            {it.role === 'assistant' && !!it.text && <div className="ag-actions"><CopyButton text={it.text} /></div>}
             {it.role === 'assistant' && running && it.id === last?.id && !ask && (!it.reasoning || it.text) && <Live live={it.live} hasText={!!it.text} />}
           </div>
         ))}
@@ -277,12 +355,23 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
         {!pinned && <button type="button" className="ag-jump" onClick={() => { stick.current = true; setPinned(true); const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }}><ChevronDoubleDown16Regular />{tx("回到底部")}</button>}
       </div>
       {!!pending.length && <div className="ag-files ag-pending">{pending.map((f) => <FileChip key={f.id} f={f} onRemove={() => detach(f.id)} />)}</div>}
+      {!!queued.length && (
+        <div className="ag-queue">
+          <div className="ag-queue-head muted">{tx("排队中：这一轮结束后自动发送")}</div>
+          {queued.map((q) => (
+            <div key={q.id} className="ag-queue-row">
+              <span>{q.text}</span>
+              <button type="button" title={tx("从队列里移除")} onClick={() => dequeue(q.id)}><Dismiss12Regular /></button>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="ag-input">
         <Tooltip content={tx("附件：图片、PDF、文本文件；也可以拖进来或粘贴")} relationship="label"><Button size="small" appearance="subtle" icon={<Attach20Regular />} disabled={!ready || running} onClick={() => fileInput.current?.click()} /></Tooltip>
         <input ref={fileInput} type="file" multiple hidden accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.txt,.md,.bib,.csv,.json,.tex,.typ" onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} />
-        <Textarea resize="vertical" value={draft} placeholder={ready ? tx("输入任务；Enter 发送，Shift+Enter 换行") : tx("请先在设置中配置模型")} disabled={!ready} onChange={(_, d) => setDraft(d.value)} onPaste={(e) => { const fs = Array.from(e.clipboardData.files); if (fs.length) { e.preventDefault(); onFiles(fs); } }} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }} />
+        <Textarea resize="vertical" value={draft} placeholder={ready ? (running ? tx("说下一句，Enter 排队，这一轮结束自动发") : tx("输入任务；Enter 发送，Shift+Enter 换行")) : tx("请先在设置中配置模型")} disabled={!ready} onChange={(_, d) => setDraft(d.value)} onPaste={(e) => { const fs = Array.from(e.clipboardData.files); if (fs.length) { e.preventDefault(); onFiles(fs); } }} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }} />
         {running
-          ? <Tooltip content={tx("停止")} relationship="label"><Button appearance="secondary" icon={<Stop20Regular />} onClick={stop} /></Tooltip>
+          ? <Tooltip content={tx("停止（排队中的消息也会清掉）")} relationship="label"><Button appearance="secondary" icon={<Stop20Regular />} onClick={stop} /></Tooltip>
           : <Tooltip content={tx("发送")} relationship="label"><Button appearance="primary" icon={<Send20Regular />} disabled={!ready || (!draft.trim() && !pending.length)} onClick={submit} /></Tooltip>}
       </div>
       <AgentSettings />

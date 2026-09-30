@@ -9,7 +9,11 @@ import { kv } from '../model/persist';
 import { useStore } from '../model/store';
 
 export interface ToolCard { name: string; input: Record<string, unknown>; result: string; isError: boolean; images?: Attachment[]; /** 跑完花了多久 */ ms?: number; /** 这一笔文档改动的行级 diff（只有写入类工具有） */ diff?: LineDiff }
-export interface ChatItem { id: string; role: 'user' | 'assistant'; text: string; tools: ToolCard[]; files?: Attachment[]; error?: string; /** 模型这一轮的思考流（有思考的模型才有）与它想了多久 */ reasoning?: string; thinkSince?: number; thinkMs?: number; /** 正在干什么（只有最后一条、跑着的时候有）：在跑的工具、分步状态、从几点起 */ live?: { tool?: { name: string; input: Record<string, unknown> }; status: string; since: number } }
+/** 一条消息里按真实顺序排下来的段落：模型说的话与工具卡交替（老记录没有 parts，按「卡在前、话在后」渲染） */
+export type MsgPart = { kind: 'text'; text: string } | { kind: 'tool'; card: ToolCard };
+export interface ChatItem { id: string; role: 'user' | 'assistant'; text: string; tools: ToolCard[]; parts?: MsgPart[]; files?: Attachment[]; error?: string; /** 模型这一轮的思考流（有思考的模型才有）与它想了多久 */ reasoning?: string; thinkSince?: number; thinkMs?: number; /** 正在干什么（只有最后一条、跑着的时候有）：在跑的工具、分步状态、从几点起 */ live?: { tool?: { name: string; input: Record<string, unknown> }; status: string; since: number } }
+/** 排队里的用户消息：跑着的时候先攒着，这一轮结束自动发 */
+export interface QueuedMsg { id: string; text: string }
 /** 模型要改设置时弹的授权卡：用户点了才往下走 */
 export interface Pending { ask: Ask; resolve: (ok: boolean) => void }
 
@@ -30,6 +34,9 @@ interface AgentState {
   items: ChatItem[];
   running: boolean;
   pending: Attachment[];
+  /** 跑着的时候用户先发的消息，排队等这一轮结束自动发 */
+  queued: QueuedMsg[];
+  dequeue: (id: string) => void;
   ask: Pending | null;
   answer: (ok: boolean) => void;
   attach: (files: File[]) => Promise<void>;
@@ -149,6 +156,7 @@ export const useAgent = create<AgentState>((set, get) => ({
   items: [],
   running: false,
   pending: [],
+  queued: [],
   ask: null,
   chats: [],
   chatId: null,
@@ -160,11 +168,14 @@ export const useAgent = create<AgentState>((set, get) => ({
     }
   },
   detach: (id) => set({ pending: get().pending.filter((a) => a.id !== id) }),
+  dequeue: (id) => set({ queued: get().queued.filter((q) => q.id !== id) }),
   send: async (text) => {
     await get().bind();
     const c = get().config;
     const files = get().pending;
-    if (!c || get().running || (!text.trim() && !files.length)) return;
+    if (!c || (!text.trim() && !files.length)) return;
+    // 跑着的时候先排队：这一轮结束自动接着发
+    if (get().running) { if (text.trim()) set({ queued: [...get().queued, { id: uid(), text: text.trim() }] }); return; }
     if (!transcript || transcript.api !== c.api) transcript = rebuildTranscript(c.api, get().items);
     const reply: ChatItem = { id: uid(), role: 'assistant', text: '', tools: [] };
     const save = () => { const st = get(); if (boundDoc && st.chatId) void persistChat(boundDoc, st.chatId, st.items, st.chats).then((chats) => set({ chats })); };
@@ -180,6 +191,7 @@ export const useAgent = create<AgentState>((set, get) => ({
     const patch = (p: Partial<ChatItem>) => { set({ items: get().items.map((it) => (it.id === reply.id ? { ...it, ...p } : it)) }); window.clearTimeout(saveTimer); saveTimer = window.setTimeout(save, 600); };
     let buf = '';
     let rbuf = '';
+    let parts: MsgPart[] = [];
     let thinkSince = 0;
     let thinkMs: number | undefined;
     aborter = new AbortController();
@@ -201,9 +213,9 @@ export const useAgent = create<AgentState>((set, get) => ({
       }
       chatPrompt = promptSpec();
       await runTurn(c, transcript, userText, files, await systemPromptFor(st, get().docPreset), {
-        onText: (d) => { if (rbuf && thinkMs === undefined) thinkMs = Date.now() - thinkSince; buf += d; patch(thinkMs !== undefined ? { text: buf, thinkMs } : { text: buf }); },
+        onText: (d) => { if (rbuf && thinkMs === undefined) thinkMs = Date.now() - thinkSince; buf += d; const tail = parts[parts.length - 1]; parts = tail?.kind === 'text' ? [...parts.slice(0, -1), { kind: 'text', text: tail.text + d }] : [...parts, { kind: 'text', text: d }]; patch(thinkMs !== undefined ? { text: buf, thinkMs, parts } : { text: buf, parts }); },
         onReasoning: (d) => { if (!rbuf) thinkSince = Date.now(); rbuf += d; patch(rbuf === d ? { reasoning: rbuf, thinkSince } : { reasoning: rbuf }); },
-        onTool: (name, input, result, isError) => { const cur = get().items.find((it) => it.id === reply.id)!; const l = cur.live; const ms = l?.tool && l.since ? Date.now() - l.since : undefined; patch({ tools: [...cur.tools, { name, input, result, isError, images: derived.length ? derived : undefined, ms, diff: takeEdit() ?? undefined }], live: { status: '', since: Date.now() } }); derived = []; },
+        onTool: (name, input, result, isError) => { const cur = get().items.find((it) => it.id === reply.id)!; const l = cur.live; const ms = l?.tool && l.since ? Date.now() - l.since : undefined; const card: ToolCard = { name, input, result, isError, images: derived.length ? derived : undefined, ms, diff: takeEdit() ?? undefined }; parts = [...parts, { kind: 'tool', card }]; patch({ tools: [...cur.tools, card], parts, live: { status: '', since: Date.now() } }); derived = []; },
         onToolStart: (name, input) => patch({ live: { tool: { name, input }, status: '', since: Date.now() } }),
         onStatus: (status) => { const l = liveOf(); patch({ live: { tool: l?.tool, status, since: status && status !== l?.status ? Date.now() : l?.since ?? Date.now() } }); },
       }, aborter.signal);
@@ -211,13 +223,17 @@ export const useAgent = create<AgentState>((set, get) => ({
       transcript.messages.length = mark;
       if (!aborter.signal.aborted) patch({ error: describeError(e) });
     } finally {
+      const aborted = aborter?.signal.aborted ?? false;
       aborter = null;
       set({ running: false, items: get().items.map((it) => (it.id === reply.id ? { ...it, live: undefined } : it)) });
       window.clearTimeout(saveTimer);
       save();
+      // 排队里的下一条接着发（停掉的那次不接着）
+      const q = get().queued;
+      if (!aborted && q.length) { set({ queued: q.slice(1) }); void get().send(q[0].text); }
     }
   },
-  stop: () => { get().answer(false); aborter?.abort(); },
+  stop: () => { get().answer(false); set({ queued: [] }); aborter?.abort(); },
   clear: () => { const st = get(); if (st.chatId) void st.deleteChat(st.chatId); },
   bind: async () => {
     const id = useStore.getState().doc.id;
@@ -227,7 +243,7 @@ export const useAgent = create<AgentState>((set, get) => ({
     if (boundDoc && prev.chatId && prev.items.length) await persistChat(boundDoc, prev.chatId, prev.items, prev.chats);
     boundDoc = id;
     const index = await loadIndex(id);
-    set({ chats: sortChats(index.chats), chatId: null, items: [], pending: [], ask: null, docProviderId: index.providerId ?? null, docPreset: index.preset ?? '' });
+    set({ chats: sortChats(index.chats), chatId: null, items: [], pending: [], queued: [], ask: null, docProviderId: index.providerId ?? null, docPreset: index.preset ?? '' });
     refresh();
     transcript = null; sentFiles = []; chatPrompt = null; setAttachments([]);
     if (index.current && index.chats.some((c) => c.id === index.current)) await get().openChat(index.current);
@@ -237,7 +253,7 @@ export const useAgent = create<AgentState>((set, get) => ({
     if (st.running) st.stop();
     if (boundDoc && st.chatId && st.items.length) await persistChat(boundDoc, st.chatId, st.items, st.chats);
     transcript = null; sentFiles = []; chatPrompt = null; setAttachments([]);
-    set({ chatId: null, items: [], pending: [], ask: null });
+    set({ chatId: null, items: [], pending: [], queued: [], ask: null });
     if (boundDoc) await kv.set('meta', indexKey(boundDoc), { ...(await loadIndex(boundDoc)), chats: get().chats, current: null } as Index);
   },
   openChat: async (id) => {
@@ -251,7 +267,7 @@ export const useAgent = create<AgentState>((set, get) => ({
     sentFiles = saved?.sentFiles ?? [];
     chatPrompt = saved?.prompt ?? (saved?.items?.length ? '' : null);
     setAttachments(sentFiles);
-    set({ chatId: id, items: saved?.items ?? [], pending: [], ask: null });
+    set({ chatId: id, items: saved?.items ?? [], pending: [], queued: [], ask: null });
     await kv.set('meta', indexKey(boundDoc), { ...(await loadIndex(boundDoc)), chats: get().chats, current: id } as Index);
   },
   renameChat: async (id, title) => {
@@ -268,7 +284,7 @@ export const useAgent = create<AgentState>((set, get) => ({
   deleteChat: async (id) => {
     if (!boundDoc) return;
     const st = get();
-    if (st.chatId === id) { if (st.running) st.stop(); transcript = null; sentFiles = []; chatPrompt = null; setAttachments([]); set({ chatId: null, items: [], pending: [], ask: null }); }
+    if (st.chatId === id) { if (st.running) st.stop(); transcript = null; sentFiles = []; chatPrompt = null; setAttachments([]); set({ chatId: null, items: [], pending: [], queued: [], ask: null }); }
     const chats = st.chats.filter((c) => c.id !== id);
     set({ chats });
     await kv.del('meta', chatKey(boundDoc, id));
