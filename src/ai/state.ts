@@ -11,7 +11,7 @@ import { useStore } from '../model/store';
 export interface ToolCard { name: string; input: Record<string, unknown>; result: string; isError: boolean; images?: Attachment[]; /** 跑完花了多久 */ ms?: number; /** 这一笔文档改动的行级 diff（只有写入类工具有） */ diff?: LineDiff }
 /** 一条消息里按真实顺序排下来的段落：模型说的话与工具卡交替（老记录没有 parts，按「卡在前、话在后」渲染） */
 export type MsgPart = { kind: 'text'; text: string } | { kind: 'tool'; card: ToolCard };
-export interface ChatItem { id: string; role: 'user' | 'assistant'; text: string; tools: ToolCard[]; parts?: MsgPart[]; files?: Attachment[]; error?: string; /** 模型这一轮的思考流（有思考的模型才有）与它想了多久 */ reasoning?: string; thinkSince?: number; thinkMs?: number; /** 正在干什么（只有最后一条、跑着的时候有）：在跑的工具、分步状态、从几点起 */ live?: { tool?: { name: string; input: Record<string, unknown> }; status: string; since: number } }
+export interface ChatItem { id: string; role: 'user' | 'assistant'; text: string; tools: ToolCard[]; parts?: MsgPart[]; files?: Attachment[]; error?: string; /** 用户按了停止：这一轮停在半路 */ stopped?: boolean; /** 这一轮用掉的 token（服务方给了才有） */ usage?: { input: number; output: number }; /** 模型这一轮的思考流（有思考的模型才有）与它想了多久 */ reasoning?: string; thinkSince?: number; thinkMs?: number; /** 正在干什么（只有最后一条、跑着的时候有）：在跑的工具、分步状态、从几点起 */ live?: { tool?: { name: string; input: Record<string, unknown> }; status: string; since: number } }
 /** 排队里的用户消息：跑着的时候先攒着，这一轮结束自动发 */
 export interface QueuedMsg { id: string; text: string }
 /** 模型要改设置时弹的授权卡：用户点了才往下走 */
@@ -41,7 +41,9 @@ interface AgentState {
   answer: (ok: boolean) => void;
   attach: (files: File[]) => Promise<void>;
   detach: (id: string) => void;
-  send: (text: string) => Promise<void>;
+  send: (text: string, files?: Attachment[]) => Promise<void>;
+  /** 重跑最后一条用户消息（重试出错的回复 / 重新生成）：把那一轮从显示与原始记录里退回去再发一遍 */
+  regenerate: () => Promise<void>;
   stop: () => void;
   clear: () => void;
   /** 对话跟着当前工程走：换了工程就存下这份、读那份 */
@@ -61,6 +63,8 @@ let transcript: Transcript | null = null;
 let aborter: AbortController | null = null;
 let sentFiles: Attachment[] = [];
 let boundDoc: string | null = null;
+/** 上次发送时原始记录的长度（重新生成要把这一轮退回去）；换文档 / 换对话就作废 */
+let lastTurn: { mark: number } | null = null;
 const uid = () => Math.random().toString(36).slice(2, 9);
 
 interface Saved { items: ChatItem[]; transcript: Transcript | null; sentFiles: Attachment[]; /** 上次聊时的系统提示 + 工具说明，下次比出新增的注入 */ prompt?: string }
@@ -134,7 +138,7 @@ function refresh() {
   const pick = (id: string | null) => (id ? s.providers.find((p) => p.id === id) ?? null : null);
   const next = pick(st.docProviderId) ?? pick(s.globalId) ?? s.providers[0] ?? null;
   const cur = st.config;
-  if (cur && next && (cur.api !== next.api || cur.model !== next.model || cur.baseUrl !== next.baseUrl)) transcript = null;
+  if (cur && next && (cur.api !== next.api || cur.model !== next.model || cur.baseUrl !== next.baseUrl)) { transcript = null; lastTurn = null; }
   useAgent.setState({ config: next });
 }
 
@@ -169,10 +173,10 @@ export const useAgent = create<AgentState>((set, get) => ({
   },
   detach: (id) => set({ pending: get().pending.filter((a) => a.id !== id) }),
   dequeue: (id) => set({ queued: get().queued.filter((q) => q.id !== id) }),
-  send: async (text) => {
+  send: async (text, filesArg) => {
     await get().bind();
     const c = get().config;
-    const files = get().pending;
+    const files = filesArg ?? get().pending;
     if (!c || (!text.trim() && !files.length)) return;
     // 跑着的时候先排队：这一轮结束自动接着发
     if (get().running) { if (text.trim()) set({ queued: [...get().queued, { id: uid(), text: text.trim() }] }); return; }
@@ -180,7 +184,7 @@ export const useAgent = create<AgentState>((set, get) => ({
     const reply: ChatItem = { id: uid(), role: 'assistant', text: '', tools: [] };
     const save = () => { const st = get(); if (boundDoc && st.chatId) void persistChat(boundDoc, st.chatId, st.items, st.chats).then((chats) => set({ chats })); };
     if (!get().chatId) { const id = uid(); set({ chatId: id, chats: [{ id, title: '新对话', updatedAt: Date.now() }, ...get().chats] }); }
-    set({ items: [...get().items, { id: uid(), role: 'user', text, tools: [], files }, reply], running: true, pending: [] });
+    set({ items: [...get().items, { id: uid(), role: 'user', text, tools: [], files }, reply], running: true, pending: filesArg ? get().pending : [] });
     save();
     sentFiles = [...sentFiles, ...files];
     setAttachments(sentFiles);
@@ -192,11 +196,13 @@ export const useAgent = create<AgentState>((set, get) => ({
     let buf = '';
     let rbuf = '';
     let parts: MsgPart[] = [];
+    let usage = { input: 0, output: 0 };
     let thinkSince = 0;
     let thinkMs: number | undefined;
     aborter = new AbortController();
     // 中途停了或出错：这一轮的记录整个撤掉，不然下一轮会带着没回结果的工具调用
     const mark = transcript.messages.length;
+    lastTurn = { mark };
     try {
       const st = get().settings;
       setMemoryContext({ enabled: !!st?.memory.enabled, notes: st?.memory.notes ?? '', write: async (notes) => { const cur = get().settings; if (cur) await get().setSettings({ ...cur, memory: { ...cur.memory, notes } }); } });
@@ -218,10 +224,11 @@ export const useAgent = create<AgentState>((set, get) => ({
         onTool: (name, input, result, isError) => { const cur = get().items.find((it) => it.id === reply.id)!; const l = cur.live; const ms = l?.tool && l.since ? Date.now() - l.since : undefined; const card: ToolCard = { name, input, result, isError, images: derived.length ? derived : undefined, ms, diff: takeEdit() ?? undefined }; parts = [...parts, { kind: 'tool', card }]; patch({ tools: [...cur.tools, card], parts, live: { status: '', since: Date.now() } }); derived = []; },
         onToolStart: (name, input) => patch({ live: { tool: { name, input }, status: '', since: Date.now() } }),
         onStatus: (status) => { const l = liveOf(); patch({ live: { tool: l?.tool, status, since: status && status !== l?.status ? Date.now() : l?.since ?? Date.now() } }); },
+        onUsage: (u) => { usage = { input: usage.input + u.input, output: usage.output + u.output }; patch({ usage }); },
       }, aborter.signal);
     } catch (e) {
       transcript.messages.length = mark;
-      if (!aborter.signal.aborted) patch({ error: describeError(e) });
+      if (aborter.signal.aborted) patch({ stopped: true }); else patch({ error: describeError(e) });
     } finally {
       const aborted = aborter?.signal.aborted ?? false;
       aborter = null;
@@ -232,6 +239,21 @@ export const useAgent = create<AgentState>((set, get) => ({
       const q = get().queued;
       if (!aborted && q.length) { set({ queued: q.slice(1) }); void get().send(q[0].text); }
     }
+  },
+  regenerate: async () => {
+    const st = get();
+    if (st.running) return;
+    const items = st.items;
+    let ui = -1;
+    for (let i = items.length - 1; i >= 0; i--) if (items[i].role === 'user') { ui = i; break; }
+    if (ui < 0) return;
+    const user = items[ui];
+    // 原始记录退回到上次发送前；退不回去（换过接口 / 重开过页面）就清掉，下次发送按显示的对话重建
+    if (transcript && lastTurn && lastTurn.mark <= transcript.messages.length) transcript.messages.length = lastTurn.mark;
+    else transcript = null;
+    lastTurn = null;
+    set({ items: items.slice(0, ui) });
+    await get().send(user.text, user.files ?? []);
   },
   stop: () => { get().answer(false); set({ queued: [] }); aborter?.abort(); },
   clear: () => { const st = get(); if (st.chatId) void st.deleteChat(st.chatId); },
@@ -245,14 +267,14 @@ export const useAgent = create<AgentState>((set, get) => ({
     const index = await loadIndex(id);
     set({ chats: sortChats(index.chats), chatId: null, items: [], pending: [], queued: [], ask: null, docProviderId: index.providerId ?? null, docPreset: index.preset ?? '' });
     refresh();
-    transcript = null; sentFiles = []; chatPrompt = null; setAttachments([]);
+    transcript = null; sentFiles = []; chatPrompt = null; setAttachments([]); lastTurn = null;
     if (index.current && index.chats.some((c) => c.id === index.current)) await get().openChat(index.current);
   },
   newChat: async () => {
     const st = get();
     if (st.running) st.stop();
     if (boundDoc && st.chatId && st.items.length) await persistChat(boundDoc, st.chatId, st.items, st.chats);
-    transcript = null; sentFiles = []; chatPrompt = null; setAttachments([]);
+    transcript = null; sentFiles = []; chatPrompt = null; setAttachments([]); lastTurn = null;
     set({ chatId: null, items: [], pending: [], queued: [], ask: null });
     if (boundDoc) await kv.set('meta', indexKey(boundDoc), { ...(await loadIndex(boundDoc)), chats: get().chats, current: null } as Index);
   },
@@ -264,6 +286,7 @@ export const useAgent = create<AgentState>((set, get) => ({
     if (st.chatId && st.items.length) await persistChat(boundDoc, st.chatId, st.items, st.chats);
     const saved = await kv.get<Saved>('meta', chatKey(boundDoc, id));
     transcript = saved?.transcript ?? null;
+    lastTurn = null;
     sentFiles = saved?.sentFiles ?? [];
     chatPrompt = saved?.prompt ?? (saved?.items?.length ? '' : null);
     setAttachments(sentFiles);
@@ -284,7 +307,7 @@ export const useAgent = create<AgentState>((set, get) => ({
   deleteChat: async (id) => {
     if (!boundDoc) return;
     const st = get();
-    if (st.chatId === id) { if (st.running) st.stop(); transcript = null; sentFiles = []; chatPrompt = null; setAttachments([]); set({ chatId: null, items: [], pending: [], queued: [], ask: null }); }
+    if (st.chatId === id) { if (st.running) st.stop(); transcript = null; sentFiles = []; chatPrompt = null; setAttachments([]); lastTurn = null; set({ chatId: null, items: [], pending: [], queued: [], ask: null }); }
     const chats = st.chats.filter((c) => c.id !== id);
     set({ chats });
     await kv.del('meta', chatKey(boundDoc, id));

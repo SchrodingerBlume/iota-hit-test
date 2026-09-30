@@ -2,7 +2,7 @@
 // 它读、改文档走 src/ai/tools.ts 那几件工具，每一步在对话里留一张卡；要改设置时弹授权卡等用户点
 import { useEffect, useRef, useState } from 'react';
 import { Button, Textarea, Tooltip, Popover, PopoverTrigger, PopoverSurface, Input, Spinner } from '@fluentui/react-components';
-import { Settings20Regular, Dismiss20Regular, Send20Regular, Stop20Regular, Add20Regular, History20Regular, Delete16Regular, WindowMultiple20Regular, PanelRightContract20Regular, Star16Regular, Star16Filled, Rename16Regular, Checkmark16Regular, ChevronRight12Regular, ChevronDown12Regular, Attach20Regular, Dismiss12Regular, Image16Regular, DocumentPdf16Regular, DocumentText16Regular, BotSparkle20Regular, ShieldCheckmark20Regular, BrainCircuit20Regular, ChevronDoubleDown16Regular, Circle16Regular, CheckmarkCircle16Filled, CircleHalfFill16Regular, DismissCircle16Regular, Copy16Regular } from '@fluentui/react-icons';
+import { Settings20Regular, Dismiss20Regular, Send20Regular, Stop20Regular, Add20Regular, History20Regular, Delete16Regular, WindowMultiple20Regular, PanelRightContract20Regular, Star16Regular, Star16Filled, Rename16Regular, Checkmark16Regular, ChevronRight12Regular, ChevronDown12Regular, Attach20Regular, Dismiss12Regular, Image16Regular, DocumentPdf16Regular, DocumentText16Regular, BotSparkle20Regular, ShieldCheckmark20Regular, BrainCircuit20Regular, ChevronDoubleDown16Regular, Circle16Regular, CheckmarkCircle16Filled, CircleHalfFill16Regular, DismissCircle16Regular, Copy16Regular, ArrowClockwise16Regular, ArrowDownload16Regular } from '@fluentui/react-icons';
 import { useAgent, type ToolCard, type ChatMeta, type ChatItem } from '../ai/state';
 import { useStore } from '../model/store';
 import { configReady, providerLabel } from '../ai/config';
@@ -24,6 +24,8 @@ const QUICK = [
 const fmtWhen = (ts: number) => { const d = new Date(ts); const now = new Date(); const same = d.toDateString() === now.toDateString(); return same ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : `${d.getMonth() + 1}/${d.getDate()}`; };
 /** 工具跑完花了多久：不到 1 秒报毫秒，后面一位小数、整分 */
 const fmtDur = (ms: number): string => ms < 950 ? tx("{{n}} 毫秒", { n: Math.max(1, Math.round(ms)) }) : ms < 60000 ? tx("{{n}} 秒", { n: Math.round(ms / 100) / 10 }) : tx("{{m}} 分 {{s}} 秒", { m: Math.floor(ms / 60000), s: Math.round((ms % 60000) / 1000) });
+/** token 数：上 k 就报一位小数 */
+const fmtTok = (n: number): string => n < 1000 ? String(n) : `${(n / 1000).toFixed(n < 10000 ? 1 : 0)}k`;
 function partLabel(key: unknown) { return PARTS.find((p) => p.key === key)?.label ?? String(key ?? ''); }
 function cardTitle(c: ToolCard): string {
   const i = c.input;
@@ -132,11 +134,11 @@ function ChatList({ chats, current, onOpen, onDelete, onRename, onStar, onNew }:
   );
 }
 
-function FileChip({ f, onRemove }: { f: Attachment; onRemove?: () => void }) {
+function FileChip({ f, onRemove, onZoom }: { f: Attachment; onRemove?: () => void; onZoom?: (src: string, name: string) => void }) {
   const Icon = f.kind === 'image' ? Image16Regular : f.kind === 'pdf' ? DocumentPdf16Regular : DocumentText16Regular;
   return (
     <span className="ag-file" title={`${f.name} · ${fmtSize(f.size)}`}>
-      {f.kind === 'image' ? <img src={`data:${f.type};base64,${f.data}`} alt="" /> : <Icon />}
+      {f.kind === 'image' ? <img src={`data:${f.type};base64,${f.data}`} alt="" onClick={onZoom ? () => onZoom(`data:${f.type};base64,${f.data}`, f.name) : undefined} /> : <Icon />}
       <span className="ag-file-name">{f.name}</span>
       {onRemove && <button type="button" className="ag-file-x" aria-label={tx("移除")} onClick={onRemove}><Dismiss12Regular /></button>}
     </span>
@@ -195,14 +197,28 @@ function CopyButton({ text }: { text: string }) {
   return <button type="button" className="ag-act" title={tx("复制这条回复")} onClick={() => { void navigator.clipboard.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 1500); }).catch(() => { /* 剪贴板不可用 */ }); }}>{done ? <Checkmark16Regular /> : <Copy16Regular />}{done ? tx("已复制") : tx("复制")}</button>;
 }
 
-function Card({ c }: { c: ToolCard }) {
+/** 点击图片放大：铺满屏幕，Esc / 点背景关掉 */
+function Lightbox({ src, name, onClose }: { src: string; name: string; onClose: () => void }) {
+  return (
+    <div className="ag-lightbox" role="dialog" aria-label={name} onClick={onClose}>
+      <img src={src} alt={name} onClick={(e) => e.stopPropagation()} />
+      <div className="ag-lb-bar" onClick={(e) => e.stopPropagation()}>
+        <span>{name}</span>
+        <button type="button" onClick={onClose} title={tx("关闭")} aria-label={tx("关闭")}><Dismiss20Regular /></button>
+      </div>
+    </div>
+  );
+}
+
+function Card({ c, anchorId, flash, onZoom }: { c: ToolCard; anchorId?: string; flash?: boolean; onZoom?: (src: string, name: string) => void }) {
   const [open, setOpen] = useState(c.isError || c.name === 'todo');
+  useEffect(() => { if (flash) setOpen(true); }, [flash]);
   const detail = c.name === 'replace' || c.name === 'insert' ? `${String(c.input.markdown ?? '')}\n\n— ${c.result}`
     : c.name === 'table_write' ? `${(c.input.rows as string[][] | undefined)?.map((r) => r.join(' | ')).join('\n') ?? ''}\n\n— ${c.result}`
     : c.name === 'bib_add' ? `${String(c.input.bibtex ?? '')}\n\n— ${c.result}`
     : c.name === 'write_json' ? `${JSON.stringify(c.input.nodes, null, 1)}\n\n— ${c.result}` : c.result;
   return (
-    <div className={`ag-card ${c.isError ? 'is-error' : EDIT_TOOLS.has(c.name) ? 'is-edit' : ''}`}>
+    <div id={anchorId ? `agc-${anchorId}` : undefined} className={`ag-card ${c.isError ? 'is-error' : EDIT_TOOLS.has(c.name) ? 'is-edit' : ''} ${flash ? 'is-flash' : ''}`}>
       <button type="button" className="ag-card-head" onClick={() => setOpen(!open)}>
         {open ? <ChevronDown12Regular /> : <ChevronRight12Regular />}
         <span>{cardTitle(c)}</span>
@@ -211,7 +227,7 @@ function Card({ c }: { c: ToolCard }) {
           {c.ms !== undefined && <span className="muted">{fmtDur(c.ms)}</span>}
         </span>
       </button>
-      {!!c.images?.length && <div className="ag-card-imgs">{c.images.map((im) => <img key={im.id} src={`data:${im.type};base64,${im.data}`} alt={im.name} title={im.name} />)}</div>}
+      {!!c.images?.length && <div className="ag-card-imgs">{c.images.map((im) => <img key={im.id} src={`data:${im.type};base64,${im.data}`} alt={im.name} title={im.name} onClick={onZoom ? () => onZoom(`data:${im.type};base64,${im.data}`, im.name) : undefined} />)}</div>}
       {open && (c.name === 'todo'
         ? <TodoBody input={c.input} />
         : c.diff
@@ -222,8 +238,11 @@ function Card({ c }: { c: ToolCard }) {
 }
 
 export function AgentPane({ overlay }: { overlay?: boolean }) {
-  const { items, running, send, stop, config, setOpen, setSettingsOpen, pending, queued, dequeue, attach, detach, ask, answer, chats, chatId, newChat, openChat, deleteChat, renameChat, starChat, settings, docProviderId } = useAgent();
+  const { items, running, send, stop, regenerate, config, setOpen, setSettingsOpen, pending, queued, dequeue, attach, detach, ask, answer, chats, chatId, newChat, openChat, deleteChat, renameChat, starChat, settings, docProviderId, setDocOverride } = useAgent();
   const [chatsOpen, setChatsOpen] = useState(false);
+  const [sumOpen, setSumOpen] = useState(false);
+  const [zoom, setZoom] = useState<{ src: string; name: string } | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
   const float = useAgentWindow((s) => s.float);
   const compact = useMedia(COMPACT);
   const provider = settings?.providers.find((p) => p.id === (docProviderId ?? settings.globalId)) ?? settings?.providers[0];
@@ -259,34 +278,88 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
   const last = items[items.length - 1];
   // 清单只留最新那一版：旧卡片不画（老记录没有 parts 也一样）
   const lastTodo = (() => { for (let i = items.length - 1; i >= 0; i--) { const list = items[i].tools; for (let j = list.length - 1; j >= 0; j--) if (list[j].name === 'todo') return list[j]; } return undefined; })();
-  const edits = items.flatMap((it) => it.tools).filter((c) => !!c.diff && (c.diff.add > 0 || c.diff.del > 0));
-  const sumAdd = edits.reduce((n, c) => n + (c.diff?.add ?? 0), 0);
-  const sumDel = edits.reduce((n, c) => n + (c.diff?.del ?? 0), 0);
+  // 本场改动汇总：每条带「消息 id-序号」，点开列表能定位回卡片
+  const editRows = items.flatMap((it) => it.tools.map((c, ci) => ({ key: `${it.id}-${ci}`, card: c }))).filter((r) => !!r.card.diff && (r.card.diff.add > 0 || r.card.diff.del > 0));
+  const sumAdd = editRows.reduce((n, r) => n + (r.card.diff?.add ?? 0), 0);
+  const sumDel = editRows.reduce((n, r) => n + (r.card.diff?.del ?? 0), 0);
+  const locate = (key: string) => {
+    setSumOpen(false);
+    setFlash(key);
+    document.getElementById(`agc-${key}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    window.setTimeout(() => setFlash((f) => (f === key ? null : f)), 1800);
+  };
+  const openZoom = (src: string, name: string) => setZoom({ src, name });
+  const exportChat = () => {
+    if (!items.length) return;
+    const title = chats.find((c) => c.id === chatId)?.title ?? '对话';
+    const lines: string[] = [`# ${title}`, '', `（HιT webapp Agent 对话导出，${new Date().toLocaleString('zh-CN')}）`, ''];
+    for (const it of items) {
+      if (it.role === 'user') {
+        lines.push('## 我', '', it.text || '（附件）', '');
+        if (it.files?.length) lines.push(`附件：${it.files.map((f) => f.name).join('、')}`, '');
+      } else {
+        if (it.reasoning) lines.push('<details><summary>思考</summary>', '', it.reasoning, '', '</details>', '');
+        for (const c of it.tools) lines.push(`- ${cardTitle(c)}${c.isError ? '（出错）' : ''}${c.diff ? ` +${c.diff.add} −${c.diff.del}` : ''}`);
+        if (it.tools.length) lines.push('');
+        if (it.text) lines.push(it.text, '');
+        if (it.error) lines.push(`> 出错：${it.error}`, '');
+        if (it.stopped) lines.push('> （已停止）', '');
+      }
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${title.replace(/[\\/:*?"<>|]/g, '_')}.md`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setChatsOpen(false);
+  };
+  // Esc 关掉放大图（捕获阶段先收，别让它把正在跑的一轮也停了）
+  useEffect(() => {
+    if (!zoom) return;
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); setZoom(null); } };
+    window.addEventListener('keydown', h, true);
+    return () => window.removeEventListener('keydown', h, true);
+  }, [zoom]);
   return (
     <aside className={`agent-pane ${overlay ? 'is-overlay' : ''} ${drag ? 'is-drop' : ''}`} onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDrag(true); } }} onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDrag(false); }} onDrop={(e) => { if (!e.dataTransfer.files.length) return; e.preventDefault(); setDrag(false); onFiles(e.dataTransfer.files); }}>
       <div className="ag-head">
         <BotSparkle20Regular className="ag-logo" />
         <b>Agent</b>
-        <button type="button" className="ag-model" title={config ? `${config.baseUrl}${docProviderId ? tx("（本文档指定）") : ''}` : ''} onClick={() => setSettingsOpen(true)}>{ready && provider ? providerLabel(provider) : tx("未配置模型")}</button>
-        {edits.length > 0 && (
-          <Popover positioning="below-start">
+        <Popover positioning="below-start">
+          <PopoverTrigger disableButtonEnhancement>
+            <button type="button" className="ag-model" title={config ? `${config.baseUrl}${docProviderId ? tx("（本文档指定）") : ''}` : ''}>{ready && provider ? providerLabel(provider) : tx("未配置模型")}</button>
+          </PopoverTrigger>
+          <PopoverSurface className="ag-modelswitch">
+            {(settings?.providers ?? []).map((p) => (
+              <button key={p.id} type="button" className={`ag-msrow ${p.id === (docProviderId ?? settings?.globalId) ? 'on' : ''}`} onClick={() => void setDocOverride({ providerId: p.id })}>
+                <span className="ag-msname">{providerLabel(p)}</span>
+                {p.id === (docProviderId ?? settings?.globalId) && <Checkmark16Regular />}
+              </button>
+            ))}
+            {docProviderId && <button type="button" className="ag-msrow" onClick={() => void setDocOverride({ providerId: null })}>{tx("跟随全局默认")}</button>}
+            <button type="button" className="ag-msrow is-manage" onClick={() => setSettingsOpen(true)}><Settings20Regular />{tx("管理模型…")}</button>
+          </PopoverSurface>
+        </Popover>
+        {editRows.length > 0 && (
+          <Popover positioning="below-start" open={sumOpen} onOpenChange={(_, d) => setSumOpen(d.open)}>
             <PopoverTrigger disableButtonEnhancement>
               <button type="button" className="ag-sum" title={tx("本场对话的文档改动")}>
                 <span className="is-add">{`+${sumAdd}`}</span>
                 <span className="is-del">{`-${sumDel}`}</span>
-                <span className="muted">{tx("{{n}} 处改动", { n: edits.length })}</span>
+                <span className="muted">{tx("{{n}} 处改动", { n: editRows.length })}</span>
               </button>
             </PopoverTrigger>
             <PopoverSurface className="ag-sumsurface">
               <div className="ag-sumlist">
-                {edits.map((c, i) => (
-                  <div key={i} className="ag-sumrow">
-                    <span className="ag-sumtitle">{cardTitle(c)}</span>
-                    <span className="ag-diffnum"><span className="is-add">{`+${c.diff!.add}`}</span><span className="is-del">{`-${c.diff!.del}`}</span></span>
-                  </div>
+                {editRows.map((r) => (
+                  <button key={r.key} type="button" className="ag-sumrow" onClick={() => locate(r.key)} title={tx("跳到这张卡片")}>
+                    <span className="ag-sumtitle">{cardTitle(r.card)}</span>
+                    <span className="ag-diffnum"><span className="is-add">{`+${r.card.diff!.add}`}</span><span className="is-del">{`-${r.card.diff!.del}`}</span></span>
+                  </button>
                 ))}
               </div>
-              <div className="muted ag-sumhint">{tx("点开对话里对应的卡片可以看逐行 diff")}</div>
+              <div className="muted ag-sumhint">{tx("点一条跳到对话里对应的卡片（展开逐行 diff）")}</div>
             </PopoverSurface>
           </Popover>
         )}
@@ -298,6 +371,7 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
           </PopoverTrigger>
           <PopoverSurface className="ag-chats">
             <ChatList chats={chats} current={chatId} onOpen={(id) => { setChatsOpen(false); void openChat(id); }} onDelete={(id) => void deleteChat(id)} onRename={(id, t) => void renameChat(id, t)} onStar={(id, on) => void starChat(id, on)} onNew={() => { setChatsOpen(false); void newChat(); }} />
+            <button type="button" className="ag-chat-export" disabled={!items.length} onClick={exportChat}><ArrowDownload16Regular />{tx("导出这场对话（Markdown）")}</button>
           </PopoverSurface>
         </Popover>
         {!compact && <Tooltip content={float ? tx("停靠回右侧") : tx("浮成小窗")} relationship="label"><Button size="small" appearance="subtle" icon={float ? <PanelRightContract20Regular /> : <WindowMultiple20Regular />} onClick={() => useAgentWindow.getState().setFloat(!useAgentWindow.getState().float)} /></Tooltip>}
@@ -322,21 +396,33 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
             {it.reasoning && <Think text={it.reasoning} active={running && it.id === last?.id && !it.text} since={it.thinkSince} ms={it.thinkMs} />}
             {it.role === 'user' ? (
               <>
-                {!!it.files?.length && <div className="ag-files">{it.files.map((f) => <FileChip key={f.id} f={f} />)}</div>}
+                {!!it.files?.length && <div className="ag-files">{it.files.map((f) => <FileChip key={f.id} f={f} onZoom={openZoom} />)}</div>}
                 {it.text && <div className="ag-text">{it.text}</div>}
               </>
             ) : (it.parts?.length
               ? it.parts.map((p, i) => p.kind === 'text'
                 ? <div key={i} className="ag-text"><ChatMarkdown text={p.text} /></div>
-                : (p.card.name === 'todo' && p.card !== lastTodo ? null : <Card key={i} c={p.card} />))
+                : (p.card.name === 'todo' && p.card !== lastTodo ? null : <Card key={i} c={p.card} anchorId={`${it.id}-${it.tools.indexOf(p.card)}`} flash={flash === `${it.id}-${it.tools.indexOf(p.card)}`} onZoom={openZoom} />))
               : (
                 <>
-                  {it.tools.map((c, i) => c.name === 'todo' && c !== lastTodo ? null : <Card key={i} c={c} />)}
+                  {it.tools.map((c, i) => c.name === 'todo' && c !== lastTodo ? null : <Card key={i} c={c} anchorId={`${it.id}-${i}`} flash={flash === `${it.id}-${i}`} onZoom={openZoom} />)}
                   {it.text && <div className="ag-text"><ChatMarkdown text={it.text} /></div>}
                 </>
               ))}
-            {it.error && <div className="ag-error">{it.error}</div>}
-            {it.role === 'assistant' && !!it.text && <div className="ag-actions"><CopyButton text={it.text} /></div>}
+            {it.error && (
+              <div className="ag-error">
+                {it.error}
+                {it.role === 'assistant' && it.id === last?.id && !running && !ask && <button type="button" className="ag-act ag-retry" onClick={() => void regenerate()}>{tx("重试")}</button>}
+              </div>
+            )}
+            {it.stopped && <div className="ag-stopped muted">{tx("已停止")}</div>}
+            {it.role === 'assistant' && (it.text || it.usage || it.id === last?.id) && (
+              <div className="ag-actions">
+                {it.text && <CopyButton text={it.text} />}
+                {!running && !ask && it.id === last?.id && !it.error && <button type="button" className="ag-act" title={tx("重新生成这条回复")} onClick={() => void regenerate()}><ArrowClockwise16Regular />{tx("重新生成")}</button>}
+                {it.usage && <span className="ag-usage muted" title={tx("这一轮的 token 用量（输入 / 输出）")}>{`↑${fmtTok(it.usage.input)} ↓${fmtTok(it.usage.output)}`}</span>}
+              </div>
+            )}
             {it.role === 'assistant' && running && it.id === last?.id && !ask && (!it.reasoning || it.text) && <Live live={it.live} hasText={!!it.text} />}
           </div>
         ))}
@@ -354,7 +440,7 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
         )}
         {!pinned && <button type="button" className="ag-jump" onClick={() => { stick.current = true; setPinned(true); const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }}><ChevronDoubleDown16Regular />{tx("回到底部")}</button>}
       </div>
-      {!!pending.length && <div className="ag-files ag-pending">{pending.map((f) => <FileChip key={f.id} f={f} onRemove={() => detach(f.id)} />)}</div>}
+      {!!pending.length && <div className="ag-files ag-pending">{pending.map((f) => <FileChip key={f.id} f={f} onRemove={() => detach(f.id)} onZoom={openZoom} />)}</div>}
       {!!queued.length && (
         <div className="ag-queue">
           <div className="ag-queue-head muted">{tx("排队中：这一轮结束后自动发送")}</div>
@@ -374,6 +460,7 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
           ? <Tooltip content={tx("停止（排队中的消息也会清掉）")} relationship="label"><Button appearance="secondary" icon={<Stop20Regular />} onClick={stop} /></Tooltip>
           : <Tooltip content={tx("发送")} relationship="label"><Button appearance="primary" icon={<Send20Regular />} disabled={!ready || (!draft.trim() && !pending.length)} onClick={submit} /></Tooltip>}
       </div>
+      {zoom && <Lightbox src={zoom.src} name={zoom.name} onClose={() => setZoom(null)} />}
       <AgentSettings />
     </aside>
   );

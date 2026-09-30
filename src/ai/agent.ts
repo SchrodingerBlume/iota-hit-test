@@ -14,6 +14,8 @@ export interface AgentEvents {
   onToolStart: (name: string, input: Record<string, unknown>) => void;
   /** 眼下在等什么（等模型回复、工具里的分步进度）；空串清掉 */
   onStatus: (text: string) => void;
+  /** 这一轮用掉多少 token（服务方在流里/结果里给了才有：Anthropic 每次都有，OpenAI 兼容看各家） */
+  onUsage?: (u: { input: number; output: number }) => void;
 }
 /** 一次会话的原始记录：两家接口的消息形状不同，装在各自的数组里 */
 export type Transcript = { api: 'anthropic'; messages: Anthropic.MessageParam[] } | { api: 'openai'; messages: any[] };
@@ -90,6 +92,8 @@ async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], us
     let think = false;
     (stream as any).on('thinking', (delta: string) => { if (!think) { think = true; ev.onStatus(''); } ev.onReasoning(delta); });
     const msg = await stream.finalMessage();
+    const u = msg.usage;
+    if (u) ev.onUsage?.({ input: (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0), output: u.output_tokens ?? 0 });
     ev.onStatus('');
     messages.push({ role: 'assistant', content: msg.content });
     await reportServerTools(client, msg.content, ev);
@@ -189,6 +193,8 @@ async function openaiTurn(c: AiConfig, messages: any[], userText: string, files:
       if (data === '[DONE]') break;
       let j: any; try { j = JSON.parse(data); } catch { continue; }
       if (j.error) throw new Error(j.error.message ?? JSON.stringify(j.error));
+      // 有些家会在最后一个 chunk 里带 usage（不带 choice）
+      if (j.usage) { const ti = Number(j.usage.prompt_tokens ?? j.usage.input_tokens ?? 0); const to = Number(j.usage.completion_tokens ?? j.usage.output_tokens ?? 0); if (ti || to) ev.onUsage?.({ input: ti, output: to }); }
       const ch = j.choices?.[0]; if (!ch) continue;
       const d = ch.delta ?? {};
       if (typeof d.content === 'string' && d.content) { if (!text) ev.onStatus(''); text += d.content; ev.onText(d.content); }
