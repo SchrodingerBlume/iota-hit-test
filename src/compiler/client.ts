@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 import type { ToWorker, FromWorker, Diagnostic, Progress } from './protocol';
 import type { Segment } from '../typst/sourcemap';
+import { scheduleLayoutSave } from './cache';
 import { t } from '../i18n';
 
 export interface CompileState {
@@ -25,6 +26,8 @@ export interface CompileState {
   /** 最近一次成功的产物（与上一版的差；fresh 表示要整个 reset） */
   artifact: Uint8Array | null;
   artifactFresh: boolean;
+  /** 开工程时正在读冷启动缓存：读出来之前不摆首编影子，免得缓存版面顶上先闪一张影子论文 */
+  cachePending: boolean;
   diagnostics: Diagnostic[];
   lastMs: number | null;
   compileCount: number;
@@ -73,6 +76,7 @@ export const useCompileState = create<CompileState>(() => ({
   bgReady: false,
   artifact: null,
   artifactFresh: true,
+  cachePending: false,
   diagnostics: [],
   lastMs: null,
   compileCount: 0,
@@ -122,6 +126,8 @@ export interface CompileInput {
   /** 源码映射与它对应的文档版本 */
   segments?: Segment[];
   version?: number;
+  /** 这份结果若为整编，按这个签名存冷启动缓存（见 cache.ts；不发给 worker） */
+  cacheKey?: string;
   /** 只为暖缓存（后台那条道刚起来时把上一次整编再编一遍），结果不上屏 */
   warm?: boolean;
 }
@@ -192,7 +198,7 @@ class Lane {
     this.inFlight = nextId++;
     this.inFlightInput = input;
     useCompileState.setState(compiling());
-    const { segments: _s, version: _v, focus, images: _i, removeImages: _r, warm: _w, ...msg } = input;
+    const { segments: _s, version: _v, cacheKey: _k, focus, images: _i, removeImages: _r, warm: _w, ...msg } = input;
     if (this.name === 'bg' && input.warm) this.warmVersion = input.version ?? -2;
     if (this.name === 'bg' && !input.warm && !this.baselined) { if (this.warmVersion !== appliedFullVersion) msg.force = true; this.baselined = true; }
     const { images, removeImages } = this.imageDelta();
@@ -225,8 +231,9 @@ function warmBg() {
   bg.pending = { ...lastFull, warm: true };
   bg.flush();
 }
-/** 整编走哪条道：后台那条起来了就走它；只编一章、只编一段永远在前台 */
-const laneFor = (input: CompileInput) => (input.focus || !bg.ready ? fg : bg);
+/** 整编走哪条道：后台那条起来了（或已经起了、还在暖）就走它；只编一章、只编一段永远在前台。
+ *  暖后台的空档让整编先在后台排着——前台要是正铺冷启动缓存的版面，别让整编把它盖成影子论文 */
+const laneFor = (input: CompileInput) => (input.focus || !bg.worker ? fg : bg);
 
 /** wasm 陷了（Rust panic → unreachable）或内存快满：换一个 worker 从头来。前台那条重启算引擎重启（整编要 force），
  *  后台那条悄悄换 */
@@ -321,6 +328,11 @@ function onMessage(lane: Lane, m: FromWorker) {
           : {}),
         ...(m.glyphs && s.para && version >= s.para.version ? { para: null } : {}),
       });
+      // 整编的产物顺手存冷启动缓存；闲时写，别和打字抢
+      if (!focus && !input?.warm && m.artifact && input?.cacheKey && input.docId === activeDoc) {
+        const st = useCompileState.getState();
+        if (st.artifact && st.glyphs) scheduleLayoutSave(input.docId, input.cacheKey, input.main.length, st.pageCount, st.artifact, st.glyphs, input.segments ?? []);
+      }
       // 线性内存只涨不缩，快顶到 4 GB 时趁没在打字先换个 worker，别等它陷进去
       if ((m.mem ?? 0) > MEM_RESTART && !lane.pending) restartLane(lane, t("排版引擎占用 {{v0}} MB 内存，正在重新启动", { v0: Math.round((m.mem ?? 0) / 1048576) }));
       else lane.flush();

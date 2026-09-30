@@ -324,6 +324,7 @@ export const useStore = create<State>((set, get) => {
     deleteProject: async (id) => {
       await flushSave();
       await deleteProjectRecord(id);
+      void import('../compiler/cache').then((m) => m.dropLayout(id)).catch(() => { /* */ });
       for (const key of await listImageKeys()) if (key.startsWith(`${id}/`)) await deleteImageKey(key);
       for (const k of await kv.keys('meta')) if (String(k) === `agent:${id}` || String(k).startsWith(`agent:${id}:`)) await kv.del('meta', String(k));
       await get().refreshProjects();

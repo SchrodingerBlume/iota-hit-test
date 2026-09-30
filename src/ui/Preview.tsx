@@ -63,6 +63,7 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
   const bgWarming = useCompileState((s) => s.bgWarming);
   const artifact = useCompileState((s) => s.artifact);
   const artifactFresh = useCompileState((s) => s.artifactFresh);
+  const cachePending = useCompileState((s) => s.cachePending);
   const focusArtifact = useCompileState((s) => s.focusArtifact);
   const diagnostics = useCompileState((s) => s.diagnostics);
   const main = useCompileState((s) => s.diagMain);
@@ -355,8 +356,10 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
   const [diagOpen, setDiagOpen] = useState(false);
   // 警告也给（标签没挂上这类要用户处理）；只滤掉本机字体档缺字体那几条噪音
   const shown = [...errors, ...serWarnings.map((message) => ({ severity: 'warning', message, where: '' })), ...warnings.filter((w) => !/unknown font family: (kaiti_gb2312|lisu|stxinwei|simsun|simhei|kaiti|fangsong)/i.test(w.message))];
-  // 进工程后第一份整编还没回来（读图、排队、编译都算）：摆影子论文，别写「暂无内容」
-  const first = status === 'ready' && !artifact && !errors.length && !refreshDisabled;
+  // 进工程后第一份整编还没回来（读图、排队、编译都算）：摆影子论文，别写「暂无内容」；正在读冷启动缓存的那一下先不摆，
+  // 再压 400 ms 才出——刚进编辑视图时渲染比 effect 早一帧，不加这一拍缓存版面顶上会闪一张影子
+  const firstWanted = status === 'ready' && !artifact && !cachePending && !errors.length && !refreshDisabled;
+  const first = !!useSlow(firstWanted, 400);
   // 已有预览、这一次整编却迟迟不回来：前台整编（大文档改摘要、换设置这类，预览马上要整个换）等过 SLOW_AFTER 就把影子论文盖上去；
   // 后台整编（长文档打字后的校准，预览照旧能用）只在角上摆一张小的。只编一章的不算
   // 上一次就慢（≥ 3 s）的等 1.5 s 就盖，平时 2 s 上下的稿要等到 3 s——省得每改一字闪一下；头一份整编是冷的、不作数

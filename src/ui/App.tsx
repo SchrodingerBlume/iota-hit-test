@@ -3,6 +3,7 @@ import { useStore, type Section } from '../model/store';
 import { BUILD } from '../version';
 import type { ThesisDoc } from '../model/types';
 import { startCompiler, requestCompile, requestPara, resetForProject, exportPdf, useCompileState, setFocusPlacer, LONG_DOC } from '../compiler/client';
+import { layoutSig, loadLayout } from '../compiler/cache';
 import { serializeProject, serializePara, paraEligible, linebreaksInput } from '../typst/serialize';
 import { chapterAt, chapterPages } from '../compiler/focus';
 import { getEditor, onRegistryChange } from '../editor/registry';
@@ -225,19 +226,33 @@ function useAutoCompile(doc: ThesisDoc, loaded: boolean, refresh: number, previe
       removeImages,
       segments: project.segments,
       version: compiledVersion(doc),
+      cacheKey: layoutSig(doc),
     });
   };
   const fireRef = useRef(fire);
   fireRef.current = fire;
   useEffect(() => {
     if (!loaded || status !== 'ready' || composing) return;
+    // 换了工程：预览区已被项目管理页卸掉，渲染器没有上一版可以打差，增量产物会让它崩（reflexo 的 module unwrap），整个重编。
+    // 读冷启动缓存放在字体恢复那道 early-return 之前——等字体那一段也不能让编辑视图先闪一张首编影子。
+    if (lastProject.current !== doc.id) {
+      resetForProject(doc.id);
+      useComments.getState().setActive(null);
+      usePreviewSurface.getState().set({ activeKey: null, focused: false });
+      // 冷启动缓存：有上次的版面就先画出来，这一轮整编在后台校准
+      const wantId = doc.id;
+      useCompileState.setState({ cachePending: true });
+      void loadLayout(wantId, layoutSig(doc)).then((rec) => {
+        if (useStore.getState().doc.id !== wantId) return;
+        if (!rec || useCompileState.getState().artifact) { useCompileState.setState({ cachePending: false }); return; }
+        useCompileState.setState({ cachePending: false, artifact: rec.artifact, artifactFresh: true, glyphs: rec.glyphs, segments: rec.segments, mapVersion: docVersion(), pageCount: rec.pageCount });
+      });
+    }
     // 读 store 里的现值：引擎刚重启时 FontRecovery 的 effect 先跑、把 restoring 拨成 true，闭包里的还是旧的 false，
     // 按旧值就会先用替代字体编一遍、字体到了再编一遍——预览闪一下「字体丢了」
     if ((restoring || useFontState.getState().restoring) && doc.settings.fontset !== 'webapp') return;
-    // 换了工程：预览区已被项目管理页卸掉，渲染器没有上一版可以打差，增量产物会让它崩（reflexo 的 module unwrap），整个重编
     // 字体表换了也整个重来：增量差分里的字形还指着旧字体，渲染器接不上
     const force = refresh !== lastRefresh.current || engineKey !== lastEngine.current || lastProject.current !== doc.id || fontsVersion !== lastFonts.current || engineGen !== lastGen.current;
-    if (lastProject.current !== doc.id) { resetForProject(doc.id); useComments.getState().setActive(null); usePreviewSurface.getState().set({ activeKey: null, focused: false }); }
     lastRefresh.current = refresh;
     lastFonts.current = fontsVersion;
     lastEngine.current = engineKey;
