@@ -423,11 +423,11 @@ function heading(ctx: Ctx, n: PMNode, part: 'body' | 'appendix', forceBreak = fa
   const plain = text(n).trim();
   // 两字章名撑开（模板的 two-hanzi）：「绪论」→「绪　论」，目录里也照此印
   const spread = level === 1 && !en && sw<boolean>('titleSpread', ctx.s) && /^[\u4e00-\u9fff]{2}$/.test(plain);
-  // 英文报告的标题西文加粗（模板样式的 latin-bold）；一级另起页看模板写进第一级样式的 page-break-before
+  // 英文报告的标题西文加粗（模板样式的 latin-bold）；一级另起页看模板写进第一级样式的 pagebreak-before
   const st = ctx.F.styles[headingLevels(ctx.s)[level - 1]] ?? {};
   const latinBold = !!st['latin-bold'] && !st.bold;
   const kids = en ? [new TextRun({ text: en, bold: latinBold || undefined })] : spread ? [new TextRun({ text: `${plain[0]}\u3000${plain[1]}` })] : inline(ctx, n.content, { latinBold });
-  const pageBreak = forceBreak || (level === 1 && !!ctx.F.styles[headingLevels(ctx.s)[0]]?.['page-break-before']);
+  const pageBreak = forceBreak || (level === 1 && !!ctx.F.styles[headingLevels(ctx.s)[0]]?.['pagebreak-before']);
   // 英文目录的条目：号照模板的英文式（Chapter 1 / 1.1；附录一级 Appendix、往下照中文的号），名取 #en 那半，没写的照中文
   const path = info?.path ?? [];
   const numEn = !info ? '' : part === 'appendix' ? num.replace(/^附录/, 'Appendix') : level === 1 ? `Chapter ${path[0]}` : path.join('.');

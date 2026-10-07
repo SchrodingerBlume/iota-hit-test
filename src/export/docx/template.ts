@@ -1,6 +1,7 @@
 // 查询 iota-hit 的样式与页面参数，并映射为 Word 样式表和节属性。
 import type { ThesisDoc, Settings } from '../../model/types';
 import { IOTA_HIT_VERSION, iotaHitShow, layoutArg, typstDict } from '../../typst/serialize';
+import { isReportBody } from '../../model/options';
 import { queryTypst } from '../../compiler/client';
 import { wordLinebreakOptions } from '../../typst/serialize';
 
@@ -14,7 +15,7 @@ export interface Style {
   'line-spacing'?: LineSpacing;
   above?: Lines | number; below?: Lines | number; gap?: number | 'auto';
   'first-line-indent'?: Chars | number; 'hanging-indent'?: Chars | number; 'left-indent'?: Chars | number;
-  align?: string; 'snap-to-grid'?: boolean; justify?: boolean; 'page-break-before'?: boolean; sticky?: boolean; breakable?: boolean;
+  align?: string; 'snap-to-grid'?: boolean; justify?: boolean; 'pagebreak-before'?: boolean; sticky?: boolean; breakable?: boolean;
   inset?: { x?: number; y?: number; left?: number; right?: number; top?: number; bottom?: number } | number;
   stroke?: Record<string, number | null> | number;
 }
@@ -149,8 +150,8 @@ export function styleXml(id: string, name: string, o: { type?: 'paragraph' | 'ch
 /** 页眉那一段的下边框（Word「边框和底纹」：线型、磅数 → 1/8 磅、距文字磅） */
 export const borderXml = (b: HeaderFooter['border']) => (b ? `<w:pBdr><w:bottom w:val="${b.style === 'thin-thick-small-gap' ? 'thinThickSmallGap' : 'single'}" w:sz="${Math.round(b.thickness * 8)}" w:space="${Math.round(b['from-text'])}" w:color="auto"/></w:pBdr>` : '');
 
-/** 报告的四级整体上移一格（模板 src/heading/heading.typ 的 report-levels） */
-export const headingLevels = (s: Settings): string[] => (s.stage !== 'final' ? ['section', 'subsection', 'subsubsection', 'subsubsection'] : ['chapter', 'section', 'subsection', 'subsubsection']);
+/** 报告（开题/中期）正文没有章：模板的样式表左移一格，四级标题实际只到款（深圳本科报告照终稿，不算报告正文） */
+export const headingLevels = (s: Settings): string[] => (isReportBody(s) ? ['heading-1', 'heading-2', 'heading-3', 'heading-3'] : ['heading-1', 'heading-2', 'heading-3', 'heading-4']);
 
 /** 整张样式表：Normal 是正文那一条，标题 1～4 是四级标题，题注、装图段、表格文字、目录 1～4、页眉页脚都从模板的字典翻 */
 export function stylesXml(F: Facts, s: Settings, o: { hangingChars: number }): { docDefaults: string; styles: string[] } {
@@ -172,11 +173,12 @@ export function stylesXml(F: Facts, s: Settings, o: { hangingChars: number }): {
     styles.push(styleXml(`Heading${i + 1}`, `heading ${i + 1}`, { basedOn: 'Normal', next: 'Normal', pPr: pPr({ ...st, 'first-line-indent': { chars: 0 } }, P, { outline: i }), rPr: rPr(st, F, zh) }));
   });
   // 前置各页的标题（摘要、目录、参考文献……）长得和章标题一样；目录自己的那条不进目录（不给大纲级别）
-  const chapter = { ...S.chapter, 'first-line-indent': { chars: 0 } as Chars };
-  styles.push(styleXml('Abstract', 'Abstract Title', { basedOn: 'Normal', next: 'Normal', pPr: pPr(chapter, P, { outline: 0 }), rPr: rPr(S.chapter, F, zh) }));
-  styles.push(styleXml('FrontTitle', 'Front Title', { basedOn: 'Normal', next: 'Normal', pPr: pPr(chapter, P), rPr: rPr(S.chapter, F, zh) }));
-  // 声明页、符号页的小标题：节标题那一条居中（模板 src/pages/declarations.typ、nomenclature.typ 的 _subheading-style 就是节那几个数）
-  const sub = { ...S.section, 'first-line-indent': { chars: 0 } as Chars, align: 'center' };
+  const term = S['term-heading'];
+  const chapter = { ...term, 'first-line-indent': { chars: 0 } as Chars };
+  styles.push(styleXml('Abstract', 'Abstract Title', { basedOn: 'Normal', next: 'Normal', pPr: pPr(chapter, P, { outline: 0 }), rPr: rPr(term, F, zh) }));
+  styles.push(styleXml('FrontTitle', 'Front Title', { basedOn: 'Normal', next: 'Normal', pPr: pPr(chapter, P), rPr: rPr(term, F, zh) }));
+  // 声明页、符号页的小标题：节标题那一条居中（模板的 section-style：四级的表取 heading-2，三级的表取 heading-1）
+  const sub = { ...S['heading-4' in S ? 'heading-2' : 'heading-1'], 'first-line-indent': { chars: 0 } as Chars, align: 'center' };
   styles.push(styleXml('SubTitle', 'Sub Title', { basedOn: 'Normal', next: 'Normal', pPr: pPr(sub, P), rPr: rPr(sub, F, zh) }));
   // 图表：装图的那一段（段前 = 图块之上）、题注（图题的段后 = 图块之下）、表题（段前 = 表块之上）、表格里的文字
   const fig = S.figure;

@@ -9,6 +9,7 @@ import { computeNumbering } from './numbering';
 import type { RichDoc } from '../model/types';
 import { generateBibtex } from '../bib/bibtex';
 import { resolvePage } from '../model/pages';
+import { isReportBody } from '../model/options';
 import { mark, stripMarks, type Segment } from './sourcemap';
 import { lengthTypst, ABS_UNITS } from '../model/length';
 import type { RichKey } from '../model/store';
@@ -211,12 +212,12 @@ function settingsArgs(s: Settings): string[] {
   args.push(s.mathFont ? `${FONTSET_ARG[s.fontset ?? 'webapp']} + (math: ${JSON.stringify(s.mathFont)})` : FONTSET_ARG[s.fontset ?? 'webapp']);
   const bools: [keyof Settings, string][] = [
     ['captionBilingual', 'caption-bilingual'],
-    ['captionNumberingByChapter', 'caption-numbering-by-chapter'],
-    ['equationNumberingByChapter', 'equation-numbering-by-chapter'],
+    ['captionNumberingByChapter', 'caption-numbering-by-top-level-heading'],
+    ['equationNumberingByChapter', 'equation-numbering-by-top-level-heading'],
     ['equationNumberingFullwidth', 'equation-numbering-fullwidth'],
-    ['theoremNumberingByChapter', 'theorem-numbering-by-chapter'],
+    ['theoremNumberingByChapter', 'theorem-numbering-by-top-level-heading'],
     ['subcaptionBilingual', 'subcaption-bilingual'],
-    ['heading1Pagebreak', 'heading-1-pagebreak'],
+    ['heading1Pagebreak', 'top-level-heading-pagebreak-before'],
     ['openright', 'openright'],
     ['enumHanging', 'enum-hanging'],
     ['listHanging', 'list-hanging'],
@@ -235,7 +236,7 @@ function settingsArgs(s: Settings): string[] {
   if (s.subcaptionSeparator !== 'auto') args.push(`subcaption-separator: ${JSON.stringify(s.subcaptionSeparator)}`);
   if (s.subcaptionGap !== 'auto') args.push(`subcaption-gap: ${s.subcaptionGap}`);
   if (s.noteWidth && /^\d+(\.\d+)?(%|cm|mm|pt|em)$/.test(s.noteWidth.trim())) args.push(`note-width: ${s.noteWidth.trim()}`);
-  const styles = stylesArg(s.styles ?? {});
+  const styles = stylesArg(s.styles ?? {}, isReportBody(s));
   if (styles) args.push(styles);
   if (s.appendixNumbering !== 'auto') {
     const pattern = { letters: 'A', roman: 'I', numbers: '1', hanzi: '一', words: 'One' }[s.appendixNumbering];
@@ -260,8 +261,25 @@ export function styleEntryArgs(e: StyleEntry): string[] {
   if (e.tracking !== undefined) out.push(`tracking: ${abs(e.tracking, '0pt')}`);
   return out;
 }
-function stylesArg(styles: Settings['styles']): string {
-  const entries = Object.entries(styles).flatMap(([k, e]) => { const a = styleEntryArgs(e ?? {}); if (!a.length) return []; return k === 'toc' ? ['toc-1', 'toc-2', 'toc-3', 'toc-4'].map((t) => [t, a] as const) : [[k, a] as const]; });
+/** 工程里的样式键（站内按语义：章/节/条/款）→ 模板的 heading-N：报告正文没有章，整张表左移一格（模板 report-styles） */
+function styleKeyToTemplate(k: string, report: boolean): string | null {
+  switch (k) {
+    case 'body': return 'body';
+    case 'chapter': return report ? null : 'heading-1';
+    case 'section': return report ? 'heading-1' : 'heading-2';
+    case 'subsection': return report ? 'heading-2' : 'heading-3';
+    case 'subsubsection': return report ? 'heading-3' : 'heading-4';
+    default: return null;
+  }
+}
+function stylesArg(styles: Settings['styles'], report: boolean): string {
+  const entries = Object.entries(styles).flatMap(([k, e]) => {
+    const a = styleEntryArgs(e ?? {});
+    if (!a.length) return [];
+    if (k === 'toc') return ['toc-1', 'toc-2', 'toc-3', 'toc-4'].map((t) => [t, a] as const);
+    const t = styleKeyToTemplate(k, report);
+    return t ? [[t, a] as const] : [];
+  });
   if (!entries.length) return '';
   return `styles: (\n    ${entries.map(([k, a]) => `${k}: (${a.join(', ')})`).join(',\n    ')},\n  )`;
 }
@@ -566,7 +584,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   if (body) parts.push(body);
 
   const conclusion = rich('conclusion', { headings: false });
-  if (conclusion.trim()) parts.push(`#conclusion${or('conclusion') ? `(${or('conclusion')})` : ''}[\n${indent(conclusion, 2)}\n]`);
+  if (conclusion.trim()) parts.push(`#conclusions${or('conclusion') ? `(${or('conclusion')})` : ''}[\n${indent(conclusion, 2)}\n]`);
 
   // ── 后置 ──
   const refs = generateBibtex(doc.references ?? []);
@@ -599,7 +617,7 @@ export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { p
   if (resolvePage(doc, 'index').value) parts.push(`#index(${[or('index'), pageLayout('index')].filter(Boolean).join(', ')})`);
 
   const ack = rich('acknowledgement', { headings: false });
-  if (ack.trim()) parts.push(`#acknowledgement${or('acknowledgement') ? `(${or('acknowledgement')})` : ''}[\n${indent(ack, 2)}\n]`);
+  if (ack.trim()) parts.push(`#acknowledgements${or('acknowledgement') ? `(${or('acknowledgement')})` : ''}[\n${indent(ack, 2)}\n]`);
 
   const resume = rich('resume', { headings: false });
   if (resolvePage(doc, 'resume').value && resume.trim()) parts.push(`#resume${or('resume') ? `(${or('resume')})` : ''}[\n${indent(resume, 2)}\n]`);

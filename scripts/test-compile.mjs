@@ -67,7 +67,9 @@ async function main() {
     if (fs.existsSync(img)) for (const f of fs.readdirSync(img)) compiler.mapShadow(`/images/${f}`, new Uint8Array(fs.readFileSync(path.join(img, f))));
   } else {
     src = `#import "@local/iota-hit:${manifest.iotaHit}": *
-#show: iota-hit.with(degree-level: "master", fontset: presets.webapp + (kaishu: "FandolKai"), title: [浏览器端编译测试], author: [张三])
+#show: iota-hit.with(degree-level: "master", fontset: presets.webapp + (kaishu: "FandolKai"), title: [浏览器端编译测试], author: [张三],
+  associate-supervisor: [李四 #en[Prof. Li]],
+  caption-numbering-by-top-level-heading: true, equation-numbering-by-top-level-heading: true, theorem-numbering-by-top-level-heading: true, top-level-heading-pagebreak-before: false)
 #show: frontmatter
 #cover()
 #titlepage()
@@ -78,8 +80,8 @@ async function main() {
 正文段落，楷体#kaishu[楷体]，黑体#heiti[黑体]。公式 $E = m c^2$。
 == 节#en[Section]
 #figure(table(columns: 2, [a], [b]), caption: [表])
-#conclusion[结论。]
-#acknowledgement[致谢。]
+#conclusions[结论。]
+#acknowledgements[致谢。]
 `;
   }
   compiler.addSource('/main.typ', src);

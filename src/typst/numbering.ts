@@ -1,7 +1,7 @@
 // 编辑器里显示的编号：章节、图、表、公式。规则照模板——
 //   标题：src/heading/numbering.typ（理工「第 1 章 / 1.1」、人文社科「第一章 / 一、/（一）/ 1.」、
 //         英文「Chapter 1 / 1.1」、报告「1 / 1.1」、附录「附录 A / A.1」）
-//   图表：caption-numbering-by-chapter（图 1-1 或图 1），公式：equation-numbering-by-chapter
+//   图表：caption-numbering-by-top-level-heading（图 1-1 或图 1），公式：equation-numbering-by-top-level-heading
 // 两个「按章编号」开关走 options.ts 里的 auto 映射，所以这里显示的就是模板最终会印的。
 // 预览里的才是准的；这里只是让人写的时候心里有数。
 import type { Settings, StyleKey } from '../model/types';

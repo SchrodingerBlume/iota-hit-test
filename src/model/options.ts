@@ -103,8 +103,8 @@ export interface SwitchDef<V extends string | boolean = boolean> {
 }
 
 const isReport = (s: Settings) => s.stage !== 'final';
-/** 正文照不照报告排：深圳本科的报告只有首页是表单，正文照终稿排 */
-const isReportBody = (s: Settings) => isReport(s) && !(s.campus === 'shenzhen' && s.degreeLevel === 'bachelor');
+/** 正文照不照报告排：深圳本科的报告只有首页是表单，正文照终稿排（模板 axes.typ 的 report-body 同一条） */
+export const isReportBody = (s: Settings) => isReport(s) && !(s.campus === 'shenzhen' && s.degreeLevel === 'bachelor');
 const bodyStage = (s: Settings): Stage => (isReportBody(s) ? s.stage : 'final');
 const degreeName: Record<DegreeLevel, string> = { bachelor: t("本科"), master: t("硕士"), doctor: t("博士") };
 const stageName: Record<Stage, string> = { final: t("终稿"), proposal: t("开题"), interim: t("中期") };

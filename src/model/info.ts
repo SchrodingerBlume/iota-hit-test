@@ -35,8 +35,8 @@ export const INFO_FIELDS: InfoFieldDef[] = [
   { key: 'studentId', label: t("学号"), param: 'student-id', kind: 'text', group: t("作者与导师"), applies: (s) => s.degreeLevel === 'bachelor' || s.stage !== 'final' },
   { key: 'supervisor', label: t("导师"), param: 'supervisor', kind: 'text', group: t("作者与导师"), placeholder: t("×××　教授") },
   { key: 'supervisorEn', label: t("导师（英文）"), param: 'supervisor-en', kind: 'text', group: t("作者与导师"), applies: final, placeholder: 'Prof. ×××' },
-  { key: 'coSupervisor', label: t("副导师"), param: 'co-supervisor', kind: 'text', group: t("作者与导师"), hint: t("选填"), applies: (s) => graduate(s) && final(s) },
-  { key: 'coSupervisorEn', label: t("副导师（英文）"), param: 'co-supervisor-en', kind: 'text', group: t("作者与导师"), applies: (s) => graduate(s) && final(s) },
+  { key: 'coSupervisor', label: t("副导师"), param: 'associate-supervisor', kind: 'text', group: t("作者与导师"), hint: t("选填"), applies: (s) => graduate(s) && final(s) },
+  { key: 'coSupervisorEn', label: t("副导师（英文）"), param: 'associate-supervisor-en', kind: 'text', group: t("作者与导师"), applies: (s) => graduate(s) && final(s) },
   { key: 'industrySupervisor', label: t("行业导师"), param: 'industry-supervisor', kind: 'text', group: t("作者与导师"), hint: t("仅适用于实践成果"), applies: (s) => practice(s) && final(s) },
   { key: 'industrySupervisorEn', label: t("行业导师（英文）"), param: 'industry-supervisor-en', kind: 'text', group: t("作者与导师"), applies: (s) => practice(s) && final(s) },
 
