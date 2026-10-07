@@ -1,4 +1,4 @@
-# typst-with-msword-linebreaks 32dec5cc3 的 msword 提交（a402c3c13…88a6f5669、b74a09f6d…68dd6ade1、564fae72d…32dec5cc3：compress / consecutive-hyphens / hyphenate-caps / 断字）+ typst 上游 #792 两个提交（485841043、701f12ed5）cherry-pick 到 88a6f5669（typst 0.15.1 基线）之上，再合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1（fork 主线已并入 typst main，typst.ts 0.8.1 编不过 main 的 Format API，站内先走 0.15.1 线）
+# typst-with-msword-linebreaks aaf2ab5b41b31ff15b61cff0512ddeca3054506a 的 msword 提交（29 笔，cherry-pick 到 88a6f5669 基线之上；上游 #792 两笔）再合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
 diff --git a/crates/typst-eval/src/markup.rs b/crates/typst-eval/src/markup.rs
 index 6e79da8d2..e5a5abdd3 100644
 --- a/crates/typst-eval/src/markup.rs
@@ -34,6 +34,46 @@ index 5e82127c1..b2dc22fe1 100644
                  break;
              }
              current = prev;
+diff --git a/crates/typst-layout/src/inline/box.rs b/crates/typst-layout/src/inline/box.rs
+index 29e0a298d..5e3ed67e5 100644
+--- a/crates/typst-layout/src/inline/box.rs
++++ b/crates/typst-layout/src/inline/box.rs
+@@ -2,9 +2,10 @@ use std::cell::LazyCell;
+ 
+ use typst_library::diag::SourceResult;
+ use typst_library::engine::Engine;
+-use typst_library::foundations::{Packed, Resolve, Smart, StyleChain};
++use typst_library::foundations::{Packed, Resolve, Smart, StyleChain, Styles};
+ use typst_library::introspection::Locator;
+ use typst_library::layout::{BoxElem, Frame, FrameKind, Size};
++use typst_library::model::ParElem;
+ use typst_library::visualize::Stroke;
+ use typst_utils::Numeric;
+ 
+@@ -28,6 +29,14 @@ pub fn layout_box(
+     // Build the pod region.
+     let pod = unbreakable_pod(&width, &height.into(), &inset, styles, region);
+ 
++    // A box is an atomic inline object with no Word counterpart, so its
++    // content does not take Word's emergency break: an unbreakable run that
++    // does not fit overflows instead of being split (see
++    // `ParElem::emergency_breaks`).
++    let mut inner_styles = Styles::new();
++    inner_styles.set(ParElem::emergency_breaks, false);
++    let body_styles = styles.chain(&inner_styles);
++
+     // Layout the body.
+     let mut frame = match elem.body.get_ref(styles) {
+         // If we have no body, just create an empty frame. If necessary,
+@@ -36,7 +45,7 @@ pub fn layout_box(
+ 
+         // If we have a child, layout it into the body. Boxes are boundaries
+         // for gradient relativeness, so we set the `FrameKind` to `Hard`.
+-        Some(body) => crate::layout_frame(engine, body, locator, styles, pod)?
++        Some(body) => crate::layout_frame(engine, body, locator, body_styles, pod)?
+             .with_kind(FrameKind::Hard),
+     };
+ 
 diff --git a/crates/typst-layout/src/inline/line.rs b/crates/typst-layout/src/inline/line.rs
 index 3d7f3a28c..e25d98f05 100644
 --- a/crates/typst-layout/src/inline/line.rs
@@ -151,7 +191,7 @@ index 0a893187a..ab6f0cb7b 100644
  
      // Single breakpoint at the end for empty text.
 diff --git a/crates/typst-layout/src/inline/mod.rs b/crates/typst-layout/src/inline/mod.rs
-index 259be8101..50f73975d 100644
+index 259be8101..19906993f 100644
 --- a/crates/typst-layout/src/inline/mod.rs
 +++ b/crates/typst-layout/src/inline/mod.rs
 @@ -5,6 +5,7 @@ mod deco;
@@ -162,7 +202,7 @@ index 259be8101..50f73975d 100644
  mod prepare;
  mod shaping;
  
-@@ -187,13 +188,18 @@ fn configuration(
+@@ -187,13 +188,19 @@ fn configuration(
      let justify = base.justify;
      let font_size = shared.resolve(TextElem::size);
      let dir = shared.resolve(TextElem::dir);
@@ -181,10 +221,11 @@ index 259be8101..50f73975d 100644
 -            if justify { Linebreaks::Optimized } else { Linebreaks::Simple }
 -        }),
 +        linebreaks,
++        emergency_breaks: shared.get(ParElem::emergency_breaks),
          first_line_indent: {
              let amount = base.first_line_indent.amount();
              let all = base.first_line_indent.all();
-@@ -233,7 +239,7 @@ fn configuration(
+@@ -233,7 +240,7 @@ fn configuration(
          font_size,
          dir,
          hyphenate: shared_get(children, shared, |s| s.get(TextElem::hyphenate))
@@ -193,12 +234,22 @@ index 259be8101..50f73975d 100644
          lang: shared_get(children, shared, |s| s.get(TextElem::lang)),
          fallback: shared.get(TextElem::fallback),
          cjk_latin_spacing: shared.get(TextElem::cjk_latin_spacing).is_auto(),
+@@ -273,6 +280,9 @@ struct Config {
+     justification_limits: JustificationLimits,
+     /// How to determine line breaks.
+     linebreaks: Linebreaks,
++    /// Whether an unbreakable run that does not fit the line may be split
++    /// (Word's emergency break). Off inside inline boxes.
++    emergency_breaks: bool,
+     /// The indent the first line of a paragraph should have.
+     first_line_indent: Abs,
+     /// The indent that all but the first line of a paragraph should have.
 diff --git a/crates/typst-layout/src/inline/msword.rs b/crates/typst-layout/src/inline/msword.rs
 new file mode 100644
-index 000000000..b04faf55f
+index 000000000..97041b1f0
 --- /dev/null
 +++ b/crates/typst-layout/src/inline/msword.rs
-@@ -0,0 +1,3398 @@
+@@ -0,0 +1,3491 @@
 +// 本文件基于 Typst（typst/typst）与 typst-with-msword-linebreaks 修改（iota4web 合并到 Myriad-Dreamin/typst 之上，见 scripts/wasm-patch/typst-msword.patch）
 +//! Line breaking that emulates Microsoft Word.
 +//!
@@ -609,36 +660,40 @@ index 000000000..b04faf55f
 +    // a URL without break opportunities) is broken by Word at the glyph
 +    // that no longer fits, while a run that could move down as a whole is
 +    // moved. Runs longer than half the line get an emergency break at every
-+    // glyph; the fit only uses those when the run starts the line.
++    // glyph; the fit only uses those when the run starts the line. Inside
++    // an inline box, the run overflows instead (`ParElem::emergency_breaks`
++    // is off there): a box is an atomic object with no Word counterpart.
 +    let mut emergency: Vec<usize> = Vec::new();
-+    let overlong: Vec<std::ops::Range<usize>> = toks
-+        .iter()
-+        .filter(|t| {
-+            t.kind == Kind::Latin
-+                && t.glyphs
-+                && t.w + params.latin_add() * t.glyph_count as f64 > width / 2.0
-+        })
-+        .map(|t| t.range.clone())
-+        .collect();
-+    if !overlong.is_empty() {
-+        for (_, item) in &p.items {
-+            let Item::Text(shaped) = item else { continue };
-+            for g in shaped.glyphs.iter() {
-+                if overlong
-+                    .iter()
-+                    .any(|r| r.start < g.range.start && g.range.start < r.end)
-+                    && !breaks.contains(&g.range.start)
-+                {
-+                    emergency.push(g.range.start);
++    if p.config.emergency_breaks {
++        let overlong: Vec<std::ops::Range<usize>> = toks
++            .iter()
++            .filter(|t| {
++                t.kind == Kind::Latin
++                    && t.glyphs
++                    && t.w + params.latin_add() * t.glyph_count as f64 > width / 2.0
++            })
++            .map(|t| t.range.clone())
++            .collect();
++        if !overlong.is_empty() {
++            for (_, item) in &p.items {
++                let Item::Text(shaped) = item else { continue };
++                for g in shaped.glyphs.iter() {
++                    if overlong
++                        .iter()
++                        .any(|r| r.start < g.range.start && g.range.start < r.end)
++                        && !breaks.contains(&g.range.start)
++                    {
++                        emergency.push(g.range.start);
++                    }
 +                }
 +            }
++            emergency.sort_unstable();
++            emergency.dedup();
++            breaks.extend(emergency.iter().copied());
++            breaks.sort_unstable();
++            breaks.dedup();
++            toks = tokenize(p, &params, &breaks, &hyphens, &glued, &symbols, &ea_letters);
 +        }
-+        emergency.sort_unstable();
-+        emergency.dedup();
-+        breaks.extend(emergency.iter().copied());
-+        breaks.sort_unstable();
-+        breaks.dedup();
-+        toks = tokenize(p, &params, &breaks, &hyphens, &glued, &symbols, &ea_letters);
 +    }
 +    if toks.is_empty() {
 +        return vec![line(engine, p, 0..p.text.len(), Breakpoint::Mandatory, None, '\0')];
@@ -1682,10 +1737,14 @@ index 000000000..b04faf55f
 +    // with to a few tenths of a point where they overlap.
 +    //
 +    //   CjkChar     bare CJK character:    k = 0: pool_C(g)
-+    //                                       k ≥ 1: min(half·k, u·k/(k+1) + E(k) − D(g)·share(k))
++    //                                       k ≥ 1: min(half·k, u·k/(k + W/M + Γ(g)))
++    //                 (W/M: the line's natural width over the measure —
++    //                 the per-spot squeeze may not exceed the stretch the
++    //                 line would need without the unit; a full line gives
++    //                 the familiar k/(k+1))
 +    //   GluedLatin  Latin run glued to CJK, no closers: k ≥ 1:
 +    //                 min(half·k + half a spacing per spacing on the line,
-+    //                     ((1.031u − 2.85)·k/(k+1) + 1.9)·(1 − 0.136·ln(1+g)))
++    //                     ((1.031u − 2.85)·k/(k + W/M) + 1.7)·(1 − 0.136·ln(1+g)))
 +    //   General     min(half·k + hang + spacing part [+ space shrink],
 +    //                   (u·k + hang + slop)/(k+1) − deficit) − penalty(g) + fine
 +    // ------------------------------------------------------------------
@@ -1732,6 +1791,16 @@ index 000000000..b04faf55f
 +        // are ordinary spots; only the last one hangs.
 +        let mut k = spots(first, j) + openers;
 +        k += (core + 1..m).filter(|&i| toks[i].spot).count();
++        if !params.compress {
++            // "Do not compress" (`characterSpacingControl doNotCompress`):
++            // no punctuation is squeezed, but the line is otherwise fitted
++            // as one without spots — the automatic spacings still shrink
++            // (a thesis with the setting, grid, justified: `…最高ARI 值达
++            // 0.9848，` with its three spacings 0.3-0.6 pt narrower, both
++            // commas at their full cell) and a closer still hangs whole
++            // (`…聚类效果越好。`, the `。` at 510-522 past the 510.25 margin).
++            k = 0;
++        }
 +        let adjacent = !latin && toks[core].gap > Abs::zero() && core == j;
 +        // Automatic spacings: all of them up to the core, and the ones
 +        // that count against the unit (its own does not, and the other
@@ -1766,12 +1835,16 @@ index 000000000..b04faf55f
 +                return pool(n_all, false);
 +            }
 +            // After k spots with g spacings elsewhere on the line
-+            // (`out/sweep-*-ik`/`iw`/`ix`, 0.1 pt): k·u/(k+1) less a share
-+            // of Δ(g) — a third of it after one spot, k/(k+1) of it after
-+            // more; Δ = 0.88/1.56/2.29/2.6/3.06/3.22 pt for 1-6 spacings,
-+            // saturating. Without spacings the pure-spot line fits a
-+            // quarter point more after two spots and a tenth after three
-+            // than the formula gives (8.55, 9.45).
++            // (`out/sweep-*-ik`/`iw`/`ix`, 0.1 pt): k·u/(k + W/M + Γ(g)).
++            // W/M is the line's natural width (text start to the unit, no
++            // indent) over the measure: the compression per spot may not
++            // exceed the stretch the line would need without the unit,
++            // (u − over)/W, taken per measure — so a line that fills the
++            // measure gets k/(k+1) of the unit and a shorter one more
++            // (`out/sweep-*-in`/`in2`/`ir`: 18-28 characters before two
++            // commas 9.55…8.55, before four 10.65…9.95, a right indent
++            // changes nothing; the same law at 12.83 pt cells and without
++            // a grid, `ikp_cs3400`/`ik0`).
 +            // Half-cell spaces right before the character belong to the unit
 +            // and share in the k/(k+1) (`…生成了 UMAP 可` after three spots
 +            // 14.35 against 9.55 without ` UMAP `, `out/sweep-*-ibt`/`ibt2`).
@@ -1780,9 +1853,18 @@ index 000000000..b04faf55f
 +            // (` Word ` 0.4, ` PT ` 0.2, two ` PT ` 0.5, `out/sweep-*-ib`/
 +            // `ibd`; ` - ` nothing, one-sided ` 5-13` and `seq ` nothing —
 +            // `ibt`: the thesis lines that a per-space bonus got wrong).
-+            const D: [f64; 9] = [0.0, 0.88, 1.56, 2.29, 2.6, 3.06, 3.22, 3.35, 3.45];
-+            const E: [f64; 6] = [0.0, 0.02, 0.25, 0.11, -0.01, -0.03];
-+            let share = if k == 1 { 1.0 / 3.0 } else { k as f64 / (k as f64 + 1.0) };
++            // Automatic spacings on the line stretch first, so the line
++            // without the unit would need less stretch elsewhere: each
++            // spacing counts like a quarter of the measure of extra
++            // stretchable width, saturating, and more the more spots there
++            // are (Γ(g)·(k+3)/5 below; `ig`/`ix`/`ip`/`in3` fitted over the
++            // W/M law, rms 0.12 pt, ±0.4 by the block's shape — a block
++            // with a space after it gets ~0.3 more, one at the line start
++            // ~0.3 less). After a single spot only 0.4 of Γ counts.
++            const G: [f64; 9] = [0.0, 0.29, 0.54, 0.73, 0.9, 1.1, 1.29, 1.4, 1.5];
++            let w_line = width_of(toks, text_start(first), m);
++            let gamma = G[n_all.min(8)] * if k == 1 { 0.4 } else { (k as f64 + 3.0) / 5.0 };
++            let denom = k as f64 + (w_line / measure).clamp(0.0, 1.5) + gamma;
 +            let uc = toks[core].nw;
 +            let mut own_spaces = Abs::zero();
 +            let mut b = j;
@@ -1790,12 +1872,7 @@ index 000000000..b04faf55f
 +                b -= 1;
 +                own_spaces += toks[b].nw;
 +            }
-+            let base = (uc + own_spaces) * k as f64 / (k as f64 + 1.0)
-+                + if n_all == 0 {
-+                    Abs::pt(E[k.min(5)]) * (uc / Abs::pt(12.454))
-+                } else {
-+                    Abs::zero()
-+                };
++            let base = (uc + own_spaces) * k as f64 / denom;
 +            let mut blocks = 0usize;
 +            if k >= 2 {
 +                let mut i = first + 1;
@@ -1818,12 +1895,13 @@ index 000000000..b04faf55f
 +                }
 +            }
 +            let bonus = Abs::pt(0.2) * blocks as f64 * scale;
-+            let t = (base - Abs::pt(D[n_all.min(8)]) * scale * share).min(half * k as f64) + bonus;
++            let t = base.min(half * k as f64) + bonus;
 +            if debug {
 +                eprintln!(
-+                    "  b15 j0={j0} j={j} core={core} m={m} k={k} gaps={gaps:.2} n_all={n_all} cjk-char u={:.2} spaces={:.2} blocks={blocks} t={:.2}",
++                    "  b15 j0={j0} j={j} core={core} m={m} k={k} gaps={gaps:.2} n_all={n_all} cjk-char u={:.2} spaces={:.2} blocks={blocks} w/m={:.3} t={:.2}",
 +                    uc.to_pt(),
 +                    own_spaces.to_pt(),
++                    w_line / measure,
 +                    t.to_pt()
 +                );
 +            }
@@ -1843,10 +1921,16 @@ index 000000000..b04faf55f
 +            // (Medium units after one spot lose less than that — `abcd`/
 +            // `Word` with two blocks 12.25/13.95 against 11.3/12.8 — and `i`
 +            // more; one rate for all is within 0.5 pt on 65 of 72 texts.)
++            // The k/(k+1) here is k/(k + W/M) like the CJK shape's (`in4`:
++            // `ab` after two commas with 18/22/28 characters before it
++            // 11.85/11.35/10.75); the 1.9 fitted with k+1 on `ik`'s lines
++            // (W/M ≈ 0.9) is 1.7 with the law.
 +            let g_other = n_all.saturating_sub(1) as f64;
 +            let c = half * k as f64 + auto / 2.0 * n_all as f64;
-+            let t = ((u * 1.031 - Abs::pt(2.85)) * k as f64 / (k as f64 + 1.0)
-+                + Abs::pt(1.9) * scale)
++            let wm = (width_of(toks, text_start(first), m) / measure).clamp(0.0, 1.5);
++            let kf = k as f64;
++            let t = ((u * 1.031 - Abs::pt(2.85)) * (kf / (kf + wm))
++                + Abs::pt(1.7) * scale)
 +                * (1.0 - 0.136 * libm::log(1.0 + g_other));
 +            if debug {
 +                eprintln!(
@@ -1979,6 +2063,12 @@ index 000000000..b04faf55f
 +        } else {
 +            Abs::zero()
 +        };
++        // (The k+1 here is k + W/M too — `in4`: `龙，` after two commas
++        // with 18/22/28 characters before it 21.85/21.35/20.45, after four
++        // 22.55/22.15/21.55, which (u·k + hang·(W/M)^0.7)/(k + W/M)
++        // reproduces — but the constants below were fitted with k+1 on
++        // full lines and moving them costs a paragraph or two per thesis,
++        // so the full-line form stays; lines with W/M < 0.85 are rare.)
 +        let t_f = (u * k as f64 + hang + forgiven) / (k as f64 + 1.0);
 +        // A single trailing closer: measured a little below the rule; a
 +        // longer chain exact with two spots and a little below with more.
@@ -2046,7 +2136,7 @@ index 000000000..b04faf55f
 +    // Word 2003-2010: half a cell per spot (at most two around an opener),
 +    // closers hang half a cell (2003) or up to a cell.
 +    let budget_old = |first: usize, j: usize, core: usize, m: usize| -> Abs {
-+        let k = spots(first, j);
++        let k = if params.compress { spots(first, j) } else { 0 };
 +        if m == core && j == core && toks[core].kind == Kind::Close && toks[core].symbol {
 +            // A symbol closer that is a unit of its own (`°` after a narrow
 +            // no-break space): the 2007/2010 layouts hang it whole
@@ -2070,8 +2160,10 @@ index 000000000..b04faf55f
 +        } else if opener {
 +            // Up to three spots' worth (`sweep-*-c11k`: `（SSA）` after
 +            // four commas fits half a cell more than after three, capped
-+            // by the closer chain).
-+            half + half * (k.min(3) as f64)
++            // by the closer chain). An opener with a CJK character and no
++            // closer stops at two (`sweep-*-c11io`: `（龙` after 0/1/2/3+
++            // commas 6/12.5/18.5/18.5 — as hithesis measured).
++            half + half * (k.min(if latin { 3 } else { 2 }) as f64)
 +        } else if latin {
 +            // Measured in Word 2003 mode (`sweep-*-c11`): a Latin unit gets
 +            // half a cell per spot plus half a spacing per automatic
@@ -2132,7 +2224,12 @@ index 000000000..b04faf55f
 +                    })
 +                    .count();
 +                let phys = half * k as f64 + auto / 2.0 * (gaps + spaces) as f64;
-+                let glyphs: usize = (b..=core).map(|i| toks[i].glyph_count).sum();
++                // A span opening with a space is capped by its whole width,
++                // space included (`out/sweep-*-c11id`/`c14id0`: `余 12` after
++                // three commas fits 18 pt over, `成 4` 12 — 6 pt more than
++                // `余12`/`成4`; after one comma the half cell per spot binds).
++                let f = (b..=core).find(|&i| toks[i].kind != Kind::Space).unwrap_or(b);
++                let glyphs: usize = (f..=core).map(|i| toks[i].glyph_count).sum();
 +                let cap =
 +                    if m == core && toks[core].glyph_count == 1 && toks[core].c == '>' {
 +                        // A lone `>` after CJK text (which may not start
@@ -2146,13 +2243,15 @@ index 000000000..b04faf55f
 +                        half * 2.0
 +                    } else if let Some(sp) = inner_space {
 +                        u - (b..sp).map(|i| toks[i].nw).sum::<Abs>()
++                    } else if f > b {
++                        u
 +                    } else if glyphs <= 1 {
 +                        // (Also before a closer: `公式3。` 18.4 = 5.9 + a cell.)
 +                        u - Abs::pt(0.3)
-+                    } else if toks[b].kind == Kind::Latin {
-+                        u - toks[b].head_w - params.latin_add()
++                    } else if toks[f].kind == Kind::Latin {
++                        u - toks[f].head_w - params.latin_add()
 +                    } else {
-+                        u - toks[b].nw
++                        u - toks[f].nw
 +                    };
 +                // A trailing ASCII closer hangs by its whole width on top
 +                // of the physical capacity, but never past the first-glyph
@@ -2302,6 +2401,11 @@ index 000000000..b04faf55f
 +        // closer unit (`sweep-*-c11b`: `龙，` after one comma 12.5, with a
 +        // Latin run on the line 15.5, with two 18.5; without spots 6.2/9.2).
 +        let gap_credit = auto / 2.0 * gaps as f64;
++        // An opener with a CJK character and a closer saturates after three
++        // commas (`sweep-*-c11io`: `（龙）`/`（龙，` 12.5/18.7/24.9/31.1 after
++        // 0-3, 31 after 4 and 5); a Latin core keeps growing to four
++        // (`（SSA）`, `sweep-*-c11k`).
++        let k_all = if opener && !latin { k_all.min(4) } else { k_all };
 +        let mut chain = if compat == 11 {
 +            hang + half * k_all as f64 + gap_credit
 +        } else {
@@ -2352,9 +2456,10 @@ index 000000000..b04faf55f
 +    };
 +
 +    let unit_budget = |first: usize, j0: usize, j: usize, core: usize, m: usize| -> Abs {
-+        if !justify || !params.compress {
++        if !justify {
 +            return Abs::zero();
 +        }
++
 +        if compat == 15 {
 +            budget15(first, j0, j, core, m)
 +        } else {
@@ -3278,6 +3383,16 @@ index 000000000..b04faf55f
 +        let cap = half;
 +        let mut hang = Abs::zero();
 +        let mut inline = need;
++        // What the automatic spacings of the line give up together: the
++        // k = 0 pool of the fit (1/2/3/4/5/6/8 spacings 1.55/2.75/3.15/
++        // 3.45/3.55/3.75/3.75 pt at 12 pt), bounded by their widths.
++        let gap_idx: Vec<usize> = (first..last).filter(|&i| toks[i + 1].gap > Abs::zero()).collect();
++        let gaps_cap = {
++            const C: [f64; 9] = [0.0, 1.55, 2.75, 3.15, 3.45, 3.55, 3.75, 3.75, 3.75];
++            let auto = params.auto_at(p - params.excess);
++            let width: Abs = gap_idx.iter().map(|&i| toks[i + 1].gap + after[i - first]).sum();
++            (Abs::pt(C[gap_idx.len().min(8)]) * (auto / Abs::pt(3.09))).min(width.max(Abs::zero()))
++        };
 +        if d.deep {
 +            let h = if NEVER_COMPRESSED.contains(&toks[last].c) {
 +                if compat == 15 { p } else { Abs::zero() }
@@ -3286,30 +3401,60 @@ index 000000000..b04faf55f
 +            } else {
 +                p
 +            };
++            let plain_closer = toks[last].kind == Kind::Close
++                && !toks[last].symbol
++                && !NEVER_COMPRESSED.contains(&toks[last].c);
 +            if compat == 11 {
 +                // Word 2003 hangs first, then compresses.
 +                hang = h.min(need);
 +                inline = need - hang;
-+            } else if need > cap * k as f64 {
-+                // Later versions compress first and hang the rest, at least
-+                // half a cell and at most a whole one.
-+                hang = h.max(need - cap * k as f64).min(p).min(need);
-+                inline = need - hang;
-+                if k == 0
-+                    && need <= half + EPS
-+                    && toks[last].kind == Kind::Close
-+                    && !toks[last].symbol
-+                    && !NEVER_COMPRESSED.contains(&toks[last].c)
-+                {
-+                    // A closer that fits once compressed to half a cell is
-+                    // compressed in place instead (`out/ul-hang15`:
-+                    // `Mode，` 0.3 pt over sits at the text's end, the text
-+                    // stretched to leave it half a cell).
++            } else if compat == 15 && plain_closer {
++                // Word 2013, measured on `out/sweep-1861-both-x` (`龙，`
++                // after 1/3/5 commas, the indent swept) and on hithesis'
++                // 范例 lines, by how much the line is over:
++                //   ≤ half a cell: the closer alone is compressed to half,
++                //     in place, the spots untouched, the surplus stretched
++                //     back into the line (`Mode，` 0.3 over, `总结与概括，`
++                //     4.5 over after two commas: closer at −6.5, commas
++                //     full);
++                //   up to half a cell per spot: the spots share it all, the
++                //     closer stays whole (`代号和公式等。` 10.7 over after
++                //     four spots: closer at −12.7);
++                //   half a cell more than that: the closer goes to half and
++                //     the spots share the rest (`进行了探讨”` 20.2 after
++                //     three openers: −6.4 and 4.7 each; `教材、` 17.4 after
++                //     two commas: −6.2 and 5.6 each);
++                //   beyond: the closer hangs whole past the margin and the
++                //     spots take what is left (`out/ul-hang15`: 34 cells +
++                //     `，`, origin at the margin; one comma, 12.6 over:
++                //     origin −0.2, the comma back at full width).
++                // The automatic spacings shrink after the spots and before
++                // the closer gives up its half, by the same pool as in the
++                // fit (`out/sweep-*-ca`: `龙，` after one comma with a
++                // `Word` on the line: comma to 6.0 and the spacings
++                // narrowed 3 pt between them while the closer stays whole,
++                // then the closer to half with the comma back at 9.0, then
++                // the hang).
++                let spots_cap = cap * k as f64 + gaps_cap;
++                if need <= half + EPS {
 +                    delta[last - first] -= half;
-+                    hang = Abs::zero();
 +                    inline = Abs::zero();
 +                    in_place = true;
++                } else if need <= spots_cap + EPS {
++                    inline = need;
++                } else if need <= spots_cap + half + EPS {
++                    delta[last - first] -= half;
++                    inline = need - half;
++                } else {
++                    hang = p.min(need);
++                    inline = need - hang;
 +                }
++            } else if need > cap * k as f64 {
++                // 2007/2010 (and symbol/never-compressed closers in 2013):
++                // compress first and hang the rest, at least half a cell
++                // and at most a whole one.
++                hang = h.max(need - cap * k as f64).min(p).min(need);
++                inline = need - hang;
 +            }
 +        }
 +        if k > 0 {
@@ -3323,10 +3468,9 @@ index 000000000..b04faf55f
 +        // CJK-Latin spacings (measured: `ab cd ef gh ij龙` squeezes the
 +        // spaces to 2.5 pt first, then the gaps beside the Latin run).
 +        if inline > Abs::zero() {
-+            let gaps: Vec<usize> =
-+                (first..last).filter(|&k| toks[k + 1].gap > Abs::zero()).collect();
++            let gaps = &gap_idx;
 +            if !gaps.is_empty() {
-+                let mut left = inline;
++                let mut left = inline.min(gaps_cap);
 +                let mut open: Vec<usize> = gaps.clone();
 +                // Equal shares, each gap bounded by its own width.
 +                while left > Abs::zero() && !open.is_empty() {
@@ -3348,7 +3492,7 @@ index 000000000..b04faf55f
 +                    }
 +                    open = next;
 +                }
-+                inline = left;
++                inline -= inline.min(gaps_cap) - left;
 +            }
 +        }
 +        // Word 2007+ hang a full-width closer that does not fit whole:
@@ -3626,7 +3770,7 @@ index 36e66987b..0ccf884f3 100644
  }
  
 diff --git a/crates/typst-library/src/model/par.rs b/crates/typst-library/src/model/par.rs
-index 77ec28c79..f108dc508 100644
+index 77ec28c79..8d851dba4 100644
 --- a/crates/typst-library/src/model/par.rs
 +++ b/crates/typst-library/src/model/par.rs
 @@ -5,8 +5,8 @@ use crate::diag::{HintedStrResult, SourceResult, StrResult, bail};
@@ -3707,7 +3851,23 @@ index 77ec28c79..f108dc508 100644
      /// ```example
      /// #set page(width: 207pt)
      /// #set par(linebreaks: "simple")
-@@ -623,7 +683,7 @@ impl Limit for Rel<Length> {
+@@ -429,6 +489,15 @@ pub struct ParElem {
+     /// ```
+     pub hanging_indent: Length,
+ 
++    /// Whether an unbreakable run that does not fit the line may be split
++    /// (Word's emergency break for long numbers and URLs). Content inside an
++    /// inline box turns this off: a box is an atomic object, so a run that
++    /// does not fit simply overflows, as in Typst's standard line breaking.
++    #[internal]
++    #[ghost]
++    #[default(true)]
++    pub emergency_breaks: bool,
++
+     /// The contents of the paragraph.
+     #[required]
+     pub body: Content,
+@@ -623,7 +692,7 @@ impl Limit for Rel<Length> {
  }
  
  /// How to determine line breaks in a paragraph.
@@ -3716,7 +3876,7 @@ index 77ec28c79..f108dc508 100644
  pub enum Linebreaks {
      /// Determine the line breaks in a simple first-fit style.
      Simple,
-@@ -632,6 +692,237 @@ pub enum Linebreaks {
+@@ -632,6 +701,237 @@ pub enum Linebreaks {
      /// Typst will try to produce more evenly filled lines of text by
      /// considering the whole paragraph when calculating line breaks.
      Optimized,
