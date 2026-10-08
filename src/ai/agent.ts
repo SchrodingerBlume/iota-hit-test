@@ -2,14 +2,15 @@
 // 两种接口各一个驱动，对话记录按接口各自的原样存（一个会话只用一家）
 import type Anthropic from '@anthropic-ai/sdk';
 import { webOf, webNativeOf, type AiConfig } from './config';
-import { runTool, toolsFor, setWebConfig, serverSandboxOn, collectBytes, setReporter, flushChecks, dropChecks, askUser, type ToolDef } from './tools';
+import { runTool, toolsFor, setWebConfig, serverSandboxOn, collectBytes, setReporter, flushChecks, dropChecks, askUser, takeDerived, type ToolDef } from './tools';
 import { pdfText, type Attachment } from './files';
 
 export interface AgentEvents {
   onText: (delta: string) => void;
   /** 模型的思考流（DeepSeek 的 reasoning_content、Anthropic 的 thinking；不是每家都有） */
   onReasoning: (delta: string) => void;
-  onTool: (name: string, input: Record<string, unknown>, result: string, isError: boolean) => void;
+  /** 工具跑完了；工具自己产出的附件（图）一并给面板做缩略图 */
+  onTool: (name: string, input: Record<string, unknown>, result: string, isError: boolean, images?: Attachment[]) => void;
   /** 工具开始跑了（结果还没回来）：面板先立一张转圈的卡 */
   onToolStart: (name: string, input: Record<string, unknown>) => void;
   /** 眼下在等什么（等模型回复、工具里的分步进度）；空串清掉 */
@@ -83,6 +84,16 @@ async function exec(name: string, input: Record<string, unknown>): Promise<{ res
   catch (e) { return { result: `工具出错：${(e as Error).message}`, isError: true }; }
 }
 
+/** 工具产出的图随工具结果回喂给能看图的模型：一轮最多 6 张（图吃上下文），多出来的在文字里交代 */
+const FEED_MAX = 6;
+function toolFeed(feed: Attachment[]) {
+  const images = feed.filter((f) => f.kind === 'image');
+  const kept = images.slice(0, FEED_MAX);
+  const text = kept.length ? `（工具产出的图：${kept.map((f) => f.name).join('、')}${images.length > kept.length ? `；另有 ${images.length - kept.length} 张没回传` : ''}）` : '';
+  return { kept, text };
+}
+const anthropicImages = (files: Attachment[]): Anthropic.ContentBlockParam[] => files.map((f) => ({ type: 'image', source: { type: 'base64', media_type: f.type as 'image/png', data: f.data } }));
+
 export async function runTurn(c: AiConfig, t: Transcript, userText: string, files: Attachment[], system: string, ev: AgentEvents, signal: AbortSignal): Promise<void> {
   if (t.api === 'anthropic') return anthropicTurn(c, t.messages, userText, files, system, ev, signal);
   return openaiTurn(c, t.messages, userText, files, system, ev, signal);
@@ -135,32 +146,41 @@ async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], us
     if (u) ev.onUsage?.({ input: (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0), output: u.output_tokens ?? 0 });
     ev.onStatus('');
     messages.push({ role: 'assistant', content: msg.content });
-    await reportServerTools(client, msg.content, ev);
+    const serverFeed = await reportServerTools(client, msg.content, ev);
     if (msg.stop_reason === 'refusal') { ev.onText("\n（模型拒绝了这次请求）"); return; }
     if (msg.stop_reason !== 'tool_use') {
       const diag = await pendingFix(fixes);
       if (!diag) return;
       fixes++;
+      const fed = toolFeed(serverFeed);
       ev.onTool('diagnostics', {}, diag, true);
       ev.onText('\n');
-      messages.push({ role: 'user', content: `${diag}\n\n（这是排版结果，不是我说的话——请直接修正，改完简短说一句）` });
+      const note = `${diag}\n\n（这是排版结果，不是我说的话——请直接修正，改完简短说一句）`;
+      messages.push({ role: 'user', content: fed.kept.length ? [{ type: 'text', text: note }, ...anthropicImages(fed.kept)] : note });
       continue;
     }
     const results: Anthropic.ToolResultBlockParam[] = [];
+    const feed = [...serverFeed];
     for (const block of msg.content) {
       if (block.type !== 'tool_use') continue;
       const input = (block.input ?? {}) as Record<string, unknown>;
       ev.onToolStart(block.name, input);
       const { result, isError } = await exec(block.name, input);
-      ev.onTool(block.name, input, result, isError);
+      const imgs = takeDerived();
+      feed.push(...imgs);
+      ev.onTool(block.name, input, result, isError, imgs.length ? imgs : undefined);
       results.push({ type: 'tool_result', tool_use_id: block.id, content: result, is_error: isError || undefined });
     }
-    messages.push({ role: 'user', content: results });
+    {
+      const fed = toolFeed(feed);
+      messages.push({ role: 'user', content: fed.kept.length ? [...results, ...anthropicImages(fed.kept), { type: 'text', text: fed.text }] : results });
+    }
   }
 }
 
 /** 服务方沙盒在这一条消息里干了什么：每次 bash / 文件编辑配成一张卡，产出的文件按 file_id 下回来收成附件 */
-async function reportServerTools(client: any, content: any[], ev: AgentEvents) {
+async function reportServerTools(client: any, content: any[], ev: AgentEvents): Promise<Attachment[]> {
+  const feed: Attachment[] = [];
   const uses = new Map<string, any>();
   for (const b of content) if (b.type === 'server_tool_use') uses.set(b.id, b);
   for (const b of content) {
@@ -185,8 +205,11 @@ async function reportServerTools(client: any, content: any[], ev: AgentEvents) {
       } catch (e) { parts.push(`有个产出文件没下回来（${(e as Error).message}）`); }
     }
     if (files.length) parts.push(`产出的文件（已收进对话）：${collectBytes(files).join('、')}`);
-    ev.onTool('code_execution', input, parts.join('\n') || '（没有输出）', false);
+    const imgs = takeDerived();
+    feed.push(...imgs);
+    ev.onTool('code_execution', input, parts.join('\n') || '（没有输出）', false, imgs.length ? imgs : undefined);
   }
+  return feed;
 }
 
 // ── OpenAI 兼容 chat/completions（DeepSeek、Kimi、通义、智谱、OpenRouter、Ollama…），SSE 自己解 ──
@@ -256,14 +279,22 @@ async function openaiTurn(c: AiConfig, messages: any[], userText: string, files:
       continue;
     }
     messages.push({ role: 'assistant', content: text || null, tool_calls: list.map((v, i) => ({ id: v.id || `call_${round}_${i}`, type: 'function', function: { name: v.name, arguments: v.args || '{}' } })) });
+    const feed: Attachment[] = [];
     for (const [i, v] of list.entries()) {
       let input: Record<string, unknown> = {};
       try { input = JSON.parse(v.args || '{}'); } catch { /* 参数不是合法 JSON */ }
       if (v.name === '$web_search') { ev.onTool('web_search', { query: (input as any).search_query ?? (input as any).query ?? '' }, '（Kimi 自己搜的）', false); messages.push({ role: 'tool', tool_call_id: v.id || `call_${round}_${i}`, name: '$web_search', content: v.args || '{}' }); continue; }
       ev.onToolStart(v.name, input);
       const { result, isError } = await exec(v.name, input);
-      ev.onTool(v.name, input, result, isError);
+      const imgs = takeDerived();
+      feed.push(...imgs);
+      ev.onTool(v.name, input, result, isError, imgs.length ? imgs : undefined);
       messages.push({ role: 'tool', tool_call_id: v.id || `call_${round}_${i}`, content: result });
+    }
+    {
+      // 工具产出的图另起一条 user 消息回喂（OpenAI 的 tool 消息只能装文本）
+      const fed = toolFeed(feed);
+      if (fed.kept.length) messages.push({ role: 'user', content: [{ type: 'text', text: fed.text }, ...fed.kept.map((f) => ({ type: 'image_url', image_url: { url: `data:${f.type};base64,${f.data}` } }))] });
     }
   }
 }

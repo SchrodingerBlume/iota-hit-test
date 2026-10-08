@@ -38,10 +38,13 @@ export const setAskUser = (f: typeof askUser) => { askUser = f; };
 /** 这一场对话里用户发过的附件，图片可以直接插成图 */
 let attachments: Attachment[] = [];
 export const setAttachments = (a: Attachment[]) => { attachments = a; };
-/** 工具自己造出来的图片（PDF 里抽的），也算附件，figure_write 认名字；面板拿去显示缩略图 */
+/** 工具自己造出来的图片（PDF 里抽的、沙盒交回的），也算附件，figure_write 认名字；面板拿去显示缩略图 */
 export let onDerived: (a: Attachment) => void = () => {};
 export const setOnDerived = (f: typeof onDerived) => { onDerived = f; };
-export const addDerived = (a: Attachment) => { attachments = [...attachments, a]; onDerived(a); };
+/** 刚产出、还没随工具结果回喂给模型的附件：agent 每次工具跑完 takeDerived 取走 */
+let derivedQueue: Attachment[] = [];
+export const takeDerived = (): Attachment[] => { const q = derivedQueue; derivedQueue = []; return q; };
+export const addDerived = (a: Attachment) => { attachments = [...attachments, a]; derivedQueue.push(a); onDerived(a); };
 export const serverSandboxOn = () => sandboxCtx.server;
 export const collectBytes = (files: { name: string; bytes: Uint8Array }[]) => collectOutputs(files);
 

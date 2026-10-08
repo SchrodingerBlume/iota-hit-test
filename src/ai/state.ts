@@ -195,8 +195,7 @@ export const useAgent = create<AgentState>((set, get) => ({
     sentFiles = [...sentFiles, ...files];
     setAttachments(sentFiles);
     setAskUser((ask) => new Promise<boolean>((resolve) => set({ ask: { ask, resolve } })));
-    let derived: Attachment[] = [];
-    setOnDerived((a) => { sentFiles = [...sentFiles, a]; derived.push(a); });
+    setOnDerived((a) => { sentFiles = [...sentFiles, a]; });
     // 每一步都落盘（节流），刷新页面也不丢半场对话
     const patch = (p: Partial<ChatItem>) => { set({ items: get().items.map((it) => (it.id === reply.id ? { ...it, ...p } : it)) }); window.clearTimeout(saveTimer); saveTimer = window.setTimeout(save, 600); };
     let buf = '';
@@ -227,7 +226,7 @@ export const useAgent = create<AgentState>((set, get) => ({
       await runTurn(c, transcript, userText, files, await systemPromptFor(st, get().docPreset), {
         onText: (d) => { if (rbuf && thinkMs === undefined) thinkMs = Date.now() - thinkSince; buf += d; const tail = parts[parts.length - 1]; parts = tail?.kind === 'text' ? [...parts.slice(0, -1), { kind: 'text', text: tail.text + d }] : [...parts, { kind: 'text', text: d }]; patch(thinkMs !== undefined ? { text: buf, thinkMs, parts } : { text: buf, parts }); },
         onReasoning: (d) => { if (!rbuf) thinkSince = Date.now(); rbuf += d; patch(rbuf === d ? { reasoning: rbuf, thinkSince } : { reasoning: rbuf }); },
-        onTool: (name, input, result, isError) => { const cur = get().items.find((it) => it.id === reply.id)!; const l = cur.live; const ms = l?.tool && l.since ? Date.now() - l.since : undefined; const card: ToolCard = { name, input, result, isError, images: derived.length ? derived : undefined, ms, diff: takeEdit() ?? undefined }; parts = [...parts, { kind: 'tool', card }]; patch({ tools: [...cur.tools, card], parts, live: { status: '', since: Date.now() } }); derived = []; },
+        onTool: (name, input, result, isError, images) => { const cur = get().items.find((it) => it.id === reply.id)!; const l = cur.live; const ms = l?.tool && l.since ? Date.now() - l.since : undefined; const card: ToolCard = { name, input, result, isError, images: images?.length ? images : undefined, ms, diff: takeEdit() ?? undefined }; parts = [...parts, { kind: 'tool', card }]; patch({ tools: [...cur.tools, card], parts, live: { status: '', since: Date.now() } }); },
         onToolStart: (name, input) => patch({ live: { tool: { name, input }, status: '', since: Date.now() } }),
         onStatus: (status) => { if (!get().running) return; const l = liveOf(); patch({ live: { tool: l?.tool, status, since: status && status !== l?.status ? Date.now() : l?.since ?? Date.now() } }); },
         onUsage: (u) => { usage = { input: usage.input + u.input, output: usage.output + u.output }; patch({ usage }); },
