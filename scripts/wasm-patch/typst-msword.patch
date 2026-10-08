@@ -1,4 +1,4 @@
-# typst-with-msword-linebreaks aaf2ab5b41b31ff15b61cff0512ddeca3054506a 的 msword 提交（29 笔，cherry-pick 到 88a6f5669 基线之上；上游 #792 两笔）再合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
+# typst-with-msword-linebreaks d9f339960e50351335faecea6e993a9ec592cfe6 的 msword 提交（30 笔，cherry-pick 到 88a6f5669 基线之上；上游 #792 两笔）再合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
 diff --git a/crates/typst-eval/src/markup.rs b/crates/typst-eval/src/markup.rs
 index 6e79da8d2..e5a5abdd3 100644
 --- a/crates/typst-eval/src/markup.rs
@@ -246,10 +246,10 @@ index 259be8101..19906993f 100644
      /// The indent that all but the first line of a paragraph should have.
 diff --git a/crates/typst-layout/src/inline/msword.rs b/crates/typst-layout/src/inline/msword.rs
 new file mode 100644
-index 000000000..97041b1f0
+index 000000000..fab34ccf9
 --- /dev/null
 +++ b/crates/typst-layout/src/inline/msword.rs
-@@ -0,0 +1,3491 @@
+@@ -0,0 +1,3514 @@
 +// 本文件基于 Typst（typst/typst）与 typst-with-msword-linebreaks 修改（iota4web 合并到 Myriad-Dreamin/typst 之上，见 scripts/wasm-patch/typst-msword.patch）
 +//! Line breaking that emulates Microsoft Word.
 +//!
@@ -285,7 +285,7 @@ index 000000000..97041b1f0
 +use typst_library::engine::Engine;
 +use typst_library::layout::{Abs, Em};
 +use typst_library::model::MswordLinebreaks;
-+use typst_library::text::{Covers, TextElem, families};
++use typst_library::text::{Covers, TextElem, families, is_default_ignorable};
 +use unicode_script::{Script, UnicodeScript};
 +use unicode_segmentation::UnicodeSegmentation;
 +
@@ -1053,12 +1053,35 @@ index 000000000..97041b1f0
 +                    let size = g.size;
 +                    let shaped_w: Abs =
 +                        cluster.iter().map(|g| g.x_advance.at(g.size)).sum();
-+                    let c = g.c;
-+                    let natural = g
-+                        .font
-+                        .x_advance(g.glyph_id)
-+                        .map(|adv| adv.at(size))
-+                        .unwrap_or(shaped_w);
++                    // A cluster can begin with a default-ignorable that the
++                    // shaper merged with the next character (a zero-width
++                    // space in front of a label ends up in the label's
++                    // cluster). Classify by the first visible character so
++                    // that the label's first glyph keeps its nature: the `(`
++                    // of `\u{200b}(1)` stays an opener instead of becoming a
++                    // CJK symbol, which would let a justified line end or
++                    // stretch between the paren and the digit.
++                    let mut c = g.c;
++                    let mut at = g.range.start;
++                    let mut ignorable = false;
++                    if is_default_ignorable(c) {
++                        for (k, ch) in p.text[g.range.clone()].char_indices() {
++                            if !is_default_ignorable(ch) {
++                                c = ch;
++                                at = g.range.start + k;
++                                ignorable = true;
++                                break;
++                            }
++                        }
++                    }
++                    let natural = if ignorable {
++                        shaped_w
++                    } else {
++                        g.font
++                            .x_advance(g.glyph_id)
++                            .map(|adv| adv.at(size))
++                            .unwrap_or(shaped_w)
++                    };
 +                    // A symbol the font renders full width (Word with the
 +                    // eastAsia hint draws ×, °, ■... with the CJK font) is
 +                    // still a Latin glyph to Word 2013+: measured `××××年`
@@ -1071,7 +1094,7 @@ index 000000000..97041b1f0
 +                    // punctuation (measured: `范围a°` and `范围1℃` end a
 +                    // justified line with the symbol entirely outside the
 +                    // margin), connectors (`—`, `…`) do not.
-+                    let symbol = is_symbol(g.range.start);
++                    let symbol = is_symbol(at);
 +                    let wide = !LATINISH.contains(&c) && is_wide(c);
 +                    let fullwidth_punct = (CLOSERS.contains(&c) || OPENERS.contains(&c))
 +                        && natural >= size * 0.9;
@@ -1174,7 +1197,7 @@ index 000000000..97041b1f0
 +                                && !is_hyphen(g.range.start)
 +                                && !LATINISH.contains(&last.tail.unwrap_or(' '))
 +                        );
-+                        let ea = is_ea_letter(g.range.start);
++                        let ea = is_ea_letter(at);
 +                        // A hyphenation point: the run so far is a syllable
 +                        // that may end a line with a hyphen in this font.
 +                        if !extend
