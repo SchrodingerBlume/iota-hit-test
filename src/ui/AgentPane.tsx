@@ -16,6 +16,7 @@ import { ChatMarkdown } from './ChatMarkdown';
 import { t as tx } from '../i18n';
 import { useAgentWindow } from './agentWindow';
 import { useMedia, COMPACT } from './useMedia';
+import { t as tr } from '../i18n';
 
 const QUICK = [
   tx("润色所选段落，保持原意并直接替换"),
@@ -26,13 +27,13 @@ const QUICK = [
 
 /** 输入框里打 / 出的命令：几个常用任务是直接发的提示语，压缩 / 导出是面板上的动作 */
 const COMMANDS: { cmd: string; desc: string; text?: string; action?: 'compact' | 'export' }[] = [
-  { cmd: '/润色', desc: tx("润色所选段落，保持原意并直接替换"), text: tx("润色所选段落，保持原意并直接替换") },
-  { cmd: '/校对', desc: tx("通读正文，列出语病、错别字和表意不清之处，暂不修改"), text: tx("通读正文，列出语病、错别字和表意不清之处，暂不修改") },
-  { cmd: '/排版', desc: tx("检查最近一次排版错误，并给出修改建议"), text: tx("检查最近一次排版错误，并给出修改建议") },
-  { cmd: '/摘要', desc: tx("根据各章内容起草总结，并插入结论开头"), text: tx("根据各章内容起草总结，并插入结论开头") },
-  { cmd: '/缩写', desc: tx("把正文里的缩略语和缩略语表对一遍"), text: tx("检查正文里的缩略语，和缩略语表对一遍，缺的登记上") },
-  { cmd: '/压缩', desc: tx("压缩历史对话（保留摘要）"), action: 'compact' },
-  { cmd: '/导出', desc: tx("导出这场对话（Markdown）"), action: 'export' },
+  { cmd: tr("/润色"), desc: tx("润色所选段落，保持原意并直接替换"), text: tx("润色所选段落，保持原意并直接替换") },
+  { cmd: tr("/校对"), desc: tx("通读正文，列出语病、错别字和表意不清之处，暂不修改"), text: tx("通读正文，列出语病、错别字和表意不清之处，暂不修改") },
+  { cmd: tr("/排版"), desc: tx("检查最近一次排版错误，并给出修改建议"), text: tx("检查最近一次排版错误，并给出修改建议") },
+  { cmd: tr("/摘要"), desc: tx("根据各章内容起草总结，并插入结论开头"), text: tx("根据各章内容起草总结，并插入结论开头") },
+  { cmd: tr("/缩写"), desc: tx("核对正文与缩略语表"), text: tx("检查正文里的缩略语，和缩略语表对一遍，缺的登记上") },
+  { cmd: tr("/压缩"), desc: tx("压缩历史对话（保留摘要）"), action: 'compact' },
+  { cmd: tr("/导出"), desc: tx("导出对话（Markdown）"), action: 'export' },
 ];
 
 /** 卡片上那笔改动是哪一部分的第几块（给「定位」用） */
@@ -131,7 +132,7 @@ function Live({ live, hasText }: { live: ChatItem['live']; hasText: boolean }) {
   const long = secs >= 1 ? tx("（{{s}} 秒）", { s: secs }) : '';
   if (live?.tool) return <div className="ag-card is-live"><div className="ag-card-head"><Spinner size="extra-tiny" /><span className="ag-live-title">{liveTitle(live.tool.name, live.tool.input)}</span><span className="muted ag-live-secs">{long}</span></div>{live.status && <div className="ag-live-status muted">{live.status}</div>}</div>;
   if (live?.status) return <div className="ag-thinking muted"><Spinner size="extra-tiny" />{live.status}{long}</div>;
-  if (!hasText) return <div className="ag-thinking muted"><Spinner size="extra-tiny" />{secs >= 20 ? tx("还在等模型的首个字…（有的服务方排队时慢，可以再等等或换个接口）") : tx("正在生成回复…")}{long}</div>;
+  if (!hasText) return <div className="ag-thinking muted"><Spinner size="extra-tiny" />{secs >= 20 ? tx("模型尚未响应…") : tx("正在生成回复…")}{long}</div>;
   return null;
 }
 const EDIT_TOOLS = new Set(['replace', 'insert', 'delete', 'table_write', 'figure_write', 'bib_add', 'info_write', 'abbreviations_add', 'settings_set', 'write_json']);
@@ -224,7 +225,7 @@ function TodoBody({ input }: { input: Record<string, unknown> }) {
 /** 复制一条回复的原文（Markdown） */
 function CopyButton({ text }: { text: string }) {
   const [done, setDone] = useState(false);
-  return <button type="button" className="ag-act" title={tx("复制这条回复")} onClick={() => { void navigator.clipboard.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 1500); }).catch(() => { /* 剪贴板不可用 */ }); }}>{done ? <Checkmark16Regular /> : <Copy16Regular />}{done ? tx("已复制") : tx("复制")}</button>;
+  return <button type="button" className="ag-act" title={tx("复制回复")} onClick={() => { void navigator.clipboard.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 1500); }).catch(() => { /* 剪贴板不可用 */ }); }}>{done ? <Checkmark16Regular /> : <Copy16Regular />}{done ? tx("已复制") : tx("复制")}</button>;
 }
 
 /** 点击图片放大：铺满屏幕，Esc / 点背景关掉 */
@@ -260,7 +261,7 @@ function Card({ c, anchorId, flash, onZoom }: { c: ToolCard; anchorId?: string; 
             {c.ms !== undefined && <span className="muted">{fmtDur(c.ms)}</span>}
           </span>
         </button>
-        {canLoc && loc && <button type="button" className="ag-locate" title={tx("在编辑器里定位到这一块")} onClick={() => void locateInEditor(loc.part, loc.from, loc.to)}>{tx("定位")}</button>}
+        {canLoc && loc && <button type="button" className="ag-locate" title={tx("定位到文档")} onClick={() => void locateInEditor(loc.part, loc.from, loc.to)}>{tx("定位")}</button>}
       </div>
       {!!c.images?.length && <div className="ag-card-imgs">{c.images.map((im) => <img key={im.id} src={`data:${im.type};base64,${im.data}`} alt={im.name} title={im.name} onClick={onZoom ? () => onZoom(`data:${im.type};base64,${im.data}`, im.name) : undefined} />)}</div>}
       {open && (c.name === 'todo'
@@ -357,20 +358,20 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
   const openZoom = (src: string, name: string) => setZoom({ src, name });
   const exportChat = () => {
     if (!items.length) return;
-    const title = chats.find((c) => c.id === chatId)?.title ?? '对话';
-    const lines: string[] = [`# ${title}`, '', `（HιT webapp Agent 对话导出，${new Date().toLocaleString('zh-CN')}）`, ''];
+    const title = chats.find((c) => c.id === chatId)?.title ?? tr("对话");
+    const lines: string[] = [`# ${title}`, '', tr("（HιT webapp Agent 对话导出，{{v0}}）", { v0: new Date().toLocaleString('zh-CN') }), ''];
     for (const it of items) {
       if (it.note) { lines.push(`> ${it.note}`, ''); continue; }
       if (it.role === 'user') {
-        lines.push('## 我', '', it.text || '（附件）', '');
-        if (it.files?.length) lines.push(`附件：${it.files.map((f) => f.name).join('、')}`, '');
+        lines.push(tr("## 我"), '', it.text || tr("（附件）"), '');
+        if (it.files?.length) lines.push(tr("附件：{{v0}}", { v0: it.files.map((f) => f.name).join('、') }), '');
       } else {
-        if (it.reasoning) lines.push('<details><summary>思考</summary>', '', it.reasoning, '', '</details>', '');
-        for (const c of it.tools) lines.push(`- ${cardTitle(c)}${c.isError ? '（出错）' : ''}${c.diff ? ` +${c.diff.add} −${c.diff.del}` : ''}`);
+        if (it.reasoning) lines.push(tr("<details><summary>思考</summary>"), '', it.reasoning, '', '</details>', '');
+        for (const c of it.tools) lines.push(`- ${cardTitle(c)}${c.isError ? tr("（出错）") : ''}${c.diff ? ` +${c.diff.add} −${c.diff.del}` : ''}`);
         if (it.tools.length) lines.push('');
         if (it.text) lines.push(it.text, '');
-        if (it.error) lines.push(`> 出错：${it.error}`, '');
-        if (it.stopped) lines.push('> （已停止）', '');
+        if (it.error) lines.push(tr("> 出错：{{error}}", { error: it.error }), '');
+        if (it.stopped) lines.push(tr("> （已停止）"), '');
       }
     }
     const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
@@ -412,14 +413,14 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
           <button
             type="button"
             className={`ag-ctx ${ctxPct >= 80 ? 'is-high' : ''}`}
-            title={tx("上下文约用了 {{p}}%（约 {{n}} / {{c}} tokens，估算）；点开对话记录可压缩历史", { p: ctxPct, n: fmtTok(ctxTokens), c: fmtTok(modelInfo!.ctx) }) + (cost !== undefined ? tx("；本场花费约 {{c}}", { c: fmtCost(cost) }) : '')}
+            title={tx("上下文估算：{{n}} / {{c}} Token（{{p}}%）", { p: ctxPct, n: fmtTok(ctxTokens), c: fmtTok(modelInfo!.ctx) }) + (cost !== undefined ? tx("；本次对话约 {{c}}", { c: fmtCost(cost) }) : '')}
             onClick={() => setChatsOpen(true)}
           >{tx("上下文 {{p}}%", { p: ctxPct === 0 && ctxTokens > 0 ? '<1' : String(ctxPct) })}</button>
         )}
         {editRows.length > 0 && (
           <Popover positioning="below-start" open={sumOpen} onOpenChange={(_, d) => setSumOpen(d.open)}>
             <PopoverTrigger disableButtonEnhancement>
-              <button type="button" className="ag-sum" title={tx("本场对话的文档改动")}>
+              <button type="button" className="ag-sum" title={tx("本次对话的修改")}>
                 <span className="is-add">{`+${sumAdd}`}</span>
                 <span className="is-del">{`-${sumDel}`}</span>
                 <span className="muted">{tx("{{n}} 处改动", { n: editRows.length })}</span>
@@ -428,13 +429,12 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
             <PopoverSurface className="ag-sumsurface">
               <div className="ag-sumlist">
                 {editRows.map((r) => (
-                  <button key={r.key} type="button" className="ag-sumrow" onClick={() => locate(r.key)} title={tx("跳到这张卡片")}>
+                  <button key={r.key} type="button" className="ag-sumrow" onClick={() => locate(r.key)} title={tx("查看工具记录")}>
                     <span className="ag-sumtitle">{cardTitle(r.card)}</span>
                     <span className="ag-diffnum"><span className="is-add">{`+${r.card.diff!.add}`}</span><span className="is-del">{`-${r.card.diff!.del}`}</span></span>
                   </button>
                 ))}
               </div>
-              <div className="muted ag-sumhint">{tx("点一条跳到对话里对应的卡片（展开逐行 diff）")}</div>
             </PopoverSurface>
           </Popover>
         )}
@@ -450,23 +450,21 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
               {compacting ? <Spinner size="extra-tiny" /> : <Broom16Regular />}
               {compacting ? tx("压缩中…") : tx("压缩历史对话（保留摘要）")}
             </button>
-            <button type="button" className="ag-chat-export" disabled={!items.length} onClick={exportChat}><ArrowDownload16Regular />{tx("导出这场对话（Markdown）")}</button>
+            <button type="button" className="ag-chat-export" disabled={!items.length} onClick={exportChat}><ArrowDownload16Regular />{tx("导出对话（Markdown）")}</button>
           </PopoverSurface>
         </Popover>
-        {!compact && <Tooltip content={float ? tx("停靠回右侧") : tx("浮成小窗")} relationship="label"><Button size="small" appearance="subtle" icon={float ? <PanelRightContract20Regular /> : <WindowMultiple20Regular />} onClick={() => useAgentWindow.getState().setFloat(!useAgentWindow.getState().float)} /></Tooltip>}
+        {!compact && <Tooltip content={float ? tx("停靠到右侧") : tx("悬浮窗口")} relationship="label"><Button size="small" appearance="subtle" icon={float ? <PanelRightContract20Regular /> : <WindowMultiple20Regular />} onClick={() => useAgentWindow.getState().setFloat(!useAgentWindow.getState().float)} /></Tooltip>}
         <Tooltip content={tx("Agent 设置")} relationship="label"><Button size="small" appearance="subtle" icon={<Settings20Regular />} onClick={() => setSettingsOpen(true)} /></Tooltip>
         <Tooltip content={tx("关闭")} relationship="label"><Button size="small" appearance="subtle" icon={<Dismiss20Regular />} onClick={() => setOpen(false)} /></Tooltip>
       </div>
       <div className="ag-list" ref={listRef}>
         {!ready && settings !== undefined && (
           <div className="ag-empty">
-            <p>{tx("配置 Anthropic、OpenAI、DeepSeek、Kimi、通义、智谱、OpenRouter，或本机的 Ollama / LM Studio。请求直达服务方，密钥仅保存在当前浏览器中。")}</p>
             <Button appearance="primary" size="small" onClick={() => setSettingsOpen(true)}>{tx("配置模型")}</Button>
           </div>
         )}
         {ready && !items.length && (
           <div className="ag-empty">
-            <p className="muted">{tx("Agent 可读取和修改论文、插入表格与图片、管理参考文献，并检查排版错误。修改设置前会征求允许，文档改动可撤消。")}</p>
             {QUICK.map((q) => <button key={q} type="button" className="ag-quick" onClick={() => { stick.current = true; void send(q); }}>{q}</button>)}
           </div>
         )}
@@ -491,7 +489,7 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
                   {it.text && <div className="ag-text">{it.text}</div>}
                   {it.id === lastUser?.id && !running && !compacting && (
                     <div className="ag-actions">
-                      <button type="button" className="ag-act" title={tx("编辑这条消息并重发")} onClick={() => setEditing({ id: it.id, text: it.text })}><Edit16Regular />{tx("编辑重发")}</button>
+                      <button type="button" className="ag-act" title={tx("编辑并重发")} onClick={() => setEditing({ id: it.id, text: it.text })}><Edit16Regular />{tx("编辑重发")}</button>
                     </div>
                   )}
                 </>
@@ -516,9 +514,9 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
             {it.role === 'assistant' && (it.text || it.usage || it.id === last?.id) && (
               <div className="ag-actions">
                 {it.text && <CopyButton text={it.text} />}
-                {!running && !ask && it.id === last?.id && !it.error && <button type="button" className="ag-act" title={tx("重新生成这条回复")} onClick={() => void regenerate()}><ArrowClockwise16Regular />{tx("重新生成")}</button>}
-                {it.usage && <span className="ag-usage muted" title={tx("这一轮的 token 用量（输入 / 输出）")}>{`↑${fmtTok(it.usage.input)} ↓${fmtTok(it.usage.output)}`}</span>}
-                {it.usage && modelInfo && <span className="ag-usage muted" title={tx("这一轮的花费（按服务方牌价估算）")}>{`≈${fmtCost(costOf(modelInfo, it.usage))}`}</span>}
+                {!running && !ask && it.id === last?.id && !it.error && <button type="button" className="ag-act" title={tx("重新生成回复")} onClick={() => void regenerate()}><ArrowClockwise16Regular />{tx("重新生成")}</button>}
+                {it.usage && <span className="ag-usage muted" title={tx("本轮 Token 用量（输入／输出）")}>{`↑${fmtTok(it.usage.input)} ↓${fmtTok(it.usage.output)}`}</span>}
+                {it.usage && modelInfo && <span className="ag-usage muted" title={tx("本轮费用估算")}>{`≈${fmtCost(costOf(modelInfo, it.usage))}`}</span>}
               </div>
             )}
             {it.role === 'assistant' && running && it.id === last?.id && !ask && (!it.reasoning || it.text) && <Live live={it.live} hasText={!!it.text} />}
@@ -546,7 +544,7 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
           {queued.map((q) => (
             <div key={q.id} className="ag-queue-row">
               <span>{q.text}</span>
-              <button type="button" title={tx("从队列里移除")} onClick={() => dequeue(q.id)}><Dismiss12Regular /></button>
+              <button type="button" title={tx("移出队列")} onClick={() => dequeue(q.id)}><Dismiss12Regular /></button>
             </div>
           ))}
         </div>
@@ -556,7 +554,7 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
         <Tooltip content={tx("附件：图片、PDF、文本文件；也可以拖进来或粘贴")} relationship="label"><Button size="small" appearance="subtle" icon={<Attach20Regular />} disabled={!ready || running} onClick={() => fileInput.current?.click()} /></Tooltip>
         <input ref={fileInput} type="file" multiple hidden accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.txt,.md,.bib,.csv,.json,.tex,.typ" onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} />
         <div className="ag-ta-wrap">
-          <Textarea resize="vertical" value={draft} placeholder={ready ? (running ? tx("说下一句，Enter 排队，这一轮结束自动发") : tx("输入任务，Enter 发送；输入 / 看命令")) : tx("请先在设置中配置模型")} disabled={!ready} onChange={(_, d) => setDraft(d.value)} onPaste={(e) => { const fs = Array.from(e.clipboardData.files); if (fs.length) { e.preventDefault(); onFiles(fs); } }} onKeyDown={(e) => {
+          <Textarea resize="vertical" value={draft} placeholder={ready ? (running ? tx("输入消息，Enter 加入队列") : tx("输入消息，或输入 / 选择命令")) : tx("请先在设置中配置模型")} disabled={!ready} onChange={(_, d) => setDraft(d.value)} onPaste={(e) => { const fs = Array.from(e.clipboardData.files); if (fs.length) { e.preventDefault(); onFiles(fs); } }} onKeyDown={(e) => {
             if (slashItems.length) {
               if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const d = e.key === 'ArrowDown' ? 1 : -1; setSlashSel((n) => (n + d + slashItems.length) % slashItems.length); return; }
               if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); runSlash(slashItems[Math.min(slashSel, slashItems.length - 1)]); return; }
@@ -576,7 +574,7 @@ export function AgentPane({ overlay }: { overlay?: boolean }) {
           )}
         </div>
         {running
-          ? <Tooltip content={tx("停止（排队中的消息也会清掉）")} relationship="label"><Button appearance="secondary" icon={<Stop20Regular />} onClick={stop} /></Tooltip>
+          ? <Tooltip content={tx("停止并清空队列")} relationship="label"><Button appearance="secondary" icon={<Stop20Regular />} onClick={stop} /></Tooltip>
           : <Tooltip content={tx("发送")} relationship="label"><Button appearance="primary" icon={<Send20Regular />} disabled={!ready || (!draft.trim() && !pending.length)} onClick={submit} /></Tooltip>}
       </div>
       {zoom && <Lightbox src={zoom.src} name={zoom.name} onClose={() => setZoom(null)} />}

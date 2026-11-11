@@ -188,7 +188,7 @@ export function AgentSettings() {
                 <h4>{tx("全局预设")}</h4>
                 <p className="field-hint muted">{tx("附加到系统提示，对所有文档生效。可填写写作偏好、禁用表达或固定流程。")}</p>
                 <Textarea className="ag-area" resize="vertical" value={draft.preset} placeholder={tx("例：改动前先列出要改哪几段再动手；引用统一用 GB/T 7714 的顺序编码制……")} onChange={(_, d) => setDraft({ ...draft, preset: d.value })} />
-                <h4>{tx("这篇文档的预设")}</h4>
+                <h4>{tx("当前文档的提示词")}</h4>
                 <p className="field-hint muted">{tx("仅对当前文档生效，与该文档的对话记录一同保存。")}</p>
                 <Textarea className="ag-area" resize="vertical" value={preset} placeholder={tx("例：这篇的研究对象是多孔质气体轴承，术语表见第 2 章……")} onChange={(_, d) => setPreset(d.value)} />
               </div>

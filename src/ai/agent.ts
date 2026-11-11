@@ -27,7 +27,7 @@ const HARD_MAX = 300;
 async function mayContinue(round: number): Promise<boolean> {
   if (round >= HARD_MAX) return false;
   if (round === 0 || round % ASK_EVERY) return true;
-  return askUser({ head: '工具已经连续调用了不少轮', title: `第 ${round} 轮了，还让它接着做？`, lines: ['「允许」接着做，「拒绝」就停在这儿（做到一半的改动都在撤消里）。'] });
+  return askUser({ head: '是否继续？', title: `已执行 ${round} 轮工具调用`, lines: ['停止后保留已完成的修改，可通过“撤消”恢复。'] });
 }
 /** 一轮说完了：先前写入挂着的排版检查全收上来，有报错就作为新的一句发回去让它改（一次对话最多补两回） */
 async function pendingFix(fixes: number): Promise<string | null> {
@@ -63,7 +63,7 @@ async function chatFetch(c: AiConfig, body: Record<string, unknown>, ev: AgentEv
     if (netErr) {
       if (signal.aborted || attempt >= 3) throw netErr;
       const wait = retryWait(null, attempt);
-      ev.onStatus(`连不上服务方（网络或跨域），${Math.round(wait / 1000)} 秒后自动重试（第 ${attempt + 1} 次）…`);
+      ev.onStatus(`连接失败，${Math.round(wait / 1000)} 秒后重试（第 ${attempt + 1} 次）…`);
       await sleep(wait, signal);
       continue;
     }
@@ -71,7 +71,7 @@ async function chatFetch(c: AiConfig, body: Record<string, unknown>, ev: AgentEv
     if (!retriable || attempt >= 3) throw new Error(`http ${r!.status}${await describeBody(r!)}`);
     const wait = retryWait(r, attempt);
     coolUntil = Date.now() + 1500;
-    ev.onStatus(r!.status === 429 ? `服务方说「请求过于频繁 / 额度不足」，${Math.round(wait / 1000)} 秒后自动重试（第 ${attempt + 1} 次）…` : `服务方返回 http ${r!.status}，${Math.round(wait / 1000)} 秒后自动重试（第 ${attempt + 1} 次）…`);
+    ev.onStatus(`请求失败（HTTP ${r!.status}），${Math.round(wait / 1000)} 秒后重试（第 ${attempt + 1} 次）…`);
     await sleep(wait, signal);
   }
 }
@@ -129,8 +129,8 @@ async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], us
   setReporter(ev.onStatus);
   let fixes = 0;
   for (let round = 0; ; round++) {
-    if (!(await mayContinue(round))) { ev.onText(round >= HARD_MAX ? '\n（工具调用轮数太多，先停在这儿）' : '\n（按你的要求停在这儿）'); return; }
-    ev.onStatus(round ? '工具结果发回去了，等模型接着说…' : '等模型回复…');
+    if (!(await mayContinue(round))) { ev.onText(round >= HARD_MAX ? '\n已达到工具调用上限。' : '\n已停止。'); return; }
+    ev.onStatus('等待模型回复…');
     const stream = client.messages.stream({
       model: c.model, max_tokens: 16000,
       system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
@@ -239,8 +239,8 @@ async function openaiTurn(c: AiConfig, messages: any[], userText: string, files:
   setReporter(ev.onStatus);
   let fixes = 0;
   for (let round = 0; ; round++) {
-    if (!(await mayContinue(round))) { ev.onText(round >= HARD_MAX ? '\n（工具调用轮数太多，先停在这儿）' : '\n（按你的要求停在这儿）'); return; }
-    ev.onStatus(round ? '工具结果发回去了，等模型接着说…' : '等模型回复…');
+    if (!(await mayContinue(round))) { ev.onText(round >= HARD_MAX ? '\n已达到工具调用上限。' : '\n已停止。'); return; }
+    ev.onStatus('等待模型回复…');
     const r = await chatFetch(c, { model: c.model, messages, tools, stream: true, ...extra }, ev, signal);
     let text = '';
     let thinking = false;
@@ -359,10 +359,10 @@ export async function summarize(c: AiConfig, text: string, signal?: AbortSignal)
 
 export function describeError(e: unknown): string {
   const m = e instanceof Error ? e.message : String(e);
-  if (/Failed to fetch|NetworkError|Load failed|Connection error/i.test(m)) return "连不上：网络不通，或服务方不允许网页直连（跨域）。本机模型要打开 CORS；不允许直连的服务可以在本机起个代理";
-  if (/http 401|authentication|invalid.*api.key|Unauthorized/i.test(m)) return "密钥不对（401）";
-  if (/http 403/.test(m)) return "没有权限（403）：密钥没开这个模型，或余额不足";
-  if (/http 404|not_found|does not exist/i.test(m)) return `模型或地址不对（404）：${m}`;
-  if (/http 429|rate.?limit/i.test(m)) return "请求太频繁或额度用完（429）：自动重试了几次还是被拒——等一两分钟再发，或在 Agent 设置里换个接口（Kimi 这类按分钟限流的服务，连续工具调用很容易触发）";
+  if (/Failed to fetch|NetworkError|Load failed|Connection error/i.test(m)) return "无法连接模型服务。请检查网络、服务地址和跨域访问设置（CORS）。";
+  if (/http 401|authentication|invalid.*api.key|Unauthorized/i.test(m)) return "身份验证失败（401）。请检查 API 密钥。";
+  if (/http 403/.test(m)) return `访问被拒绝（403）。请检查账号和模型权限。\n${m}`;
+  if (/http 404|not_found|does not exist/i.test(m)) return `未找到模型或接口。请检查模型名称和服务地址。\n${m}`;
+  if (/http 429|rate.?limit/i.test(m)) return `请求受限。请稍后重试，或查看服务方的配额限制。\n${m}`;
   return m;
 }

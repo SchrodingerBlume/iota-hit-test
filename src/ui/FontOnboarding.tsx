@@ -36,12 +36,12 @@ export function FontOnboarding() {
           <DialogTitle>{t("读取本机字体？")}</DialogTitle>
           <DialogContent>
             <p>{t("用这台电脑上的宋体、黑体、楷体和 Times New Roman 排版，预览、导出的 PDF 与 Word 里看到的一致。字体只在本机读取，不上传；浏览器会问一次要不要允许。")}</p>
-            <p className="muted">{t("不读也行：内置的 Noto 开源字体随时能用，之后在「论文设置 › 字体方案」里还能改。")}</p>
+            <p className="muted">{t("可稍后在“论文设置”中更改字体方案。")}</p>
             {busy && <p role="status">{busy}</p>}
             {error && <p role="alert" className="diag err" style={{ padding: '6px 10px', borderRadius: 'var(--r-s)' }}>{error}</p>}
           </DialogContent>
           <DialogActions>
-            <Button disabled={!!busy} onClick={skip}>{t("先用内置字体")}</Button>
+            <Button disabled={!!busy} onClick={skip}>{t("使用内置字体")}</Button>
             <Button appearance="primary" disabled={!!busy} onClick={() => void read()}>{t("读取本机字体")}</Button>
           </DialogActions>
         </DialogBody>
