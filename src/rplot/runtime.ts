@@ -70,7 +70,13 @@ export async function runRPlot(code: string, options: RPlotOptions = {}): Promis
   const width = options.width ?? 6, height = options.height ?? 4, pointsize = options.pointsize ?? 11, seed = options.seed ?? 1;
   if (![width, height].every((n) => Number.isFinite(n) && n >= 1 && n <= 20) || !Number.isFinite(pointsize) || pointsize < 4 || pointsize > 72) throw new Error('画布宽高需在 1–20 英寸之间，字号需在 4–72 pt 之间');
   if (!Number.isInteger(seed) || seed < 0 || seed > 2147483647) throw new Error('随机种子需为 0–2147483647 的整数');
-  if ((options.files ?? []).reduce((n, f) => n + f.bytes.byteLength, 0) > 20 * 1024 * 1024) throw new Error('单张 R 图的数据附件总大小不能超过 20 MB');
+  const files = [...(options.files ?? [])], names = new Set<string>();
+  if (files.reduce((n, f) => n + f.bytes.byteLength, 0) > 20 * 1024 * 1024) throw new Error('单张 R 图的数据附件总大小不能超过 20 MB');
+  for (const file of files) {
+    if (!file.name || file.name === '.' || file.name === '..' || /[\\/\0]/.test(file.name)) throw new Error('R 数据文件名不能包含路径');
+    if (names.has(file.name)) throw new Error(`R 数据文件名重复：${file.name}`);
+    names.add(file.name);
+  }
   options.signal?.throwIfAborted();
   busy = true;
   const progress = options.progress ?? (() => {});
@@ -86,10 +92,6 @@ export async function runRPlot(code: string, options: RPlotOptions = {}): Promis
     return await Promise.race([killed, (async () => {
       const r = await getRuntime(progress);
       controller.signal.throwIfAborted();
-      for (const file of options.files ?? []) {
-        if (!file.name || /[\\/\0]/.test(file.name)) throw new Error('R 数据文件名不能包含路径');
-        await r.FS.writeFile(`/data/${file.name}`, file.bytes);
-      }
       // ggplot2 等包只在代码确实引用它时装；基础绘图和 grid 随 R 引擎分发。
       const pkgs = [...code.matchAll(/(?:library|require)\s*\(\s*["']?([A-Za-z][\w.]*)|([A-Za-z][\w.]*)::/g)].map((m) => m[1] ?? m[2]);
       const extra = [...new Set(pkgs)].filter((p) => !['base', 'stats', 'graphics', 'grDevices', 'grid', 'utils', 'datasets', 'cetzDevice'].includes(p));
@@ -105,11 +107,14 @@ export async function runRPlot(code: string, options: RPlotOptions = {}): Promis
       for (let pass = 0; pass < 8; pass++) {
         controller.signal.throwIfAborted();
         progress(pass ? `正在按 Typst 字体重新排图（第 ${pass + 1} 次）…` : '正在运行 R 绘图代码…');
+        // 每次重放都从同一份附件开始，不继承上一张图或上一次量字产生的文件。
+        await r.evalRVoid('setwd("/data"); unlink(list.files("/data", all.files = TRUE, full.names = TRUE, no.. = TRUE), recursive = TRUE, force = TRUE)');
+        for (const file of files) await r.FS.writeFile(`/data/${file.name}`, file.bytes);
         const result = JSON.parse(await r.evalRString(`.iota_draw(${rstring(code)}, ${width}, ${height}, ${pointsize}, ${seed})`)) as { source: string; missing: Record<string, string>; pages: number; stdout: string };
         const missing = result.missing && !Array.isArray(result.missing) ? result.missing : {};
         if (!Object.keys(missing).length) {
           const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(result.source)))].map((v) => v.toString(16).padStart(2, '0')).join('').slice(0, 32);
-          const dataFiles = (options.files ?? []).map((f) => {
+          const dataFiles = files.map((f) => {
             let binary = '';
             for (let i = 0; i < f.bytes.length; i += 8192) binary += String.fromCharCode(...f.bytes.subarray(i, i + 8192));
             return { name: f.name, data: btoa(binary) };

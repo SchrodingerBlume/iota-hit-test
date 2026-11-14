@@ -153,6 +153,17 @@ try {
   });
   assert.equal(data.kept, 1); assert.equal(data.same, true);
   console.log('PASS data file retention and deterministic replay');
+  const isolated = await page.evaluate(async () => {
+    const a = window.rplot;
+    const file = { name: 'isolated.csv', bytes: new TextEncoder().encode('x,y\n1,3\n2,4\n') };
+    await a.runRPlot('stopifnot(!file.exists("/data/generated.txt")); writeLines("temporary", "/data/generated.txt"); d <- read.csv("isolated.csv"); plot(d$x, d$y, main="isolation-label-新")', { files: [file], width: 5, height: 3.5 });
+    const next = await a.runRPlot('stopifnot(!file.exists("/data/isolated.csv"), !file.exists("/data/generated.txt"), !file.exists("/data/test.csv")); plot(1:3)', { width: 5, height: 3.5 });
+    let duplicate = false;
+    try { await a.runRPlot('plot(1:3)', { files: [file, file] }); } catch (e) { duplicate = /文件名重复/.test(e.message); }
+    return { next: !!next.plot.source, duplicate };
+  });
+  assert.equal(isolated.next, true); assert.equal(isolated.duplicate, true);
+  console.log('PASS per-job/per-replay data isolation, relative filenames and duplicate rejection');
 
   const tool = await page.evaluate(async () => {
     const a = window.rplot;
@@ -163,6 +174,13 @@ try {
   console.log('PASS Agent r_plot tool inserts an editable R figure');
 
   await page.evaluate(() => window.rplot.showDialog());
+  const dataInput = page.locator('input[type="file"]');
+  await dataInput.setInputFiles({ name: 'replace.csv', mimeType: 'text/csv', buffer: Buffer.from('x,y\n1,2\n') });
+  await dataInput.setInputFiles({ name: 'replace.csv', mimeType: 'text/csv', buffer: Buffer.from('x,y\n3,4\n') });
+  assert.equal(await page.locator('.rplot-files button').count(), 1, '同名附件应替换而不是重复添加');
+  await page.locator('.rplot-files button').click();
+  assert.equal(await page.locator('.rplot-files button').count(), 0, '附件应能移除');
+  console.log('PASS attachment replacement and removal in R dialog');
   await page.getByRole('textbox', { name: 'R 绘图代码', exact: true }).fill('plot(1:4, type="b", main="用户界面测试")');
   await page.getByRole('button', { name: '运行预览', exact: true }).click();
   await page.locator('.rplot-preview img').waitFor({ timeout: 120000 });
