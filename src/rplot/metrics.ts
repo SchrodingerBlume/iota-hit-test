@@ -1,4 +1,5 @@
 import { queryTypst, startCompiler } from '../compiler/client';
+import { R_PLOT_STOCK_PRELUDE } from './typography';
 
 export type MetricCache = Record<string, number[]>;
 
@@ -8,6 +9,7 @@ export async function measureLabels(missing: Record<string, string>): Promise<Me
   if (!entries.length) return {};
   startCompiler();
   const source = `#set page(width: 10000pt, height: 10000pt, margin: 0pt)
+${R_PLOT_STOCK_PRELUDE}
 #show math.equation: set text(font: "TeX Gyre Termes Math")
 #let r-label-scope = (:)
 ${entries.some(([, e]) => e.includes('r-mitext(')) ? '#import "@preview/mitex:0.2.6": mitext as r-mitext' : ''}

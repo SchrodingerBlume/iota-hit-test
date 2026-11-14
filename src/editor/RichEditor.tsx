@@ -241,7 +241,7 @@ export function RichEditor({ value, onChange, headings = true, blocks = true, pl
   // 登记到编辑器表里：预览区直接编辑要找到它（挂上来时内容就是工程里那份，位置不必作废）
   useEffect(() => {
     if (!editor || !richKey || sourceMode) return;
-    registerEditor(richKey, editor, { blocks, headings });
+    registerEditor(richKey, editor, { blocks, headings, docId: useStore.getState().doc.id });
     // 没有当前编辑器（或它已经没了）就把这份当作当前的，功能区才有东西可作用
     const cur = usePreviewSurface.getState().activeKey;
     if (!cur || cur === richKey || !getEditor(cur)) usePreviewSurface.getState().set({ activeKey: richKey });

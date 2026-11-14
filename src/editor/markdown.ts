@@ -122,7 +122,8 @@ function block(n: Node): string {
     }
     case 'figure': {
       // R 源码与生成的 CeTZ 必须完整往返，不能退化成一张 PNG 链接。
-      if (a.rPlot) return `<!--iota-attrs:${encodeURIComponent(JSON.stringify({ rPlot: a.rPlot, uid: a.uid }))}-->\n\n![${esc(String(a.caption ?? ''))}](${String(a.image ?? '')})${captionAttrs(a, { width: a.width !== 8 ? a.width : undefined })}${notesMd(a)}`;
+      if (a.rPlotTask && !a.image) return opaque(n);
+      if (a.rPlot || a.rPlotTask) return `<!--iota-attrs:${encodeURIComponent(JSON.stringify({ rPlot: a.rPlot, rPlotTask: a.rPlotTask, uid: a.uid }))}-->\n\n![${esc(String(a.caption ?? ''))}](${String(a.image ?? '')})${captionAttrs(a, { width: a.width !== 8 ? a.width : undefined })}${notesMd(a)}`;
       const subs = parseJsonList(a.subs);
       if (subs.length) {
         // 每张分图：宽 / 高钉死、排法（place=row/below/beside）、单张的图上标签（mark / markFill）、自定义标签（#id）

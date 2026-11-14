@@ -6,7 +6,7 @@ import { ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent, type NodeViewP
 import { CellSelection, TableMap } from '@tiptap/pm/tables';
 import { useEffect, useRef, useState } from 'react';
 import { imageUrl } from '../imageCache';
-import { useEditorEnv, useNumbering, useOpenNonce, focusAttrInput } from '../env';
+import { useEditorEnv, useNumbering, useOpenNonce, focusAttrInput, useRichKey } from '../env';
 import { labelOf, parseJsonArr } from '../../typst/pmToTypst';
 import { parseSubs, subLayout, subNumber, type SubFig } from '../../typst/subfigs';
 import { SWITCHES, resolveSwitch } from '../../model/options';
@@ -22,7 +22,9 @@ import { parseLength, toPx } from '../../model/length';
 import { t } from '../../i18n';
 import { MirrorInput } from '../mirror';
 import { RPlotDialog } from '../../ui/RPlotDialog';
-import { rPlotOf } from '../../rplot/files';
+import { pendingRPlotOf, rPlotOf } from '../../rplot/files';
+import { attachRPlotJob, cancelRPlotJob, pendingFigureAttrs, retryRPlotJob } from '../../rplot/jobs';
+import { RPlotPending } from '../../ui/RPlotPending';
 
 /** 编辑区里图的显示宽度：绝对长度按 28px/cm 的缩小比例画，百分比按容器，其余按 8cm */
 function figurePx(w: unknown): string {
@@ -192,6 +194,8 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
   const env = useEditorEnv();
   const [rOpen, setROpen] = useState(false);
   const rPlot = rPlotOf(node.attrs.rPlot);
+  const pending = pendingRPlotOf(node.attrs.rPlotTask);
+  const richKey = useRichKey();
   const subs = parseSubs(node.attrs.subs);
   const setSubs = (s: SubFig[]) => updateAttributes({ subs: JSON.stringify(s) });
   const settings = useStore((st) => st.doc.settings);
@@ -208,17 +212,22 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
   const num = useNumbering().get(labelOf(node.attrs as any, 'fig'))?.number;
   const pick = async (file: File) => {
     const r = await env.addImage(file);
-    const patch: Record<string, any> = { image: r.name, rPlot: '' };
+    if (pending) cancelRPlotJob(pending.id);
+    const patch: Record<string, any> = { image: r.name, rPlot: '', rPlotTask: '' };
     if (r.width && r.height) patch.width = Math.min(14, Math.max(4, Math.round((r.width / 96) * 2.54 * 10) / 10));
     updateAttributes(patch);
   };
   // 合成图配连排分图题：分图条目都没有图、母图有图——图照常显示，分图题在图题下一行一条
   const captionOnly = subs.length > 0 && !!name && !subs.some((s) => s.image);
   return (
-    <NodeViewWrapper className={`blk fig ${selected ? 'is-selected' : ''} ${subs.length && !captionOnly ? 'has-subs' : ''}`} ref={wrap} onMouseDown={selectOnPadding(editor, getPos)} onKeyDown={captionKeys(editor, getPos)}>
+    <NodeViewWrapper className={`blk fig ${selected ? 'is-selected' : ''} ${subs.length && !captionOnly ? 'has-subs' : ''}`} data-rplot-task={pending?.id} ref={wrap} onMouseDown={selectOnPadding(editor, getPos)} onKeyDown={captionKeys(editor, getPos)}>
       <Handle editor={editor} getPos={getPos} />
       <div className="fig-body" contentEditable={false}>
-        {subs.length && !captionOnly ? (
+        {pending ? <div className="rplot-figure-pending" style={{ width: figurePx(node.attrs.width), maxWidth: '100%' }}>
+          <RPlotPending pending={pending} onInspect={() => setROpen(true)}
+            onRetry={editable && richKey ? () => retryRPlotJob(pending, { docId: useStore.getState().doc.id, key: richKey, uid: String(node.attrs.uid) }) : undefined}
+            onCancel={editable ? () => { cancelRPlotJob(pending.id); if (rPlot) updateAttributes({ rPlotTask: '' }); } : undefined} />
+        </div> : subs.length && !captionOnly ? (
           // 行 / 格 / 叠照 place 排（没写的按每行几张）：每行一个网格，叠竖着摞，叠里并排的横着放
           <div className="subfig-grid">
             {(() => {
@@ -232,7 +241,7 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
               ));
             })()}
           </div>
-        ) : url ? <img src={url} alt="" style={{ width: figurePx(node.attrs.width), maxWidth: '100%' }} draggable={false} /> : (
+        ) : url ? <img className={rPlot ? 'rplot-image-ready' : undefined} src={url} alt="" style={{ width: figurePx(node.attrs.width), maxWidth: '100%' }} draggable={false} /> : (
           <label className="fig-drop">
             <ImageUp />
             <span>{name ? t("未找到图片 {{name}}。请单击重新选择。", { name: name }) : t("选择图片（PNG / JPG / SVG）")}</span>
@@ -255,14 +264,15 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
           <LengthInput value={node.attrs.width ?? 8} defaultUnit="cm" disabled={!editable} onChange={(v) => updateAttributes({ width: v ?? 8 })} width={84} />
         </label>
         <LabelField node={node} updateAttributes={updateAttributes} prefix="fig" editable={editable} />
-        {rPlot && <button type="button" className="blk-tool is-btn" title={t('编辑 R 绘图代码')} disabled={!editable} onClick={() => setROpen(true)}><PencilLine />{t('编辑 R 图')}</button>}
+        {(rPlot || pending) && <button type="button" className="blk-tool is-btn" title={t('编辑 R 绘图代码')} disabled={!editable} onClick={() => setROpen(true)}><PencilLine />{pending ? t('查看后台绘图') : t('编辑 R 图')}</button>}
         <button type="button" className="blk-tool is-btn" title={t("图注：排在图之下、图题之上，与图同宽")} disabled={!editable} onClick={() => addNote(node, updateAttributes)}><PencilLine />{t("图注")}</button>
         {!rPlot && <button type="button" className="blk-tool is-btn" title={t("添加分图")} disabled={!editable} onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.onchange = async () => { const files = [...(input.files ?? [])]; const add: SubFig[] = []; for (const f of files) { const r = await env.addImage(f); add.push({ image: r.name, width: '', caption: '' }); } const base = subs.length ? subs : (name ? [{ image: name, width: '', caption: '' }] : []); setSubs([...base, ...add]); }; input.click(); }}><PencilLine />{t("分图")}</button>}
         {!rPlot && !!name && (!subs.length || captionOnly) && <button type="button" className="blk-tool is-btn" title={t("分图题注置于总题注下方")} disabled={!editable} onClick={() => setSubs([...subs, { image: '', width: '', caption: '' }])}><PencilLine />{t("分图题注")}</button>}
         {!subs.length && <label className="blk-tool is-btn" title={t("更改图片")}><ImageUp /><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>}
         <button type="button" className="blk-tool is-btn is-danger" title={t("删除插图")} disabled={!editable} onClick={deleteNode}><Trash2 /></button>
       </Tools>
-      {rOpen && <RPlotDialog initial={node.attrs} preview={url} onClose={() => setROpen(false)} onApply={(attrs) => { if (!editor.isDestroyed) updateAttributes(attrs); }} />}
+      {rOpen && <RPlotDialog initial={node.attrs} preview={url} onClose={() => setROpen(false)} onApply={(attrs) => { if (!editor.isDestroyed) updateAttributes({ ...attrs, rPlotTask: '' }); }}
+        onBackground={richKey ? (draft, id) => { const attrs = pendingFigureAttrs(id, draft, node.attrs); updateAttributes(attrs); attachRPlotJob(id, { docId: useStore.getState().doc.id, key: richKey, uid: String(attrs.uid) }); } : undefined} />}
     </NodeViewWrapper>
   );
 }
@@ -280,7 +290,7 @@ export const Figure = Node.create({
     // subLabel：(a)(b) 打在图上的哪个角（none / tl / tr / bl / br），subLabelFill 标签黑字或白字（深色图用），
     // subLabelPattern / subLabelSize / subLabelFont 标签的写法（空 = 跟 subcaption-numbering）、字号（zihao 名）、字体角色（空 = sans）
     // notes：图注（JSON [{lead, text}]），模板 note：排在图之下、图题之上
-    return { rPlot: attr('rPlot', ''), image: attr('image', ''), width: attr('width', 8), caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null), placement: attr('placement', 'none'), breakable: attr('breakable', 'auto'), subs: attr('subs', '[]'), columns: attr('columns', 2), subMode: attr('subMode', 'under'), subGutter: attr('subGutter', ''), subLabel: attr('subLabel', 'none'), subLabelFill: attr('subLabelFill', 'black'), subLabelPattern: attr('subLabelPattern', ''), subLabelSize: attr('subLabelSize', ''), subLabelFont: attr('subLabelFont', ''), notes: attr('notes', '[]') };
+    return { rPlotTask: attr('rPlotTask', ''), rPlot: attr('rPlot', ''), image: attr('image', ''), width: attr('width', 8), caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null), placement: attr('placement', 'none'), breakable: attr('breakable', 'auto'), subs: attr('subs', '[]'), columns: attr('columns', 2), subMode: attr('subMode', 'under'), subGutter: attr('subGutter', ''), subLabel: attr('subLabel', 'none'), subLabelFill: attr('subLabelFill', 'black'), subLabelPattern: attr('subLabelPattern', ''), subLabelSize: attr('subLabelSize', ''), subLabelFont: attr('subLabelFont', ''), notes: attr('notes', '[]') };
   },
   parseHTML() { return [{ tag: 'div[data-node="figure"]' }]; },
   renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { 'data-node': 'figure' })]; },

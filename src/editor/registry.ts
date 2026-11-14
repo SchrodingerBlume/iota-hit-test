@@ -7,7 +7,7 @@ const editors = new Map<RichKey, Editor>();
 const metas = new Map<RichKey, EditorMeta>();
 const listeners = new Set<() => void>();
 
-export interface EditorMeta { blocks: boolean; headings: boolean }
+export interface EditorMeta { blocks: boolean; headings: boolean; docId?: string }
 
 export function registerEditor(key: RichKey, editor: Editor, meta: EditorMeta = { blocks: true, headings: true }) {
   editors.set(key, editor);

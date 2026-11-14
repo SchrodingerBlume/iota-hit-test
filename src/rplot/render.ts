@@ -4,9 +4,11 @@ import { putImage } from '../editor/imageCache';
 import { useStore } from '../model/store';
 import { runRPlot, type RPlotOptions } from './runtime';
 import type { RPlotData } from './files';
+import { stockRPlotSource } from './typography';
 
 export interface RenderedRPlot { plot: RPlotData; png: Blob; svg: string; pixelWidth: number; pixelHeight: number; stdout: string }
 let creating = false;
+export const isRPlotRendering = () => creating;
 
 /** 预览、富文本缩略图和 Word 导出都由同一份 CeTZ 画出来，正文/PDF 则直接编 CeTZ 矢量图。 */
 export async function createRPlot(code: string, options: RPlotOptions = {}): Promise<RenderedRPlot> {
@@ -22,7 +24,7 @@ async function renderRPlot(code: string, options: RPlotOptions): Promise<Rendere
   options.signal?.throwIfAborted();
   if (r.plot.pages !== 1) throw new Error(`这段 R 代码画出了 ${r.plot.pages} 页；一张插图需为一页，多面板请使用 par(mfrow=...) 或 patchwork`);
   options.progress?.('正在编译 CeTZ 图并生成预览…');
-  const result = await compileDrawing(`#set page(width: auto, height: auto, margin: 0pt, fill: none)\n#show math.equation: set text(font: "TeX Gyre Termes Math")\n#import ${JSON.stringify(r.plot.path)}: r-figure\n#r-figure()`, { [r.plot.path]: r.plot.source });
+  const result = await compileDrawing(`#set page(width: auto, height: auto, margin: 0pt, fill: none)\n#show math.equation: set text(font: "TeX Gyre Termes Math")\n#import ${JSON.stringify(r.plot.path)}: r-figure\n#r-figure()`, { [r.plot.path]: stockRPlotSource(r.plot.source) });
   if (!result.artifact) throw new Error(`R 图的 CeTZ 编译失败：${result.error ?? '没有生成版面'}`);
   options.signal?.throwIfAborted();
   let svg = (await renderSnippetSvg(new Uint8Array(result.artifact)))

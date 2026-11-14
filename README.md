@@ -47,13 +47,15 @@ LaTeX 公式使用 MathLive 可视化编辑，Typst 公式使用源码与实时�
 
 ### R 绘图
 
-「插入 → R 绘图」可以直接写 base R、grid 或 ggplot2 绘图代码。点击「运行预览」后插入，选中已有图可点「编辑 R 图」修改代码。无需手动打开或关闭 R 图形设备；支持上传数据文件，在 R 中从 `/data/文件名` 读取。画布尺寸使用厘米、字号使用 pt，并提供固定随机种子。
+「插入 → R 绘图」可以直接写 base R、grid 或 ggplot2 绘图代码。点击「运行预览」后插入，也可点击「后台生成，继续编辑」退出窗口：原位置会出现带动画的占位图，生成结束后自动替换，期间可以继续输入。选中已有图可点「编辑 R 图」修改代码。无需手动打开或关闭 R 图形设备；支持上传数据文件，在 R 中从 `/data/文件名` 读取。画布尺寸使用厘米、字号使用 pt，并提供固定随机种子。
 
 R 在浏览器的 webR 0.6.1 Wasm worker 中运行，`cetzDevice 0.5.3.1` 将绘图操作转成 CeTZ 0.5.3。文字由站内 Typst/Wasm 批量精确测量，正文和 PDF 中保留矢量图；编辑区和 Word 导出使用从同一份 CeTZ 生成的 PNG。R 代码、数据文件和生成结果随工程保存，重新打开无需重跑 R 就能显示图。
 
 内部 CeTZ 源码作为 `rplots/<内容哈希>.typ` 旁文件自动提供给编译器，导出 Typst 工程时也会带上；用户界面不显示这些内部文件。Agent 可以调用 `r_plot` 工具直接绘图并插入，返回的图还会提供给支持看图的模型检查。
 
-R 引擎、cetzDevice、ggplot2 及依赖随站分发，仅第一次使用 R 绘图时加载，不需要本机 R、服务器或跨源隔离头。额外的 R 包在代码引用时才尝试从 webR 仓库安装，是否可用取决于该包是否有 Wasm 构建。每张插图限一页，多面板可用 `par(mfrow=...)`；运行超时或取消会终止 R worker，下一次自动重启。
+R 引擎、cetzDevice、ggplot2、ggrepel 及依赖随站分发。首次正文排版完成后，界面空闲时会在后台自动下载并预热；右下角和绘图窗口显示实际组件数、下载量与初始化状态。组件按版本缓存，不需要本机 R、服务器或跨源隔离头。代码引用额外 R 包时，从现成的 `repo.r-wasm.org` 仓库递归下载其 Wasm 依赖，显示包名、下载量和解包阶段，并缓存安装包；没有 Wasm 构建的包会说明失败原因。每张插图限一页，多面板可用 `par(mfrow=...)` 或 `patchwork`。
+
+后台结果按节点 ID 回填，不会移动正在输入的光标；删除占位图后不会重新插入。切到另一个工程时保留结果，回到原工程再回填。失败或取消后可以重试；刷新网页会停止尚未完成的任务，但代码、数据和占位状态仍会保存，可手动继续生成。运行超时或取消会终止 R worker，下一次自动重启。图内文字独立恢复原版 Typst 的字距和段落设置，正文的 Word 兼容排版设置不再影响绘图区。
 
 ### 引文与书目
 
@@ -170,7 +172,7 @@ npx playwright-core install chromium
 npm run test:rplot
 ```
 
-也可用 `CHROME_PATH` 指定已有 Chromium。测试使用真实 R/Wasm、CeTZ 和 Typst/Wasm，覆盖基础绘图、ggplot2、中文与数学标签、内部 `.typ` 导入、Markdown 往返、保存重开、Word 导出、Agent 插图、用户绘图窗口以及超时恢复。
+也可用 `CHROME_PATH` 指定已有 Chromium。测试使用真实 R/Wasm、CeTZ 和 Typst/Wasm，覆盖基础绘图、ggplot2/ggrepel、额外包下载与缓存、中文与数学标签、内部 `.typ` 导入、Markdown 往返、保存重开、Word 导出、Agent 插图、用户绘图窗口、后台原位回填、切工程、删除占位、失败重试以及超时恢复。原版字体度量对照另用 `TYPST_STOCK=/path/to/official/typst node scripts/test-rplot-stock.mjs` 运行，需要官方 Typst 0.15.1。
 
 更新 R/Wasm 随站资源时，先运行 `node scripts/vendor-rplot.mjs` 下载固定版本 webR 和 cetzDevice 源码；再手动运行仓库的 `Build cetzDevice for webR` 工作流，下载其 `cetzDevice-0.5.3.1-webR-0.6.1` artifact，执行 `node scripts/install-rplot-artifact.mjs <artifact解压目录>`。交叉编译脚本是 `scripts/build-rplot-wasm.R`，不依赖开发机上的 R/Wasm 工具链。
 

@@ -26,8 +26,8 @@ import { GUIDES, guideFor, loadGuide, guideToc, guideSection, guideSearch } from
 import { queryFacts } from '../export/docx/template';
 import { parseSubs, subLayout, type SubFig } from '../typst/subfigs';
 import { lineDiff, type LineDiff } from './diff';
-import { createRPlot, saveRPlot } from '../rplot/render';
-import { rPlotOf } from '../rplot/files';
+import { attachRPlotJob, pendingFigureAttrs, startRPlotJob, waitRPlotJob } from '../rplot/jobs';
+import { pendingRPlotOf, rPlotOf } from '../rplot/files';
 
 export interface ToolDef { name: string; description: string; parameters: Record<string, unknown> }
 /** 要用户点头的改动：面板弹卡片，用户允许了才做 */
@@ -182,6 +182,8 @@ function outlineText(): string {
 function readableBlock(block: any): string {
   const plot = block.type === 'figure' ? rPlotOf(block.attrs?.rPlot) : null;
   if (plot) return `R 插图：${String(block.attrs?.caption ?? '')}${block.attrs?.label ? ` <${block.attrs.label}>` : ''}（用 r_plot 编辑；内部 CeTZ 已生成，不要用 replace 重建这张图）\n\n\`\`\`r\n${plot.code}\n\`\`\``;
+  const pending = block.type === 'figure' ? pendingRPlotOf(block.attrs?.rPlotTask) : null;
+  if (pending) return `R 插图（${pending.state}）：${String(block.attrs?.caption ?? '')}；后台任务 ${pending.id}\n\n\`\`\`r\n${pending.draft.code}\n\`\`\``;
   return toMarkdown({ type: 'doc', content: [block] });
 }
 function readText(key: RichKey, from: number, to: number): string {
@@ -919,22 +921,28 @@ async function dispatch(name: string, input: Record<string, any>, signal?: Abort
     case 'r_plot': {
       const p = need();
       const place = placeOf(input, p.key); if (typeof place === 'string') return place;
+      const count = blocksOf(p.key).length;
+      if (![place.from, place.to].every(Number.isInteger) || place.from < 0 || place.from > count || place.to < place.from - 1 || place.to >= count) return `段号超出范围（共 ${count} 块）`;
       const docId = useStore.getState().doc.id;
-      const before = JSON.stringify(blocksOf(p.key));
       const width = Number(input.width ?? 14), height = Number(input.height ?? 9);
       const bad = await checkFigureWidths([{ type: 'figure', attrs: { width } }]); if (bad) return bad;
-      const result = await createRPlot(String(input.code ?? ''), { width: width / 2.54, height: height / 2.54,
-        pointsize: Number(input.pointsize ?? 11), seed: Number(input.seed ?? 1),
-        timeout: Math.min(600, Math.max(5, Number(input.timeout ?? 120))), signal, progress: (s) => report(s),
-        files: attachments.filter((a) => /\.(csv|tsv|txt|json|rds|rdata)$/i.test(a.name)).map((a) => ({ name: a.name, bytes: a.kind === 'text' ? new TextEncoder().encode(a.data) : Uint8Array.from(atob(a.data), (c) => c.charCodeAt(0)) })),
+      const dataFiles = attachments.filter((a) => /\.(csv|tsv|txt|json|rds|rdata)$/i.test(a.name)).map((a) => {
+        if (a.kind !== 'text') return { name: a.name, data: a.data };
+        const bytes = new TextEncoder().encode(a.data); let binary = '';
+        for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+        return { name: a.name, data: btoa(binary) };
       });
+      const draft = { code: String(input.code ?? ''), width, height, pointsize: Number(input.pointsize ?? 11), seed: Number(input.seed ?? 1),
+        timeout: Math.min(600, Math.max(5, Number(input.timeout ?? 120))),
+        caption: String(input.caption ?? ''), captionEn: String(input.captionEn ?? ''), label: String(input.label ?? ''), ...(dataFiles.length ? { dataFiles } : {}) };
       signal?.throwIfAborted();
-      if (JSON.stringify(blocksOf(p.key)) !== before) throw new Error('R 绘图期间目标部分已被编辑，请重新读取块号再插入');
-      const attrs = await saveRPlot(result, docId, width);
-      const node = { type: 'figure', attrs: { ...attrs, caption: String(input.caption ?? ''), captionEn: String(input.captionEn ?? ''), label: String(input.label ?? ''), placement: 'none' } };
-      const out = splice(p.key, place.from, place.to, [node], 'R 图已插入（CeTZ 矢量）');
-      collectOutputs([{ name: String(attrs.image), bytes: new Uint8Array(await result.png.arrayBuffer()) }]);
-      return `${out}${result.stdout ? '\nR 输出：\n' + result.stdout : ''}`;
+      const id = startRPlotJob(draft, docId), attrs = pendingFigureAttrs(id, draft);
+      const out = splice(p.key, place.from, place.to, [{ type: 'figure', attrs }], 'R 图占位符已插入，正在后台生成');
+      attachRPlotJob(id, { docId, key: p.key, uid: String(attrs.uid) });
+      const job = await waitRPlotJob(id, signal, (s) => report(s));
+      const result = job.result!;
+      collectOutputs([{ name: `rplot-${result.plot.path.split('/').pop()!.replace('.typ', '.png')}`, bytes: new Uint8Array(await result.png.arrayBuffer()) }]);
+      return `${job.phase === 'completed' ? 'R 图已插入（CeTZ 矢量），已更新原占位位置。' : 'R 图已生成；工程已切换，回到原工程后将更新原占位位置。'}${out}${result.stdout ? '\nR 输出：\n' + result.stdout : ''}`;
     }
     case 'images': return imagesText();
     case 'selection': return selectionText();

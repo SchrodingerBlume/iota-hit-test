@@ -6,7 +6,7 @@ import { createServer } from 'vite';
 
 const entry = '\0rplot-integration';
 const server = await createServer({
-  server: { host: '127.0.0.1', port: 5313, strictPort: true },
+  server: { host: '127.0.0.1', port: 5313, strictPort: true, hmr: false, ws: false, watch: null },
   plugins: [{
     name: 'rplot-integration-check',
     resolveId(id) { if (id === '/__rplot_integration.js') return entry; },
@@ -16,9 +16,16 @@ const server = await createServer({
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { FluentProvider, webLightTheme } from '@fluentui/react-components';
-import { RPlotDialog } from '/src/ui/RPlotDialog.tsx';
+import { RPlotDialog, RPlotInsertDialog } from '/src/ui/RPlotDialog.tsx';
+import { Editor } from '@tiptap/core';
+import StarterKit from '@tiptap/starter-kit';
+import { Figure } from '/src/editor/extensions/blocks.tsx';
+import { registerEditor, unregisterEditor } from '/src/editor/registry.ts';
+import * as jobs from '/src/rplot/jobs.ts';
+import { useRPlotLoad } from '/src/rplot/assets.ts';
+import { useRPackageLoad } from '/src/rplot/packages.ts';
 import { createRPlot, saveRPlot } from '/src/rplot/render.ts';
-import { runRPlot, resetR } from '/src/rplot/runtime.ts';
+import { runRPlot, resetR, prepareRPlotRuntime } from '/src/rplot/runtime.ts';
 import { useStore } from '/src/model/store.ts';
 import { sampleDoc } from '/src/model/sample.ts';
 import { serializeProject, serializePara } from '/src/typst/serialize.ts';
@@ -28,18 +35,27 @@ import { setImageNamespace, saveProject, loadProject, loadImage } from '/src/mod
 import { buildDocx } from '/src/export/docx/build.ts';
 import { runTool } from '/src/ai/tools.ts';
 import '/src/styles/app.css';
-window.rplot = { createRPlot, saveRPlot, runRPlot, resetR, useStore, sampleDoc, serializeProject, serializePara, toMarkdown, fromMarkdown, compileDrawing, setImageNamespace, saveProject, loadProject, loadImage, buildDocx, runTool };
+window.rplot = { createRPlot, saveRPlot, runRPlot, resetR, prepareRPlotRuntime, useRPlotLoad, useRPackageLoad, jobs, registerEditor, useStore, sampleDoc, serializeProject, serializePara, toMarkdown, fromMarkdown, compileDrawing, setImageNamespace, saveProject, loadProject, loadImage, buildDocx, runTool };
 const root = createRoot(document.getElementById('root'));
+const clear = () => root.render(React.createElement(FluentProvider, { theme: webLightTheme }));
+window.rplot.showBackgroundDialog = () => {
+  const ed = new Editor({ element: document.getElementById('editor'), extensions: [StarterKit, Figure.extend({ addNodeView: () => undefined })], content: useStore.getState().doc.body,
+    onUpdate: ({ editor }) => useStore.getState().setRich('body', editor.getJSON()) });
+  registerEditor('body', ed, { blocks: true, headings: true, docId: useStore.getState().doc.id }); window.rplot.ed = ed;
+  ed.commands.setTextSelection(ed.state.doc.content.size);
+  root.render(React.createElement(FluentProvider, { theme: webLightTheme }, React.createElement(RPlotInsertDialog, { editor: ed, richKey: 'body', onClose: clear })));
+};
+window.rplot.closeEditor = () => { const ed = window.rplot.ed; if (ed) { unregisterEditor('body', ed); ed.destroy(); } };
 window.rplot.showDialog = (initial) => {
   root.render(React.createElement(FluentProvider, { theme: webLightTheme }, React.createElement(RPlotDialog, {
-    initial, onApply: (attrs) => { window.rplot.inserted = attrs; }, onClose: () => root.render(React.createElement(FluentProvider, { theme: webLightTheme })),
+    initial, onApply: (attrs) => { window.rplot.inserted = attrs; }, onClose: clear,
   })));
 };`;
     },
     configureServer(s) {
       s.middlewares.use('/__rplot_test__', async (_req, res) => {
         res.setHeader('Content-Type', 'text/html');
-        res.end(await s.transformIndexHtml('/__rplot_test__', '<!doctype html><html lang="zh"><head><meta charset="utf-8"><base href="/"></head><body><div id="root"></div><script type="module" src="/__rplot_integration.js"></script></body></html>'));
+        res.end(await s.transformIndexHtml('/__rplot_test__', '<!doctype html><html lang="zh"><head><meta charset="utf-8"><base href="/"></head><body><div id="root"></div><div id="editor"></div><script type="module" src="/__rplot_integration.js"></script></body></html>'));
       });
     },
   }],
@@ -49,12 +65,23 @@ try {
   await server.listen();
   browser = await chromium.launch({ headless: true, ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chromium' }) });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-  const errors = [], remote = [];
+  const errors = [], remote = [], local = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  page.on('request', (r) => { if (/^https?:/.test(r.url()) && !r.url().startsWith('http://127.0.0.1:5313/')) remote.push(r.url()); });
+  page.on('request', (r) => { if (/^https?:/.test(r.url()) && !r.url().startsWith('http://127.0.0.1:5313/')) remote.push(r.url()); else local.push(r.url()); });
   await page.exposeFunction('rProgress', (s) => console.log('  ' + s));
   await page.goto('http://127.0.0.1:5313/__rplot_test__');
   await page.waitForFunction(() => !!window.rplot);
+
+  const warm = await page.evaluate(async () => {
+    const a = window.rplot, phases = [];
+    const off = a.useRPlotLoad.subscribe((s) => phases.push(s.phase));
+    await Promise.all([a.prepareRPlotRuntime(), a.prepareRPlotRuntime()]); off();
+    return { ...a.useRPlotLoad.getState(), phases };
+  });
+  assert.equal(warm.phase, 'ready'); assert.equal(warm.done, warm.total); assert.ok(warm.bytes > 20000000, JSON.stringify(warm));
+  assert.ok(warm.phases.includes('downloading') && warm.phases.includes('initializing'));
+  assert.equal(local.filter((u) => u.endsWith('/rplot/library.data')).length, 1);
+  console.log('PASS shared background prewarm downloads once and exposes real component progress');
 
   const base = await page.evaluate(async () => {
     const a = window.rplot;
@@ -98,12 +125,23 @@ try {
   console.log('PASS Chinese, Typst and MiTeX labels with real font metrics');
 
   const ggplot = await page.evaluate(async () => {
-    const r = await window.rplot.createRPlot('library(ggplot2)\nggplot(mtcars, aes(wt, mpg, colour=factor(cyl))) + geom_point() + theme_classic(base_family="TeX Gyre Termes")', { width: 5, height: 3.5, progress: window.rProgress });
+    const r = await window.rplot.createRPlot('library(ggplot2)\nlibrary(ggrepel)\nggplot(mtcars, aes(wt, mpg, colour=factor(cyl), label=rownames(mtcars))) + geom_point() + geom_text_repel(max.overlaps=Inf, max.time=0, max.iter=50, seed=1) + theme_classic(base_family="TeX Gyre Termes")', { width: 5, height: 3.5, progress: window.rProgress });
     return { size: r.png.size, pages: r.plot.pages };
   });
   assert.ok(ggplot.size > 2000); assert.equal(ggplot.pages, 1);
   assert.deepEqual(remote, [], 'Core R/ggplot2 drawing must not depend on an external CDN');
-  console.log('PASS bundled ggplot2, no external runtime/package requests');
+  console.log('PASS bundled ggplot2 + ggrepel, no external runtime/package requests');
+
+  const extra = await page.evaluate(async () => {
+    const a = window.rplot, states = [];
+    const off = a.useRPackageLoad.subscribe((s) => states.push({ phase: s.phase, bytes: s.bytes, name: s.name }));
+    const r = await a.createRPlot('library(patchwork)\nlibrary(ggplot2)\np <- ggplot(mtcars, aes(wt, mpg)) + geom_point()\np + p', { width: 5, height: 3.5, progress: window.rProgress }); off();
+    return { size: r.png.size, states, cached: (await (await caches.open('iota-rplot-rpackages-v1')).keys()).map((k) => k.url) };
+  });
+  assert.ok(extra.size > 2000); assert.ok(extra.states.some((s) => s.phase === 'download' && s.bytes > 0)); assert.ok(extra.states.some((s) => s.phase === 'install'));
+  assert.ok(remote.some((u) => /patchwork_.*\.tgz$/.test(u)));
+  assert.ok(extra.cached.some((u) => /patchwork_.*\.tgz$/.test(u)));
+  console.log('PASS on-demand Wasm package installs from existing repository with byte/install progress');
 
   const data = await page.evaluate(async () => {
     const a = window.rplot, code = 'd <- read.csv("/data/test.csv")\nplot(d$x, d$y, type="b")';
@@ -144,6 +182,67 @@ try {
   assert.match(await page.evaluate(() => JSON.parse(window.rplot.inserted.rPlot).code), /编辑已有 R 图/);
   console.log('PASS existing R figure reopens with source and applies regenerated plot');
 
+  await page.evaluate(() => window.rplot.showBackgroundDialog());
+  await page.getByRole('textbox', { name: 'R 绘图代码', exact: true }).fill('Sys.sleep(2); plot(1:4, type="b", main="后台插图")');
+  await page.getByRole('button', { name: '运行预览', exact: true }).click();
+  await page.getByRole('button', { name: '后台生成，继续编辑', exact: true }).click();
+  await page.locator('.rplot-dialog').waitFor({ state: 'detached' });
+  const background = await page.evaluate(async () => {
+    const a = window.rplot, ed = a.ed, j = a.jobs;
+    const placeholder = ed.getJSON().content.find((n) => n.attrs?.rPlotTask);
+    if (!placeholder) throw Error('Missing background placeholder');
+    const pending = JSON.parse(placeholder.attrs.rPlotTask), uid = placeholder.attrs.uid;
+    const md = a.fromMarkdown(a.toMarkdown({ type: 'doc', content: [placeholder] }), true);
+    if (JSON.parse(md.content[0].attrs.rPlotTask).id !== pending.id) throw Error('Markdown lost pending task');
+    ed.commands.setTextSelection(2); ed.commands.insertContent('继续编辑');
+    const selection = ed.state.selection.from;
+    await j.waitRPlotJob(pending.id);
+    const node = ed.getJSON().content.find((n) => n.attrs?.uid === uid);
+    return { editable: ed.state.doc.textContent.includes('继续编辑'), samePosition: ed.state.selection.from === selection, complete: !!node?.attrs.rPlot && !node?.attrs.rPlotTask };
+  });
+  assert.equal(background.editable, true); assert.equal(background.samePosition, true); assert.equal(background.complete, true);
+  console.log('PASS close to background, preserve pending source, continue editing and fill same node without moving cursor');
+
+  const lifecycle = await page.evaluate(async () => {
+    const a = window.rplot, ed = a.ed, j = a.jobs;
+    const draft = { code: 'Sys.sleep(1); plot(1:3)', width: 12, height: 8, pointsize: 11, seed: 1, caption: '', captionEn: '', label: '' };
+    const attach = (d) => {
+      const id = j.startRPlotJob(d, a.useStore.getState().doc.id), attrs = j.pendingFigureAttrs(id, d);
+      ed.commands.insertContentAt(ed.state.doc.content.size, { type: 'figure', attrs });
+      j.attachRPlotJob(id, { docId: a.useStore.getState().doc.id, key: 'body', uid: attrs.uid });
+      return { id, attrs };
+    };
+    const deleted = attach(draft);
+    let pos; ed.state.doc.descendants((n, p) => { if (n.attrs.uid === deleted.attrs.uid) pos = p; });
+    ed.view.dispatch(ed.state.tr.delete(pos, pos + 1));
+    let notRevived = false;
+    try { await j.waitRPlotJob(deleted.id); } catch { notRevived = !ed.getJSON().content.some((n) => n.attrs?.uid === deleted.attrs.uid); }
+    const switched = attach(draft), original = a.useStore.getState().doc;
+    a.useStore.setState({ doc: { ...a.sampleDoc(), id: 'other-rplot-project' } });
+    const ready = await j.waitRPlotJob(switched.id);
+    const notCrossWritten = a.useStore.getState().doc.id === 'other-rplot-project' && !a.useStore.getState().doc.body.content.some((n) => n.attrs?.uid === switched.attrs.uid);
+    // React 切工程的提交前，登记表可能还留着另一个工程的编辑器；应回填工程数据而不是判作删除。
+    a.registerEditor('body', ed, { blocks: true, headings: true, docId: 'other-rplot-project' });
+    a.useStore.setState({ doc: original });
+    await j.waitRPlotJob(switched.id);
+    const restored = a.useStore.getState().doc.body.content.some((n) => n.attrs?.uid === switched.attrs.uid && n.attrs.rPlot);
+    ed.commands.setContent(a.useStore.getState().doc.body);
+    a.registerEditor('body', ed, { blocks: true, headings: true, docId: original.id });
+    const failed = attach({ ...draft, code: 'stop("intentional retry check")' });
+    try { await j.waitRPlotJob(failed.id); } catch { /* expected */ }
+    const node = ed.getJSON().content.find((n) => n.attrs?.uid === failed.attrs.uid), pending = JSON.parse(node.attrs.rPlotTask);
+    const retry = j.retryRPlotJob({ ...pending, draft: { ...pending.draft, code: 'plot(1:3)' } }, { docId: original.id, key: 'body', uid: failed.attrs.uid });
+    await j.waitRPlotJob(retry);
+    const retried = ed.getJSON().content.some((n) => n.attrs?.uid === failed.attrs.uid && n.attrs.rPlot && !n.attrs.rPlotTask);
+    const cancelled = attach({ ...draft, code: 'Sys.sleep(20); plot(1:3)' });
+    j.cancelRPlotJob(cancelled.id);
+    const cancelledState = JSON.parse(ed.getJSON().content.find((n) => n.attrs?.uid === cancelled.attrs.uid).attrs.rPlotTask).state;
+    a.closeEditor();
+    return { notRevived, deferred: ready.phase === 'ready', notCrossWritten, restored, failed: pending.state === 'failed', retried, cancelled: cancelledState === 'cancelled' };
+  });
+  assert.deepEqual(lifecycle, { notRevived: true, deferred: true, notCrossWritten: true, restored: true, failed: true, retried: true, cancelled: true });
+  console.log('PASS deleted placeholder stays deleted, project switch defers result, failure retries and cancellation persist');
+
   const recovery = await page.evaluate(async () => {
     const a = window.rplot;
     const stalled = a.createRPlot('while(TRUE) {}', { timeout: 1 }).catch((e) => /超时/.test(e.message));
@@ -154,6 +253,15 @@ try {
     return { timed, concurrent, recovered: !!r.plot.source };
   });
   assert.equal(recovery.timed, true); assert.equal(recovery.concurrent, true); assert.equal(recovery.recovered, true);
+  const cachedPackage = await page.evaluate(async () => {
+    const a = window.rplot; let hit = false;
+    const off = a.useRPackageLoad.subscribe((s) => { if (s.cached) hit = true; });
+    await a.createRPlot('library(patchwork); plot(1:3)', { width: 5, height: 3.5 }); off();
+    return hit;
+  });
+  assert.equal(cachedPackage, true);
+  assert.equal(remote.filter((u) => /patchwork_.*\.tgz$/.test(u)).length, 1);
+  assert.equal(local.filter((u) => u.endsWith('/rplot/library.data')).length, 1);
   assert.deepEqual(errors, []);
-  console.log('PASS concurrent drawing rejected, timeout terminates worker, next drawing recovers');
+  console.log('PASS timeout/cancellation recovery and package reuse without downloading again');
 } finally { await browser?.close(); await server.close(); }

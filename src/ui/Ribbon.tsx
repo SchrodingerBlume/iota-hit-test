@@ -42,7 +42,7 @@ import { FontFamilyPicker, FontSizePicker, FontColorButton, HighlightButton } fr
 import { useCompileState } from '../compiler/client';
 import { useMedia, SHORT } from './useMedia';
 import { TableSizeDialog, TableTextDialog, readTableDefaults, type TableDialogKind } from './TableInsert';
-import { RPlotDialog } from './RPlotDialog';
+import { RPlotInsertDialog } from './RPlotDialog';
 import { LengthInput } from './LengthInput';
 import { useLinkDialog } from './LinkDialog';
 import { HeaderFooterDialog, useHFDialog } from './HeaderFooterDialog';
@@ -566,7 +566,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                 {tableDlg === 'text' && <TableTextDialog onClose={() => setTableDlg(null)} onInsert={(t, h) => { setTableDlg(null); ins.insertTableFromText(t, h); afterCommand(); }} />}
                 <B title={tx("插入图片；也可将图片直接粘贴到正文中")} big icon={<Image20Regular />} disabled={none || !blocks} run={ins.insertFigure}>{tx("图片")}</B>
                 <B title={tx('用 R 代码绘图并插入')} big icon={<Image20Regular />} disabled={none || !blocks} run={() => setRPlotOpen(true)}>{tx('R 绘图')}</B>
-                {rPlotOpen && <RPlotDialog onClose={() => setRPlotOpen(false)} onApply={(attrs) => { if (ed && !ed.isDestroyed) { ed.chain().focus().insertContent({ type: 'figure', attrs }).run(); afterCommand(); } }} />}
+                {rPlotOpen && ed && activeKey && <RPlotInsertDialog editor={ed} richKey={activeKey} onClose={() => setRPlotOpen(false)} onInserted={afterCommand} />}
               </Group>
               <Group label={tx("链接与符号")}>
                 <B title={tx("插入链接（⌘K）")} big icon={<Link20Regular />} disabled={none} run={() => useLinkDialog.getState().open()}>{tx("链接")}</B>

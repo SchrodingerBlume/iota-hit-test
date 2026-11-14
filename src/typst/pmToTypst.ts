@@ -17,7 +17,7 @@
 import { mark, unmarked } from './sourcemap';
 import { theoremKind } from './theorem';
 import { lengthTypst } from '../model/length';
-import { rPlotOf } from '../rplot/files';
+import { pendingRPlotOf, rPlotOf } from '../rplot/files';
 
 /** 分图 / 伪代码的属性都是 JSON 串（与 eqdenote 的 rows 同一套路） */
 export function parseJsonArr<T>(v: unknown): T[] { if (Array.isArray(v)) return v as T[]; if (typeof v !== 'string' || !v) return []; try { const a = JSON.parse(v); return Array.isArray(a) ? a : []; } catch { return []; } }
@@ -443,6 +443,13 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
         const body = `context { import ${JSON.stringify(plot.path)}: r-figure; let w = measure(box(width: ${width})).width; let factor = w / (${plot.width * 72}pt) * 100%; scale(x: factor, y: factor, reflow: true, r-figure()) }`;
         return floatWrap(n, 'image', tag(opts, n, 'node', `#figure(\n  ${body}${notesOf(n, opts)},\n  caption: [${caption(n, opts)}],${placementArg(n)}\n)`) + (label ? ` <${label}>` : ''));
       }
+      const pending = pendingRPlotOf(n.attrs?.rPlotTask);
+      if (pending) {
+        const width = lengthTypst(n.attrs?.width ?? pending.draft.width, 'cm', '14cm');
+        const status = pending.state === 'failed' ? 'R 绘图未完成，可在编辑器中重试' : pending.state === 'cancelled' ? 'R 绘图已取消' : 'R 图正在后台生成，可以继续编辑';
+        const body = `context { let w = measure(box(width: ${width})).width; block(width: w, height: w * ${pending.draft.height / pending.draft.width}, fill: rgb("#edf4f8"), stroke: 0.5pt + rgb("#b8cfde"), radius: 5pt, inset: 12pt, align(center + horizon, text(size: 9pt, fill: rgb("#41647a"))[${escapeText(status)}])) }`;
+        return floatWrap(n, 'image', tag(opts, n, 'node', `#figure(\n  ${body},\n  caption: [${caption(n, opts)}],${placementArg(n)}\n)`) + (label ? ` <${label}>` : ''));
+      }
       // 一张合成图（(a)(b) 画在图里）配连排分图题：分图条目都没有图、母图有图 → 单图 + 图题里的 #subs
       if (subs.length && n.attrs?.image && !subs.some((s) => s.image)) {
         const letter = (i: number) => 'abcdefghijklmnopqrstuvwxyz'[i] ?? String(i + 1);
@@ -667,7 +674,7 @@ export interface RefTarget {
 /** 这个节点序列化时真会带着标签排出来吗：空图、空表、还没写公式、没内容的定理都发不出去，标签也就不存在 */
 export function emitsLabel(n: PMNode): boolean {
   switch (n.type) {
-    case 'figure': { const subs = parseSubs(n.attrs?.subs); return !!n.attrs?.image || !!rPlotOf(n.attrs?.rPlot) || subs.some((s) => s.image); }
+    case 'figure': { const subs = parseSubs(n.attrs?.subs); return !!n.attrs?.image || !!rPlotOf(n.attrs?.rPlot) || !!pendingRPlotOf(n.attrs?.rPlotTask) || subs.some((s) => s.image); }
     case 'tableFigure': return !!(n.content ?? []).find((c) => c.type === 'table' && (c.content ?? []).some((r) => r.type === 'tableRow'));
     case 'equation': { const src = String(n.attrs?.src ?? '').trim(); return n.attrs?.numbered !== false && !!src && mathReady(src); }
     case 'codeFigure': return (n.content ?? []).some((c) => c.type === 'codeBlock');
