@@ -1,0 +1,33 @@
+name: Build cetzDevice for webR
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wasm:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: r-wasm/actions
+          ref: v2
+          path: .r-wasm-actions
+      - name: Cross-compile cetzDevice 0.5.3.1 and dependencies
+        uses: ./.r-wasm-actions/build-rwasm
+        with:
+          packages: github::SchrodingerBlume/cetzDevice@cd8cdd701dd209757aceca22a3564a760c5b09a8
+          webr-image: ghcr.io/r-wasm/webr:v0.6.1
+          repo-path: _r-wasm
+          image-path: _r-wasm-image
+          strip: demo,doc,examples,help,html,include,tests,vignette
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cetzDevice-0.5.3.1-webR-0.6.1
+          path: |
+            _r-wasm/**
+            _r-wasm-image/**
