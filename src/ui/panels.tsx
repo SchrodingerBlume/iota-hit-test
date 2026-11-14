@@ -1,5 +1,6 @@
 // 其余的节：摘要、符号与缩略语、正文类富文本、参考文献、成果、答辩、页面设置。
-import { useMemo, useRef } from 'react';
+import { createContext, useContext, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useStore, type RichKey } from '../model/store';
 import { PAGE_DEFS, resolvePage } from '../model/pages';
 import { TriSeg, ON_OFF, SettingSwitch, TriSwitch } from './TriSwitch';
@@ -118,22 +119,26 @@ export function IndexPanel() {
   );
 }
 
-/** 正文、附录这种长页：开关不摆在编辑器上面，标题右边一个「内容 / 设置」切换，设置页单独一屏；编辑器切走时只是藏起来，不卸 */
+export const SectionToolbarContext = createContext<HTMLElement | null>(null);
+
+/** 正文、附录的切换放进编辑区右上角，独立于正文滚动；编辑器切走时只是藏起来，不卸。 */
 export function RichSection({ title, lead, richKey, headings, blocks, placeholder, extra, settings }: { title: string; lead?: string; richKey: RichKey; headings: boolean; blocks?: boolean; placeholder?: string; extra?: React.ReactNode; settings?: React.ReactNode }) {
   const part = richKey === 'body' ? 'body' : richKey === 'appendix' ? 'appendix' : 'other';
   const value = useStore((s) => s.doc[richKey]);
   const setRich = useStore((s) => s.setRich);
   const [tab, setTab] = useState<'content' | 'settings'>('content');
+  const toolbar = useContext(SectionToolbarContext);
+  const tabs = settings && (
+    <div className="page-tabs" role="tablist" aria-label={title}>
+      <button type="button" role="tab" aria-selected={tab === 'content'} className={tab === 'content' ? 'on' : ''} onClick={() => setTab('content')}>{tx("内容")}</button>
+      <button type="button" role="tab" aria-selected={tab === 'settings'} className={tab === 'settings' ? 'on' : ''} onClick={() => setTab('settings')}>{tx("设置")}</button>
+    </div>
+  );
   return (
     <>
       <div className="page-head">
         <h2>{title}</h2>
-        {settings && (
-          <div className="seg page-tabs" role="tablist">
-            <button type="button" role="tab" aria-selected={tab === 'content'} className={tab === 'content' ? 'on' : ''} onClick={() => setTab('content')}>{tx("内容")}</button>
-            <button type="button" role="tab" aria-selected={tab === 'settings'} className={tab === 'settings' ? 'on' : ''} onClick={() => setTab('settings')}>{tx("设置")}</button>
-          </div>
-        )}
+        {toolbar ? createPortal(tabs, toolbar) : tabs}
       </div>
       {lead && <p className="lead">{lead}</p>}
       {tab === 'settings' && settings}

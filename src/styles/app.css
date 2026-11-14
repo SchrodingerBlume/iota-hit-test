@@ -29,7 +29,10 @@
   --ok-soft: #e3f1e8;
   --warn: #b06300;
   --warn-soft: #fff1df;
-  --preview-bg: #e6e9eb;
+  --preview-day-bg: #e6e9eb;
+  --preview-night-bg: #404040;
+  --preview-auto-bg: var(--preview-day-bg);
+  --preview-bg: var(--preview-day-bg);
   --paper: #ffffff;
   --shadow-1: 0 1px 2px rgba(20, 30, 40, 0.06), 0 1px 1px rgba(20, 30, 40, 0.04);
   --shadow-2: 0 8px 28px rgba(20, 30, 40, 0.14), 0 2px 6px rgba(20, 30, 40, 0.06);
@@ -87,6 +90,7 @@
   --warn: #ffb95c;
   --warn-soft: rgba(252, 144, 0, 0.16);
   --preview-bg: #171717;
+  --preview-auto-bg: var(--preview-night-bg);
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-2: 0 12px 32px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.35);
   --shadow-page: 0 2px 4px rgba(0, 0, 0, 0.6), 0 10px 24px rgba(0, 0, 0, 0.5);
@@ -171,23 +175,30 @@ code { font-family: var(--mono); font-size: 0.92em; }
 .nav .nav-collapse svg { width: 16px; height: 16px; }
 
 /* overflow-anchor 关掉：设置页折行时浏览器会滚一下把锚点按住，和重排滑动动画打架 */
-.work { overflow: auto; overflow-x: hidden; overflow-anchor: none; min-width: 0; padding: 20px 24px 80px; background: var(--preview-bg); container-type: inline-size; }
+.work { position: relative; display: grid; grid-template-rows: minmax(0, 1fr); overflow: hidden; min-width: 0; min-height: 0; background: var(--preview-bg); container-type: inline-size; }
+.work[hidden] { display: none; }
+.work-tools { position: absolute; top: 0; left: 0; right: 0; z-index: 8; height: 40px; display: flex; align-items: center; justify-content: flex-end; padding: 0 12px; min-width: 0; pointer-events: none; }
+.work-tools > * { pointer-events: auto; }
+.work-scroll { overflow: auto; overflow-x: hidden; overflow-anchor: none; min-height: 0; padding: 58px 24px 80px; scroll-padding-top: 48px; }
 .work-inner { animation: rise var(--base) var(--ease) both; }
 /* 编辑 / 分栏 / 预览切换：刚露面的那一栏淡入 */
 .work, .preview { animation: fade var(--base) var(--ease); }
 .work h2 { margin: 0 0 4px; font-size: 19px; font-weight: 650; letter-spacing: 0.01em; }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .page-head h2 { margin: 0; }
-.page-tabs { flex: none; }
-.page-tabs button { padding: 3px 12px; font-size: 12.5px; white-space: nowrap; }
+.page-tabs { display: inline-flex; flex: none; gap: 6px; }
+.page-tabs button { height: 28px; padding: 3px 12px; border: 1px solid var(--line-2); border-radius: var(--r-pill); background: var(--panel); box-shadow: var(--shadow-1); color: var(--ink-2); font-size: 12.5px; white-space: nowrap; transition: background-color var(--fast) var(--ease), border-color var(--fast) var(--ease), color var(--fast) var(--ease); }
+.page-tabs button:hover { background: var(--panel-2); border-color: var(--muted); color: var(--ink); }
+.page-tabs button.on { background: color-mix(in srgb, var(--accent) 18%, var(--panel)); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .work .lead { color: var(--muted); margin: 0 0 16px; max-width: 72ch; }
 
-.preview { border-left: 1px solid var(--line); display: grid; grid-template-rows: 40px 1fr; min-height: 0; background: var(--preview-bg); position: relative; container-type: inline-size; }
-.pane-bar { display: flex; align-items: center; gap: 8px; padding: 0 12px; background: var(--panel); border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.preview { border-left: 1px solid var(--line); display: grid; grid-template-rows: minmax(0, 1fr); min-height: 0; background: var(--preview-bg); position: relative; container-type: inline-size; }
+.pane-bar { display: flex; align-items: center; gap: 8px; padding: 0 12px; background: transparent; font-size: 12px; color: var(--muted); }
 .pane-title { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
 .pane-title svg { width: 14px; height: 14px; color: var(--accent); }
 .pane-bar .spacer { flex: 1; }
-.preview-scroll { overflow: auto; padding: 18px; touch-action: pan-x pan-y; overscroll-behavior: contain; }
+.pane-bar .zoom-tools, .pane-bar .page-layout-tools { display: inline-flex; flex: none; align-items: center; gap: 4px; }
+.preview-scroll { overflow: auto; padding: 58px 18px 18px; scroll-padding-top: 48px; touch-action: pan-x pan-y; overscroll-behavior: contain; }
 .pane-bar .per-row { min-width: 24px; justify-content: center; }
 .pane-bar .per-row.on { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
 .preview-canvas { margin: 0 auto; }
@@ -267,7 +278,8 @@ code { font-family: var(--mono); font-size: 0.92em; }
 @keyframes fc-vanish { to { opacity: 0; } }
 @keyframes fc-in { from { opacity: 0; transform: translateY(46px) rotateX(-9deg) scale(.985); } 60% { opacity: 1; } }
 .fc-body { position: absolute; inset: 9% 11% 8%; color: #202020; }
-.preview[data-bg="night"] .fc-body { filter: invert(.85) hue-rotate(180deg); }
+.preview[data-bg="night"] .fc-body,
+:root[data-theme="dark"] .preview[data-bg="default"] .fc-body { filter: invert(.85) hue-rotate(180deg); }
 .fc-num { position: absolute; bottom: 3.5%; left: 0; right: 0; text-align: center; font: 8px var(--serif); color: #888; }
 .fc-cur .fc-num { animation: fade 600ms 900ms var(--ease) both; }
 .fc-line { position: relative; margin-bottom: 8px; --d: calc(1200ms / var(--n) * 1.6); --dl: calc(1200ms * var(--i) / var(--n)); }
@@ -708,8 +720,8 @@ html.theme-anim :not(svg, svg *) { transition: background-color 320ms var(--ease
   /* 底部那条模式栏浮在上面，Agent 的输入框得让出来 */
   .main.is-compact .agent-pane { padding-bottom: 58px; }
   .main.is-compact .preview { border-left: 0; }
-  .work { padding: 12px 12px 72px; }
-  .preview-scroll { padding: 8px; padding-bottom: 72px; }
+  .work-scroll { padding: 48px 12px 72px; }
+  .preview-scroll { padding: 48px 8px 72px; }
   .rb-proj, .rb-trailing .status, .rb-where, .pane-bar .muted { display: none; }
   .brand b, .pane-title, .mobile-bar button, .rb-tablist [role=tab] { white-space: nowrap; }
   .brand { margin-right: 2px; }
@@ -726,7 +738,7 @@ html.theme-anim :not(svg, svg *) { transition: background-color 320ms var(--ease
   .rb-trailing .theme-btn { display: none; }
 }
 @media (max-height: 520px) {
-  .work { padding-top: 8px; }
+  .work-scroll { padding-top: 48px; }
 }
 
 /* ── 我的文档（照 Word 的「开始」页）───────────────────────── */
@@ -1486,9 +1498,9 @@ body.is-dragging-window iframe, body.is-dragging-window .preview-stage { pointer
 .rb-dialog { max-width: 720px; }
 .rb-dialog .card { box-shadow: none; margin-bottom: 0; }
 
-/* 预览栏固定为 40px，与编辑区分栏顶边保持齐平；窄栏通过隐藏次要项收缩。 */
-.preview { grid-template-rows: 40px minmax(0, 1fr); }
-.preview .pane-bar { position: relative; flex-wrap: nowrap; height: 40px; min-height: 40px; padding-block: 0; overflow: hidden; }
+/* 两侧工具浮在可滚动内容上；只给按钮底色，整行透明，空白处允许操作下方内容。 */
+.preview .pane-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 8; flex-wrap: nowrap; height: 40px; min-height: 40px; padding-block: 0; overflow: hidden; pointer-events: none; }
+.preview .pane-bar > :not(.spacer, .preview-progress) { pointer-events: auto; }
 /* 预览栏：页码 / 字数是状态栏那种可点的字，弹出的是 Word 的「字数统计」「缩放」 */
 .pv-pages, .pv-link, .preview .pane-title { white-space: nowrap; }
 .pv-link { border: 0; background: none; padding: 2px 4px; margin: 0 -2px; border-radius: var(--r-s); color: var(--ink-2); font: inherit; cursor: pointer; }
@@ -1511,12 +1523,17 @@ body.is-dragging-window iframe, body.is-dragging-window .preview-stage { pointer
 .pv-zoom-pct { display: flex; align-items: center; gap: 6px; padding: 8px 14px 0; border-top: 1px solid var(--line); margin-top: 6px; }
 .pv-zoom-btn { width: 52px; justify-content: center; }
 /* 预览底色：整块区域的颜色 + 纸的颜色；夜间把版面反色 */
-.preview[data-bg="day"] { --preview-bg: #e0e0e0; }
-.preview[data-bg="night"] { --preview-bg: #404040; --paper: #1a1a1a; }
-.preview[data-bg="night"] .preview-doc svg.typst-doc { filter: invert(0.85) hue-rotate(180deg); }
+.preview[data-bg="day"], .preview[data-bg="default"] { --preview-bg: var(--preview-day-bg); --paper: #ffffff; }
+.preview[data-bg="night"], :root[data-theme="dark"] .preview[data-bg="default"] { --preview-bg: var(--preview-night-bg); --paper: #1a1a1a; }
+.preview[data-bg="night"] .preview-doc svg.typst-doc,
+:root[data-theme="dark"] .preview[data-bg="default"] .preview-doc svg.typst-doc { filter: invert(0.85) hue-rotate(180deg); }
 .preview[data-bg="eye"] { --preview-bg: #a8cfb0; --paper: #c7edcc; }
 .preview[data-bg="parchment"] { --preview-bg: #c8ab7e; --paper: #f2e6d0; }
-.preview .pane-bar .btn { flex-shrink: 0; }
+.preview .pane-bar .btn, .preview .pane-bar .pv-link { flex-shrink: 0; height: 28px; border: 1px solid var(--line-2); border-radius: var(--r-pill); background: var(--panel); box-shadow: var(--shadow-1); }
+.preview .pane-bar .btn:hover, .preview .pane-bar .pv-link:hover { background: var(--panel-2); }
+.preview .pane-bar .btn-icon, .preview .pane-bar .per-row { width: 28px; min-width: 28px; padding: 0; border-radius: 50%; }
+.preview .pane-bar .per-row.on { background: color-mix(in srgb, var(--accent) 18%, var(--panel)); border-color: var(--accent); }
+.preview .pane-bar .pv-link { padding-inline: 8px; margin: 0; }
 .preview .pane-bar .preview-progress { top: auto; bottom: -1px; height: 3px; z-index: 5; }
 
 .editor-mode { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
@@ -1938,6 +1955,15 @@ body.is-dragging-window iframe, body.is-dragging-window .preview-stage { pointer
 .rplot-files button { padding: 2px 7px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--panel-2); color: var(--ink-2); font: 11px var(--mono); cursor: pointer; }
 .rplot-work { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
 .rplot-code { width: 100%; min-height: 300px; max-height: 55vh; resize: vertical; padding: 10px; box-sizing: border-box; border: 1px solid var(--line-2); border-radius: var(--r-s); background: var(--panel-2); color: var(--ink); font: 12px/1.6 var(--mono); tab-size: 2; }
+.rplot-code:has(.cm-editor) { height: 340px; padding: 0; overflow: hidden; resize: vertical; }
+.rplot-code { --r-code-keyword: #713c91; --r-code-string: #a33d15; --r-code-number: #136642; }
+:root[data-theme="dark"] .rplot-code { --r-code-keyword: #c7a4ed; --r-code-string: #eaa36e; --r-code-number: #80ccad; }
+.rplot-options select { max-width: 165px; padding: 5px 22px 5px 7px; border: 1px solid var(--line-2); border-radius: var(--r-s); background-color: var(--panel); color: var(--ink); }
+.rplot-language-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-bottom: 8px; font: 11px/1.5 var(--sans); }
+.rplot-language-tools > span { flex: 1; }
+.rplot-language-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0; color: var(--muted); font: 11px/1.5 var(--sans); }
+.rplot-language-status .rplot-error { flex-basis: 100%; margin: 0; }
+.rplot-lsp-hover { max-width: min(500px, 70vw); max-height: 250px; overflow: auto; margin: 0; padding: 10px; white-space: pre-wrap; font: 12px/1.6 var(--mono); }
 .rplot-preview { min-height: 260px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: var(--r-s); overflow: auto; background: var(--panel-2); }
 .rplot-preview img { max-width: 100%; max-height: 50vh; object-fit: contain; background: white; }
 .rplot-caption { display: grid; grid-template-columns: 1fr 1fr 160px; gap: 8px; margin-top: 10px; }

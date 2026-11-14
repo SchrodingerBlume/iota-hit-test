@@ -182,8 +182,10 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
     const pageH = parseFloat(first?.getAttribute('data-page-height') ?? '0') || vb.height;
     if (!vb.width || !pageH) return;
     // 100% 时版面宽 = 视口内宽；一页的像素高 = 版面宽 × 页高 / 版面宽（用户单位）
-    const contentW = sc.clientWidth - 36;
-    const z = (sc.clientHeight - 44) / (contentW * pageH / vb.width);
+    const padding = getComputedStyle(sc);
+    const contentW = sc.clientWidth - parseFloat(padding.paddingLeft) - parseFloat(padding.paddingRight);
+    const contentH = sc.clientHeight - parseFloat(padding.paddingTop) - parseFloat(padding.paddingBottom) - 8;
+    const z = contentH / (contentW * pageH / vb.width);
     zoomTo(z);
   };
   /** 跳到第 n 页（滚到那页顶上留一点边） */
@@ -193,7 +195,7 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
     if (!sc || !svg || !canvas || !g) return;
     const scale = svg.getBoundingClientRect().width / (svg.viewBox.baseVal.width || 1);
     const canvasTop = canvas.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop;
-    sc.scrollTo({ top: canvasTop + parseFloat(g.getAttribute('data-layout-y') ?? '0') * scale - 8, behavior: 'smooth' });
+    sc.scrollTo({ top: canvasTop + parseFloat(g.getAttribute('data-layout-y') ?? '0') * scale - 48, behavior: 'smooth' });
   };
   const perRow = usePreviewZoom((s) => s.perRow);
   const setPerRow = usePreviewZoom((s) => s.setPerRow);
@@ -378,14 +380,14 @@ export function Preview({ onRefresh, refreshDisabled = false }: { onRefresh: () 
         {compiling && <span className="compiling-note muted">{tx("正在排版…")}</span>}
         <span className="spacer" />
         <BgMenu />
-        <span className="join zoom-tools">
+        <span className="zoom-tools">
           <button type="button" className="btn btn-xs btn-icon" title={tx("缩小（也可使用触控板手势或 ⌘/Ctrl + 滚轮）")} onClick={() => zoomBy(1 / 1.1)}><ZoomOut /></button>
           <ZoomMenu zoom={zoom} zoomTo={zoomTo} fitPage={fitPage} labelRef={zoomLabelRef} />
           <button type="button" className="btn btn-xs btn-icon" title={tx("放大（也可使用触控板手势或 ⌘/Ctrl + 滚轮）")} onClick={() => zoomBy(1.1)}><ZoomIn /></button>
           <button type="button" className="btn btn-xs btn-icon" title={tx("页宽")} onClick={() => zoomTo(1)}><Maximize2 /></button>
           <button type="button" className="btn btn-xs btn-icon" title={tx("整页：在窗口中显示一整页")} onClick={fitPage}><Minimize2 /></button>
         </span>
-        <span className="join page-layout-tools" title={tx("设置多页视图中每行显示的页数")}>
+        <span className="page-layout-tools" title={tx("设置多页视图中每行显示的页数")}>
           {([1, 2, 3] as const).map((n) => <button key={n} type="button" className={`btn btn-xs per-row ${perRow === n ? 'on' : ''}`} title={tx("每行 {{n}} 页", { n: n })} onClick={() => setPerRow(n)}>{n}</button>)}
         </span>
         <div className="preview-progress" aria-hidden />

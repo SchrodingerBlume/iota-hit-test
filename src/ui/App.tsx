@@ -29,7 +29,7 @@ import { DisclaimerGate, DisclaimerText, DevBadge, useDisclaimer } from './Discl
 import { useFontState } from '../fonts/userFonts';
 import { SettingsPanel } from './SettingsPanel';
 import { InfoPanel, CoverPanel, TitlepagePanel } from './InfoPanel';
-import { AbstractPanel, NomenclaturePanel, RichSection, BodySettings, BibPanel, DefensePanel, DeclarationsPanel, TocPanel, IndexPanel, PageSettings, OpenrightSwitch } from './panels';
+import { AbstractPanel, NomenclaturePanel, RichSection, BodySettings, BibPanel, DefensePanel, DeclarationsPanel, TocPanel, IndexPanel, PageSettings, OpenrightSwitch, SectionToolbarContext } from './panels';
 import { Preview } from './Preview';
 import { usePreviewSurface } from './PreviewEditLayer';
 import { useTheme, type ThemePref } from './theme';
@@ -294,6 +294,7 @@ export function App() {
   const { doc, section, loaded, view, setView, setSection, load, setImages } = useStore();
   const compile = useCompileState();
   const [refresh, setRefresh] = useState(0);
+  const [sectionToolbar, setSectionToolbar] = useState<HTMLDivElement | null>(null);
   const previewFocused = usePreviewSurface((s) => s.focused);
   const composing = useInputState((s) => s.composing);
   useAutoCompile(doc, loaded && view === 'editor', refresh, previewFocused, composing);
@@ -545,10 +546,15 @@ export function App() {
           </nav>
           {!compact && <Fold className="nav-toggle" open={navOpen} title={navOpen ? tx("收起左侧导航") : tx("展开左侧导航")} onClick={() => setNavOpen(!navOpen)} />}
           <section className="work" hidden={!shown.includes('editor')}>
-            {/* 批注栏够宽才放右边，不够就叠到下面：按 .work 的宽（容器查询），不按窗口 */}
-            <div className={`work-cols ${commentsOpen ? 'has-comments' : ''}`}>
-              {loaded ? <div className="work-inner" key={`${doc.id}:${section}`} ref={reflowRef}>{panel}</div> : <div className="muted">{tx("正在打开文档…")}</div>}
-              {commentsOpen && loaded && <CommentsPane />}
+            <div className="work-tools" ref={setSectionToolbar} />
+            <div className="work-scroll">
+              {/* 批注栏够宽才放右边，不够就叠到下面：按 .work 的宽（容器查询），不按窗口 */}
+              <div className={`work-cols ${commentsOpen ? 'has-comments' : ''}`}>
+                <SectionToolbarContext.Provider value={sectionToolbar}>
+                  {loaded ? <div className="work-inner" key={`${doc.id}:${section}`} ref={reflowRef}>{panel}</div> : <div className="muted">{tx("正在打开文档…")}</div>}
+                </SectionToolbarContext.Provider>
+                {commentsOpen && loaded && <CommentsPane />}
+              </div>
             </div>
           </section>
           <LinkDialogHost />

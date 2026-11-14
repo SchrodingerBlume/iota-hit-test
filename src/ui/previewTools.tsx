@@ -81,9 +81,10 @@ export function ZoomMenu({ zoom, zoomTo, fitPage, labelRef, children }: { zoom: 
 export type PreviewBg = 'default' | 'day' | 'night' | 'eye' | 'parchment';
 const BG_KEY = 'iota4web-preview-bg';
 export const BG_OPTIONS: { mode: PreviewBg; label: () => string; swatch: string }[] = [
-  { mode: 'default', label: () => tx("默认"), swatch: 'var(--preview-bg)' },
-  { mode: 'day', label: () => tx("日间"), swatch: '#e0e0e0' },
-  { mode: 'night', label: () => tx("夜间"), swatch: '#404040' },
+  // 保留旧的存储值 default，已有偏好直接对应新的“自动”档。
+  { mode: 'default', label: () => tx("自动"), swatch: 'var(--preview-auto-bg)' },
+  { mode: 'day', label: () => tx("日间"), swatch: 'var(--preview-day-bg)' },
+  { mode: 'night', label: () => tx("夜间"), swatch: 'var(--preview-night-bg)' },
   { mode: 'eye', label: () => tx("护眼"), swatch: '#c7edcc' },
   { mode: 'parchment', label: () => tx("羊皮纸"), swatch: '#f2e6d0' },
 ];
