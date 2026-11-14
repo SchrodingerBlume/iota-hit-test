@@ -44,8 +44,8 @@ iota-hit 在线编辑器 · 开源许可与声明
 · iota-hit（哈工大学位论文 Typst 模板） 0.1.0（187c573-dirty-4a30f5a1）
     版权：模板作者
     许可：LPPL-1.3c
-    来源：本机 ../iota-hit，原样打包
-    修改：无
+    来源：本机 ../iota-hit
+    修改：src/axes.typ 兼容修复（degree-type-none，见 scripts/patch-iota-package.mjs）
 
 · React 19.3.0
     版权：Meta Platforms, Inc.

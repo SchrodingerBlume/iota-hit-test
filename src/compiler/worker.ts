@@ -37,15 +37,16 @@ class StaticPackageRegistry {
 async function fetchCached(url: string, version: string | number | null, onBytes?: (n: number) => void): Promise<Uint8Array> {
   let cache: Cache | undefined;
   try { cache = await caches.open(CACHE); } catch { cache = undefined; }
-  const key = version == null ? url : `${url}?v=${version}`;
+  const key = version == null ? url : `${url}${url.includes('?') ? '&' : '?'}v=${encodeURIComponent(String(version))}`;
+  const packageVersion = typeof version === 'string' && /^[0-9a-f]{12}$/i.test(version) ? version : undefined;
   if (cache && version != null) for (const r of await cache.keys()) if (r.url !== key && (r.url === url || r.url.startsWith(`${url}?v=`))) void cache.delete(r);
   const cached = cache && (await cache.match(key));
-  if (cached) {
+  if (cached && (!packageVersion || cached.headers.get('X-Iota-Package-Version') === packageVersion)) {
     const buf = new Uint8Array(await cached.arrayBuffer());
     onBytes?.(buf.length);
     return buf;
   }
-  const res = await fetch(url);
+  const res = await fetch(key);
   if (!res.ok) throw new Error(t("下载失败 {{url}}: {{status}}", { url: url, status: res.status }));
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -65,7 +66,7 @@ async function fetchCached(url: string, version: string | number | null, onBytes
   const out = new Uint8Array(total);
   let off = 0;
   for (const c of chunks) { out.set(c, off); off += c.length; }
-  if (cache) { try { await cache.put(key, new Response(out, { headers: { 'Content-Type': 'application/octet-stream' } })); } catch { /* 配额不够就算了 */ } }
+  if (cache) { try { await cache.put(key, new Response(out, { headers: { 'Content-Type': 'application/octet-stream', ...(packageVersion ? { 'X-Iota-Package-Version': packageVersion } : {}) } })); } catch { /* 配额不够就算了 */ } }
   return out;
 }
 

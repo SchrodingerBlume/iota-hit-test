@@ -17,6 +17,7 @@ interface Profile {
   };
 }
 export const REPORT_TEMPLATE = data.template;
+export const REPORT_PATCHES = data.patches;
 export const isDoctorInterimForm = (s: Settings) => s.campus === 'shenzhen' && s.degreeLevel === 'doctor' && s.stage === 'interim';
 export function reportProfile(s: Settings): Profile {
   return (data.profiles as unknown as Record<string, Profile>)[[s.campus, s.degreeLevel, s.stage, s.lang, s.form].join('/')];

@@ -44,7 +44,7 @@ const rows = [
   ['Typst', '0.15.1', 'Typst GmbH 及贡献者', 'Apache-2.0', 'https://github.com/typst/typst', '有修改（见上）'],
   ['typst-with-msword-linebreaks', fork, '同 Typst', 'Apache-2.0', '本机分支，Typst 的派生', '有修改（合并）'],
   ['typst.ts（编译器 / 渲染器 wasm 与 JS 胶水）', `${pkgVersion('@myriaddreamin/typst.ts')} / 提交 ${commit}`, 'Myriad Dreamin', 'Apache-2.0', 'https://github.com/Myriad-Dreamin/typst.ts', '有修改（lib.rs、patch.mjs）'],
-  ['iota-hit（哈工大学位论文 Typst 模板）', `${manifest.iotaHit}（${manifest.iotaHitCommit ?? ''}）`, '模板作者', 'LPPL-1.3c', '本机 ../iota-hit，原样打包', '无'],
+  ['iota-hit（哈工大学位论文 Typst 模板）', `${manifest.iotaHit}（${manifest.iotaHitCommit ?? ''}）`, '模板作者', 'LPPL-1.3c', '本机 ../iota-hit', manifest.iotaHitPatches?.length ? `src/axes.typ 兼容修复（${manifest.iotaHitPatches.join('、')}，见 scripts/patch-iota-package.mjs）` : '无'],
   ['React', pkgVersion('react'), 'Meta Platforms, Inc.', 'MIT', 'https://react.dev', '无'],
   ['webR（R 的 WebAssembly 运行时，首次 R 绘图才加载）', '0.6.1', 'R Core Team、Lionel Henry、George Stagg 及 webR 贡献者', 'GPL-3.0-or-later / MIT，详见 rplot/WEBR-LICENSE.md', 'https://github.com/r-wasm/webr', '固定版本随站分发，使用 PostMessage worker 通道'],
   ['cetzDevice（R 图形设备）', '0.5.3.1', 'Andrew Junhao Wu 及贡献者', 'GPL-3.0-or-later', 'https://github.com/SchrodingerBlume/cetzDevice', 'C 设备交叉编译为 Wasm；字体度量改接站内 Typst/Wasm，适配源码 src/rplot/adapter.R；原包源码 rplot/cetzDevice-0.5.3.1-source.tar.gz'],

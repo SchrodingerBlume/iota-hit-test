@@ -1,5 +1,8 @@
 {
   "template": "187c573-dirty-4a30f5a1",
+  "patches": [
+    "degree-type-none"
+  ],
   "profiles": {
     "harbin/bachelor/proposal/zh/dissertation": {
       "labels": {

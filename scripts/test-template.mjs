@@ -79,8 +79,9 @@ try {
     } finally { world.free(); }
   };
   const { buildDocx } = await server.ssrLoadModule('/src/export/docx/build.ts');
-  const { REPORT_TEMPLATE, reportProfile } = await server.ssrLoadModule('/src/export/docx/reports.ts');
+  const { REPORT_TEMPLATE, REPORT_PATCHES, reportProfile } = await server.ssrLoadModule('/src/export/docx/reports.ts');
   assert.equal(REPORT_TEMPLATE, manifest.iotaHitCommit, 'Word 报告数据必须与打包模板同步');
+  assert.deepEqual(REPORT_PATCHES, manifest.iotaHitPatches ?? [], 'Word 报告数据必须包含相同的模板兼容补丁');
   function glyphFixture(name, source, check) {
     compiler.addSource('/glyph-fixture.typ', `#set text(font: "TeX Gyre Termes", size: 8pt)\n${source}`);
     const world = raw.snapshot(undefined, '/glyph-fixture.typ', []);
@@ -116,9 +117,13 @@ try {
   });
   const cases = [
     ['master-final', {}], ['doctor-final', { degreeLevel: 'doctor' }],
+    ['master-final-hidden', { degreeType: 'none' }],
     ['bachelor-final', { degreeLevel: 'bachelor' }], ['hass-final', { category: 'hass' }],
     ['english-final', { lang: 'en' }], ['harbin-proposal', { stage: 'proposal' }],
     ['harbin-interim', { stage: 'interim' }],
+    ['harbin-practice-interim-auto', { stage: 'interim', form: 'practice', degreeType: 'auto' }],
+    ['harbin-practice-interim-professional', { stage: 'interim', form: 'practice', degreeType: 'professional' }],
+    ['harbin-practice-interim-hidden', { stage: 'interim', form: 'practice', degreeType: 'none' }],
     ['sz-bachelor-proposal', { campus: 'shenzhen', degreeLevel: 'bachelor', stage: 'proposal' }],
     ['sz-master-proposal', { campus: 'shenzhen', stage: 'proposal' }],
     ['sz-doctor-proposal', { campus: 'shenzhen', degreeLevel: 'doctor', stage: 'proposal' }],
@@ -251,6 +256,7 @@ try {
         assert.ok(!/="(?:NaN|Infinity|undefined)"/.test(xml), `${name}: ${entry.name} 属性无效`);
       }
       const xml = await zip.file('word/document.xml').async('string');
+      if (name === 'master-final-hidden') assert.ok(!xml.includes('（学术学位论文）') && !xml.includes('（专业学位论文）'), '不显示学位类别时 Word 封面也不能保留该行');
       if (name === 'word-inline-format') {
         const runs = [];
         const walk = node => { if (!node || typeof node !== 'object') return; if (node['w:t']?._text === 'word-format-sample') runs.push(node); Object.values(node).forEach(v => Array.isArray(v) ? v.forEach(walk) : walk(v)); };

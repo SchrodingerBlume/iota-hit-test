@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import * as tar from 'tar';
 import { execFileSync } from 'node:child_process';
 import { templateRev } from './template-rev.mjs';
+import { applyIotaCompatibility } from './patch-iota-package.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -100,10 +101,11 @@ async function pack(ns, name, version, dir) {
   const outName = `${ns}-${name}-${version}.tar.gz`;
   const outPath = path.join(outDir, outName);
   await tar.c({ gzip: true, file: outPath, cwd: dir, portable: true, mtime: new Date(0) }, files);
+  const patches = ns === 'local' && name === 'iota-hit' ? await applyIotaCompatibility(outPath) : [];
   const size = fs.statSync(outPath).size;
   const sha = crypto.createHash('sha256').update(fs.readFileSync(outPath)).digest('hex').slice(0, 12);
   console.log(`  ${outName}  ${(size / 1024).toFixed(0)} KB  (${files.length} 个文件)`);
-  return { namespace: ns, name, version, file: outName, size, sha, deps: scanImports(dir, files) };
+  return { namespace: ns, name, version, file: outName, size, sha, ...(patches.length ? { patches } : {}), deps: scanImports(dir, files) };
 }
 
 async function main() {
@@ -138,7 +140,7 @@ async function main() {
   const total = manifest.reduce((s, m) => s + m.size, 0);
   fs.writeFileSync(
     path.join(outDir, 'manifest.json'),
-    JSON.stringify({ iotaHit: iotaVersion, iotaHitCommit: gitHead(iotaDir), packages: manifest.map(({ deps, ...m }) => m) }, null, 2),
+    JSON.stringify({ iotaHit: iotaVersion, iotaHitCommit: gitHead(iotaDir), iotaHitPatches: first.patches ?? [], packages: manifest.map(({ deps, ...m }) => m) }, null, 2),
   );
   console.log(`共 ${manifest.length} 个包，${(total / 1024 / 1024).toFixed(1)} MB`);
   execFileSync(process.execPath, [path.join(here, 'bundle-word-reports.mjs')], { stdio: 'inherit' });

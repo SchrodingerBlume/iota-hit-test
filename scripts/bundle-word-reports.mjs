@@ -74,7 +74,7 @@ ${profiles.join('\n')}`;
     if (errors.length) throw new Error(JSON.stringify(errors));
     values = JSON.parse(world.query(0, '<word-report-data>', 'value'));
   } finally { world.free(); }
-  const out = { template: manifest.iotaHitCommit, profiles: Object.fromEntries(values.map(({ key, ...value }) => [key, value])) };
+  const out = { template: manifest.iotaHitCommit, patches: manifest.iotaHitPatches ?? [], profiles: Object.fromEntries(values.map(({ key, ...value }) => [key, value])) };
   fs.writeFileSync(path.join(root, 'src/export/docx/report-data.json'), JSON.stringify(out, null, 2) + '\n');
   console.log(`Word report profiles: ${values.length}, template ${manifest.iotaHitCommit}`);
 } finally { fs.rmSync(dir, { recursive: true, force: true }); }

@@ -116,7 +116,7 @@ function wrapTracked(t: string, size: number, bold: boolean, latin: boolean): st
  *  空行数（英文题目下、作者下、校名上）与英文题目字号（二号放不下再小二）照模板的打分搜出来 */
 export function coverPage(doc: ThesisDoc, _top: number): Paragraph[] {
   const s = doc.settings;
-  const grad = s.degreeLevel !== 'bachelor';
+  const showDegree = s.degreeLevel !== 'bachelor' && s.degreeType !== 'none';
   const title = lines(pick(doc, 'cover', 'title')).join('\n');
   const subtitle = pick(doc, 'cover', 'subtitle');
   const titleEn = lines(pick(doc, 'cover', 'titleEn')).join(' ') + (pick(doc, 'cover', 'subtitleEn') ? `: ${pick(doc, 'cover', 'subtitleEn')}` : '');
@@ -125,7 +125,7 @@ export function coverPage(doc: ThesisDoc, _top: number): Paragraph[] {
   const cjkBlank = gapOf(1, XS, false), latinBlank = gapOf(1, XS, true);
   // 英文题目以上那一块的高：squeeze 0/1/2 逐级去掉题目下的两个空行
   const uptoEn = (enSize: number, squeeze: number, zh = title, sub = subtitle, en = titleEn) =>
-    3 * latinBlank + lineOf(1, XY, false) + 2 * cjkBlank + (grad ? lineOf(1, XE, false) + 2 * cjkBlank : 0)
+    3 * latinBlank + lineOf(1, XY, false) + 2 * cjkBlank + (showDegree ? lineOf(1, XE, false) + 2 * cjkBlank : 0)
     + 12 + linesOf(zh, ER, true) * lineOf(1, ER, false, true) + (squeeze < 2 ? cjkBlank : 0) + (squeeze < 1 ? cjkBlank : 0)
     + (sub ? linesOf(`——${sub}`, XE, true) * lineOf(1, XE, false) : 0)
     + 12 + linesOf(en, enSize, true, true) * lineOf(1.25, enSize, true);
@@ -169,7 +169,7 @@ export function coverPage(doc: ThesisDoc, _top: number): Paragraph[] {
     E(24, { latinMark: true }), E(24, { latinMark: true }), E(24, { latinMark: true }),
     C(DOC_TYPE[s.degreeLevel], XY * 2, { b: true }),
     E(24, { jc: AlignmentType.CENTER }), E(24, { jc: AlignmentType.CENTER }),
-    ...(grad ? [C(`（${kind}学位论文）`, XE * 2, { b: true }), E(24, { jc: AlignmentType.CENTER }), E(24, { jc: AlignmentType.CENTER })] : []),
+    ...(showDegree ? [C(`（${kind}学位论文）`, XE * 2, { b: true }), E(24, { jc: AlignmentType.CENTER }), E(24, { jc: AlignmentType.CENTER })] : []),
     C(title, ER * 2, { zh: FONT.hei, before: 240, grid: true }),
     ...(squeeze < 2 ? [E(24, { jc: AlignmentType.CENTER })] : []), ...(squeeze < 1 ? [E(24, { jc: AlignmentType.CENTER })] : []),
     ...(subtitle ? [C(`——${subtitle}`, XE * 2, { zh: FONT.hei, left: 4 * XE * PT })] : []),
