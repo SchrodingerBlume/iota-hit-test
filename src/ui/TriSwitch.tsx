@@ -18,28 +18,30 @@ interface SegProps<V> {
   /** 固定为某值时也提示自动档会是什么 */
   showAutoWhenFixed?: boolean;
   className?: string;
+  disabled?: boolean;
 }
 
-export function TriSeg<V>({ label, hint, choices, value, auto, onChange, showAutoWhenFixed = false, className }: SegProps<V>) {
+export function TriSeg<V>({ label, hint, choices, value, auto, onChange, showAutoWhenFixed = false, className, disabled = false }: SegProps<V>) {
   const isAuto = value === 'auto';
   const labelOf = (v: V) => choices.find((c) => c.value === v)?.label ?? String(v);
   const toneOf = (v: V) => choices.find((c) => c.value === v)?.tone ?? 'accent';
   const eff = isAuto ? auto.value : (value as V);
+  const unavailable = disabled ? auto.reason : choices.find(c => c.value === value && c.disabled)?.hint;
   return (
-    <div className={`triseg ${className ?? ''}`}>
-      <div className="triseg-lab" title={hint}>{label}</div>
-      <div className="seg triseg-seg" role="radiogroup" aria-label={label}>
-        <button type="button" role="radio" aria-checked={isAuto} className={`auto ${isAuto ? 'on' : ''}`} onClick={() => onChange('auto')} title={t("自动：{{reason}}", { reason: auto.reason })}>
+    <div className={`triseg ${disabled ? 'is-disabled' : ''} ${className ?? ''}`}>
+      <div className="triseg-lab" title={disabled ? auto.reason : hint}>{label}</div>
+      <div className="seg triseg-seg" role="radiogroup" aria-label={label} aria-disabled={disabled || undefined}>
+        <button type="button" role="radio" aria-checked={isAuto} disabled={disabled} className={`auto ${isAuto ? 'on' : ''}`} onClick={() => onChange('auto')} title={t("自动：{{reason}}", { reason: auto.reason })}>
           {t("自动")}{auto.mixed ? <b className="t-mixed">{auto.mixed}</b> : <b className={`t-${toneOf(auto.value)}`}>{labelOf(auto.value)}</b>}
         </button>
         {choices.map((c) => (
-          <button key={String(c.value)} type="button" role="radio" aria-checked={!isAuto && value === c.value} disabled={c.disabled} className={`${!isAuto && value === c.value ? `on t-${c.tone ?? 'accent'}` : ''}`} onClick={() => onChange(c.value)} title={c.hint ?? t("固定为「{{label}}」", { label: c.label })}>{c.label}</button>
+          <button key={String(c.value)} type="button" role="radio" aria-checked={!isAuto && value === c.value} disabled={disabled || c.disabled} className={`${!isAuto && value === c.value ? `on t-${c.tone ?? 'accent'}` : ''}`} onClick={() => onChange(c.value)} title={disabled ? auto.reason : c.hint ?? t("固定为「{{label}}」", { label: c.label })}>{c.label}</button>
         ))}
       </div>
-      <div className="triseg-note" title={auto.reason}>
-        {isAuto
+      <div className="triseg-note" title={unavailable ?? auto.reason}>
+        {unavailable ?? (isAuto
           ? auto.reason
-          : <>{t("已固定为")}{' '}<b className={`t-${toneOf(eff)}`}>{labelOf(eff)}</b>{(showAutoWhenFixed || auto.mixed || auto.value !== value) && <> · {t("自动设置为“{{v}}”", { v: auto.mixed ?? labelOf(auto.value) })}</>}</>}
+          : <>{t("已固定为")}{' '}<b className={`t-${toneOf(eff)}`}>{labelOf(eff)}</b>{(showAutoWhenFixed || auto.mixed || auto.value !== value) && <> · {t("自动设置为“{{v}}”", { v: auto.mixed ?? labelOf(auto.value) })}</>}</>)}
       </div>
     </div>
   );
@@ -55,7 +57,7 @@ export function SettingSwitch({ k, className }: { k: string; className?: string 
   const settings = useStore((s) => s.doc.settings);
   const setSettings = useStore((s) => s.setSettings);
   const def = SWITCHES.find((d) => d.key === k);
-  if (!def || (def.applies && !def.applies(settings))) return null;
+  if (!def || (def.applies && !def.applies(settings) && !def.keepVisible)) return null;
   return <TriSwitch def={def} settings={settings} onChange={(v) => setSettings({ [def.key]: v } as any)} className={className} />;
 }
 
@@ -69,5 +71,5 @@ export function TriSwitch({ def, settings, onChange, className }: { def: SwitchD
     const reason = settingUnavailable(settings, def.key, c.value);
     return { value: c.value, label: c.label, hint: reason ?? c.hint, disabled: !!reason, tone: c.tone ?? (isBool ? (c.value ? 'on' : 'off') : 'accent') };
   });
-  return <TriSeg label={def.label} hint={def.hint} choices={choices} value={raw} auto={auto} onChange={onChange} className={className} />;
+  return <TriSeg label={def.label} hint={def.hint} choices={choices} value={raw} auto={auto} onChange={onChange} className={className} disabled={!!def.applies && !def.applies(settings)} />;
 }

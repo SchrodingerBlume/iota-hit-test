@@ -337,6 +337,11 @@ try {
     }
     raw.evict?.(0);
   }
+  const practice = ['auto', 'professional', 'hidden'].map(k => results[`harbin-practice-interim-${k}`]);
+  if (practice.every(r => r && !r.error)) for (const r of practice.slice(1)) {
+    assert.equal(r.positions, practice[0].positions, '报告不排学位类别说明，隐藏选项不应改变预览');
+    assert.equal(r.wordText, practice[0].wordText, '报告的成果形式说明不应随隐藏学位类别而改变');
+  }
   const docxtyp = manifest.packages.find(p => p.name === 'docxtyp');
   if (docxtyp) {
     await tar.t({ file: path.join(packages, docxtyp.file), onReadEntry(e) {

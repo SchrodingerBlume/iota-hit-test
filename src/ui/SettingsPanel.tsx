@@ -23,7 +23,7 @@ export function SettingsPanel() {
             </div>
           </div>
         ))}
-        {SWITCHES.filter((d) => d.place === 'type' && (!d.applies || d.applies(settings))).map((d) => <TriSwitch key={d.key} def={d} settings={settings} onChange={(v) => setSettings({ [d.key]: v } as any)} />)}
+        {SWITCHES.filter((d) => d.place === 'type' && (d.keepVisible || !d.applies || d.applies(settings))).map((d) => <TriSwitch key={d.key} def={d} settings={settings} onChange={(v) => setSettings({ [d.key]: v } as any)} />)}
       </div>
       <FontCard />
       {SWITCH_GROUPS.map((g) => {

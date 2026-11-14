@@ -25,7 +25,7 @@ try {
   let spec = data.profile(info, "${lang}")
   let cover = terms.term-table("${lang}", "cover")
   let labels = (:)
-  for key in ("university", "author", "student-id", "affiliation", "specialty", "supervisor", "date", "enrollment", "stage", "seal") {
+  for key in ("university", "author", "student-id", "affiliation", "specialty", "supervisor", "date", "enrollment", "stage", "seal", "form") {
     if terms.has-term(cover, key, variant) { labels.insert(key, text-only(terms.term-for(cover, key, variant))) }
   }
   labels.insert("document-type", text-only(terms.document-type-of(cover, "${lang}", variant)))

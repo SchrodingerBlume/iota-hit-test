@@ -4,3 +4,8 @@
   background: var(--panel);
   cursor: not-allowed;
 }
+
+.triseg.is-disabled .triseg-lab,
+.triseg.is-disabled .triseg-seg button.auto b {
+  color: var(--muted);
+}

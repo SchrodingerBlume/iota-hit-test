@@ -51,12 +51,13 @@ try {
   await academic.waitFor();
   assert.equal(await academic.isDisabled(), true);
   assert.equal(await professional.isEnabled(), true);
-  assert.equal(await hidden.isEnabled(), true);
+  assert.equal(await hidden.isDisabled(), true, '报告不使用终稿封面的学位类别隐藏选项');
   await academic.evaluate(button => button.click());
   assert.equal(await page.evaluate(() => window.settingsTest.get().degreeType), 'auto', '原生 disabled 按钮不能写入学术学位');
   if (process.env.TEST_AGENT_SETTINGS) {
-    const rejection = await page.evaluate(() => Promise.race([window.settingsTest.runTool('settings_set', { key: 'degreeType', value: 'academic' }), new Promise((_, reject) => setTimeout(() => reject(new Error('非法设置不应进入确认流程')), 2000))]));
+    const rejection = await page.evaluate(() => Promise.race([window.settingsTest.runTool('settings_set', { key: 'degreeType', value: 'academic' }), new Promise((_, reject) => setTimeout(() => reject(new Error('非法设置不应进入确认流程')), 5000))]));
     assert.match(rejection, /实践成果仅适用于专业学位/);
+    assert.match(await page.evaluate(() => window.settingsTest.runTool('settings_set', { key: 'degreeType', value: 'none' })), /仅用于硕博终稿封面/);
     assert.equal(await page.evaluate(() => window.settingsTest.get().degreeType), 'auto');
     console.log('PASS Agent rejects incompatible degree settings');
   }
@@ -69,17 +70,34 @@ try {
   await professional.click();
   await form.selectOption('practice');
   assert.equal(await page.evaluate(() => window.settingsTest.get().degreeType), 'professional');
-  await hidden.click();
-  assert.equal(await page.evaluate(() => window.settingsTest.get().degreeType), 'none');
-  console.log('PASS academic degree disables practice outcome; professional and hidden remain usable');
+  assert.equal(await hidden.isDisabled(), true);
+  console.log('PASS academic degree disables practice outcome; inactive hide option stays disabled');
 
   await page.evaluate(() => window.settingsTest.set({ degreeType: 'academic' }));
   await degree.getByRole('radio').first().click();
   assert.equal(await page.evaluate(() => window.settingsTest.get().degreeType), 'auto', '旧的非法设置可以通过自动档恢复');
   const level = page.locator('.axis').filter({ has: page.getByText('学位级别', { exact: true }) }).locator('select');
   await level.selectOption('bachelor');
+  assert.equal(await degree.isVisible(), true, '本科仍须显示学位类别设置');
+  assert.equal(await degree.getAttribute('aria-disabled'), 'true');
+  assert.equal(await degree.getByRole('radio').count(), 4);
+  assert.equal(await degree.locator('button:disabled').count(), 4, '本科整组按钮必须置灰，包括自动');
+  await professional.evaluate(button => button.click());
+  assert.equal(await page.evaluate(() => window.settingsTest.get().degreeType), 'auto');
+  if (process.env.TEST_AGENT_SETTINGS) assert.match(await page.evaluate(() => window.settingsTest.runTool('settings_set', { key: 'degreeType', value: 'professional' })), /本科不区分学术与专业学位/);
   assert.equal(await form.locator('option[value="practice"]').isEnabled(), true);
-  await level.selectOption('master');
+  console.log('PASS bachelor degree group remains visible and entirely disabled without restricting design');
+  const stage = page.locator('.axis').filter({ has: page.getByText('阶段', { exact: true }) }).locator('select');
+  const campus = page.locator('.axis').filter({ has: page.getByText('校区', { exact: true }) }).locator('select');
+  for (const lv of ['master', 'doctor']) for (const site of ['harbin', 'shenzhen']) {
+    await level.selectOption(lv);
+    await campus.selectOption(site);
+    for (const st of ['proposal', 'interim', 'final']) {
+      await stage.selectOption(st);
+      assert.equal(await hidden.isDisabled(), st !== 'final', `${lv}/${site}/${st}: 隐藏选项适用范围错误`);
+    }
+  }
+  console.log('PASS hide option is enabled only for graduate final covers across campuses');
   await hidden.click();
   await page.evaluate(async () => {
     const manifest = await (await fetch('/packages/manifest.json', { cache: 'no-cache' })).json();

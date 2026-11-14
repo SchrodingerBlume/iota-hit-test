@@ -22,6 +22,10 @@ export interface AxisDef<K extends keyof Settings = keyof Settings> {
 
 /** 与模板 axes.degree-type-for 一致；none 仅隐藏类别文字，不等于学术学位。 */
 export function settingUnavailable(s: Settings, key: keyof Settings, value: unknown): string | undefined {
+  if (key === 'degreeType') {
+    if (s.degreeLevel === 'bachelor') return t("本科不区分学术与专业学位");
+    if (value === 'none' && s.stage !== 'final') return t("仅用于硕博终稿封面");
+  }
   if (!['form', 'degreeType', 'degreeLevel'].includes(key)) return;
   const next = { ...s, [key]: value };
   if (next.degreeLevel !== 'bachelor' && next.form === 'practice' && next.degreeType === 'academic') return t("实践成果仅适用于专业学位");
@@ -104,6 +108,8 @@ export interface SwitchDef<V extends string | boolean = boolean> {
   choices: Choice<any>[];
   resolve: (s: Settings) => Resolved<V>;
   applies?: (s: Settings) => boolean;
+  /** 不适用时仍显示该行，并将全部按钮置灰。 */
+  keepVisible?: boolean;
   group: string;
   /** 只关乎某一页的开关放到那一页去（摘要、缩略语、附录、页面设置、论文信息、论文类型），不在论文设置里列 */
   place?: 'abstract' | 'nomenclature' | 'appendix' | 'toc' | 'cover' | 'titlepage' | 'type' | 'body' | 'bibliography';
@@ -536,12 +542,13 @@ export const SWITCHES: SwitchDef<any>[] = [
     choices: [
       { value: 'academic', label: t("学术") },
       { value: 'professional', label: t("专业") },
-      { value: 'none', label: t("不显示") },
+      { value: 'none', label: t("不显示"), hint: t("隐藏终稿封面的学术／专业学位说明") },
     ],
     group: t("标题与页面"),
     place: 'type',
     applies: (s) => s.degreeLevel !== 'bachelor',
-    resolve: (s) => (s.form === 'practice'
+    keepVisible: true,
+    resolve: (s) => s.degreeLevel === 'bachelor' ? { value: 'none', reason: t("本科不区分学术与专业学位") } : (s.form === 'practice'
       ? { value: 'professional', reason: t("实践成果仅适用于专业学位") }
       : { value: 'academic', reason: t("学位论文默认学术学位") }),
   },

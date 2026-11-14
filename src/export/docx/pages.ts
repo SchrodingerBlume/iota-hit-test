@@ -3,6 +3,7 @@ import { Paragraph, TextRun, ImportedXmlComponent, AlignmentType, LineRuleType, 
 import type { ThesisDoc, Info, DefensePerson } from '../../model/types';
 import { SWITCHES, resolveSwitch } from '../../model/options';
 import { PT, HALF, ZIHAO, FONT, fonts, fontsFor, hasCJK } from './units';
+import { reportProfile } from './reports';
 
 const DOC_TYPE = { bachelor: "本科毕业论文（设计）", master: "硕士学位论文", doctor: "博士学位论文" } as const;
 const DOC_TYPE_EN = { bachelor: 'Graduation Thesis', master: "Dissertation for the Master's Degree", doctor: "Dissertation for the Doctoral Degree" } as const;
@@ -219,8 +220,7 @@ export function reportCover(doc: ThesisDoc, width: number): (Paragraph | Table)[
   if (sz && !grad) return shenzhenBachelorReport(doc, { stage, title, date, studentId });
   if (!grad) return harbinBachelorReport(doc, { stage, title, date, studentId, width });
   // ── 本部研究生 ──
-  const kindWord = s.degreeType === 'professional' || (s.degreeType === 'auto' && s.form === 'practice')
-    ? `（专业学位${s.form === 'practice' ? '实践成果' : '论文'}）` : '（学位论文）';
+  const kindWord = `（${reportProfile(s)?.labels.form || (s.form === 'practice' ? '实践成果' : '学位论文')}）`;
   const rows: [string, string][] = [
     ['学院（部）', pick(doc, 'cover', 'affiliation')],
     ['学科/专业学位类别', s.form === 'practice' ? pick(doc, 'cover', 'practiceType') : pick(doc, 'cover', 'speciality')],

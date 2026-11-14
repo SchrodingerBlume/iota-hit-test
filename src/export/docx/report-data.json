@@ -15,6 +15,7 @@
         "date": "日期",
         "stage": "开题报告",
         "seal": "哈尔滨工业大学教务处制",
+        "form": "毕业论文",
         "document-type": "本科毕业论文（设计）开题报告"
       },
       "cover": {},
@@ -530,6 +531,7 @@
         "date": "日期",
         "stage": "开题报告",
         "seal": "哈尔滨工业大学教务处制",
+        "form": "毕业设计",
         "document-type": "本科毕业论文（设计）开题报告"
       },
       "cover": {},
@@ -1045,6 +1047,7 @@
         "date": "Defense Date",
         "stage": "Proposal Report",
         "seal": "Office of Academic Affairs",
+        "form": "毕业论文Thesis",
         "document-type": "Thesis Proposal of Bachelor Candidates"
       },
       "cover": {},
@@ -1560,6 +1563,7 @@
         "date": "Defense Date",
         "stage": "Proposal Report",
         "seal": "Office of Academic Affairs",
+        "form": "毕业设计Design",
         "document-type": "Thesis Proposal of Bachelor Candidates"
       },
       "cover": {},
@@ -2075,6 +2079,7 @@
         "date": "日期",
         "stage": "中期报告",
         "seal": "哈尔滨工业大学教务处制",
+        "form": "毕业论文",
         "document-type": "本科毕业论文（设计）中期报告"
       },
       "cover": {},
@@ -2586,6 +2591,7 @@
         "date": "日期",
         "stage": "中期报告",
         "seal": "哈尔滨工业大学教务处制",
+        "form": "毕业设计",
         "document-type": "本科毕业论文（设计）中期报告"
       },
       "cover": {},
@@ -3097,6 +3103,7 @@
         "date": "The Date",
         "stage": "Interim Report",
         "seal": "Office of Academic Affairs",
+        "form": "毕业论文Thesis",
         "document-type": "Interim Report for Bachelor’s Thesis"
       },
       "cover": {},
@@ -3609,6 +3616,7 @@
         "date": "The Date",
         "stage": "Interim Report",
         "seal": "Office of Academic Affairs",
+        "form": "毕业设计Design",
         "document-type": "Interim Report for Bachelor’s Thesis"
       },
       "cover": {},
@@ -4121,6 +4129,7 @@
         "date": "日期",
         "stage": "开题报告",
         "seal": "研究生院制",
+        "form": "学位论文",
         "document-type": "硕士学位开题报告"
       },
       "cover": {
@@ -4651,6 +4660,7 @@
         "date": "日期",
         "stage": "开题报告",
         "seal": "研究生院制",
+        "form": "实践成果",
         "document-type": "硕士学位开题报告"
       },
       "cover": {
@@ -5181,6 +5191,7 @@
         "date": "Defense Date",
         "stage": "Proposal Report",
         "seal": "Graduate School",
+        "form": "Dissertation",
         "document-type": "Thesis Proposal of Master Candidates"
       },
       "cover": {
@@ -5712,6 +5723,7 @@
         "date": "Defense Date",
         "stage": "Proposal Report",
         "seal": "Graduate School",
+        "form": "Practical Results",
         "document-type": "Thesis Proposal of Master Candidates"
       },
       "cover": {
@@ -6243,6 +6255,7 @@
         "date": "日期",
         "stage": "中期报告",
         "seal": "研究生院制",
+        "form": "学位论文",
         "document-type": "硕士学位中期报告"
       },
       "cover": {
@@ -6773,6 +6786,7 @@
         "date": "日期",
         "stage": "中期报告",
         "seal": "研究生院制",
+        "form": "实践成果",
         "document-type": "硕士学位中期报告"
       },
       "cover": {
@@ -7303,6 +7317,7 @@
         "date": "The Date",
         "stage": "Interim Report",
         "seal": "Graduate School",
+        "form": "Dissertation",
         "document-type": "Interim Report for Master’s Thesis"
       },
       "cover": {
@@ -7834,6 +7849,7 @@
         "date": "The Date",
         "stage": "Interim Report",
         "seal": "Graduate School",
+        "form": "Practical Results",
         "document-type": "Interim Report for Master’s Practical Results"
       },
       "cover": {
@@ -8365,6 +8381,7 @@
         "date": "日期",
         "stage": "开题报告",
         "seal": "研究生院制",
+        "form": "学位论文",
         "document-type": "博士学位开题报告"
       },
       "cover": {
@@ -8895,6 +8912,7 @@
         "date": "日期",
         "stage": "开题报告",
         "seal": "研究生院制",
+        "form": "实践成果",
         "document-type": "博士学位开题报告"
       },
       "cover": {
@@ -9425,6 +9443,7 @@
         "date": "Defense Date",
         "stage": "Proposal Report",
         "seal": "Graduate School",
+        "form": "Dissertation",
         "document-type": "Thesis Proposal of Doctoral Candidates"
       },
       "cover": {
@@ -9956,6 +9975,7 @@
         "date": "Defense Date",
         "stage": "Proposal Report",
         "seal": "Graduate School",
+        "form": "Practical Results",
         "document-type": "Thesis Proposal of Doctoral Candidates"
       },
       "cover": {
@@ -10487,6 +10507,7 @@
         "date": "日期",
         "stage": "中期报告",
         "seal": "研究生院制",
+        "form": "学位论文",
         "document-type": "博士学位中期报告"
       },
       "cover": {
@@ -11017,6 +11038,7 @@
         "date": "日期",
         "stage": "中期报告",
         "seal": "研究生院制",
+        "form": "实践成果",
         "document-type": "博士学位中期报告"
       },
       "cover": {
@@ -11547,6 +11569,7 @@
         "date": "The Date",
         "stage": "Interim Report",
         "seal": "Graduate School",
+        "form": "Dissertation",
         "document-type": "Interim Report for Doctoral Dissertation"
       },
       "cover": {
@@ -12078,6 +12101,7 @@
         "date": "The Date",
         "stage": "Interim Report",
         "seal": "Graduate School",
+        "form": "Practical Results",
         "document-type": "Interim Report for Doctoral Practical Results"
       },
       "cover": {
@@ -12609,6 +12633,7 @@
         "date": "日期：",
         "stage": "开题报告",
         "seal": "深圳校区教务部 制",
+        "form": "毕业论文",
         "document-type": "毕业论文（设计）开题报告"
       },
       "cover": {},
@@ -13126,6 +13151,7 @@
         "date": "日期：",
         "stage": "开题报告",
         "seal": "深圳校区教务部 制",
+        "form": "毕业设计",
         "document-type": "毕业论文（设计）开题报告"
       },
       "cover": {},
@@ -13643,6 +13669,7 @@
         "date": "日期/ Date：",
         "stage": "Proposal Report",
         "seal": "Shenzhen Department of Academic Affairs",
+        "form": "毕业论文Thesis",
         "document-type": "Undergraduate Thesis (Design) Proposal Report"
       },
       "cover": {},
@@ -14161,6 +14188,7 @@
         "date": "日期/ Date：",
         "stage": "Proposal Report",
         "seal": "Shenzhen Department of Academic Affairs",
+        "form": "毕业设计Design",
         "document-type": "Undergraduate Thesis (Design) Proposal Report"
       },
       "cover": {},
@@ -14679,6 +14707,7 @@
         "date": "日期：",
         "stage": "中期报告",
         "seal": "",
+        "form": "毕业论文",
         "document-type": "毕业论文（设计）中期报告"
       },
       "cover": {},
@@ -15196,6 +15225,7 @@
         "date": "日期：",
         "stage": "中期报告",
         "seal": "",
+        "form": "毕业设计",
         "document-type": "毕业论文（设计）中期报告"
       },
       "cover": {},
@@ -15713,6 +15743,7 @@
         "date": "日期/ Date：",
         "stage": "Interim Report",
         "seal": "",
+        "form": "毕业论文Thesis",
         "document-type": "Undergraduate Thesis (Design) Interim Report"
       },
       "cover": {},
@@ -16231,6 +16262,7 @@
         "date": "日期/ Date：",
         "stage": "Interim Report",
         "seal": "",
+        "form": "毕业设计Design",
         "document-type": "Undergraduate Thesis (Design) Interim Report"
       },
       "cover": {},
@@ -16749,6 +16781,7 @@
         "date": "日期",
         "stage": "开题报告",
         "seal": "深圳校区教务部 制",
+        "form": "学位论文",
         "document-type": "硕士学位论文开题报告"
       },
       "cover": {
@@ -17300,6 +17333,7 @@
         "date": "日期",
         "stage": "开题报告",
         "seal": "深圳校区教务部 制",
+        "form": "实践成果",
         "document-type": "硕士实践成果开题报告"
       },
       "cover": {
@@ -17851,6 +17885,7 @@
         "date": "Date:",
         "stage": "Proposal Report",
         "seal": "Shenzhen Department of Academic Affairs",
+        "form": "Dissertation",
         "document-type": "Master’s Thesis Proposal"
       },
       "cover": {
@@ -18404,6 +18439,7 @@
         "date": "Date:",
         "stage": "Proposal Report",
         "seal": "Shenzhen Department of Academic Affairs",
+        "form": "Practical Results",
         "document-type": "Master’s Practical Results Proposal"
       },
       "cover": {
@@ -18957,6 +18993,7 @@
         "date": "日期",
         "stage": "中期报告",
         "seal": "",
+        "form": "学位论文",
         "document-type": "硕士学位论文中期报告"
       },
       "cover": {
@@ -19510,6 +19547,7 @@
         "date": "日期",
         "stage": "中期报告",
         "seal": "",
+        "form": "实践成果",
         "document-type": "硕士实践成果中期报告"
       },
       "cover": {
@@ -20063,6 +20101,7 @@
         "date": "Date:",
         "stage": "Interim Report",
         "seal": "",
+        "form": "Dissertation",
         "document-type": "Mid-term Report for Master’s Thesis"
       },
       "cover": {
@@ -20617,6 +20656,7 @@
         "date": "Date:",
         "stage": "Interim Report",
         "seal": "",
+        "form": "Practical Results",
         "document-type": "Mid-term Report for Master’s Practical Results"
       },
       "cover": {
@@ -21171,6 +21211,7 @@
         "date": "日期",
         "stage": "开题报告",
         "seal": "哈工大（深圳）制",
+        "form": "学位论文",
         "document-type": "博士学位论文开题报告"
       },
       "cover": {
@@ -21720,6 +21761,7 @@
         "date": "日期",
         "stage": "开题报告",
         "seal": "哈工大（深圳）制",
+        "form": "实践成果",
         "document-type": "博士实践成果开题报告"
       },
       "cover": {
@@ -22269,6 +22311,7 @@
         "date": "Date:",
         "stage": "Proposal Report",
         "seal": "Shenzhen Department of Academic Affairs",
+        "form": "Dissertation",
         "document-type": "Doctoral Dissertation Proposal"
       },
       "cover": {
@@ -22819,6 +22862,7 @@
         "date": "Date:",
         "stage": "Proposal Report",
         "seal": "Shenzhen Department of Academic Affairs",
+        "form": "Practical Results",
         "document-type": "Doctoral Practical Results Proposal"
       },
       "cover": {
@@ -23370,6 +23414,7 @@
         "enrollment": "入 学 时 间",
         "stage": "中期报告",
         "seal": "",
+        "form": "学位论文",
         "document-type": "博士学位论文中期检查报告"
       },
       "cover": {},
@@ -23921,6 +23966,7 @@
         "enrollment": "入 学 时 间",
         "stage": "中期报告",
         "seal": "",
+        "form": "实践成果",
         "document-type": "博士实践成果中期检查报告"
       },
       "cover": {},
@@ -24472,6 +24518,7 @@
         "enrollment": "Enrollment Date",
         "stage": "Interim Report",
         "seal": "",
+        "form": "Dissertation",
         "document-type": "Doctoral Dissertation Mid-term Assessment Report"
       },
       "cover": {},
@@ -25023,6 +25070,7 @@
         "enrollment": "Enrollment Date",
         "stage": "Interim Report",
         "seal": "",
+        "form": "Practical Results",
         "document-type": "Doctoral Practical Results Mid-term Assessment Report"
       },
       "cover": {},
