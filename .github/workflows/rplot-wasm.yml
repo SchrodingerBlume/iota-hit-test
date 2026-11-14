@@ -17,10 +17,15 @@ jobs:
           repository: r-wasm/actions
           ref: v2
           path: .r-wasm-actions
+      - uses: actions/checkout@v4
+        with:
+          repository: SchrodingerBlume/cetzDevice
+          ref: cd8cdd701dd209757aceca22a3564a760c5b09a8
+          path: .cetzDevice-source
       - name: Cross-compile cetzDevice 0.5.3.1 and dependencies
         uses: ./.r-wasm-actions/build-rwasm
         with:
-          packages: github::SchrodingerBlume/cetzDevice@cd8cdd701dd209757aceca22a3564a760c5b09a8
+          packages: local::.cetzDevice-source
           webr-image: ghcr.io/r-wasm/webr:v0.6.1
           repo-path: _r-wasm
           image-path: _r-wasm-image
