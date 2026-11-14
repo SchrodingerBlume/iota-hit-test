@@ -93,6 +93,35 @@ try {
   assert.ok(base.size > 2000); assert.match(base.source, /@preview\/cetz:0\.5\.3/); assert.match(base.source, /#let r-layers/);
   console.log('PASS real R device produces CeTZ and PNG');
 
+  const typography = await page.evaluate(async () => {
+    const a = window.rplot;
+    const automatic = await a.runRPlot('plot(1:3, main="Auto font")', { width: 5.5, height: 3.5 });
+    const manual = await a.runRPlot('plot(1:3)', { width: 5.5, height: 3.5, pointsize: 10.8 });
+    const explicit = await a.runRPlot('grid::grid.text("Explicit 10.8", gp=grid::gpar(fontsize=10.8))', { width: 5.5, height: 3.5 });
+    await a.runRPlot('plot.new(); f <- function(x=99,y=99) { stopifnot(is.null(x), missing(y)); text(.5,.5,"Literal NULL preserved") }; f(NULL,)', { width: 5.5, height: 3.5 });
+    const panels = await a.runRPlot('par(mfrow=c(2,2)); plot(1:3); plot(3:1)', { width: 8, height: 7 });
+    const smallPanels = await a.runRPlot('par(mfrow=c(2,2)); plot(1:3)', { width: 3, height: 3 });
+    const explicitCex = await a.runRPlot('par(mfrow=c(2,2), cex=.9); plot(1:3)', { width: 8, height: 7 });
+    const theme = await a.runRPlot('library(ggplot2)\nggplot(mtcars, aes(wt,mpg))+geom_point()+theme_classic()', { width: 5.5, height: 3.5 });
+    const manualTheme = await a.runRPlot('library(ggplot2)\nggplot(mtcars, aes(wt,mpg))+geom_point()+theme_classic()', { width: 5.5, height: 3.5, pointsize: 10.8 });
+    const explicitTheme = await a.runRPlot('library(ggplot2)\nggplot(mtcars, aes(wt,mpg))+geom_point()+theme_classic(base_size=11)+theme(axis.text=element_text(size=8.2))', { width: 5.5, height: 3.5 });
+    const dense = await a.runRPlot('plot.new(); plot.window(xlim=c(0,1), ylim=c(0,1), xaxs="i", yaxs="i"); text(c(.49,.51), c(.5,.5), c("abcdef","ghijkl"))', { width: 3, height: 3 });
+    return { auto: automatic.plot, manual: manual.plot, explicit: explicit.plot, panels: panels.plot, smallPanels: smallPanels.plot, explicitCex: explicitCex.plot, theme: theme.plot, manualTheme: manualTheme.plot, explicitTheme: explicitTheme.plot, dense: dense.plot };
+  });
+  assert.equal(typography.auto.pointsize, 10.5); assert.equal(typography.auto.fontMode, 'auto');
+  assert.match(typography.auto.source, /size: 10\.5pt/);
+  assert.equal(typography.manual.fontMode, 'manual'); assert.match(typography.manual.source, /size: 10\.8pt/);
+  assert.match(typography.explicit.source, /size: 10\.8pt/);
+  assert.equal(typography.panels.pointsize, 10.5); assert.doesNotMatch(typography.panels.source, /size: 8\.715pt/);
+  assert.ok([9, 7.5].includes(typography.smallPanels.pointsize));
+  assert.match(typography.explicitCex.source, /size: 9\.45pt/);
+  assert.equal(typography.theme.pointsize, 10.5); assert.match(typography.theme.source, /size: 10\.5pt/);
+  assert.match(typography.manualTheme.source, /size: 10\.8pt/); assert.equal(typography.manualTheme.fontMode, 'manual');
+  assert.match(typography.explicitTheme.source, /size: 8\.2pt/); assert.match(typography.explicitTheme.source, /size: 11pt/);
+  assert.ok([9, 7.5].includes(typography.dense.pointsize), JSON.stringify(typography.dense.fontReport));
+  assert.ok(typography.dense.fontReport.overlaps > 0, 'Unresolved crowding must be reported, not hidden by further shrinking');
+  console.log('PASS five-point-Chinese font preference, dense fallback and exact explicit pt in base/grid/ggplot');
+
   const saved = await page.evaluate(async () => {
     const a = window.rplot, d = a.sampleDoc();
     for (const k of ['abstractZh','abstractEn','body','conclusion','appendix','acknowledgement','resume']) d[k] = { type: 'doc', content: [] };
@@ -139,9 +168,9 @@ try {
     return { size: r.png.size, states, cached: (await (await caches.open('iota-rplot-rpackages-v1')).keys()).map((k) => k.url) };
   });
   assert.ok(extra.size > 2000); assert.ok(extra.states.some((s) => s.phase === 'download' && s.bytes > 0)); assert.ok(extra.states.some((s) => s.phase === 'install'));
-  assert.ok(remote.some((u) => /patchwork_.*\.tgz$/.test(u)));
+  assert.ok(local.some((u) => /patchwork_.*\.tgz$/.test(u)));
   assert.ok(extra.cached.some((u) => /patchwork_.*\.tgz$/.test(u)));
-  console.log('PASS on-demand Wasm package installs from existing repository with byte/install progress');
+  console.log('PASS optional Wasm package installs from same-origin archive with byte/install progress');
 
   const data = await page.evaluate(async () => {
     const a = window.rplot, code = 'd <- read.csv("/data/test.csv")\nplot(d$x, d$y, type="b")';
@@ -191,7 +220,7 @@ try {
   console.log('PASS user R editor: run, preview and insert');
 
   await page.evaluate(() => { const previous = window.rplot.inserted; window.rplot.inserted = null; window.rplot.showDialog(previous); });
-  assert.match(await page.getByRole('textbox', { name: 'R 绘图代码', exact: true }).inputValue(), /用户界面测试/);
+  assert.match(await page.getByRole('textbox', { name: 'R 绘图代码', exact: true }).innerText(), /用户界面测试/);
   await page.getByRole('textbox', { name: 'R 绘图代码', exact: true }).fill('plot(4:1, type="l", main="编辑已有 R 图")');
   await page.getByRole('button', { name: '运行预览', exact: true }).click();
   await page.locator('.rplot-preview img').waitFor({ timeout: 120000 });
@@ -278,7 +307,7 @@ try {
     return hit;
   });
   assert.equal(cachedPackage, true);
-  assert.equal(remote.filter((u) => /patchwork_.*\.tgz$/.test(u)).length, 1);
+  assert.equal(local.filter((u) => /patchwork_.*\.tgz$/.test(u)).length, 1);
   assert.equal(local.filter((u) => u.endsWith('/rplot/library.data')).length, 1);
   assert.deepEqual(errors, []);
   console.log('PASS timeout/cancellation recovery and package reuse without downloading again');

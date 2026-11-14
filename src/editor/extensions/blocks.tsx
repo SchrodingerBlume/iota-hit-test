@@ -272,7 +272,7 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
         <button type="button" className="blk-tool is-btn is-danger" title={t("删除插图")} disabled={!editable} onClick={deleteNode}><Trash2 /></button>
       </Tools>
       {rOpen && <RPlotDialog initial={node.attrs} preview={url} onClose={() => setROpen(false)} onApply={(attrs) => { if (!editor.isDestroyed) updateAttributes({ ...attrs, rPlotTask: '' }); }}
-        onBackground={richKey ? (draft, id) => { const attrs = pendingFigureAttrs(id, draft, node.attrs); updateAttributes(attrs); attachRPlotJob(id, { docId: useStore.getState().doc.id, key: richKey, uid: String(attrs.uid) }); } : undefined} />}
+        onBackground={richKey ? (draft, id) => { const attrs = pendingFigureAttrs(id, draft, { ...node.attrs, width: draft.width }); updateAttributes(attrs); attachRPlotJob(id, { docId: useStore.getState().doc.id, key: richKey, uid: String(attrs.uid) }); } : undefined} />}
     </NodeViewWrapper>
   );
 }

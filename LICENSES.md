@@ -12,6 +12,8 @@
 | omni-gb7714（`local-omni-gb7714-*.tar.gz`） | Apache-2.0 | 本机 typst local 包 |
 | 其余 `@preview/*` 包（glossy、lovelace、algorithmic、quan、auto-pinyin、zhconv、auto-bihua、glotter、jurlstify、mitex、valkyrie） | 各自的许可，见各包 `typst.toml` / LICENSE | packages.typst.org |
 | Fluent UI React v9（`@fluentui/react-components`、`@fluentui/react-icons`） | MIT | github.com/microsoft/fluentui — 功能区的组件与图标 |
+| CodeMirror 6、R legacy mode 及其依赖 | MIT | codemirror.net；完整版权与许可随 `public/licenses.txt` 分发 |
+| R languageserver 与可选 Wasm 包（`public/rplot/language/`） | 各包许可及 copyleft 依赖源码随站提供，见同目录 `THIRD-PARTY.txt` / `PACKAGES.json` | github.com/REditorSupport/languageserver / repo.r-wasm.org；原始二进制 SHA256 固定；浏览器 transport 与任务适配见 `src/rplot/language-service.R` |
 | i18next | MIT | github.com/i18next/i18next — 界面文字层（`src/i18n`） |
 | docx | MIT | github.com/dolanmiu/docx — 导出 Word 文档 |
 | citation-js（含 citeproc-js） | MIT；citeproc-js CPAL-1.0 / AGPL-3.0 双许可 | citation.js.org — 导出 Word 时按 GB/T 7714 排参考文献 |

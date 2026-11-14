@@ -49,6 +49,14 @@ LaTeX 公式使用 MathLive 可视化编辑，Typst 公式使用源码与实时�
 
 「插入 → R 绘图」可以直接写 base R、grid 或 ggplot2 绘图代码。点击「运行预览」后插入，也可点击「后台生成，继续编辑」退出窗口：原位置会出现带动画的占位图，生成结束后自动替换，期间可以继续输入。选中已有图可点「编辑 R 图」修改代码。无需手动打开或关闭 R 图形设备；支持上传数据文件，在 R 中从 `/data/文件名` 读取。画布尺寸使用厘米、字号使用 pt，并提供固定随机种子。
 
+字号默认「自动（五号优先）」：先以五号 `10.5pt` 测量并排图；检测到可见标签重叠或裁切时，依次尝试小五 `9pt`、六号 `7.5pt`，每次重新测量和运行 R，不在生成结果上直接替换字号。达到六号仍有冲突会保留提示，供用户或 Agent 调整标签和布局。检测基于已绘制文字的包围框，不保证识别所有图形遮挡或复杂自定义节点。用户在窗口指定 pt，或在 R 中显式指定 `gpar(fontsize=...)`、`element_text(size=...)`、主题 `base_size`、文字 geom 的字号时，保留 R 的原始有效字号，不取整。旧图沿用原来的手动字号模式。
+
+Agent 的系统提示要求：字能排下就优先五号，先调整图宽、标签换行/旋转、刻度、图例、分面或 ggrepel；没有用户明确要求时省略工具的 `pointsize`，不要写死常见小字号绕过自动模式。应按论文最终图宽生成，插入后整体缩放仍会改变物理字号；在绘图窗口修改画布尺寸并重新运行，才会按新尺寸重排。
+
+自动模式也会抑制 base R 的 `par(mfrow/mfcol)`、`layout()` 对 `cex` 的隐式缩小；显式传入的 `cex` 保留。手动 pt 是基础字号，R 代码明确设置的相对倍率与单独字号仍按 R 语义生效。
+
+R 输入区使用 CodeMirror，内置语法高亮、行号、缩进、括号匹配和基础补全。可点击「下载并启用 R LSP」从本站按需下载 `languageserver` 及其 Wasm 依赖，并缓存到浏览器；未启用时不下载这些包。语言服务运行在独立 webR worker 中，提供真实 R 补全、悬停函数签名和 lintr 诊断，不执行正在编辑的绘图代码，也不要求本机安装 R。它使用 languageserver 的 JSON-RPC handler，浏览器适配替换 stdio/子进程调度；桌面动态帮助和外部程序不启用。关闭 LSP 不影响基础代码编辑和绘图，下载进度沿用 R 包进度组件。
+
 R 在浏览器的 webR 0.6.1 Wasm worker 中运行，`cetzDevice 0.5.3.1` 将绘图操作转成 CeTZ 0.5.3。文字由站内 Typst/Wasm 批量精确测量，正文和 PDF 中保留矢量图；编辑区和 Word 导出使用从同一份 CeTZ 生成的 PNG。R 代码、数据文件和生成结果随工程保存，重新打开无需重跑 R 就能显示图。
 
 内部 CeTZ 源码作为 `rplots/<内容哈希>.typ` 旁文件自动提供给编译器，导出 Typst 工程时也会带上；用户界面不显示这些内部文件。Agent 可以调用 `r_plot` 工具直接绘图并插入，返回的图还会提供给支持看图的模型检查。
@@ -171,6 +179,7 @@ npm run dev
 npm run typecheck
 npm run test:markdown
 npm run test:library
+npm run test:r-language
 npm run test:projects
 npm run test:compile
 npm run build
@@ -188,6 +197,8 @@ npm run test:rplot
 `npm run test:library` 同样需要 Chromium，也支持 `CHROME_PATH`。它以固定 Zotero API 响应驱动真实 PDF.js、IndexedDB、界面和 Agent 工具，验证重定向下载不转发密钥、附件去重、群组隔离、全文/页码读取、原页图片、扫描件、本机上传与刷新重开；不使用个人 Zotero 凭证。
 
 更新 R/Wasm 随站资源时，先运行 `node scripts/vendor-rplot.mjs` 下载固定版本 webR 和 cetzDevice 源码；再手动运行仓库的 `Build cetzDevice for webR` 工作流，下载其 `cetzDevice-0.5.3.1-webR-0.6.1` artifact，执行 `node scripts/install-rplot-artifact.mjs <artifact解压目录>`。交叉编译脚本是 `scripts/build-rplot-wasm.R`，不依赖开发机上的 R/Wasm 工具链。
+
+`node scripts/vendor-r-language.mjs` 更新本站可选包资源，生成 `public/rplot/language/PACKAGES.json`、带内容哈希的原始 Wasm 包、许可清单与 copyleft 依赖的对应源码；需要 curl。语言服务依赖和 patchwork 优先从本站清单安装，其他包再使用上游仓库。普通构建不重新下载这些已固定资源。
 
 `npm run build` 生成可直接部署的 `dist/`。站点使用相对资源路径，可部署在任意子目录。服务器应以 `application/wasm` 提供 `.wasm` 文件，并正确提供 `.tar.gz` 包。
 

@@ -46,10 +46,12 @@ const rows = [
   ['typst.ts（编译器 / 渲染器 wasm 与 JS 胶水）', `${pkgVersion('@myriaddreamin/typst.ts')} / 提交 ${commit}`, 'Myriad Dreamin', 'Apache-2.0', 'https://github.com/Myriad-Dreamin/typst.ts', '有修改（lib.rs、patch.mjs）'],
   ['iota-hit（哈工大学位论文 Typst 模板）', `${manifest.iotaHit}（${manifest.iotaHitCommit ?? ''}）`, '模板作者', 'LPPL-1.3c', '本机 ../iota-hit', manifest.iotaHitPatches?.length ? `src/axes.typ 兼容修复（${manifest.iotaHitPatches.join('、')}，见 scripts/patch-iota-package.mjs）` : '无'],
   ['React', pkgVersion('react'), 'Meta Platforms, Inc.', 'MIT', 'https://react.dev', '无'],
-  ['webR（R 的 WebAssembly 运行时，首次 R 绘图才加载）', '0.6.1', 'R Core Team、Lionel Henry、George Stagg 及 webR 贡献者', 'GPL-3.0-or-later / MIT，详见 rplot/WEBR-LICENSE.md', 'https://github.com/r-wasm/webr', '固定版本随站分发，使用 PostMessage worker 通道'],
+  ['webR（R 的 WebAssembly 运行时，正文就绪后后台准备）', '0.6.1', 'R Core Team、Lionel Henry、George Stagg 及 webR 贡献者', 'GPL-3.0-or-later / MIT，详见 rplot/WEBR-LICENSE.md', 'https://github.com/r-wasm/webr', '固定版本随站分发，使用 PostMessage worker 通道'],
   ['cetzDevice（R 图形设备）', '0.5.3.1', 'Andrew Junhao Wu 及贡献者', 'GPL-3.0-or-later', 'https://github.com/SchrodingerBlume/cetzDevice', 'C 设备交叉编译为 Wasm；字体度量改接站内 Typst/Wasm，适配源码 src/rplot/adapter.R；原包源码 rplot/cetzDevice-0.5.3.1-source.tar.gz'],
   ['Fluent UI React v9', pkgVersion('@fluentui/react-components'), 'Microsoft Corporation', 'MIT', 'https://github.com/microsoft/fluentui', '无'],
   ['Tiptap', pkgVersion('@tiptap/core'), 'Tiptap GmbH', 'MIT', 'https://tiptap.dev', '无'],
+  ['CodeMirror 6（R 代码编辑区与 legacy R mode）', pkgVersion('codemirror'), 'Marijn Haverbeke 及贡献者', 'MIT', 'https://codemirror.net', '无；接入高亮、缩进、补全与诊断'],
+  ['R languageserver（可选下载）', '', 'Randy Lai、Kun Ren 及贡献者', 'MIT + file LICENSE；依赖各自许可保留在下载的 R 包中', 'https://github.com/REditorSupport/languageserver / repo.r-wasm.org', '固定二进制按需从 rplot/language/ 下载，含 copyleft 依赖对应源码；浏览器 transport、任务调度与悬停签名适配见 src/rplot/language-service.R'],
   ['tiptap-comment-extension', pkgVersion('@sereneinserenade/tiptap-comment-extension'), 'Jeet Mandaliya', 'MIT', 'https://github.com/sereneinserenade/tiptap-comment-extension', '无'],
   ['MathLive', pkgVersion('mathlive'), 'Arno Gourdol', 'MIT', 'https://cortexjs.io/mathlive', '无'],
   ['marked', pkgVersion('marked'), 'Christopher Jeffrey 及贡献者', 'MIT', 'https://marked.js.org', '无'],
@@ -80,6 +82,11 @@ out.push(sub('Typst 的 NOTICE（原文）'));
 out.push(lic('typst-NOTICE.txt') + '\n');
 out.push(sub('MIT License（各项目的版权声明）'));
 for (const f of ['MIT-react.txt', 'MIT-fluentui.txt', 'MIT-tiptap.txt', 'MIT-tiptap-comment-extension.txt', 'MIT-mathlive.txt', 'MIT-marked.txt', 'MIT-i18next.txt', 'MIT-zustand.txt']) out.push(`[${f.replace(/^MIT-|\.txt$/g, '')}]\n${lic(f)}\n`);
+for (const name of ['codemirror', '@codemirror/state', '@codemirror/view', '@codemirror/language', '@codemirror/autocomplete', '@codemirror/commands', '@codemirror/lint', '@codemirror/search', '@codemirror/legacy-modes', '@lezer/common', '@lezer/highlight', '@lezer/lr', 'style-mod', 'w3c-keyname', 'crelt', '@marijn/find-cluster-break']) {
+  const file = path.join(root, 'node_modules', name, 'LICENSE');
+  if (!fs.existsSync(file)) throw new Error(`缺少 CodeMirror 依赖的许可文件：${name}`);
+  out.push(`[${name}]\n${fs.readFileSync(file, 'utf8')}\n`);
+}
 out.push(sub('citeproc-js 的许可声明（CPAL-1.0 或 AGPL，本站按 CPAL 使用；导出 Word 时的参考文献由它按 CSL 排版）'));
 out.push(lic('citeproc-LICENSE.txt') + '\n');
 out.push(`本站按 CPAL 第 14 条的要求作署名：参考文献排版功能由 citeproc-js 提供（Frank Bennett，https://github.com/Juris-M/citeproc-js）。\n`);
@@ -94,7 +101,7 @@ portions of this font into the document, this font does not by itself cause the 
 covered by the GNU General Public License. This exception does not however invalidate any other reasons
 why the document might be covered by the GNU General Public License.\n`);
 out.push(lic('GPL-3.0.txt') + '\n');
-for (const file of ['public/rplot/WEBR-LICENSE.md', 'public/rplot/THIRD-PARTY.txt']) {
+for (const file of ['public/rplot/WEBR-LICENSE.md', 'public/rplot/THIRD-PARTY.txt', 'public/rplot/language/THIRD-PARTY.txt']) {
   if (fs.existsSync(path.join(root, file))) out.push(sub(file), fs.readFileSync(path.join(root, file), 'utf8') + '\n');
 }
 out.push(sub('GUST Font License（TeX Gyre）'));

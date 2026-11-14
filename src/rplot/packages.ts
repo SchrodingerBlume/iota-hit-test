@@ -1,14 +1,27 @@
 // 直接使用现成的 webR 二进制仓库。下载在浏览器主线程异步进行，避免 PostMessage 通道里
 // R 的同步下载/交互式安装路径失效；二进制包用相同的只读 WORKERFS 挂载。
 import { create } from 'zustand';
+import { rPlotAssetUrl } from './assets';
 
 export interface RPackageLoadState {
   active: boolean; phase: 'index' | 'download' | 'install' | 'ready' | 'error';
+  source?: 'rplot' | 'language';
   name: string; bytes: number; total?: number; step: number; count: number; cached?: boolean; error?: string;
 }
 export const useRPackageLoad = create<RPackageLoadState>(() => ({ active: false, phase: 'ready', name: '', bytes: 0, step: 0, count: 0 }));
-let generation = 0;
-export function resetRPackageLoad() { generation++; useRPackageLoad.setState({ active: false }); }
+type PackageSource = 'rplot' | 'language';
+const generations: Record<PackageSource, number> = { rplot: 0, language: 0 };
+const loads = new Map<PackageSource, { order: number; state: RPackageLoadState }>();
+let order = 0;
+function publishLoad() {
+  const entries = [...loads.values()].sort((a, b) => b.order - a.order);
+  const latest = entries.find(e => e.state.active) ?? entries[0];
+  useRPackageLoad.setState(latest?.state ?? { active: false, phase: 'ready', name: '', bytes: 0, total: undefined, step: 0, count: 0, cached: false, error: undefined });
+}
+export function resetRPackageLoad(source?: PackageSource) {
+  for (const key of source ? [source] : ['rplot', 'language'] as const) { generations[key]++; loads.delete(key); }
+  publishLoad();
+}
 
 interface RPackageHost {
   versionR?: string;
@@ -19,8 +32,28 @@ interface RPackageHost {
 }
 type PackageRecord = Record<string, string>;
 const indexes = new Map<string, Promise<Map<string, PackageRecord>>>();
+let localIndex: Promise<Map<string, PackageRecord>> | null = null;
 const BASE = new Set(['R', 'base', 'compiler', 'datasets', 'graphics', 'grDevices', 'grid', 'methods', 'parallel', 'splines', 'stats', 'stats4', 'tools', 'utils']);
 const quote = JSON.stringify;
+const dependencies = (p: PackageRecord) => ['Depends', 'Imports', 'LinkingTo'].flatMap(field => (p[field] ?? '').split(',').map(s => s.replace(/\s*\([^)]*\)/g, '').trim()).filter(Boolean));
+
+async function optionalPackageIndex(version: string) {
+  if (!localIndex) localIndex = (async () => {
+    const url = rPlotAssetUrl('language/PACKAGES.json');
+    let store: Cache | null = null; try { store = await caches.open('iota-rplot-rpackages-v1'); } catch { /* 缓存不可用仍可下载 */ }
+    let response;
+    try {
+      response = await fetch(url, { cache: 'no-cache', signal: AbortSignal.timeout(10000) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      try { await store?.put(url, response.clone()); } catch { /* 不阻塞安装 */ }
+    } catch { response = await store?.match(url); }
+    if (!response) return new Map<string, PackageRecord>();
+    const manifest = await response.json().catch(() => null);
+    if (!manifest || manifest.webr !== '0.6.1' || manifest.r !== version || !Array.isArray(manifest.packages)) return new Map<string, PackageRecord>();
+    return new Map<string, PackageRecord>(manifest.packages.filter((p: PackageRecord) => /^[\w.+-]+\.tgz$/.test(p.IotaLocalFile ?? '') && /^[a-f0-9]{64}$/.test(p.IotaSHA256 ?? '')).map((p: PackageRecord) => [p.Package, p]));
+  })().catch(e => { localIndex = null; throw e; });
+  return localIndex;
+}
 
 /** R/Wasm 的 .tgz 是已安装的包目录。索引 tar 中的文件区段，直接挂载，免去 R 的 shell/untar 路径。 */
 async function packageImage(bytes: Uint8Array<ArrayBuffer>, name: string) {
@@ -73,28 +106,42 @@ async function download(url: string, signal?: AbortSignal, onBytes?: (bytes: num
   let cache: Cache | null = null;
   try { cache = await caches.open('iota-rplot-rpackages-v1'); } catch { /* 隐私模式仍可安装 */ }
   if (!url.endsWith('PACKAGES.gz')) { const hit = await cache?.match(url); if (hit) { onBytes?.(0, undefined, true); return hit; } }
-  try {
-    const r = await fetch(url, { signal, cache: url.endsWith('PACKAGES.gz') ? 'no-cache' : 'force-cache' });
+  for (let attempt = 0; ; attempt++) {
+    const idle = new AbortController(); let timer: ReturnType<typeof setTimeout>;
+    const touch = () => { clearTimeout(timer); timer = setTimeout(() => idle.abort(new DOMException('下载连接 45 秒没有响应', 'TimeoutError')), 45000); };
+    touch();
+    try {
+    signal?.throwIfAborted(); onBytes?.(0);
+    const networkSignal = signal ? AbortSignal.any([signal, idle.signal]) : idle.signal;
+    const r = await fetch(url, { signal: networkSignal, cache: attempt ? 'reload' : url.endsWith('PACKAGES.gz') ? 'no-cache' : 'force-cache' });
+    touch();
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const length = Number(r.headers.get('Content-Length')) || undefined;
     const chunks: Uint8Array[] = []; let bytes = 0;
     if (r.body) {
       const reader = r.body.getReader();
-      for (;;) { const value = await reader.read(); if (value.done) break; chunks.push(value.value); bytes += value.value.length; onBytes?.(bytes, length); }
+      for (;;) { const value = await reader.read(); if (value.done) break; touch(); chunks.push(value.value); bytes += value.value.length; onBytes?.(bytes, length); }
     } else { const b = new Uint8Array(await r.arrayBuffer()); chunks.push(b); bytes = b.length; onBytes?.(bytes, length); }
     const body = new Uint8Array(bytes); let offset = 0;
     for (const b of chunks) { body.set(b, offset); offset += b.length; }
     const result = new Response(body, { headers: { 'Content-Type': r.headers.get('Content-Type') ?? 'application/octet-stream' } });
     try { await cache?.put(url, result.clone()); } catch { /* 存储不足不影响本次安装 */ }
     return result;
-  } catch (e) { const hit = await cache?.match(url); if (hit && !signal?.aborted) return hit; throw e; }
+  } catch (e) {
+    const hit = await cache?.match(url); if (hit && !signal?.aborted) { onBytes?.(0, undefined, true); return hit; }
+    if (signal?.aborted) throw e;
+    const retry = e instanceof TypeError || ['AbortError', 'TimeoutError'].includes((e as Error).name) || /HTTP (429|5\d\d)/.test((e as Error).message);
+    if (attempt === 0 && retry) { await new Promise((r) => setTimeout(r, 500)); continue; }
+    throw new Error(`R 包下载失败：${url.split('/').pop()}（${(e as Error).message || '连接超时'}）`);
+    } finally { clearTimeout(timer!); }
+  }
 }
 
-async function packageIndex(repo: string, signal?: AbortSignal): Promise<Map<string, PackageRecord>> {
+async function packageIndex(repo: string): Promise<Map<string, PackageRecord>> {
   let pending = indexes.get(repo);
   if (!pending) {
     pending = (async () => {
-      const bytes = new Uint8Array(await (await download(`${repo}PACKAGES.gz`, signal)).arrayBuffer());
+      const bytes = new Uint8Array(await (await download(`${repo}PACKAGES.gz`)).arrayBuffer());
       const text = bytes[0] === 0x1f && bytes[1] === 0x8b
         ? await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text()
         : new TextDecoder().decode(bytes);
@@ -114,23 +161,36 @@ async function packageIndex(repo: string, signal?: AbortSignal): Promise<Map<str
   return pending;
 }
 
-export async function installRPackages(r: RPackageHost, requested: string[], progress: (s: string) => void, signal?: AbortSignal) {
-  const current = ++generation;
-  const update = (patch: Partial<RPackageLoadState>) => { if (current === generation) useRPackageLoad.setState(patch); };
-  update({ active: true, phase: 'index', name: requested.join('、'), bytes: 0, total: undefined, step: 0, count: 0, cached: false, error: undefined });
+export async function installRPackages(r: RPackageHost, requested: string[], progress: (s: string) => void, signal?: AbortSignal, verify = true, source: PackageSource = 'rplot') {
+  const current = ++generations[source], started = ++order;
+  const update = (patch: Partial<RPackageLoadState>) => {
+    if (current !== generations[source]) return;
+    const previous = loads.get(source)?.state ?? { active: false, phase: 'ready' as const, name: '', bytes: 0, step: 0, count: 0 };
+    loads.set(source, { order: started, state: { ...previous, ...patch } }); publishLoad();
+  };
+  update({ active: true, phase: 'index', source, name: requested.join('、'), bytes: 0, total: undefined, step: 0, count: 0, cached: false, error: undefined });
   let stage = '识别 R/Wasm 版本';
   try {
     const version = (r.versionR ?? await r.evalRString('as.character(getRversion())')).match(/\d+\.\d+/)?.[0];
     if (!version) throw new Error('无法识别 R/Wasm 的版本');
     const repo = `https://repo.r-wasm.org/bin/emscripten/contrib/${version}/`;
-    progress(`正在检查 R/Wasm ${version} 包仓库…`);
-    stage = '读取 R/Wasm 包仓库索引';
-    const index = await packageIndex(repo, signal);
     stage = '检查已安装的 R 包';
     // installed.packages() 在 webR 的只读镜像/PostMessage 路径不可用；
     // 包目录足以避免重复下载，完成后仍用 requireNamespace 验证实际可加载。
     const installedText = await r.evalRString('paste(unlist(lapply(.libPaths(), list.files), use.names = FALSE), collapse = "\\n")');
     const installed = new Set(installedText.split('\n').filter(Boolean));
+    progress('正在读取本站可选 R 包清单…');
+    const local = await optionalPackageIndex(version), checked = new Set<string>(); signal?.throwIfAborted();
+    const localAvailable = (name: string): boolean => {
+      if (BASE.has(name) || installed.has(name) || checked.has(name)) return true;
+      const record = local.get(name); if (!record) return false; checked.add(name);
+      return dependencies(record).every(localAvailable);
+    };
+    let index = local;
+    if (!requested.every(localAvailable)) {
+      stage = '读取 R/Wasm 包仓库索引'; progress(`正在检查 R/Wasm ${version} 扩展包仓库…`);
+      index = new Map([...(await packageIndex(repo)), ...local]); signal?.throwIfAborted();
+    }
     const ordered: PackageRecord[] = [], visited = new Set<string>();
     const visit = (name: string) => {
       if (BASE.has(name) || installed.has(name) || visited.has(name)) return;
@@ -138,7 +198,7 @@ export async function installRPackages(r: RPackageHost, requested: string[], pro
       visited.add(name);
       const p = index.get(name);
       if (!p) throw new Error(`R/Wasm ${version} 仓库尚未提供 ${name} 的二进制构建；桌面 R 包不能直接用于浏览器`);
-      for (const field of ['Depends', 'Imports', 'LinkingTo']) for (const dep of (p[field] ?? '').split(',').map((s) => s.replace(/\s*\([^)]*\)/g, '').trim()).filter(Boolean)) visit(dep);
+      for (const dep of dependencies(p)) visit(dep);
       ordered.push(p);
     };
     for (const name of requested) visit(name);
@@ -149,7 +209,12 @@ export async function installRPackages(r: RPackageHost, requested: string[], pro
       const file = pkg.File || `${pkg.Package}_${pkg.Version}.tgz`;
       if (!/^[\w.+-]+\.tgz$/.test(file)) throw new Error(`R 包仓库返回了无效文件名：${file}`);
       stage = `下载 ${pkg.Package}`;
-      const bytes = new Uint8Array(await (await download(repo + file, signal, (bytes, total, cached) => update({ bytes, total, cached }))).arrayBuffer());
+      const url = pkg.IotaLocalFile ? rPlotAssetUrl(`language/${pkg.IotaLocalFile}`) : repo + file;
+      const bytes = new Uint8Array(await (await download(url, signal, (bytes, total, cached) => update({ bytes, total, cached }))).arrayBuffer());
+      if (pkg.IotaSHA256) {
+        const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(v => v.toString(16).padStart(2, '0')).join('');
+        if (hash !== pkg.IotaSHA256) throw new Error(`${pkg.Package} 的下载校验失败，请重试`);
+      }
       update({ phase: 'install' });
       progress(`已下载 ${pkg.Package}，正在解包安装（${i + 1}/${ordered.length}）…`);
       stage = `解包安装 ${pkg.Package}`;
@@ -161,10 +226,9 @@ export async function installRPackages(r: RPackageHost, requested: string[], pro
       await r.evalRVoid(`.libPaths(c(${quote(target)}, .libPaths()))`);
     }
     stage = '加载安装后的 R 包';
-    for (const name of requested) if (!await r.evalRBoolean(`requireNamespace(${quote(name)}, quietly = TRUE)`)) {
-      let detail = '';
-      try { await r.evalRVoid(`loadNamespace(${quote(name)})`); } catch (e) { detail = (e as Error).message; }
-      throw new Error(`R 包 ${name} 下载后仍无法加载${detail ? `：${detail}` : ''}`);
+    for (const name of verify ? requested : []) {
+      const detail = await r.evalRString(`tryCatch({ loadNamespace(${quote(name)}); "IOTA_PACKAGE_OK" }, error = function(e) conditionMessage(e))`);
+      if (detail !== 'IOTA_PACKAGE_OK') throw new Error(`R 包 ${name} 下载后仍无法加载：${detail}`);
     }
     update({ phase: 'ready' });
   } catch (e) { const error = new Error(`${stage}：${(e as Error)?.message || String(e)}`); update({ phase: 'error', error: error.message }); throw error; }

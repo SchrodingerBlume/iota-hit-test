@@ -91,7 +91,7 @@ async function pump() {
       setJob(job.id, { phase: 'running', startedAt: Date.now(), status: '正在准备 R 绘图…' });
       try {
         const d = job.draft;
-        const result = await createRPlot(d.code, { width: d.width / 2.54, height: d.height / 2.54, pointsize: d.pointsize, seed: d.seed,
+        const result = await createRPlot(d.code, { width: d.width / 2.54, height: d.height / 2.54, pointsize: d.fontMode === 'auto' ? undefined : d.pointsize, seed: d.seed,
           files: rPlotDataFiles(d.dataFiles), timeout: d.timeout, signal: controller.signal,
           progress: (status) => { if (getJob(job.id)?.phase === 'running') setJob(job.id, { status }); },
         });

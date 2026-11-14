@@ -53,7 +53,7 @@ iota-hit 在线编辑器 · 开源许可与声明
     来源：https://react.dev
     修改：无
 
-· webR（R 的 WebAssembly 运行时，首次 R 绘图才加载） 0.6.1
+· webR（R 的 WebAssembly 运行时，正文就绪后后台准备） 0.6.1
     版权：R Core Team、Lionel Henry、George Stagg 及 webR 贡献者
     许可：GPL-3.0-or-later / MIT，详见 rplot/WEBR-LICENSE.md
     来源：https://github.com/r-wasm/webr
@@ -76,6 +76,18 @@ iota-hit 在线编辑器 · 开源许可与声明
     许可：MIT
     来源：https://tiptap.dev
     修改：无
+
+· CodeMirror 6（R 代码编辑区与 legacy R mode） 6.0.2
+    版权：Marijn Haverbeke 及贡献者
+    许可：MIT
+    来源：https://codemirror.net
+    修改：无；接入高亮、缩进、补全与诊断
+
+· R languageserver（可选下载）
+    版权：Randy Lai、Kun Ren 及贡献者
+    许可：MIT + file LICENSE；依赖各自许可保留在下载的 R 包中
+    来源：https://github.com/REditorSupport/languageserver / repo.r-wasm.org
+    修改：固定二进制按需从 rplot/language/ 下载，含 copyleft 依赖对应源码；浏览器 transport、任务调度与悬停签名适配见 src/rplot/language-service.R
 
 · tiptap-comment-extension 0.2.0
     版权：Jeet Mandaliya
@@ -1052,6 +1064,384 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+[codemirror]
+MIT License
+
+Copyright (C) 2018-2021 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+[@codemirror/state]
+MIT License
+
+Copyright (C) 2018-2021 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+[@codemirror/view]
+MIT License
+
+Copyright (C) 2018-2021 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+[@codemirror/language]
+MIT License
+
+Copyright (C) 2018-2021 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+[@codemirror/autocomplete]
+MIT License
+
+Copyright (C) 2018-2021 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+[@codemirror/commands]
+MIT License
+
+Copyright (C) 2018-2021 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+[@codemirror/lint]
+MIT License
+
+Copyright (C) 2018-2021 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+[@codemirror/search]
+MIT License
+
+Copyright (C) 2018-2021 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+[@codemirror/legacy-modes]
+MIT License
+
+Copyright (C) 2018-2021 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+[@lezer/common]
+MIT License
+
+Copyright (C) 2018 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+[@lezer/highlight]
+MIT License
+
+Copyright (C) 2018 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+[@lezer/lr]
+MIT License
+
+Copyright (C) 2018 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+[style-mod]
+Copyright (C) 2018 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+[w3c-keyname]
+Copyright (C) 2016 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+[crelt]
+Copyright (C) 2020 by Marijn Haverbeke <marijn@haverbeke.berlin>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+[@marijn/find-cluster-break]
+MIT License
+
+Copyright (C) 2024 by Marijn Haverbeke <marijn@haverbeke.berlin>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
 
 
 citeproc-js 的许可声明（CPAL-1.0 或 AGPL，本站按 CPAL 使用；导出 Word 时的参考文献由它按 CSL 排版）
@@ -4063,6 +4453,219 @@ COPYRIGHT HOLDER: Simon Garnier
 ------------------------------------------------------------
 YEAR: 2020
 COPYRIGHT HOLDER: withr authors
+
+
+
+public/rplot/language/THIRD-PARTY.txt
+--------------------------------------------------------------------------
+
+可选 R 语言服务与多面板绘图依赖
+二进制原样来自 repo.r-wasm.org；包内 DESCRIPTION / LICENSE / COPYING 保留原始许可。
+浏览器适配位于 src/rplot/language-service.R。本站文件均位于 rplot/language/。
+
+brew 1.0-10
+License: GPL (>= 2)
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/brew_1.0-10.tgz
+Source: rplot/language/brew_1.0-10-source.tar.gz
+SHA256: c3925b8ea178ee7ceb62604ec63028b65f0e950c8272cfcc2d2223a4708a132b
+
+callr 3.8.0
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/callr_3.8.0.tgz
+Source: https://cran.r-project.org/src/contrib/callr_3.8.0.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/callr/callr_3.8.0.tar.gz)
+SHA256: c4093fa70e16cb0b067ba95faef423a8ae4068fcc6d764fe74f537216eb93482
+
+codetools 0.2-20
+License: GPL
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/codetools_0.2-20.tgz
+Source: rplot/language/codetools_0.2-20-source.tar.gz
+SHA256: 36b3c58993dffe36937ff8470b2d185f9f6588412605ca0709fc95d970ce5014
+
+collections 0.3.12
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/collections_0.3.12.tgz
+Source: https://cran.r-project.org/src/contrib/collections_0.3.12.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/collections/collections_0.3.12.tar.gz)
+SHA256: 35f265a5d51ed2e21310a5b1807c89032b27a815cf70af1030878dcac499d0d0
+
+commonmark 2.0.0
+License: BSD_2_clause + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/commonmark_2.0.0.tgz
+Source: https://cran.r-project.org/src/contrib/commonmark_2.0.0.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/commonmark/commonmark_2.0.0.tar.gz)
+SHA256: d8feca9497e46d437fe7b33feebbb8c32953cf05707ebcf4335ad9b83523b8a9
+
+desc 1.4.3
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/desc_1.4.3.tgz
+Source: https://cran.r-project.org/src/contrib/desc_1.4.3.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/desc/desc_1.4.3.tar.gz)
+SHA256: eb8fce0f98688243ae0a28cc8ecc402d49aa728a94d63fc371dd638372e9c0fa
+
+evaluate 1.0.5
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/evaluate_1.0.5.tgz
+Source: https://cran.r-project.org/src/contrib/evaluate_1.0.5.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/evaluate/evaluate_1.0.5.tar.gz)
+SHA256: 78e951393968c4d2298d9ea380bb06ab31f037dc9eaf74fac9b59a77c3801c3c
+
+fs 2.1.0
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/fs_2.1.0.tgz
+Source: https://cran.r-project.org/src/contrib/fs_2.1.0.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/fs/fs_2.1.0.tar.gz)
+SHA256: c5c986963981c09e40a50cd4ff3b1cc98f2f7758880f7fcc91a71855a96c9d9b
+
+highr 0.12
+License: GPL
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/highr_0.12.tgz
+Source: rplot/language/highr_0.12-source.tar.gz
+SHA256: 007f33651dca953ffa35db7362776aa8a00993c6f3986c46cfdc2e0759581871
+
+knitr 1.52
+License: GPL
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/knitr_1.52.tgz
+Source: rplot/language/knitr_1.52-source.tar.gz
+SHA256: 7d6a45ce61a39380eae654dbcf1cc79b9a4f4d3d06560e20c08fd017faaf80ac
+
+languageserver 0.3.20
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/languageserver_0.3.20.tgz
+Source: https://cran.r-project.org/src/contrib/languageserver_0.3.20.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/languageserver/languageserver_0.3.20.tar.gz)
+SHA256: 7929f2ab277298f89b9543f1cdee98a63b5f27734b1978dd1bd4cf599eeb28f1
+
+lintr 3.4.0
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/lintr_3.4.0.tgz
+Source: https://cran.r-project.org/src/contrib/lintr_3.4.0.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/lintr/lintr_3.4.0.tar.gz)
+SHA256: 1860d098a5ea2c94b9695242b8085eda466803d554644d7523cefe4a4bffa295
+
+magrittr 2.0.5
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/magrittr_2.0.5.tgz
+Source: https://cran.r-project.org/src/contrib/magrittr_2.0.5.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/magrittr/magrittr_2.0.5.tar.gz)
+SHA256: ff7c81a6839f611a9a7d16b2e03ba6e99859992128012f8e9d3d7a8ef1ad5588
+
+otel 0.2.0
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/otel_0.2.0.tgz
+Source: https://cran.r-project.org/src/contrib/otel_0.2.0.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/otel/otel_0.2.0.tar.gz)
+SHA256: 722eed201325be994c5ce729f0d016571b9987c51193e87134fd2fe65d6ce09b
+
+patchwork 1.3.2
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/patchwork_1.3.2.tgz
+Source: https://cran.r-project.org/src/contrib/patchwork_1.3.2.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/patchwork/patchwork_1.3.2.tar.gz)
+SHA256: 729f2264553e2bf8d4ba035b3ef6fe80c500861bdf79e9ba06fdcbc846f3897f
+
+pkgbuild 1.4.8
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/pkgbuild_1.4.8.tgz
+Source: https://cran.r-project.org/src/contrib/pkgbuild_1.4.8.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/pkgbuild/pkgbuild_1.4.8.tar.gz)
+SHA256: 0c3fcdc7578c7636676b749f13079c4fb512256e899ef78873d9501f4856ebaf
+
+pkgload 1.5.3
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/pkgload_1.5.3.tgz
+Source: https://cran.r-project.org/src/contrib/pkgload_1.5.3.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/pkgload/pkgload_1.5.3.tar.gz)
+SHA256: 2743133cddf03d4f31739d6780781a38126f857e0d266157c1ee5593129c2916
+
+processx 3.9.0
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/processx_3.9.0.tgz
+Source: https://cran.r-project.org/src/contrib/processx_3.9.0.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/processx/processx_3.9.0.tar.gz)
+SHA256: c994d967a7daf02b3a1fc816cf7e2cc58520b7e887b1fa11d83f878ed79dccbc
+
+ps 1.9.3
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/ps_1.9.3.tgz
+Source: https://cran.r-project.org/src/contrib/ps_1.9.3.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/ps/ps_1.9.3.tar.gz)
+SHA256: ec2e4d31b380325725ccc5618ff3335c8adb451eca347ede3e30d856b56b6614
+
+purrr 1.2.2
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/purrr_1.2.2.tgz
+Source: https://cran.r-project.org/src/contrib/purrr_1.2.2.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/purrr/purrr_1.2.2.tar.gz)
+SHA256: bd87e3e08ace87d8d6be7a47f4d2620843f15beb2f6e54f28eb90b1bdbb731e0
+
+R.cache 0.17.0
+License: LGPL (>= 2.1)
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/R.cache_0.17.0.tgz
+Source: rplot/language/R.cache_0.17.0-source.tar.gz
+SHA256: ba53cb4704e8298b69835f2d4965471bd5558b8a063b9a7af3f5791dede93a96
+
+R.methodsS3 1.8.2
+License: LGPL (>= 2.1)
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/R.methodsS3_1.8.2.tgz
+Source: rplot/language/R.methodsS3_1.8.2-source.tar.gz
+SHA256: b3d2d789f50fd72bb9a7074768d5dfa08f5c54bbe8e0b1cceac605cbd3de5e52
+
+R.oo 1.27.1
+License: LGPL (>= 2.1)
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/R.oo_1.27.1.tgz
+Source: rplot/language/R.oo_1.27.1-source.tar.gz
+SHA256: 791826747b52bd1ad1548531df858e77ec5e1bbe7eb1077dd82b0e24e7700381
+
+R.utils 2.13.0
+License: LGPL (>= 2.1)
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/R.utils_2.13.0.tgz
+Source: rplot/language/R.utils_2.13.0-source.tar.gz
+SHA256: 249d0ab8c8df3134860f837385424443e6736b100dc57b52521ff7b7881ba676
+
+rdtools 0.1.0
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/rdtools_0.1.0.tgz
+Source: https://cran.r-project.org/src/contrib/rdtools_0.1.0.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/rdtools/rdtools_0.1.0.tar.gz)
+SHA256: d435818660f1c4b27fe8d4ccc1de13e1757f4d371205479e1ad16f71a4530c06
+
+rex 1.2.2
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/rex_1.2.2.tgz
+Source: https://cran.r-project.org/src/contrib/rex_1.2.2.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/rex/rex_1.2.2.tar.gz)
+SHA256: 2098a2912b3f1a52b8c8fa050dd9f2cdfc137cb3f16756a9414a669095785bc1
+
+roxygen2 8.1.1
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/roxygen2_8.1.1.tgz
+Source: https://cran.r-project.org/src/contrib/roxygen2_8.1.1.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/roxygen2/roxygen2_8.1.1.tar.gz)
+SHA256: f81b47d8e4dadaced65b33a3a0fc7cf8ba23f7a3580a934c4055ddc8a9e8497a
+
+rprojroot 2.1.1
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/rprojroot_2.1.1.tgz
+Source: https://cran.r-project.org/src/contrib/rprojroot_2.1.1.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/rprojroot/rprojroot_2.1.1.tar.gz)
+SHA256: ed74ec20e04afbc9ae96ac61b3503801f52e93adbe32f71b3122a63463190a0f
+
+stringi 1.8.9
+License: file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/stringi_1.8.9.tgz
+Source: https://cran.r-project.org/src/contrib/stringi_1.8.9.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/stringi/stringi_1.8.9.tar.gz)
+SHA256: 9dbaf879802701c962215cea056873187e4034ea8aa4d9c3309871c3fa190a1c
+
+styler 1.11.0
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/styler_1.11.0.tgz
+Source: https://cran.r-project.org/src/contrib/styler_1.11.0.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/styler/styler_1.11.0.tar.gz)
+SHA256: 098a80aecb75125f9caa90a918e428d7dd9f74e3e5ed4c3ad768750c147815a3
+
+xfun 0.61
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/xfun_0.61.tgz
+Source: https://cran.r-project.org/src/contrib/xfun_0.61.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/xfun/xfun_0.61.tar.gz)
+SHA256: 62e6499ecbf49a3a2fc7343ac836c91c80f4d6bab5edeaed97fc1450230ff686
+
+xml2 1.6.0
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/xml2_1.6.0.tgz
+Source: https://cran.r-project.org/src/contrib/xml2_1.6.0.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/xml2/xml2_1.6.0.tar.gz)
+SHA256: 3618879568c846e1c4b298604297addf1867c2c461ad13361b623c0352a3ac86
+
+xmlparsedata 1.0.5
+License: MIT + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/xmlparsedata_1.0.5.tgz
+Source: https://cran.r-project.org/src/contrib/xmlparsedata_1.0.5.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/xmlparsedata/xmlparsedata_1.0.5.tar.gz)
+SHA256: d845e8ee3549cc03035ae53c081f23d13f62b0173e754211e09789f0daea0926
+
+yaml 2.3.12
+License: BSD_3_clause + file LICENSE
+Binary: https://repo.r-wasm.org/bin/emscripten/contrib/4.6/yaml_2.3.12.tgz
+Source: https://cran.r-project.org/src/contrib/yaml_2.3.12.tar.gz (archive: https://cran.r-project.org/src/contrib/Archive/yaml/yaml_2.3.12.tar.gz)
+SHA256: 027e4bd87fcd16d0ba744dd41c51e2eb711c07d873f6050e65c8daf454d74f13
 
 
 

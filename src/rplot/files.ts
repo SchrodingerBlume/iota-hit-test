@@ -8,6 +8,8 @@ export interface RPlotData {
   width: number;
   height: number;
   pointsize: number;
+  fontMode?: 'auto' | 'manual';
+  fontReport?: import('./fontPolicy').RFontReport;
   seed: number;
   path: string;
   source: string;
@@ -20,6 +22,7 @@ export interface RPlotDraft {
   code: string; width: number; height: number; pointsize: number; seed: number;
   caption: string; captionEn: string; label: string;
   timeout?: number;
+  fontMode?: 'auto' | 'manual';
   dataFiles?: { name: string; data: string }[];
 }
 export interface PendingRPlot {

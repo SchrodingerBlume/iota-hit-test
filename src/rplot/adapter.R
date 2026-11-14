@@ -16,12 +16,18 @@
     c(nchar(string, type = "width") * style$size * 0.55, style$size * 0.8, style$size * 0.2)
   }
 }
+
+.iota_try_draw <- function(...) tryCatch(.iota_draw(...), error = function(e) {
+  message <- conditionMessage(e)
+  if (!grepl("figure margins too large|figure region too large|plot region too large", message, ignore.case = TRUE)) stop(e)
+  jsonlite::toJSON(list(layoutError = message, missing = as.list(.iota_missing)), auto_unbox = TRUE)
+})
 .iota_ns <- asNamespace("cetzDevice")
 unlockBinding(".metric_backend", .iota_ns)
 assign(".metric_backend", .iota_backend, envir = .iota_ns)
 lockBinding(".metric_backend", .iota_ns)
 
-.iota_draw <- function(code, width, height, pointsize, seed) {
+.iota_draw <- function(code, width, height, pointsize, seed, auto_font = FALSE) {
   .iota_missing <<- new.env(parent = emptyenv())
   file <- "/tmp/iota-rplot.typ"
   # 入口的 CLI 文件检查保留；度量后端已替换，不会执行这个文件。
@@ -34,18 +40,22 @@ lockBinding(".metric_backend", .iota_ns)
     standalone = FALSE)
   device <- grDevices::dev.cur()
   state <- cetzDevice:::.devices[[as.character(device)]]
+  restore_fonts <- .iota_font_defaults(pointsize, auto_font)
+  on.exit(restore_fonts(), add = TRUE)
   environment <- new.env(parent = globalenv())
   on.exit(if (grDevices::dev.cur() > 1L) grDevices::graphics.off(), add = TRUE)
   logs <- capture.output({
     for (expression in parse(text = code)) {
+      expression <- .iota_font_calls(expression, pointsize, auto_font)
       value <- withVisible(eval(expression, envir = environment))
       if (value$visible) print(value$value)
     }
   })
+  labels <- .iota_label_boxes(state)
   if (device %in% grDevices::dev.list()) grDevices::dev.off(device)
   if (!is.null(state$error)) stop(state$error)
   if (!length(state$pages)) stop("R 代码没有画出图；请使用 plot()、print(ggplot(...)) 等绘图语句")
   jsonlite::toJSON(list(source = paste(readLines(file, warn = FALSE), collapse = "\n"),
-    missing = as.list(.iota_missing), pages = length(state$pages), stdout = paste(logs, collapse = "\n")),
+    missing = as.list(.iota_missing), pages = length(state$pages), labels = labels, stdout = paste(logs, collapse = "\n")),
     auto_unbox = TRUE, null = "null")
 }

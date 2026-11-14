@@ -132,7 +132,7 @@ export const TOOLS: ToolDef[] = [
   { name: 'library_search', description: '检索资料库 PDF 全文，返回命中页码和原文片段；query 多个词以空格分隔，匹配同时包含全部词的页。id 可限定一份 PDF。扫描件须用 library_render 查看。', parameters: { type: 'object', properties: { query: { type: 'string' }, id: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 50 } }, required: ['query'], additionalProperties: false } },
   { name: 'library_read', description: '读取资料库 PDF 指定页范围的真实文字。id 来自 library_list/search；from_page/to_page 为 PDF 文件页码（从1开始），默认前5页，一次最多10页。引用须标明文献与页码，不可把未提取到的内容当作已阅读。', parameters: { type: 'object', properties: { id: { type: 'string' }, from_page: { type: 'integer', minimum: 1 }, to_page: { type: 'integer', minimum: 1 } }, required: ['id'], additionalProperties: false } },
   { name: 'library_render', description: '将资料库 PDF 指定页渲染为图片回传给你，阅读扫描件、图表和公式时使用。id 来自 library_list/search；page 为从1开始的 PDF 页码；scale 默认1.5，范围0.5–3。', parameters: { type: 'object', properties: { id: { type: 'string' }, page: { type: 'integer', minimum: 1 }, scale: { type: 'number', minimum: .5, maximum: 3 } }, required: ['id', 'page'], additionalProperties: false } },
-  { name: 'r_plot', description: '用浏览器内的 R/Wasm + cetzDevice 0.5.3.1 绘图，转成 CeTZ 矢量图并直接插进论文。code 填 R 绘图代码（base plot、grid、ggplot2 均可），不要自己打开/关闭图形设备；ggplot 对象在顶层会自动 print。width/height 是厘米（默认14×9），pointsize 是 pt。附件数据可从 /data/<文件名> 读取。part 指目标部分，at 指插入块号，或 replace=[from,to] 替换已有块。保留 R 代码，用户可随时点「编辑 R 图」修改；输出另存内部 .typ 模块，正文/PDF 保持矢量。只接受单页，多个面板请 par(mfrow=...)。绘图后会把图发回给你查看。', parameters: { type: 'object', properties: { ...place, code: { type: 'string' }, width: { type: 'number', minimum: 2.54, maximum: 50.8 }, height: { type: 'number', minimum: 2.54, maximum: 50.8 }, pointsize: { type: 'number', minimum: 4, maximum: 72 }, seed: { type: 'integer', minimum: 0, maximum: 2147483647 }, caption: { type: 'string' }, captionEn: { type: 'string' }, label: { type: 'string' }, timeout: { type: 'number', minimum: 5, maximum: 600 } }, required: ['part', 'code'], additionalProperties: false } },
+  { name: 'r_plot', description: '用浏览器内的 R/Wasm + cetzDevice 0.5.3.1 绘图，转成 CeTZ 矢量图并直接插进论文。code 填 R 绘图代码（base plot、grid、ggplot2 均可），不要自己打开/关闭图形设备；ggplot 对象在顶层会自动 print。width/height 是最终排版尺寸，单位厘米（默认14×9）。字排得下优先五号10.5pt：没有用户明确的pt要求时省略pointsize，自动检测拥挤后才尝试9/7.5pt；先调整布局，不要在代码里写死常见小字号绕过自动模式。显式pt及代码中的显式字号保留，不取整。附件数据可从 /data/<文件名> 读取。part 指目标部分，at 指插入块号，或 replace=[from,to] 替换已有块。保留 R 代码，用户可随时点「编辑 R 图」修改；输出另存内部 .typ 模块，正文/PDF 保持矢量。只接受单页，多个面板请 par(mfrow=...)。绘图后会把图发回给你查看。', parameters: { type: 'object', properties: { ...place, code: { type: 'string' }, width: { type: 'number', minimum: 2.54, maximum: 50.8, description: '论文中的最终图宽，厘米；生成后整体缩放会改变物理字号' }, height: { type: 'number', minimum: 2.54, maximum: 50.8 }, pointsize: { type: 'number', minimum: 4, maximum: 72, description: '仅用户明确指定pt时填写，同数值映射Typst pt、不取整；否则省略，自动五号优先' }, seed: { type: 'integer', minimum: 0, maximum: 2147483647 }, caption: { type: 'string' }, captionEn: { type: 'string' }, label: { type: 'string' }, timeout: { type: 'number', minimum: 5, maximum: 600 } }, required: ['part', 'code'], additionalProperties: false } },
   { name: 'outline', description: '看整篇的结构：各部分有多少块，正文与附录的标题树（带段号），图表清单。改之前先看这个。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'read', description: '读某一部分第 from 到 to 块（含两端，0 起数）的 Markdown，每块前有 <!-- #n --> 段号标。一次最多 80 块。', parameters: { type: 'object', properties: { part: partEnum, ...range }, required: ['part', 'from', 'to'], additionalProperties: false } },
   { name: 'replace', description: '用 Markdown 换掉某一部分第 from 到 to 块（含两端）。块数可以变。只换需要改的那几块；标题的标签、引用键、公式照原样留着。表和图别用它，用 table_write / figure_write。', parameters: { type: 'object', properties: { part: partEnum, ...range, markdown: { type: 'string' } }, required: ['part', 'from', 'to', 'markdown'], additionalProperties: false } },
@@ -943,7 +943,7 @@ async function dispatch(name: string, input: Record<string, any>, signal?: Abort
         for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
         return { name: a.name, data: btoa(binary) };
       });
-      const draft = { code: String(input.code ?? ''), width, height, pointsize: Number(input.pointsize ?? 11), seed: Number(input.seed ?? 1),
+      const draft = { code: String(input.code ?? ''), width, height, pointsize: Number(input.pointsize ?? 10.5), fontMode: input.pointsize === undefined ? 'auto' as const : 'manual' as const, seed: Number(input.seed ?? 1),
         timeout: Math.min(600, Math.max(5, Number(input.timeout ?? 120))),
         caption: String(input.caption ?? ''), captionEn: String(input.captionEn ?? ''), label: String(input.label ?? ''), ...(dataFiles.length ? { dataFiles } : {}) };
       signal?.throwIfAborted();
@@ -953,7 +953,7 @@ async function dispatch(name: string, input: Record<string, any>, signal?: Abort
       const job = await waitRPlotJob(id, signal, (s) => report(s));
       const result = job.result!;
       collectOutputs([{ name: `rplot-${result.plot.path.split('/').pop()!.replace('.typ', '.png')}`, bytes: new Uint8Array(await result.png.arrayBuffer()) }]);
-      return `${job.phase === 'completed' ? 'R 图已插入（CeTZ 矢量），已更新原占位位置。' : 'R 图已生成；工程已切换，回到原工程后将更新原占位位置。'}${out}${result.stdout ? '\nR 输出：\n' + result.stdout : ''}`;
+      return `${job.phase === 'completed' ? 'R 图已插入（CeTZ 矢量），已更新原占位位置。' : 'R 图已生成；工程已切换，回到原工程后将更新原占位位置。'}${out}\n字号模式：${result.plot.fontMode}，默认 ${result.plot.pointsize}pt（代码中的显式字号保持原值）。${result.plot.fontMode === 'auto' && result.plot.pointsize < 10.5 ? '自动字号已降级：优先调整标签换行/旋转、刻度、图例或分面后重新画，争取保留五号10.5pt；确实排不下才接受较小字号。' : ''}${result.plot.fontReport?.overlaps || result.plot.fontReport?.clipped ? '仍有标签重叠或裁切：请先调整布局、标签和最终图宽，不要继续缩小字号。' : ''}${result.stdout ? '\nR 输出：\n' + result.stdout : ''}`;
     }
     case 'library_list': case 'library_search': case 'library_read': case 'library_render': {
       const result = await libraryTool(name, input, signal);
@@ -1028,6 +1028,8 @@ export const SYSTEM_PROMPT = `你是 HιT webapp 里的写作助手（名字读 
 用户问导出 Word（.docx，顶栏「下载」里）：封面 / 内封照校方范例抄、正文按排版出的 PDF 逐页对拍过，浮动图表在 Word 里是图文框；已知差别只有两处——续表没有「（续表）」题，博士论文第 1 页落在偶数页时 Word 会自己补一张白页（双面奇偶页眉的规矩）。
 规矩：
 - 用户要用 R 绘图、ggplot2、或希望图随正文保持矢量时，用 r_plot 直接画并插图，不要把 R 代码当 Typst 或只给用户一段代码。它自动管理 cetzDevice 图形设备与内部 .typ 文件；用户只看图和 R 代码。
+- R 图中文字只要排得下，优先用五号 10.5pt。没有用户明确的字号要求时省略 r_plot 的 pointsize，让自动模式先用五号，确有拥挤才尝试小五 9pt、六号 7.5pt。写代码不要顺手套小字主题或显式填写 geom_text(size=3)、theme_classic(base_size=11) 等默认数字绕过自动模式；优先调整图宽、标签换行/旋转、刻度数量、图例布局、分面和 ggrepel，查看返回的图后再决定是否重画。不要为省版面把可排下的五号字缩小。
+- 用户明确给出的 pt 必须按同数值的 Typst pt 保留，不取整、不改成中文字号；已有 R 代码里的 gpar(fontsize=...)、element_text(size=...)、显式主题 base_size 和 geom_text 的字号也须尊重（geom_text 默认单位是 mm，不能误当 pt）。按论文最终图宽生成；不要靠插入后整体缩放图来解决布局，否则物理字号会跟着变化。
 - 用户说清楚了就直接做完，不要一步一问、不要先请示再动手、不要只做一半等确认：所有改动都在撤消里能回退，改错了可以再改。只有几种理解会导致明显不同的结果时才问一句，问之前先把不依赖答案的部分做掉。要你写就写出完整的段落，不要只给提纲或占位符。
 - 快：read 一次最多 80 块，一次把整章 / 整个部分读完，不要读几块改几块；replace 一次换一段连续范围，几处不相干的改动、几个不相干的查询放在同一轮里一起调用；不用为了「确认」而重复读。
 - 先 outline 或 read 看清楚再改，只换需要改的那几块；不要改标题的标签、引用键。
