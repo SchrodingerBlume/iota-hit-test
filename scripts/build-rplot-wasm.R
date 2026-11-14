@@ -19,7 +19,7 @@ rv <- strsplit(as.character(version), "\\.")[[1]]
 repo <- paste0("https://repo.r-wasm.org/bin/emscripten/contrib/", paste(rv[1:2], collapse = "."), "/")
 index <- read.dcf(gzcon(url(paste0(repo, "PACKAGES.gz"))))
 base_packages <- c("R", "base", "compiler", "datasets", "graphics", "grDevices", "grid", "methods", "parallel", "splines", "stats", "stats4", "tools", "utils")
-pending <- c("digest", "jsonlite", "png", "ggplot2")
+pending <- c("digest", "jsonlite", "png", "ggplot2", "ggrepel")
 included <- character()
 while (length(pending)) {
   name <- pending[[1L]]
