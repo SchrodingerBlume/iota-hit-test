@@ -10,6 +10,8 @@ export interface RPlotData {
   pointsize: number;
   fontMode?: 'auto' | 'manual';
   fontReport?: import('./fontPolicy').RFontReport;
+  /** 上下裁切距离，单位 Typst pt；width/height 仍为原始 R 画布英寸，供重排使用。 */
+  crop?: { top: number; bottom: number };
   seed: number;
   path: string;
   source: string;
@@ -50,6 +52,15 @@ export function rPlotOf(value: unknown): RPlotData | null {
   } catch { return null; }
 }
 
+export function rPlotCrop(plot: RPlotData) {
+  const c = plot.crop;
+  return c && [c.top, c.bottom].every(n => Number.isFinite(n) && n >= 0) && c.top + c.bottom < plot.height * 72 ? c : undefined;
+}
+export function rPlotHeight(plot: RPlotData): number {
+  const crop = rPlotCrop(plot);
+  return plot.height - (crop ? (crop.top + crop.bottom) / 72 : 0);
+}
+
 /** 可接收整份工程，也可接收只编一章/一段的 RichDoc。 */
 export function collectRPlotFiles(value: unknown): Record<string, string> {
   const files: Record<string, string> = {};
@@ -57,7 +68,7 @@ export function collectRPlotFiles(value: unknown): Record<string, string> {
     if (!v || typeof v !== 'object') return;
     if (v.type === 'figure') {
       const plot = rPlotOf(v.attrs?.rPlot);
-      if (plot) files[plot.path] = stockRPlotSource(plot.source);
+      if (plot) files[plot.path] = stockRPlotSource(plot.source, rPlotCrop(plot));
     }
     if (Array.isArray(v)) { for (const item of v) walk(item); }
     else { for (const [key, item] of Object.entries(v)) if (key !== 'attrs') walk(item); }

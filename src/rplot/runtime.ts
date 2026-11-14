@@ -130,7 +130,8 @@ export async function runRPlot(code: string, options: RPlotOptions = {}): Promis
             for (let i = 0; i < f.bytes.length; i += 8192) binary += String.fromCharCode(...f.bytes.subarray(i, i + 8192));
             return { name: f.name, data: btoa(binary) };
           });
-          return { plot: { version: '0.5.3.1' as const, code, width, height, pointsize: fontSize, fontMode, fontReport: { mode: fontMode, pointsize: fontSize, ...fit }, seed, source: result.source, path: `rplots/${hash}.typ`, pages: result.pages, ...(dataFiles.length ? { dataFiles } : {}) }, stdout: result.stdout };
+          const sizes = [...new Set((result.labels ?? []).map(l => Math.round(l.size * 1e6) / 1e6).filter(n => Number.isFinite(n) && n > 0))].sort((a, b) => a - b);
+          return { plot: { version: '0.5.3.1' as const, code, width, height, pointsize: fontSize, fontMode, fontReport: { mode: fontMode, pointsize: fontSize, sizes, ...fit }, seed, source: result.source, path: `rplots/${hash}.typ`, pages: result.pages, ...(dataFiles.length ? { dataFiles } : {}) }, stdout: result.stdout };
         }
         progress(`正在用 Typst 测量图中文字（${Object.keys(missing).length} 项）…`);
         const measured = await measureLabels(missing);

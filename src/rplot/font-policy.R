@@ -1,7 +1,11 @@
 # 只改默认值：显式 pointsize、gpar(fontsize)、element_text(size)、geom_text(size) 原样交给 R。
-.iota_text_theme <- function(size) {
+.iota_text_theme <- function(size, theme) {
   element <- ggplot2::element_text(size = size)
-  do.call(ggplot2::theme, setNames(rep(list(element), 10L), c("text", "axis.text", "axis.title", "legend.text", "legend.title", "strip.text", "plot.title", "plot.subtitle", "plot.caption", "plot.tag")))
+  parts <- c("text", "axis.text", "axis.title", "legend.text", "legend.title", "strip.text", "plot.title", "plot.subtitle", "plot.caption", "plot.tag")
+  visible <- vapply(parts, function(part) !inherits(ggplot2::calc_element(part, theme), c("element_blank", "ggplot2::element_blank")), logical(1L))
+  changes <- setNames(rep(list(element), sum(visible)), parts[visible])
+  changes$geom <- ggplot2::element_geom(fontsize = size)
+  do.call(ggplot2::theme, changes)
 }
 .iota_auto_theme <- function(fn, size, ...) {
   args <- list(...)
@@ -10,7 +14,8 @@
   names <- names(args)
   explicit <- length(args) && (is.null(names) || any(!nzchar(names)) || "base_size" %in% names)
   if (explicit) return(do.call(fn, args))
-  do.call(fn, c(list(base_size = size), args)) + .iota_text_theme(size)
+  theme <- do.call(fn, c(list(base_size = size), args))
+  theme + .iota_text_theme(size, theme)
 }
 .iota_base_layout <- function(fn, ...) {
   args <- list(...)
@@ -22,6 +27,28 @@
   # R 的多面板布局会隐式把 cex 降为 .83/.66；自动模式不据此把能排下的五号缩小。
   if (reset) graphics::par(cex = 1)
   if (value$visible) value$value else invisible(value$value)
+}
+.iota_text_geom <- function(.iota_fn, ...) {
+  args <- list(...)
+  name <- if (identical(.iota_fn, ggplot2::geom_text)) "geom_text" else if (identical(.iota_fn, ggplot2::geom_label)) "geom_label" else NULL
+  if (is.null(name)) return(do.call(.iota_fn, args))
+  layer <- do.call(name, args, envir = asNamespace("ggplot2"))
+  if (!is.null(args[["size"]])) return(layer)
+  unit <- args[["size.unit"]]
+  if (is.null(unit) || identical(unit, "mm")) return(layer)
+  factor <- switch(unit, pt = 1, cm = ggplot2::.pt * 10, `in` = ggplot2::.pt * 25.4, pc = 12, NULL)
+  if (is.null(factor)) return(layer)
+  # 只改这一层的默认值；映射到 size 的数据、显式 size 和其他文字层都不受影响。
+  parent <- layer$geom
+  defaults <- parent$default_aes
+  value <- defaults[["size"]]
+  if (!rlang::is_quosure(value)) return(layer)
+  expression <- rlang::quo_get_expr(value)
+  if (!rlang::is_call(expression, "from_theme")) return(layer)
+  expression[[2L]] <- call("*", expression[[2L]], ggplot2::.pt / factor)
+  defaults$size <- rlang::new_quosure(expression, rlang::quo_get_env(value))
+  layer$geom <- ggplot2::ggproto(NULL, parent, default_aes = defaults)
+  layer
 }
 .iota_font_calls <- function(expr, size, auto_font = TRUE) {
   if (!is.call(expr)) return(expr)
@@ -43,6 +70,7 @@
   }
   expr <- as.call(parts)
   if (name %in% themes && !has_missing) return(as.call(c(list(.iota_auto_theme, head, size), parts[-1L])))
+  if (name %in% c("geom_text", "geom_label") && !has_missing) return(as.call(c(list(.iota_text_geom, head), parts[-1L])))
   if (auto_font && name %in% c("par", "layout") && !has_missing) return(as.call(c(list(.iota_base_layout, head), parts[-1L])))
   expr
 }
@@ -51,11 +79,17 @@
   if (auto_font) graphics::par(cex.main = 1, cex.lab = 1, cex.axis = 1, cex.sub = 1)
   if (!"ggplot2" %in% loadedNamespaces()) return(function() invisible(NULL))
   old <- ggplot2::theme_get()
-  ggplot2::theme_set(old + .iota_text_theme(size))
+  ggplot2::theme_set(old + .iota_text_theme(size, old))
   geoms <- list(ggplot2::GeomText, ggplot2::GeomLabel)
   if ("ggrepel" %in% loadedNamespaces()) geoms <- c(geoms, list(ggrepel::GeomTextRepel, ggrepel::GeomLabelRepel))
   defaults <- lapply(geoms, function(g) g$default_aes)
-  for (g in geoms) ggplot2::update_geom_defaults(g, list(size = size / ggplot2::.pt))
+  for (g in geoms) {
+    value <- g$default_aes[["size"]]
+    if (rlang::is_quosure(value) && "from_theme" %in% all.names(rlang::quo_get_expr(value))) next
+    aes <- g$default_aes
+    aes$size <- rlang::new_quosure(quote(from_theme(fontsize)), asNamespace("ggplot2"))
+    g$default_aes <- aes
+  }
   function() {
     ggplot2::theme_set(old)
     for (i in seq_along(geoms)) geoms[[i]]$default_aes <- defaults[[i]]

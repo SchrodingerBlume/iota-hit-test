@@ -5,14 +5,23 @@ set text(tracking: 0pt, spacing: 100%, kerning: true, baseline: 0pt, overhang: t
 
 export const R_PLOT_STOCK_PRELUDE = R_PLOT_STOCK_STYLES.replace(/^set /gm, '#set ');
 
-export function stockRPlotSource(source: string): string {
-  if (source.includes('// iota-rplot-stock-typography')) return source;
-  return `${source}
+export function stockRPlotSource(source: string, crop?: { top: number; bottom: number }): string {
+  const scoped = source.includes('// iota-rplot-stock-typography') ? source : `${source}
 // iota-rplot-stock-typography: only the plot body, not its thesis caption
 #let iota-rplot-original = r-figure
 #let r-figure(..args) = {
   ${R_PLOT_STOCK_STYLES}
   iota-rplot-original(..args)
+}
+`;
+  if (!crop || (!crop.top && !crop.bottom)) return scoped;
+  return `${scoped}
+// iota-rplot-vertical-crop: translate and clip, never scale the plot or its fonts
+#let iota-rplot-uncropped = r-figure
+#let r-figure(..args) = {
+  let h = calc.max(1pt, r-size.at(1) * 1pt - ${crop.top}pt - ${crop.bottom}pt)
+  block(width: r-size.at(0) * 1pt, height: h, spacing: 0pt, clip: true,
+    place(top + left, dy: -${crop.top}pt, iota-rplot-uncropped(..args)))
 }
 `;
 }

@@ -1,7 +1,7 @@
 /** 自动按五号→小五→六号尝试；显式 pt 与 R 代码中的显式字号不参与取整。 */
 export const R_AUTO_FONT_SIZES = [10.5, 9, 7.5] as const;
 export interface RLabelBox { label: string; size: number; x: number; y: number; width: number; ascent: number; descent: number; angle: number; clip: number[] }
-export interface RFontReport { mode: 'auto' | 'manual'; pointsize: number; overlaps: number; clipped: number; autoOverlaps?: number; autoClipped?: number }
+export interface RFontReport { mode: 'auto' | 'manual'; pointsize: number; sizes?: number[]; overlaps: number; clipped: number; autoOverlaps?: number; autoClipped?: number }
 
 export function inspectRLabels(labels: RLabelBox[], size: number): Pick<RFontReport, 'overlaps' | 'clipped' | 'autoOverlaps' | 'autoClipped'> {
   const boxes = labels.filter((l) => [l.x, l.y, l.width, l.ascent, l.descent, l.angle].every(Number.isFinite)).map((l) => {
