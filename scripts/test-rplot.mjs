@@ -99,6 +99,7 @@ try {
     const manual = await a.runRPlot('plot(1:3)', { width: 5.5, height: 3.5, pointsize: 10.8 });
     const explicit = await a.runRPlot('grid::grid.text("Explicit 10.8", gp=grid::gpar(fontsize=10.8))', { width: 5.5, height: 3.5 });
     await a.runRPlot('plot.new(); f <- function(x=99,y=99) { stopifnot(is.null(x), missing(y)); text(.5,.5,"Literal NULL preserved") }; f(NULL,)', { width: 5.5, height: 3.5 });
+    await a.runRPlot('stopifnot(identical(base::quote(theme_classic()), quote(theme_classic())), identical(rlang::expr(theme_classic()), quote(theme_classic()))); plot(1:3)', { width: 5.5, height: 3.5 });
     const panels = await a.runRPlot('par(mfrow=c(2,2)); plot(1:3); plot(3:1)', { width: 8, height: 7 });
     const smallPanels = await a.runRPlot('par(mfrow=c(2,2)); plot(1:3)', { width: 3, height: 3 });
     const explicitCex = await a.runRPlot('par(mfrow=c(2,2), cex=.9); plot(1:3)', { width: 8, height: 7 });

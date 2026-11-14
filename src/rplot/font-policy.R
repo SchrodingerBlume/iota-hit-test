@@ -27,6 +27,11 @@
   if (!is.call(expr)) return(expr)
   head <- expr[[1L]]
   if (is.symbol(head) && as.character(head) %in% c("quote", "substitute", "expression", "bquote")) return(expr)
+  if (is.call(head) && (identical(head[[1L]], as.name("::")) || identical(head[[1L]], as.name(":::")))) {
+    package <- as.character(head[[2L]]); fun <- as.character(head[[3L]])
+    if (package == "base" && fun %in% c("quote", "substitute", "expression", "bquote")) return(expr)
+    if (package == "rlang" && fun %in% c("expr", "exprs", "quo", "quos", "enquo", "enquos", "ensym", "ensyms")) return(expr)
+  }
   name <- if (is.symbol(head)) as.character(head) else if (is.call(head) && identical(head[[1L]], as.name("::")) && as.character(head[[2L]]) %in% c("ggplot2", "graphics")) as.character(head[[3L]]) else ""
   themes <- c("theme_gray", "theme_grey", "theme_bw", "theme_linedraw", "theme_light", "theme_dark", "theme_minimal", "theme_classic", "theme_void", "theme_test")
   parts <- as.list(expr); has_missing <- FALSE
