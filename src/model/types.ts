@@ -53,6 +53,8 @@ export interface Settings {
   /** 学术／专业学位。auto 按 form 定；本科不印这一行 */
   degreeType: Tri<DegreeType | 'none'>;
   form: Form;
+  /** 本科文种，只通过术语覆盖区分毕业与综合；硕博保留此值但不使用。 */
+  bachelorDocumentType?: 'graduation' | 'comprehensive';
   stage: Stage;
   category: Category;
   lang: Lang;

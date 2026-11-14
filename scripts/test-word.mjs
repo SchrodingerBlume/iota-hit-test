@@ -18,7 +18,7 @@ import { defaultSettings } from '/src/model/options.ts';
 import { setImageNamespace, saveImage } from '/src/model/persist.ts';
 import { buildDocx } from '/src/export/docx/build.ts';
 window.exportWordCase = async function(kind) {
-  const settings = kind === 'interim' ? { campus: 'shenzhen', degreeLevel: 'doctor', stage: 'interim' } : kind === 'doctor-chapter' ? { degreeLevel: 'doctor' } : kind === 'foot' ? { bibStyle: 'foot' } : kind === 'author-date' ? { bibStyle: 'author-date', bibVersion: '2025' } : {};
+  const settings = kind === 'interim' ? { campus: 'shenzhen', degreeLevel: 'doctor', stage: 'interim' } : kind === 'bachelor-comprehensive' ? { degreeLevel: 'bachelor', bachelorDocumentType: 'comprehensive', form: 'practice' } : kind === 'doctor-chapter' ? { degreeLevel: 'doctor' } : kind === 'foot' ? { bibStyle: 'foot' } : kind === 'author-date' ? { bibStyle: 'author-date', bibVersion: '2025' } : {};
   const d = sampleDoc({ ...defaultSettings(), ...settings });
   if (kind === 'formats') d.body.content.push({ type: 'paragraph', content: [{ type: 'text', text: 'BROWSER_FORMAT', marks: [{ type: 'fontFamily', attrs: { role: 'heiti' } }, { type: 'fontSize', attrs: { size: '15pt' } }, { type: 'textColor', attrs: { color: '#123456' } }, { type: 'highlight', attrs: { color: '#ffff00' } }] }] });
   if (kind === 'chapter' || kind === 'doctor-chapter') { d.settings.layout = { chapters: { '1': { margin: { left: '4cm' } } } }; d.settings.localStyles = { chapters: { '1': { body: { size: '13pt', bold: true } } } }; }
@@ -50,7 +50,7 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('http://127.0.0.1:5321/__word_export__');
   await page.waitForFunction(() => !!window.exportWordCase);
-  for (const kind of ['formats', 'chapter', 'doctor-chapter', 'header', 'author-date', 'foot', 'lists', 'interim']) {
+  for (const kind of ['formats', 'chapter', 'doctor-chapter', 'header', 'author-date', 'foot', 'lists', 'interim', 'bachelor-comprehensive']) {
     const files = await page.evaluate(kind => window.exportWordCase(kind), kind);
     for (const [name, xml] of Object.entries(files)) { xml2js(xml); assert.ok(!/="(?:NaN|undefined|Infinity)"/.test(xml), name); }
     const xml = files['word/document.xml'], styles = files['word/styles.xml'];
@@ -71,6 +71,7 @@ try {
     if (kind === 'foot') assert.ok(xml.includes('<w:footnoteReference') && files['word/footnotes.xml'].includes('WILLIS'));
     if (kind === 'lists') assert.ok(xml.includes('TOC \\f F') && xml.includes('TOC \\f T') && xml.includes('TOC \\f E') && xml.includes('INDEX \\h'));
     if (kind === 'interim') assert.ok(xml.includes('浏览器检查组长') && xml.includes('w:val="6180"') && xml.includes('<w:tblHeader'));
+    if (kind === 'bachelor-comprehensive') assert.ok(xml.includes('本科综合论文（设计）') && xml.includes('☑综合设计') && xml.includes('且综合论文（设计）中除已标注引用文献'));
     console.log(`PASS browser Word export: ${kind}`);
   }
   assert.deepEqual(errors, []);

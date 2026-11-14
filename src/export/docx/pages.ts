@@ -4,9 +4,11 @@ import type { ThesisDoc, Info, DefensePerson } from '../../model/types';
 import { SWITCHES, resolveSwitch } from '../../model/options';
 import { PT, HALF, ZIHAO, FONT, fonts, fontsFor, hasCJK } from './units';
 import { reportProfile } from './reports';
+import { bachelorText, bachelorTerm } from '../../model/bachelor';
 
 const DOC_TYPE = { bachelor: "本科毕业论文（设计）", master: "硕士学位论文", doctor: "博士学位论文" } as const;
 const DOC_TYPE_EN = { bachelor: 'Graduation Thesis', master: "Dissertation for the Master's Degree", doctor: "Dissertation for the Doctoral Degree" } as const;
+const documentType = (doc: ThesisDoc) => doc.settings.degreeLevel === 'bachelor' ? bachelorTerm(doc.settings, 'base-document-type-bachelor') ?? bachelorText(doc.settings, DOC_TYPE.bachelor) : DOC_TYPE[doc.settings.degreeLevel];
 
 const run = (text: string, size: number, o: { bold?: boolean; zh?: string; en?: string; italics?: boolean; spacing?: number; outline?: boolean } = {}) => {
   const r = new TextRun({ text, size: size * HALF, bold: o.bold, italics: o.italics, characterSpacing: o.spacing || undefined, font: fontsFor(text, o.zh ?? FONT.zh, o.en ?? FONT.en) });
@@ -168,7 +170,7 @@ export function coverPage(doc: ThesisDoc, _top: number): Paragraph[] {
   const [squeeze, above, below, before, relax] = chosen ?? [2, 0, 0, 0, 3];
   const seq: Line[] = [
     E(24, { latinMark: true }), E(24, { latinMark: true }), E(24, { latinMark: true }),
-    C(DOC_TYPE[s.degreeLevel], XY * 2, { b: true }),
+    C(documentType(doc), XY * 2, { b: true }),
     E(24, { jc: AlignmentType.CENTER }), E(24, { jc: AlignmentType.CENTER }),
     ...(showDegree ? [C(`（${kind}学位论文）`, XE * 2, { b: true }), E(24, { jc: AlignmentType.CENTER }), E(24, { jc: AlignmentType.CENTER })] : []),
     C(title, ER * 2, { zh: FONT.hei, before: 240, grid: true }),
@@ -301,7 +303,7 @@ function harbinBachelorReport(doc: ThesisDoc, o: { stage: string; title: string;
     E(XS * 2), E(XE * 2), E(XE * 2),
     C('哈尔滨工业大学', XE * 2, { b: true, zh: FONT.lishu }),
     E(XE * 2),
-    C(`本科毕业论文（设计）${o.stage}`, XY * 2, { b: true, spacing: 40 }),
+    C(`${bachelorText(doc.settings, '本科毕业论文（设计）')}${o.stage}`, XY * 2, { b: true, spacing: 40 }),
     E(SAN * 2), E(SAN * 2),
   ];
   const titleLine = new Paragraph({
@@ -349,7 +351,7 @@ function shenzhenBachelorReport(doc: ThesisDoc, o: { stage: string; title: strin
     linePara(E(24, { line: 380, exact: true })),
     linePara(E(44, { jc: AlignmentType.CENTER, before: 240, line: 300 })),
     head('哈尔滨工业大学深圳校区'),
-    head(`毕业论文（设计）${o.stage}`),
+    head(`${bachelorText(doc.settings, '毕业论文（设计）')}${o.stage}`),
     new Table({ rows: trs, layout: TableLayoutType.FIXED, alignment: AlignmentType.CENTER, width: { size: 5941, type: WidthType.DXA }, columnWidths: [2250, 3691], borders: { ...NO_B, insideHorizontal: NO_B.top, insideVertical: NO_B.top } }),
   ];
 }
@@ -368,7 +370,7 @@ export function titlepageZh(doc: ThesisDoc, width: number): (Paragraph | Table)[
     E(24, { grid: true }), E(24, { line: 300 }), E(24, { grid: true, latinMark: true }), E(24, { grid: true, latinMark: true }), E(24, { grid: true, latinMark: true }),
   ] : [
     // 模板的本科内封头一行：☑毕业论文　☐毕业设计 …… 密级：公开（范例只有右边那截，左边勾选框是模板加的）
-    { t: `${s.form === 'practice' ? '☐' : '☑'}毕业论文  ${s.form === 'practice' ? '☑' : '☐'}毕业设计`, tab: `密级：${pick(doc, 'titlepage', 'secrecy') || '公开'}`, width, sz: 24, grid: true, jc: AlignmentType.LEFT },
+    { t: `${s.form === 'practice' ? '☐' : '☑'}${bachelorTerm(s, 'base-form-bachelor-dissertation')}  ${s.form === 'practice' ? '☑' : '☐'}${bachelorTerm(s, 'base-form-bachelor-practice')}`, tab: `密级：${pick(doc, 'titlepage', 'secrecy') || '公开'}`, width, sz: 24, grid: true, jc: AlignmentType.LEFT },
     E(24, { jc: AlignmentType.CENTER }), E(24, { grid: true, latinMark: true }), E(24, { grid: true, latinMark: true }),
   ];
   // 题目与表之间的 39 磅空行：模板从 3 个起，整页放不下就减（题目折成两行时减到 2）
@@ -381,7 +383,7 @@ export function titlepageZh(doc: ThesisDoc, width: number): (Paragraph | Table)[
   while (blanks > 0 && mastheadH + headH + blanks * 39 + tableH > COVER.textH) blanks--;
   const seq: Line[] = [
     ...head,
-    C(DOC_TYPE[s.degreeLevel], 36, { b: true }),
+    C(documentType(doc), 36, { b: true }),
     E(24, { jc: AlignmentType.CENTER, grid: true }), E(24, { jc: AlignmentType.CENTER, line: 300 }),
     C(title, 44, { zh: FONT.hei, grid: true }),
     E(24, { jc: AlignmentType.CENTER, grid: true }), E(24, { jc: AlignmentType.CENTER, grid: true }),
@@ -501,6 +503,10 @@ export function declarationsPage(doc: ThesisDoc, title: BlockLike[], subTitle: (
   // 《》那一格照声明页的设置：留白手写就空着，另填的用另填的
   const o = doc.declarationsOptions ?? { title: 'auto', customTitle: '' };
   const t = o.title === 'blank' ? '\u3000'.repeat(8) : o.title === 'custom' && o.customTitle.trim() ? o.customTitle.trim() : doc.info.title.split('\n').join('');
+  if (doc.settings.degreeLevel === 'bachelor') {
+    const s = doc.settings, subject = bachelorTerm(s, 'base-document-type-bachelor') ?? documentType(doc);
+    return [...title, subTitle(`${subject}原创性声明`), body(bachelorTerm(s, 'declarations-statement-text-bachelor', t) ?? ''), sig('作者'), subTitle(`${subject}使用权限`), body(bachelorTerm(s, 'declarations-authorization-text-lead-bachelor') ?? ''), body(bachelorTerm(s, 'declarations-authorization-text-items-bachelor') ?? ''), body('保密论文在保密期内遵守有关保密规定，解密后适用于此使用权限规定。'), body(`本人知悉${subject}的使用权限，并将遵守有关规定。`), sig('作者', 2), sig('导师')];
+  }
   return [
     ...title,
     subTitle('学位论文原创性声明'),

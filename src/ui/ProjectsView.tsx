@@ -5,12 +5,12 @@ import { Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogAc
 import { Document20Regular, DocumentSparkle20Regular, FolderOpen20Regular, ArrowLeft20Regular, ArrowReset20Regular, Search20Regular, MoreHorizontal20Regular, Rename20Regular, Copy20Regular, Delete20Regular, ArrowDownload20Regular, Open20Regular, ArrowSort20Regular, Pin20Regular, PinOff20Regular } from '@fluentui/react-icons';
 import { kv } from '../model/persist';
 import { useStore, type ProjectMeta } from '../model/store';
-import { AXES, defaultSettings, settingUnavailable } from '../model/options';
+import { AXES, BACHELOR_DOCUMENT_TYPES, axisChoices, defaultSettings, settingUnavailable } from '../model/options';
 import type { Settings } from '../model/types';
 import { t as tx } from '../i18n';
 import { ResetDialog } from './ResetDialog';
 
-const label = (s: Settings, key: keyof Settings) => AXES.find((a) => a.key === key)?.choices.find((c) => c.value === s[key])?.label ?? String(s[key]);
+const label = (s: Settings, key: keyof Settings) => { const axis = AXES.find(a => a.key === key); return axis && axisChoices(axis, s).find(c => c.value === s[key])?.label || String(s[key]); };
 
 function fmtTime(iso: string) {
   const d = new Date(iso);
@@ -211,12 +211,17 @@ export function ProjectsView() {
                 <input autoFocus value={name} placeholder={tx("例如：张三的硕士学位论文")} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.nativeEvent.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') void onCreate(); }} />
               </label>
               <div className="new-axes">
-                {AXES.filter((a) => !a.applies || a.applies(settings)).map((a) => (
+                {AXES.filter((a) => a.key !== 'bachelorDocumentType' && (!a.applies || a.applies(settings))).map((a) => (
                   <label className="field" key={a.key}>
                     <span className="field-label">{a.label}</span>
-                    <select value={settings[a.key] as string} onChange={(e) => setSettings({ ...settings, [a.key]: e.target.value })}>
-                      {a.choices.map((c) => <option key={c.value} value={c.value} disabled={!!settingUnavailable(settings, a.key, c.value)} title={settingUnavailable(settings, a.key, c.value)}>{c.label}</option>)}
-                    </select>
+                    <div style={a.key === 'degreeLevel' && settings.degreeLevel === 'bachelor' ? { display: 'flex', gap: 8 } : undefined}>
+                      <select style={a.key === 'degreeLevel' && settings.degreeLevel === 'bachelor' ? { flex: '1 1 0', minWidth: 0 } : undefined} value={settings[a.key] as string} onChange={(e) => setSettings({ ...settings, [a.key]: e.target.value })}>
+                        {axisChoices(a, settings).map((c) => <option key={c.value} value={c.value} disabled={!!settingUnavailable(settings, a.key, c.value)} title={settingUnavailable(settings, a.key, c.value)}>{c.label}</option>)}
+                      </select>
+                      {a.key === 'degreeLevel' && settings.degreeLevel === 'bachelor' && <select aria-label={tx('本科文档类型')} style={{ flex: '1 1 0', minWidth: 0 }} value={settings.bachelorDocumentType ?? 'graduation'} onChange={e => setSettings({ ...settings, bachelorDocumentType: e.target.value as 'graduation' | 'comprehensive' })}>
+                        {BACHELOR_DOCUMENT_TYPES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                      </select>}
+                    </div>
                   </label>
                 ))}
               </div>

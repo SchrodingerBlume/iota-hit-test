@@ -80,7 +80,10 @@ try {
   };
   const { buildDocx } = await server.ssrLoadModule('/src/export/docx/build.ts');
   const { REPORT_TEMPLATE, REPORT_PATCHES, reportProfile } = await server.ssrLoadModule('/src/export/docx/reports.ts');
+  const { BACHELOR_TERM_TEMPLATE, BACHELOR_TERM_PATCHES } = await server.ssrLoadModule('/src/model/bachelor.ts');
   assert.equal(REPORT_TEMPLATE, manifest.iotaHitCommit, 'Word 报告数据必须与打包模板同步');
+  assert.equal(BACHELOR_TERM_TEMPLATE, manifest.iotaHitCommit, '本科术语必须来自同一份模板');
+  assert.deepEqual(BACHELOR_TERM_PATCHES, manifest.iotaHitPatches ?? []);
   assert.deepEqual(REPORT_PATCHES, manifest.iotaHitPatches ?? [], 'Word 报告数据必须包含相同的模板兼容补丁');
   function glyphFixture(name, source, check) {
     compiler.addSource('/glyph-fixture.typ', `#set text(font: "TeX Gyre Termes", size: 8pt)\n${source}`);
@@ -119,6 +122,14 @@ try {
     ['master-final', {}], ['doctor-final', { degreeLevel: 'doctor' }],
     ['master-final-hidden', { degreeType: 'none' }],
     ['bachelor-final', { degreeLevel: 'bachelor' }], ['hass-final', { category: 'hass' }],
+    ['bachelor-comprehensive-final', { degreeLevel: 'bachelor', bachelorDocumentType: 'comprehensive' }, d => { d.info.title = '毕业论文评价方法研究'; }],
+    ['bachelor-comprehensive-design', { degreeLevel: 'bachelor', bachelorDocumentType: 'comprehensive', form: 'practice' }],
+    ['bachelor-comprehensive-proposal', { degreeLevel: 'bachelor', bachelorDocumentType: 'comprehensive', stage: 'proposal' }],
+    ['bachelor-comprehensive-sz-proposal', { campus: 'shenzhen', degreeLevel: 'bachelor', bachelorDocumentType: 'comprehensive', stage: 'proposal' }],
+    ['bachelor-comprehensive-sz-interim', { campus: 'shenzhen', degreeLevel: 'bachelor', bachelorDocumentType: 'comprehensive', stage: 'interim', form: 'practice' }],
+    ['bachelor-comprehensive-english', { degreeLevel: 'bachelor', bachelorDocumentType: 'comprehensive', lang: 'en' }],
+    ['graduate-comprehensive-inactive', { bachelorDocumentType: 'comprehensive' }],
+    ['comprehensive-explicit-term', { degreeLevel: 'bachelor', bachelorDocumentType: 'comprehensive' }, d => { d.settings.overrides = { 'base-document-type-bachelor': '自定义本科文种' }; }],
     ['english-final', { lang: 'en' }], ['harbin-proposal', { stage: 'proposal' }],
     ['harbin-interim', { stage: 'interim' }],
     ['harbin-practice-interim-auto', { stage: 'interim', form: 'practice', degreeType: 'auto' }],
@@ -165,6 +176,9 @@ try {
     edit?.(doc);
     const unchanged = JSON.stringify(doc);
     const p = mode === 'paragraph' ? serializePara(doc, 2) : serializeProject(doc, mode ?? { preview: true });
+    if (name.startsWith('bachelor-comprehensive')) assert.ok(p.main.includes('base-document-type-bachelor-zh: [本科综合论文（设计）]'), '综合文种应通过术语覆盖发给模板');
+    if (name === 'graduate-comprehensive-inactive') assert.ok(!p.main.includes('本科综合'), '本科选项不应影响硕博');
+    if (name === 'comprehensive-explicit-term') assert.ok(!p.main.includes('base-document-type-bachelor-zh:'), '用户已有的同义词条覆盖优先，不得重复生成');
     assert.equal(JSON.stringify(doc), unchanged, `${name}: 序列化不得改写工程`);
     for (const [file, text] of Object.entries(p.files)) compiler.mapShadow(`/${mode?.focus && !file.startsWith('rplots/') ? 'focus-' : ''}${file}`, new TextEncoder().encode(text));
     compiler.addSource('/regression.typ', p.main);
@@ -256,6 +270,13 @@ try {
         assert.ok(!/="(?:NaN|Infinity|undefined)"/.test(xml), `${name}: ${entry.name} 属性无效`);
       }
       const xml = await zip.file('word/document.xml').async('string');
+      if (name.startsWith('bachelor-comprehensive')) {
+        const visible = [...xml.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map(m => m[1]).join('');
+        assert.ok(visible.includes(doc.settings.campus === 'shenzhen' && doc.settings.stage !== 'final' ? '综合论文（设计）' : '本科综合论文（设计）'));
+        if (name === 'bachelor-comprehensive-final') assert.ok(visible.includes('毕业论文评价方法研究') && visible.includes('综合论文（设计）《毕业论文评价方法研究》'), '文种替换不能误改用户题目');
+        if (doc.settings.stage === 'final') assert.ok(visible.includes('综合论文') && visible.includes('综合设计'), '本科内封两个成果形式均应切换术语');
+      }
+      if (name === 'comprehensive-explicit-term') assert.ok(xml.includes('自定义本科文种'), 'Word 导出也应保留用户已有术语覆盖');
       if (name === 'master-final-hidden') assert.ok(!xml.includes('（学术学位论文）') && !xml.includes('（专业学位论文）'), '不显示学位类别时 Word 封面也不能保留该行');
       if (name === 'word-inline-format') {
         const runs = [];

@@ -27,6 +27,7 @@ import { resolveSwitch, SWITCHES } from '../../model/options';
 import { queryFacts, stylesXml, gapTwips, headingLevels, headerFooterStyleId, shown, tw, asianOf, type Facts, type PageSetup } from './template';
 import { THEOREM_NAMES, theoremKind, joinHead } from '../../typst/theorem';
 import { graduateReportCover, reportInstructions, interimSection, interimReview, isDoctorInterimForm } from './reports';
+import { bachelorTerm } from '../../model/bachelor';
 
 const sw = <V,>(key: string, s: Settings): V => resolveSwitch<V>(SWITCHES.find((d) => d.key === key)!, s).effective;
 
@@ -621,7 +622,7 @@ const titlePara = (ctx: Ctx, zh: string, en: string, enTitle = en): Block[] => {
   const bm = `T${ctx.toc.length + 1}`;
   ctx.toc.push({ level: 1, text: en, bm });
   const t = ctx.s.lang === 'en' ? enTitle : zh;
-  return [pageTop(t), new Paragraph({ style: 'Abstract', children: [new Bookmark({ id: bm, children: [new TextRun({ text: t })] })] })];
+  return [pageTop(t), new Paragraph({ style: 'Abstract', children: [new Bookmark({ id: bm, children: t.split('\n').flatMap((line, i) => [...(i ? [new TextRun({ break: 1 })] : []), new TextRun({ text: line })]) })] })];
 };
 function abstractPages(ctx: Ctx): Block[] {
   const { doc, s } = ctx;
@@ -928,7 +929,7 @@ export async function buildDocx(doc: ThesisDoc): Promise<Blob> {
   if (ach.length) back.push({ L: pageLayout('achievements', Lback), blocks: ach });
   if (!isReport && resolvePage(doc, 'defense').value) back.push({ L: Lback, blocks: defensePage(doc, titlePara(ctx, "学位论文评阅人、答辩委员会名单及答辩决议", 'List of Dissertation Reviewers and Defense Committee and Defense Resolution')) });
   if (isDoctorInterimForm(s) && resolvePage(doc, 'defense').value) for (const page of interimReview(doc, blocks(ctx, doc.defense.resolution.content, 'other').filter((b): b is Paragraph | Table => !isNewPage(b)))) back.push({ L: Lmain, blocks: page });
-  if (!isReport && resolvePage(doc, 'declarations').value) back.push({ L: pageLayout(s.degreeLevel === 'bachelor' ? 'declarations' : 'declarations-graduate', Lback), blocks: declarationsPage(doc, titlePara(ctx, "哈尔滨工业大学学位论文原创性声明和使用权限", 'Statement of copyright and Letter of authorization'), (t) => new Paragraph({ style: 'SubTitle', children: [new TextRun({ text: t })] })) });
+  if (!isReport && resolvePage(doc, 'declarations').value) back.push({ L: pageLayout(s.degreeLevel === 'bachelor' ? 'declarations' : 'declarations-graduate', Lback), blocks: declarationsPage(doc, titlePara(ctx, s.degreeLevel === 'bachelor' ? bachelorTerm(s, 'declarations-title-bachelor') ?? '哈尔滨工业大学本科论文（设计）原创性声明和使用权限' : "哈尔滨工业大学学位论文原创性声明和使用权限", 'Statement of copyright and Letter of authorization'), (t) => new Paragraph({ style: 'SubTitle', children: [new TextRun({ text: t })] })) });
   const indexPart = resolvePage(doc, 'index').value ? { L: pageLayout('index', Lback), blocks: titlePara(ctx, '索引', 'Index') } : null;
   if (indexPart) back.push(indexPart);
   const ack = doc.acknowledgement as PMNode;

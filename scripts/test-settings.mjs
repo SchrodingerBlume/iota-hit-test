@@ -18,13 +18,15 @@ import { SettingsPanel } from '/src/ui/SettingsPanel.tsx';
 import { useStore } from '/src/model/store.ts';
 import { sampleDoc } from '/src/model/sample.ts';
 import { defaultSettings } from '/src/model/options.ts';
+import { normalizeDoc } from '/src/model/store.ts';
+import { saveProject, loadProject } from '/src/model/persist.ts';
 import { serializeProject } from '/src/typst/serialize.ts';
 import { compileDrawing } from '/src/compiler/client.ts';
 import '/src/styles/app.css';
 const doc = sampleDoc({ ...defaultSettings(), campus: 'harbin', degreeLevel: 'master', form: 'practice', stage: 'interim', category: 'stem', lang: 'zh' });
 useStore.setState({ doc });
 createRoot(document.getElementById('root')).render(React.createElement(FluentProvider, { theme: webLightTheme }, React.createElement(SettingsPanel)));
-window.settingsTest = { get: () => useStore.getState().doc.settings, set: patch => useStore.getState().setSettings(patch), runTool: async (...args) => (await import('/src/ai/tools.ts')).runTool(...args), compile: async () => { const p = serializeProject(useStore.getState().doc, { preview: true }); return compileDrawing(p.main, p.files); } };`;
+window.settingsTest = { get: () => useStore.getState().doc.settings, set: patch => useStore.getState().setSettings(patch), runTool: async (...args) => (await import('/src/ai/tools.ts')).runTool(...args), reopen: async () => { const doc = useStore.getState().doc; await saveProject(doc.id, doc); return normalizeDoc(await loadProject(doc.id)).settings.bachelorDocumentType; }, compile: async () => { const p = serializeProject(useStore.getState().doc, { preview: true }); return compileDrawing(p.main, p.files); } };`;
     },
     configureServer(s) {
       s.middlewares.use('/__settings_test__', async (_req, res) => {
@@ -44,6 +46,8 @@ try {
   page.on('request', request => { if (request.url().includes('/packages/local-iota-hit-0.1.0.tar.gz')) packageRequests.push(request.url()); });
   await page.goto('http://127.0.0.1:5323/__settings_test__');
   await page.waitForFunction(() => !!window.settingsTest);
+  const subtype = page.getByRole('combobox', { name: '本科文档类型', exact: true });
+  assert.equal(await subtype.count(), 0, '硕博不显示本科第二个下拉框');
   const degree = page.getByRole('radiogroup', { name: '学位类别', exact: true });
   const academic = degree.getByRole('radio', { name: '学术', exact: true });
   const professional = degree.getByRole('radio', { name: '专业', exact: true });
@@ -76,8 +80,19 @@ try {
   await page.evaluate(() => window.settingsTest.set({ degreeType: 'academic' }));
   await degree.getByRole('radio').first().click();
   assert.equal(await page.evaluate(() => window.settingsTest.get().degreeType), 'auto', '旧的非法设置可以通过自动档恢复');
-  const level = page.locator('.axis').filter({ has: page.getByText('学位级别', { exact: true }) }).locator('select');
+  const level = page.locator('.axis').filter({ has: page.getByText('学位级别', { exact: true }) }).locator('select').first();
   await level.selectOption('bachelor');
+  assert.equal(await subtype.isVisible(), true);
+  assert.deepEqual(await subtype.locator('option').allTextContents(), ['毕业论文／设计', '综合论文／设计']);
+  assert.equal(await page.getByText('本科文档类型', { exact: true }).count(), 0, '第二个下拉框不能有额外可见标签');
+  const a = await level.boundingBox(), b = await subtype.boundingBox();
+  assert.ok(b.x > a.x && Math.abs(b.y - a.y) < 2, '本科文种应并排放在学位级别右侧');
+  assert.equal(await form.locator('option[value="practice"]').textContent(), '毕业设计');
+  await subtype.selectOption('comprehensive');
+  assert.equal(await form.locator('option[value="practice"]').textContent(), '综合设计');
+  assert.equal(await form.locator('option[value="dissertation"]').textContent(), '综合论文');
+  assert.equal(await page.evaluate(() => window.settingsTest.reopen()), 'comprehensive', '本科文种设置必须保存并能重开');
+  console.log('PASS unlabelled bachelor dropdown sits beside degree level, updates form labels and persists');
   assert.equal(await degree.isVisible(), true, '本科仍须显示学位类别设置');
   assert.equal(await degree.getAttribute('aria-disabled'), 'true');
   assert.equal(await degree.getByRole('radio').count(), 4);
@@ -91,6 +106,8 @@ try {
   const campus = page.locator('.axis').filter({ has: page.getByText('校区', { exact: true }) }).locator('select');
   for (const lv of ['master', 'doctor']) for (const site of ['harbin', 'shenzhen']) {
     await level.selectOption(lv);
+    assert.equal(await subtype.count(), 0);
+    assert.equal(await form.locator('option[value="practice"]').textContent(), '实践成果');
     await campus.selectOption(site);
     for (const st of ['proposal', 'interim', 'final']) {
       await stage.selectOption(st);

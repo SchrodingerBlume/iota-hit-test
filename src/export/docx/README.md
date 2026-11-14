@@ -16,7 +16,9 @@
 
 `reports.ts` 提供报告说明页、深圳研究生首页、博士中期正文表格及评议签字表。说明文字和变体参数来自 `report-data.json`，由 `scripts/bundle-word-reports.mjs` 从已打包的 iota-hit 提取；`npm run packages` 会同步生成。
 
-`report-data.json` 是 iota-hit 的派生数据，沿用模板的 LPPL-1.3c 许可；来源版本记录在文件的 `template` 字段。
+`report-data.json` 和 `src/model/bachelor-terms.json` 是 iota-hit 的派生数据，沿用模板的 LPPL-1.3c 许可；来源版本记录在文件的 `template` 字段。
+
+本科的“毕业／综合”通过术语覆盖实现，控制封面、内封、页眉和声明中的文种名称；保留“毕业后”等非文种表述，题目作为独立参数插入。旧工程默认使用毕业文种，硕博忽略此本科选项。
 
 评议签字表仅在工程启用对应页面时导出，人员和决议使用工程中的数据，空白意见及签字单元格可在 Word 中继续填写。
 

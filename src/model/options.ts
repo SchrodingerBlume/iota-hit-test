@@ -1,6 +1,7 @@
 // 版式选项及自动档说明。自动档的实际值由 iota-hit 计算；此处仅展示当前解析结果。
 import type { Settings, TriBool, Tri, DegreeLevel, Stage, Campus } from './types';
 import { t } from '../i18n';
+import { formLabel } from './bachelor';
 
 export interface Choice<V = string> {
   value: V;
@@ -10,7 +11,7 @@ export interface Choice<V = string> {
   tone?: 'on' | 'off' | 'accent';
 }
 
-/** 下拉框（轴）：值不可能是 auto，模板对它们都有默认档但语义上必须选一个 */
+/** 下拉型设置：模板轴及编辑器术语选项共用登记表，必须选定一个值。 */
 export interface AxisDef<K extends keyof Settings = keyof Settings> {
   key: K;
   label: string;
@@ -22,6 +23,7 @@ export interface AxisDef<K extends keyof Settings = keyof Settings> {
 
 /** 与模板 axes.degree-type-for 一致；none 仅隐藏类别文字，不等于学术学位。 */
 export function settingUnavailable(s: Settings, key: keyof Settings, value: unknown): string | undefined {
+  if (key === 'bachelorDocumentType' && s.degreeLevel !== 'bachelor') return t('仅适用于本科');
   if (key === 'degreeType') {
     if (s.degreeLevel === 'bachelor') return t("本科不区分学术与专业学位");
     if (value === 'none' && s.stage !== 'final') return t("仅用于硕博终稿封面");
@@ -29,6 +31,15 @@ export function settingUnavailable(s: Settings, key: keyof Settings, value: unkn
   if (!['form', 'degreeType', 'degreeLevel'].includes(key)) return;
   const next = { ...s, [key]: value };
   if (next.degreeLevel !== 'bachelor' && next.form === 'practice' && next.degreeType === 'academic') return t("实践成果仅适用于专业学位");
+}
+
+export const BACHELOR_DOCUMENT_TYPES: Choice[] = [
+  { value: 'graduation', label: t('毕业论文／设计') },
+  { value: 'comprehensive', label: t('综合论文／设计') },
+];
+
+export function axisChoices(axis: AxisDef, s: Settings): Choice[] {
+  return axis.key === 'form' ? axis.choices.map(c => ({ ...c, label: formLabel(s, c.value as Settings['form']) })) : axis.choices;
 }
 
 export const AXES: AxisDef[] = [
@@ -52,12 +63,19 @@ export const AXES: AxisDef[] = [
     ],
   },
   {
+    key: 'bachelorDocumentType',
+    label: t('本科文档类型'),
+    hint: t('本科文种使用毕业论文／设计或综合论文／设计'),
+    choices: BACHELOR_DOCUMENT_TYPES,
+    applies: s => s.degreeLevel === 'bachelor',
+  },
+  {
     key: 'form',
     label: t("成果形式"),
     hint: t("论文、实践成果或毕业设计"),
     choices: [
       { value: 'dissertation', label: t("学位论文") },
-      { value: 'practice', label: t("实践成果或毕业设计") },
+      { value: 'practice', label: t("实践成果") },
     ],
   },
   {
@@ -652,6 +670,7 @@ export const defaultSettings = (): Settings => ({
   degreeLevel: 'master',
   degreeType: 'auto',
   form: 'dissertation',
+  bachelorDocumentType: 'graduation',
   stage: 'final',
   category: 'stem',
   lang: 'zh',

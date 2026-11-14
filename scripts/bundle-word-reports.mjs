@@ -41,6 +41,26 @@ try {
 }
 ]`);
   }
+  const bachelorTerms = ['zh', 'en'].map(lang => `#[
+#show: iota-hit.with(degree-level: "bachelor", stage: "final", lang: "${lang}", fontset: presets.webapp + (kaishu: "FandolKai"))
+#context {
+  let variant = terms.variant-of(state("iota-hit-info").get())
+  let base = terms.term-table("${lang}", "base")
+  let entries = ((key: "base-document-type-bachelor", text: term-text(terms.term-for(base, "document-type", variant)), titleSlot: false),)
+  for form in ("dissertation", "practice") {
+    entries.push((key: "base-form-bachelor-" + form, text: term-text(terms.term-for(base, "form", variant + (form: form))), titleSlot: false))
+  }
+  let declarations = terms.term-table("${lang}", "declarations")
+  for name in ("title", "statement-text", "authorization-text-lead", "authorization-text-items") {
+    if not terms.has-term(declarations, name, variant) { continue }
+    let value = terms.term-for(declarations, name, variant)
+    let title-slot = type(value) == function
+    if title-slot { value = value(text("__IOTA_DECLARATION_TITLE__")) }
+    entries.push((key: "declarations-" + name + "-bachelor", text: term-text(value), titleSlot: title-slot))
+  }
+  [#metadata((lang: "${lang}", entries: entries)) <bachelor-term-data>]
+}
+]`);
   const source = `#import "lib.typ": *
 #import "src/terms/lookup.typ" as terms
 #import "src/pages/report/instructions-data.typ" as data
@@ -49,8 +69,10 @@ try {
 #import banshi.content as content
 #let all-metadata(c, key) = if type(c) != content { () } else if c.func() == metadata { if type(c.value) == dictionary and key in c.value { (c.value.at(key),) } else { () } } else if c.has("children") { c.children.map(x => all-metadata(x, key)).flatten() } else if c.has("body") { all-metadata(c.body, key) } else if c.has("child") { all-metadata(c.child, key) } else { () }
 #let text-only(v) = if type(v) == str { v } else if v == none { "" } else { let s = content.plain-text(v); if s == none { "" } else { s } }
+#let term-text(v) = if type(v) != content { text-only(v) } else if v.func() in (linebreak, parbreak) { "\\n" } else if v.has("children") { v.children.map(term-text).join() } else if v.has("child") { term-text(v.child) } else if v.has("body") { term-text(v.body) } else { text-only(v) }
 #let plain(v) = if type(v) == length { if v.em == 0 { v.pt() } else { (abs: v.abs.pt(), em: v.em) } } else if type(v) == dictionary { v.pairs().map(((k, x)) => (k, plain(x))).to-dict() } else if type(v) == array { v.map(plain) } else if type(v) == color { v.to-hex() } else if type(v) == content { text-only(v) } else { v }
-${profiles.join('\n')}`;
+${profiles.join('\n')}
+${bachelorTerms.join('\n')}`;
   const am = new MemoryAccessModel(), cache = new Map();
   const compiler = createTypstCompiler();
   const vendor = path.join(root, 'vendor/typst-ts-web-compiler');
@@ -68,13 +90,22 @@ ${profiles.join('\n')}`;
   map(dir);
   compiler.addSource('/word-report-data.typ', source);
   const world = compiler.compiler.snapshot(undefined, '/word-report-data.typ', []);
-  let values;
+  let values, termValues;
   try {
     const r = world.compile(0, 3), errors = (r.diagnostics ?? []).filter(d => d.severity === 'error');
     if (errors.length) throw new Error(JSON.stringify(errors));
     values = JSON.parse(world.query(0, '<word-report-data>', 'value'));
+    termValues = JSON.parse(world.query(0, '<bachelor-term-data>', 'value'));
   } finally { world.free(); }
   const out = { template: manifest.iotaHitCommit, patches: manifest.iotaHitPatches ?? [], profiles: Object.fromEntries(values.map(({ key, ...value }) => [key, value])) };
   fs.writeFileSync(path.join(root, 'src/export/docx/report-data.json'), JSON.stringify(out, null, 2) + '\n');
+  const terms = {
+    template: manifest.iotaHitCommit,
+    patches: manifest.iotaHitPatches ?? [],
+    titleSlot: '__IOTA_DECLARATION_TITLE__',
+    terms: Object.fromEntries(termValues.map(v => [v.lang, Object.fromEntries(v.entries.map(({ key, ...term }) => [key, term]))])),
+    covers: Object.fromEntries(values.filter(v => v.key.split('/')[1] === 'bachelor').map(v => { const [campus, , stage, lang, form] = v.key.split('/'); return [[campus, stage, lang, form].join('/'), v.labels['document-type']]; })),
+  };
+  fs.writeFileSync(path.join(root, 'src/model/bachelor-terms.json'), JSON.stringify(terms, null, 2) + '\n');
   console.log(`Word report profiles: ${values.length}, template ${manifest.iotaHitCommit}`);
 } finally { fs.rmSync(dir, { recursive: true, force: true }); }

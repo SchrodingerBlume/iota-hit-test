@@ -14,6 +14,7 @@ import { mark, stripMarks, type Segment } from './sourcemap';
 import { lengthTypst, ABS_UNITS } from '../model/length';
 import type { RichKey } from '../model/store';
 import { collectRPlotFiles } from '../rplot/files';
+import { bachelorTermOverrides, BACHELOR_TITLE_SLOT } from '../model/bachelor';
 
 export const IOTA_HIT_VERSION = '0.1.0';
 /** 引用写 omni-gb7714 自己的 cite（盖掉原生的）：一次合并多条、页码、叙述式 / 只著者 / 只年份，原生 cite 的 form 它不认 */
@@ -176,7 +177,15 @@ export function levelLayout(s: Settings, level: HFLevel): LayoutDict | undefined
 }
 /** overrides:——工程 JSON 里平铺的词条，加页眉印的那一行 */
 function overridesArg(s: Settings): string {
-  const out = Object.entries(s.overrides ?? {}).filter(([k, v]) => /^[a-z][a-z0-9-]*$/.test(k) && typeof v === 'string').map(([k, v]) => `${k}: ${content(v)}`);
+  const user = Object.entries(s.overrides ?? {}).filter(([k, v]) => /^[a-z][a-z0-9-]*$/.test(k) && typeof v === 'string');
+  const canonical = (key: string) => { const lang = /-(zh|en)$/.exec(key)?.[1] ?? s.lang; return `${lang}:${key.replace(/-(zh|en)$/, '')}`; };
+  const explicit = new Set(user.map(([key]) => canonical(key)));
+  const text = (value: string) => value.split('\n').map(escapeText).join('#linebreak()');
+  const out = Object.entries(bachelorTermOverrides(s)).filter(([key]) => !explicit.has(canonical(key))).map(([key, term]) => {
+    const body = term.text.split(BACHELOR_TITLE_SLOT).map(text).join('#(title)');
+    return `${key}: ${term.titleSlot ? 'title => ' : ''}[${body}]`;
+  });
+  out.push(...user.map(([k, v]) => `${k}: ${content(v)}`));
   const t = s.headerFooter?.text;
   if (t && !t.auto) {
     // 页眉那一行的词条是收料字典 p 的函数：用户给整句就发常函数，键带全轴、压过模板自带的各档（odd / even）。
