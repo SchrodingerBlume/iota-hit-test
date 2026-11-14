@@ -12,6 +12,7 @@
     "test:markdown": "node scripts/test-markdown.mjs",
     "test:compile": "node scripts/test-compile.mjs",
     "test:template": "node scripts/test-template.mjs",
+    "test:word": "node scripts/test-word.mjs",
     "fonts": "bash scripts/fetch-fonts.sh && node scripts/font-manifest.mjs",
     "packages": "node scripts/bundle-packages.mjs && node scripts/build-licenses.mjs",
     "licenses": "node scripts/build-licenses.mjs",

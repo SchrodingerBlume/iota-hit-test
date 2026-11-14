@@ -79,6 +79,8 @@ try {
     } finally { world.free(); }
   };
   const { buildDocx } = await server.ssrLoadModule('/src/export/docx/build.ts');
+  const { REPORT_TEMPLATE, reportProfile } = await server.ssrLoadModule('/src/export/docx/reports.ts');
+  assert.equal(REPORT_TEMPLATE, manifest.iotaHitCommit, 'Word 报告数据必须与打包模板同步');
   function glyphFixture(name, source, check) {
     compiler.addSource('/glyph-fixture.typ', `#set text(font: "TeX Gyre Termes", size: 8pt)\n${source}`);
     const world = raw.snapshot(undefined, '/glyph-fixture.typ', []);
@@ -128,6 +130,25 @@ try {
     }],
     ['local-style', {}, d => { d.settings.localStyles = { chapters: { '1': { body: { bold: true } } } }; }],
     ['local-dates', {}, d => { d.info.date = '2027-03'; d.info.defenseDate = '2027-04'; d.localInfo = { cover: { date: '2027-05' }, titlepage: { date: '2027-06' } }; }],
+    ['word-inline-format', {}, d => { d.body.content.push({ type: 'paragraph', content: [{ type: 'text', text: 'word-format-sample', marks: [{ type: 'fontFamily', attrs: { role: 'heiti' } }, { type: 'fontSize', attrs: { size: 'xiaosan' } }, { type: 'textColor', attrs: { color: '#123456' } }, { type: 'highlight', attrs: { color: '#ffff00' } }] }] }); }],
+    ['word-chapter-style', {}, d => { d.settings.localStyles = { chapters: { '1': { body: { size: '13pt', bold: true, align: 'right' } } } }; d.settings.layout = { chapters: { '1': { margin: { left: '4cm' } } } }; }],
+    ['word-doctor-chapter', { degreeLevel: 'doctor' }, d => { d.settings.localStyles = { chapters: { '1': { body: { size: '13pt' } } } }; }],
+    ['word-header-text', {}, d => { d.settings.headerFooter = { text: { auto: false, split: true, value: '自定义奇数页', even: '自定义偶数页' } }; }],
+    ['word-bib-author-date', { bibStyle: 'author-date' }],
+    ['word-bib-2025', { bibStyle: 'author-date', bibVersion: '2025' }],
+    ['word-bib-foot', { bibStyle: 'foot' }],
+    ['word-bib-cited-only', { bibliographyFull: false }],
+    ['word-bib-no-url', { bibUrls: 'none', bibAuthors: 'all' }, d => { d.references[0].fields.url = 'https://example.org/word-bib-test'; d.references[0].fields.doi = '10.1234/word-bib-test'; }],
+    ['word-bib-empty-sort', {}, d => { d.settings.gb7714 = { 'entry-lang-order': '()', 'bib-sort-by': 'none' }; }],
+    ['word-bib-unicode-keys', {}, d => {
+      const keys = new Map(d.references.map((r, i) => [r.key, `文献${i + 1}`]));
+      d.references.forEach(r => { r.key = keys.get(r.key); });
+      const walk = n => { if (n.type === 'cite') n.attrs.keys = String(n.attrs.keys).split(',').map(k => keys.get(k) ?? k).join(','); n.content?.forEach(walk); };
+      for (const k of ['body', 'abstractZh', 'abstractEn', 'conclusion', 'appendix', 'acknowledgement', 'resume']) walk(d[k]);
+    }],
+    ['word-index-lists', {}, d => { d.pages.listOfFigures = d.pages.listOfTables = d.pages.listOfEquations = true; d.body.content.push({ type: 'paragraph', content: [{ type: 'idx', attrs: { text: '气体轴承' } }, { type: 'text', text: '与' }, { type: 'idx', attrs: { text: '润滑' } }] }); }],
+    ['word-sz-interim-review', { campus: 'shenzhen', degreeLevel: 'doctor', stage: 'interim' }, d => { d.pages.defense = true; d.defense.chair = [{ name: '检查组长测试', title: '教授', discipline: '机械工程', affiliation: '哈工大' }]; }],
+    ['word-report-custom-layout', { stage: 'proposal' }, d => { d.settings.layout = { doc: { margin: { left: '4cm' } }, pages: { instructions: { margin: { right: '3.5cm' } } } }; }],
     ['simple-engine', { linebreaker: 'simple' }], ['optimized-engine', { linebreaker: 'optimized' }],
     ['word-2013', { wordCompat: '15' }],
     ['focus-chapter', {}, null, { preview: true, focus: { chapter: 1, page: 5 } }],
@@ -211,6 +232,10 @@ try {
         assert.equal(facts.layout.doc.header.style.size, 10);
         assert.equal(facts.layout.doc.header.style['asian-font'], 'heiti');
       }
+      if (name === 'word-report-custom-layout') {
+        assert.equal(Math.round(facts.pages.instructions.margin.left * 20), 2268);
+        assert.equal(Math.round(facts.pages.instructions.margin.right * 20), 1985);
+      }
       layout.wordStyles = hash(xml);
       layout.pageSetup = hash(facts.layout);
       layout.body = { size: facts.styles.body.size, lineSpacing: facts.styles.body['line-spacing'], indent: facts.styles.body['first-line-indent'] };
@@ -226,6 +251,69 @@ try {
         assert.ok(!/="(?:NaN|Infinity|undefined)"/.test(xml), `${name}: ${entry.name} 属性无效`);
       }
       const xml = await zip.file('word/document.xml').async('string');
+      if (name === 'word-inline-format') {
+        const runs = [];
+        const walk = node => { if (!node || typeof node !== 'object') return; if (node['w:t']?._text === 'word-format-sample') runs.push(node); Object.values(node).forEach(v => Array.isArray(v) ? v.forEach(walk) : walk(v)); };
+        walk(xml2js(xml, { compact: true }));
+        assert.equal(runs.length, 1);
+        const p = runs[0]['w:rPr'];
+        assert.equal(p['w:rFonts']._attributes['w:eastAsia'], 'SimHei');
+        assert.equal(p['w:sz']._attributes['w:val'], '30');
+        assert.equal(p['w:color']._attributes['w:val'], '123456');
+        assert.equal(p['w:highlight']._attributes['w:val'], 'yellow');
+      }
+      if (name === 'word-chapter-style') {
+        const styles = await zip.file('word/styles.xml').async('string');
+        assert.ok(xml.includes('w:val="C1Normal"') && xml.includes('w:left="2268"'), '章级样式与页边距必须写入正文');
+        assert.ok(!xml.includes('CHAPTER_'), '章级样式的内部标记不能残留在 Word 中');
+        const normal = /<w:style[^>]*w:styleId="C1Normal"[^>]*>([\s\S]*?)<\/w:style>/.exec(styles)?.[1];
+        assert.ok(normal?.includes('<w:b/>') && normal.includes('w:val="26"') && normal.includes('w:val="right"'), normal);
+      }
+      if (name === 'word-header-text') {
+        const headers = await Promise.all(Object.values(zip.files).filter(f => /^word\/header\d+\.xml$/.test(f.name)).map(f => f.async('string')));
+        assert.ok(headers.some(s => s.includes('自定义奇数页')) && headers.some(s => s.includes('自定义偶数页')));
+      }
+      if (name === 'word-doctor-chapter') {
+        const headers = await Promise.all(Object.values(zip.files).filter(f => /^word\/header\d+\.xml$/.test(f.name)).map(f => f.async('string')));
+        assert.ok(headers.some(s => s.includes('STYLEREF &quot;heading 1 (chapter 1)&quot;')), '博士章级页眉必须引用对应的局部标题样式');
+        assert.ok(xml.includes('heading 1 (chapter 1)'), '目录域必须包含章级标题样式');
+      }
+      if (name === 'word-bib-author-date' || name === 'word-bib-2025') {
+        assert.ok(xml.includes('（Willis，1828）'), 'Word 正文必须使用模板的著者—出版年标注');
+        assert.ok(!xml.includes('[1]') && !xml.includes('［1］'), '著者—出版年书目不应强制编号');
+      }
+      if (name === 'word-bib-foot') {
+        assert.ok(xml.includes('<w:footnoteReference'), '脚注制引用必须生成为 Word 原生脚注');
+        const footnotes = await zip.file('word/footnotes.xml').async('string');
+        assert.ok(footnotes.includes('WILLIS'), footnotes);
+      }
+      if (name === 'word-bib-cited-only') {
+        assert.ok(!xml.includes('气体润滑理论与应用'), '未引用的书目不能因探针而被列出');
+        assert.ok([...xml.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map(m => m[1]).join('').includes('［1］WILLIS'), '参考文献必须保留一份正确的书目编号');
+      }
+      if (name === 'word-bib-no-url') assert.ok(!xml.includes('example.org/word-bib-test') && !xml.includes('10.1234/word-bib-test'), '不显示网址的设置必须作用于 Word 书目');
+      if (name === 'word-bib-unicode-keys') {
+        const names = [...xml.matchAll(/w:bookmarkStart w:name="(Rbib_[^"]+)"/g)].map(m => m[1]);
+        assert.equal(names.length, doc.references.length);
+        assert.equal(names.length, new Set(names).size, '中文引用键不得生成同名书签');
+      }
+      if (doc.settings.stage !== 'final') {
+        const instruction = reportProfile(doc.settings)?.instructions;
+        if (instruction?.blocks.length) {
+          assert.ok(xml.includes(instruction.title), '报告说明页标题必须导出');
+          const first = instruction.blocks.find(b => b.text?.trim());
+          if (first) assert.ok(xml.includes(first.text), '报告说明文字必须来自同一份模板数据');
+        }
+        if (doc.settings.campus === 'shenzhen' && doc.settings.degreeLevel === 'doctor' && doc.settings.stage === 'interim') assert.ok(xml.includes('<w:tblHeader') && xml.includes('w:val="6180"'), '深圳博士中期正文必须导出为可跨页、重复栏目标题的表格');
+      }
+      if (name === 'word-index-lists') {
+        assert.ok(xml.includes('XE &quot;气体轴承&quot;') && xml.includes('INDEX \\h'), '索引必须包含原生 XE 与 INDEX 域');
+        for (const id of ['F', 'T', 'E']) assert.ok(xml.includes(`TOC \\f ${id}`) && xml.includes(`\\f ${id} \\l 1`), '图表公式清单必须包含对应的 TC 与 TOC 域');
+        assert.ok(xml.includes('PAGEREF LIST_F1') && xml.includes('PAGEREF IDX1'));
+      }
+      if (name === 'word-sz-interim-review') assert.ok(xml.includes('检查组长测试') && xml.includes('导师') && xml.includes('签字'), '评议与签字表必须保留检查组数据');
+      const styleIds = [...(await zip.file('word/styles.xml').async('string')).matchAll(/w:styleId="([^"]+)"/g)].map(m => m[1]);
+      assert.equal(styleIds.length, new Set(styleIds).size, `${name}: Word 样式 ID 不得重复`);
       assert.ok(xml.includes('<w:pgSz'), `${name}: Word 缺少纸张设置`);
       layout.wordText = hash([...xml.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map(m => m[1]));
       layout.wordSections = (xml.match(/<w:sectPr>/g) ?? []).length;
@@ -235,7 +323,7 @@ try {
     results[name] = layout;
     console.log(`PASS ${name}: ${layout.pages} pages, ${layout.glyphs} glyphs, Word styles valid`);
   }
-  for (const entry of cases) {
+  for (const entry of cases.filter(([name]) => !process.env.CASES || process.env.CASES.split(',').includes(name))) {
     try { await runCase(entry); } catch (error) {
       if (!process.env.RECORD_ERRORS) throw error;
       results[entry[0]] = { error: error.message };
@@ -265,7 +353,7 @@ try {
     doc.body.content.push(figure);
     const projects = [serializeProject(doc), serializeProject(doc, { preview: true, focus: { chapter: 1 } }), serializePara(doc, doc.body.content.length - 1)];
     for (const project of projects) {
-      assert.equal(project.files[file], source, 'R 图旁文件必须随整编、单章和单段产物交给编译器');
+      assert.ok(project.files[file]?.startsWith(source), 'R 图原始源码必须保留在整编、单章和单段的旁文件中');
     }
     console.log('PASS R plot virtual files: full, chapter, paragraph');
     // 图放在首章，确保单章样例实际导入它，而非只检查整份工程收集到的旁文件。

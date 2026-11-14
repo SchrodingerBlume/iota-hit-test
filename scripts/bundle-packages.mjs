@@ -141,6 +141,7 @@ async function main() {
     JSON.stringify({ iotaHit: iotaVersion, iotaHitCommit: gitHead(iotaDir), packages: manifest.map(({ deps, ...m }) => m) }, null, 2),
   );
   console.log(`共 ${manifest.length} 个包，${(total / 1024 / 1024).toFixed(1)} MB`);
+  execFileSync(process.execPath, [path.join(here, 'bundle-word-reports.mjs')], { stdio: 'inherit' });
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

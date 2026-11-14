@@ -447,7 +447,7 @@ const HIGHLIGHT_RULE = `#let iota-hl(fill, body) = context highlight(fill: fill,
 // 有 fr 列的本来就撑满版心，原样。表里的字号与格的左右边距从两个探针表量出来（不碰模板的样式表）
 /** 章级版面（工程 JSON 的 layout.chapters）：模板不许某一段把字符网格开上或关掉（char-pitch / chars-per-line 与全文相反就 panic）——
  *  终稿有网格、报告档没有，同一份工程改个阶段就撞上；这里先照模板的算法算一遍，会翻转的把网格那几键扔掉，只留字号 */
-const CHAPTER_LAYOUT = `#import "@local/iota-hit:${IOTA_HIT_VERSION}" as _iota
+export const CHAPTER_LAYOUT = `#import "@local/iota-hit:${IOTA_HIT_VERSION}" as _iota
 #let chapter-layout(d, body) = context {
   let cur = current-layout()
   let d = if cur == none { d } else {

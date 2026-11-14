@@ -1,9 +1,10 @@
 // 查询 iota-hit 的样式与页面参数，并映射为 Word 样式表和节属性。
 import type { ThesisDoc, Settings } from '../../model/types';
-import { IOTA_HIT_VERSION, iotaHitShow, layoutArg, levelLayout, templateLayout, typstDict } from '../../typst/serialize';
+import { IOTA_HIT_VERSION, iotaHitShow, layoutArg, levelLayout, templateLayout, typstDict, chapterWrap, CHAPTER_LAYOUT } from '../../typst/serialize';
 import { isReportBody } from '../../model/options';
 import { queryTypst } from '../../compiler/client';
 import { wordLinebreakOptions } from '../../typst/serialize';
+import reportData from './report-data.json';
 
 export type Lines = { lines: number };
 export type Chars = { chars: number };
@@ -34,30 +35,43 @@ export interface Facts {
   fonts: Record<string, string>;
   layout: { doc: PageSetup; front: PageSetup; main: PageSetup; back: PageSetup };
   pages: Record<string, PageSetup>;
+  chapters?: Record<string, { layout: PageSetup; styles: Facts['styles'] }>;
+  bibliographyConfig?: string;
 }
 
-const FRONT_PAGES = ['cover', 'titlepage', 'abstract', 'toc', 'nomenclature'];
+const FRONT_PAGES = ['cover', 'titlepage', 'abstract', 'toc', 'nomenclature', 'listOfFigures', 'listOfTables', 'listOfEquations'];
 const BACK_PAGES = ['achievements', 'declarations', 'declarations-graduate', 'index'];
 
 /** 探针文档：设定照原样发给模板，各部件的版面用模板公开的 layout-of 读（用户页级的局部字典也交给它并） */
 export function probeSource(doc: ThesisDoc): string {
   const s = doc.settings;
   const pages = s.layout?.pages ?? {};
-  const pageOf = (k: string) => { const d = templateLayout(pages[k]); return `${JSON.stringify(k)}: layout-of(${JSON.stringify(k)}${d && Object.keys(d).length ? `, local: ${typstDict(d)}` : ''})`; };
+  const profile = (reportData.profiles as unknown as Record<string, { instructions: { layoutCode: string } }>)[[s.campus, s.degreeLevel, s.stage, s.lang, s.form].join('/')];
+  const pageOf = (k: string) => {
+    const d = templateLayout(pages[k]);
+    if (k === 'instructions') return `instructions: _iota.banshi.layout.merge-page-setup(layout-of(none, local: ${profile.instructions.layoutCode}), ${typstDict(d ?? {})})`;
+    return `${JSON.stringify(k)}: layout-of(${JSON.stringify(k.startsWith('listOf') ? 'toc' : k)}${d && Object.keys(d).length ? `, local: ${typstDict(d)}` : ''})`;
+  };
   const matter = (fn: string, k: 'frontmatter' | 'mainmatter' | 'backmatter') => { const a = layoutArg(levelLayout(s, k)); return a ? `#show: ${fn}.with(${a})` : `#show: ${fn}`; };
+  const chapters = [...new Set([...Object.keys(s.layout?.chapters ?? {}), ...Object.keys(s.localStyles?.chapters ?? {})])].filter(k => /^[1-9]\d*$/.test(k));
+  const chapterProbes = chapters.map(k => `#[${matter('mainmatter', 'mainmatter')}\n${chapterWrap(s.layout?.chapters?.[k], s.localStyles?.chapters?.[k], `#context probe("chapter-${k}", (layout: current-layout(), styles: _iota.banshi.styles.current-styles()))`)}\n]`).join('\n');
   return `#import "@local/iota-hit:${IOTA_HIT_VERSION}": *
+${chapters.length ? CHAPTER_LAYOUT : profile ? `#import "@local/iota-hit:${IOTA_HIT_VERSION}" as _iota` : ''}
 ${iotaHitShow(doc, true)}
 #let plain(v) = if type(v) == length { if v.em == 0 { v.pt() } else { (abs: v.abs.pt(), em: v.em) } } else if type(v) == dictionary { v.pairs().map(((k, x)) => (k, plain(x))).to-dict() } else if type(v) == array { v.map(plain) } else { v }
 #let facts = state("docx-facts", (:))
 #let probe(name, v) = facts.update(d => d + ((name): plain(v)))
+#let literal(v) = if type(v) == dictionary { "(" + v.pairs().map(((k, x)) => repr(k) + ": " + literal(x)).join(", ") + (if v.len() == 0 { ":" } else { "" }) + ")" } else if type(v) == array { if v.len() == 0 { "()" } else { "(" + v.map(literal).join(", ") + ",)" } } else { repr(v) }
 #context probe("doc", current-layout())
+#context probe("bibliography-config", literal(state("gb7714-config", (:)).get() + (title: none)))
 #[${matter('frontmatter', 'frontmatter')}
-#context probe("front", (styles: state("iota-styles").final(), fonts: presets.windows, layout: current-layout(), pages: (${FRONT_PAGES.map(pageOf).join(', ')})))
+#context probe("front", (styles: state("iota-styles").final(), fonts: presets.windows, layout: current-layout(), pages: (${[...FRONT_PAGES, ...(profile ? ['instructions'] : [])].map(pageOf).join(', ')})))
 ]
 #[${matter('mainmatter', 'mainmatter')}
 = 章
 #context probe("main", current-layout())
 ]
+${chapterProbes}
 #[${matter('backmatter', 'backmatter')}
 #context probe("back", (layout: current-layout(), pages: (${BACK_PAGES.map(pageOf).join(', ')})))
 ]
@@ -91,7 +105,8 @@ function wordStyles(table: NativeStyle): NativeStyle {
   }
   return out;
 }
-function wordPage(p: NativePage): PageSetup {
+export function wordPage(value: unknown): PageSetup {
+  const p = value as NativePage;
   if (!Number.isFinite(p?.size) || p.size <= 0) throw new Error('模板返回的页面字号无效');
   const { size, header, footer, ...rest } = p;
   const record = ({ format, ...r }: NativePage['header']): HeaderFooter => ({ ...r, style: wordStyles(format) as Style });
@@ -101,7 +116,11 @@ export function factsFromTemplate(value: unknown): Facts {
   const f = value as { doc: NativePage; front: { styles: NativeStyle; fonts: Facts['fonts']; layout: NativePage; pages: Record<string, NativePage> }; main: NativePage; back: { layout: NativePage; pages: Record<string, NativePage> } };
   if (!f?.front?.styles?.body) throw new Error('模板没有交回正文样式');
   const pages = Object.fromEntries(Object.entries({ ...f.front.pages, ...f.back.pages }).map(([name, p]) => [name, wordPage(p)]));
-  return { styles: wordStyles(f.front.styles) as Facts['styles'], fonts: f.front.fonts, layout: { doc: wordPage(f.doc), front: wordPage(f.front.layout), main: wordPage(f.main), back: wordPage(f.back.layout) }, pages };
+  const chapters = Object.fromEntries(Object.entries(f).filter(([k]) => /^chapter-\d+$/.test(k)).map(([k, v]) => {
+    const c = v as unknown as { layout: NativePage; styles: NativeStyle };
+    return [k.slice(8), { layout: wordPage(c.layout), styles: wordStyles(c.styles) as Facts['styles'] }];
+  }));
+  return { styles: wordStyles(f.front.styles) as Facts['styles'], fonts: f.front.fonts, layout: { doc: wordPage(f.doc), front: wordPage(f.front.layout), main: wordPage(f.main), back: wordPage(f.back.layout) }, pages, ...(Object.keys(chapters).length ? { chapters } : {}), bibliographyConfig: (value as Record<string, unknown>)['bibliography-config'] as string | undefined };
 }
 
 // ── 单位 ────────────────────────────────────────────────────────────
@@ -116,6 +135,11 @@ export const asianOf = (st: Style) => st['asian-font'];
 export const latinOf = (st: Style) => st['latin-font'];
 /** 页眉 / 页脚显不显示：auto 按模板的规矩——论文显示，报告不显示（src/layout/matter.typ 的 header-footer） */
 export const shown = (hf: HeaderFooter, s: Settings) => (hf.shown === 'auto' ? s.stage === 'final' : hf.shown);
+export function headerFooterStyleId(P: PageSetup, part: 'Header' | 'Footer'): string {
+  let hash = 2166136261;
+  for (const c of JSON.stringify([P.header, P.footer, P.docgrid, P['font-size']])) hash = Math.imul(hash ^ c.charCodeAt(0), 16777619);
+  return `HF${(hash >>> 0).toString(16)}${part}`;
+}
 /** 目录条目行距写 auto 的按学科与学位（模板 src/styles/presets.typ 的 toc-line-spacing-auto，那一支模板没公开） */
 export const tocLineSpacing = (s: Settings): LineSpacing => (s.category === 'hass' ? { exactly: 23 } : s.degreeLevel === 'bachelor' ? 1.25 : 1.2);
 
@@ -189,7 +213,7 @@ export const borderXml = (b: HeaderFooter['border']) => (b ? `<w:pBdr><w:bottom 
 export const headingLevels = (s: Settings): string[] => (isReportBody(s) ? ['heading-1', 'heading-2', 'heading-3', 'heading-3'] : ['heading-1', 'heading-2', 'heading-3', 'heading-4']);
 
 /** 整张样式表：Normal 是正文那一条，标题 1～4 是四级标题，题注、装图段、表格文字、目录 1～4、页眉页脚都从模板的字典翻 */
-export function stylesXml(F: Facts, s: Settings, o: { hangingChars: number }): { docDefaults: string; styles: string[] } {
+export function stylesXml(F: Facts, s: Settings, o: { hangingChars: number; referenceIndent?: number }): { docDefaults: string; styles: string[] } {
   const zh = s.lang !== 'en';
   const P = F.layout.doc;
   const S = F.styles;
@@ -239,7 +263,7 @@ export function stylesXml(F: Facts, s: Settings, o: { hangingChars: number }): {
   const code = { ...body, 'latin-font': 'mono', 'first-line-indent': { chars: 0 } as Chars, justify: false };
   styles.push(styleXml('Code', 'Code', { basedOn: 'Normal', pPr: pPr(code, P), rPr: rPr(code, F, zh) }));
   // 文献条目：正文那一条加悬挂（悬挂几个字按最宽的号算）
-  const ref = { ...body, 'first-line-indent': { chars: 0 } as Chars, 'hanging-indent': { chars: o.hangingChars } as Chars };
+  const ref = { ...body, 'first-line-indent': { chars: 0 } as Chars, 'hanging-indent': o.referenceIndent ?? { chars: o.hangingChars } as Chars };
   styles.push(styleXml('Reference', 'Reference', { basedOn: 'Normal', pPr: pPr(ref, P) }));
   // 页眉页脚：版面里 header.style / footer.style 那两条（小五宋体、单倍、不贴网格），页眉那条带下边框
   const hdr = { ...P.header.style, 'first-line-indent': { chars: 0 } as Chars, align: 'center' };
@@ -253,6 +277,23 @@ export function stylesXml(F: Facts, s: Settings, o: { hangingChars: number }): {
   for (let i = 1; i <= 4; i++) {
     const st = { ...S[`toc-${i}`], 'first-line-indent': { chars: 0 } as Chars, align: 'left' };
     styles.push(styleXml(`TOC${i}`, `toc ${i}`, { basedOn: 'Normal', next: 'Normal', pPr: pPr(st, P, { lineSpacing: st['line-spacing'] === 'auto' ? tocLineSpacing(s) : st['line-spacing'], lead: `<w:tabs><w:tab w:val="right" w:leader="dot" w:pos="${tw(P['paper-width'] - P.margin.left - P.margin.right)}"/></w:tabs>` }), rPr: rPr(st, F, zh) }));
+  }
+  const hfIds = new Set<string>();
+  for (const L of [...Object.values(F.layout), ...Object.values(F.pages), ...Object.values(F.chapters ?? {}).map(c => c.layout)]) {
+    for (const name of ['Header', 'Footer'] as const) {
+      const id = headerFooterStyleId(L, name);
+      if (hfIds.has(id)) continue;
+      hfIds.add(id);
+      const record = name === 'Header' ? L.header : L.footer;
+      const st = { ...record.style, 'first-line-indent': { chars: 0 } as Chars, align: 'center' };
+      styles.push(styleXml(id, id, { basedOn: 'Normal', pPr: pPr(st, L, { lead: name === 'Header' ? borderXml(record.border) : '' }), rPr: rPr(st, F, zh) }));
+    }
+  }
+  for (const [chapter, value] of Object.entries(F.chapters ?? {})) {
+    const prefix = `C${chapter}`;
+    const local = stylesXml({ ...F, chapters: undefined, styles: value.styles, layout: { ...F.layout, doc: value.layout } }, s, o).styles;
+    const ids = new Set(local.map(x => /w:styleId="([^"]+)"/.exec(x)![1]));
+    styles.push(...local.map(x => x.replace(/w:default="1" /g, '').replace(/w:styleId="([^"]+)"/g, (_, id) => `w:styleId="${prefix}${id}"`).replace(/(<w:(?:basedOn|next|link) w:val=")([^"]+)/g, (_, lead, id) => lead + (ids.has(id) ? prefix + id : id)).replace(/(<w:name w:val=")([^"]+)/, `$1$2 (chapter ${chapter})`)));
   }
   return { docDefaults, styles };
 }
