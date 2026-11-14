@@ -16,7 +16,7 @@ import {
   CommentAdd20Regular, CommentDismiss20Regular, Comment20Regular, TextBulletListSquare20Regular, TextEditStyle20Regular,
   Lightbulb20Regular, CloudArrowDown20Regular, ZoomIn20Regular, AutoFitWidth20Regular, DocumentOnePage20Regular, DocumentMultiple20Regular, TextChangeCase20Regular, TextWordCount20Regular, PanelLeftText20Regular, ChevronDoubleRight16Regular, DocumentHeader20Regular, DocumentFooter20Regular,
 } from '@fluentui/react-icons';
-import { useStore } from '../model/store';
+import { useStore, type RichKey } from '../model/store';
 import { getEditor, getEditorMeta, onRegistryChange } from '../editor/registry';
 import { historyLog, entryText } from '../editor/historyLog';
 import { usePreviewSurface, usePreviewMarks } from './PreviewEditLayer';
@@ -188,7 +188,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const [peek, setPeek] = useState(false);
   const [pop, setPop] = useState<'table' | 'symbol' | 'symbol2' | 'theorem' | null>(null);
   const [tableDlg, setTableDlg] = useState<TableDialogKind | null>(null);
-  const [rPlotOpen, setRPlotOpen] = useState(false);
+  const [rPlotTarget, setRPlotTarget] = useState<{ editor: Editor; key: RichKey } | null>(null);
   const [painter, setPainter] = useState<Mark[] | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const ed = useActiveEditor();
@@ -419,6 +419,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
       <HistoryDialog />
       <GitDialog />
       <ZoteroDialog open={zoteroOpen} onClose={() => setZoteroOpen(false)} entries={references} onChange={(e) => useStore.getState().setReferences(e)} />
+      {rPlotTarget && <RPlotInsertDialog editor={rPlotTarget.editor} richKey={rPlotTarget.key} onClose={() => setRPlotTarget(null)} onInserted={afterCommand} />}
       <div className="rb-tabs">
         <div className="rb-tabs-left">
           {leading}
@@ -565,8 +566,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                 {tableDlg === 'size' && <TableSizeDialog onClose={() => setTableDlg(null)} onInsert={(r, c, h, fit, cw) => { setTableDlg(null); ins.insertTable(r, c, h, fit, cw); afterCommand(); }} />}
                 {tableDlg === 'text' && <TableTextDialog onClose={() => setTableDlg(null)} onInsert={(t, h) => { setTableDlg(null); ins.insertTableFromText(t, h); afterCommand(); }} />}
                 <B title={tx("插入图片；也可将图片直接粘贴到正文中")} big icon={<Image20Regular />} disabled={none || !blocks} run={ins.insertFigure}>{tx("图片")}</B>
-                <B title={tx('用 R 代码绘图并插入')} big icon={<Image20Regular />} disabled={none || !blocks} run={() => setRPlotOpen(true)}>{tx('R 绘图')}</B>
-                {rPlotOpen && ed && activeKey && <RPlotInsertDialog editor={ed} richKey={activeKey} onClose={() => setRPlotOpen(false)} onInserted={afterCommand} />}
+                <B title={tx('用 R 代码绘图并插入')} big icon={<Image20Regular />} disabled={none || !blocks} run={() => { if (ed && activeKey) setRPlotTarget({ editor: ed, key: activeKey }); }}>{tx('R 绘图')}</B>
               </Group>
               <Group label={tx("链接与符号")}>
                 <B title={tx("插入链接（⌘K）")} big icon={<Link20Regular />} disabled={none} run={() => useLinkDialog.getState().open()}>{tx("链接")}</B>

@@ -20,6 +20,8 @@ import { RPlotDialog, RPlotInsertDialog } from '/src/ui/RPlotDialog.tsx';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { Figure } from '/src/editor/extensions/blocks.tsx';
+import { Ribbon } from '/src/ui/Ribbon.tsx';
+import { usePreviewSurface } from '/src/ui/PreviewEditLayer.tsx';
 import { registerEditor, unregisterEditor } from '/src/editor/registry.ts';
 import * as jobs from '/src/rplot/jobs.ts';
 import { useRPlotLoad } from '/src/rplot/assets.ts';
@@ -35,15 +37,16 @@ import { setImageNamespace, saveProject, loadProject, loadImage } from '/src/mod
 import { buildDocx } from '/src/export/docx/build.ts';
 import { runTool } from '/src/ai/tools.ts';
 import '/src/styles/app.css';
-window.rplot = { createRPlot, saveRPlot, runRPlot, resetR, prepareRPlotRuntime, useRPlotLoad, useRPackageLoad, jobs, registerEditor, useStore, sampleDoc, serializeProject, serializePara, toMarkdown, fromMarkdown, compileDrawing, setImageNamespace, saveProject, loadProject, loadImage, buildDocx, runTool };
+window.rplot = { createRPlot, saveRPlot, runRPlot, resetR, prepareRPlotRuntime, useRPlotLoad, useRPackageLoad, jobs, registerEditor, usePreviewSurface, useStore, sampleDoc, serializeProject, serializePara, toMarkdown, fromMarkdown, compileDrawing, setImageNamespace, saveProject, loadProject, loadImage, buildDocx, runTool };
 const root = createRoot(document.getElementById('root'));
 const clear = () => root.render(React.createElement(FluentProvider, { theme: webLightTheme }));
-window.rplot.showBackgroundDialog = () => {
+window.rplot.showBackgroundDialog = (ribbon = false) => {
   const ed = new Editor({ element: document.getElementById('editor'), extensions: [StarterKit, Figure.extend({ addNodeView: () => undefined })], content: useStore.getState().doc.body,
     onUpdate: ({ editor }) => useStore.getState().setRich('body', editor.getJSON()) });
   registerEditor('body', ed, { blocks: true, headings: true, docId: useStore.getState().doc.id }); window.rplot.ed = ed;
   ed.commands.setTextSelection(ed.state.doc.content.size);
-  root.render(React.createElement(FluentProvider, { theme: webLightTheme }, React.createElement(RPlotInsertDialog, { editor: ed, richKey: 'body', onClose: clear })));
+  usePreviewSurface.getState().set({activeKey:'body'});
+  root.render(React.createElement(FluentProvider, { theme: webLightTheme }, ribbon ? React.createElement(Ribbon,{layout:{navOpen:true,setNavOpen:()=>{},mode:'split',setMode:()=>{}}}) : React.createElement(RPlotInsertDialog, { editor: ed, richKey: 'body', onClose: clear })));
 };
 window.rplot.closeEditor = () => { const ed = window.rplot.ed; if (ed) { unregisterEditor('body', ed); ed.destroy(); } };
 window.rplot.showDialog = (initial) => {
@@ -202,6 +205,17 @@ try {
   });
   assert.match(tool.out, /R 图已插入/); assert.ok(tool.attrs?.rPlot);
   console.log('PASS Agent r_plot tool inserts an editable R figure');
+
+  await page.evaluate(() => window.rplot.showBackgroundDialog(true));
+  await page.getByRole('tab', { name: '插入', exact: true }).click();
+  await page.getByRole('button', { name: 'R 绘图', exact: true }).click();
+  await page.getByRole('textbox', { name: 'R 绘图代码', exact: true }).fill('plot(1:3, main="keep this draft")');
+  await page.evaluate(() => { window.rplot.usePreviewSurface.getState().set({activeKey:null}); document.querySelector('.ribbon [role="tab"]').click(); });
+  assert.match(await page.getByRole('textbox', { name: 'R 绘图代码', exact: true }).innerText(), /keep this draft/);
+  await page.getByRole('button', { name: '取消', exact: true }).click();
+  await page.locator('.rplot-dialog').waitFor({state:'detached'});
+  await page.evaluate(() => window.rplot.closeEditor());
+  console.log('PASS Ribbon dialog and R draft survive active-editor reset and tab changes');
 
   await page.evaluate(() => window.rplot.showDialog());
   const dataInput = page.locator('input[type="file"]');
