@@ -66,6 +66,10 @@ function cardTitle(c: ToolCard): string {
     case 'figure_write': return tx("已插入图片：{{part}}，{{where}}", { part: partLabel(i.part), where });
     case 'r_plot': return tx('已用 R 绘图并插入：{{part}}', { part: partLabel(i.part) });
     case 'images': return tx("已读取图片列表");
+    case 'library_list': return tx('已读取资料库清单');
+    case 'library_search': return tx('已检索资料库：{{q}}', { q: i.query });
+    case 'library_read': return tx('已读取文献 PDF 原文');
+    case 'library_render': return tx('已查看文献 PDF 第 {{page}} 页', { page: i.page });
     case 'selection': return tx("已读取所选内容");
     case 'diagnostics': return tx("已读取排版诊断");
     case 'bib_list': return i.which === 'achievements' ? tx("已读取成果表") : tx("已读取参考文献表");
@@ -120,6 +124,7 @@ function liveTitle(name: string, input: Record<string, any>): string {
     case 'bridge_run': return tx("在本机运行：{{cmd}}", { cmd: String(input.cmd ?? '').slice(0, 60) });
     case 'bridge_ls': case 'bridge_read': case 'bridge_write': return tx("正在访问本机文件…");
     case 'pdf_images': case 'pdf_render': return tx("正在处理 PDF…");
+    case 'library_list': case 'library_search': case 'library_read': case 'library_render': return tx('正在读取资料库…');
     case 'bib_add': return tx("正在添加参考文献…");
     case 'settings_set': return tx("正在修改设置…");
     case 'diagnostics': return tx("正在读取排版诊断…");

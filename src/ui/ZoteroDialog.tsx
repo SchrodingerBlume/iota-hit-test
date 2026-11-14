@@ -5,7 +5,9 @@ import { Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogAc
 import type { BibEntry } from '../bib/bibtex';
 import { parseBibtex } from '../bib/bibtex';
 import { entriesFromCsl, mergeEntries, parseCslJson, cslToEntry } from '../bib/csl';
-import { connect, libraries, collections, items, loadAuth, saveAuth, type ZoteroAuth, type ZoteroLibrary, type ZoteroCollection } from '../bib/zotero';
+import { connect, libraries, collections, items, loadAuth, saveAuth, zoteroSource, type ZoteroAuth, type ZoteroLibrary, type ZoteroCollection } from '../bib/zotero';
+import { importZoteroPdfs, type PdfImportResult } from '../library/zotero';
+import { useStore } from '../model/store';
 import { t as tx } from '../i18n';
 
 interface Props { open: boolean; onClose: () => void; entries: BibEntry[]; onChange: (e: BibEntry[]) => void }
@@ -30,11 +32,17 @@ export function ZoteroDialog({ open, onClose, entries, onChange }: Props) {
   const [cols, setCols] = useState<ZoteroCollection[]>([]);
   const [col, setCol] = useState<string>('');
   const [asGroup, setAsGroup] = useState(true);
+  const [withPdfs, setWithPdfs] = useState(true);
+  const [pdfResult, setPdfResult] = useState<PdfImportResult | null>(null);
+  const controller = useRef<AbortController | null>(null);
   const [result, setResult] = useState<{ added: number; updated: number; total: number } | null>(null);
   const [drag, setDrag] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const latestEntries = useRef(entries); latestEntries.current = entries;
+  const close = () => { controller.current?.abort(); onClose(); };
+  useEffect(() => { if (!open) controller.current?.abort(); return () => controller.current?.abort(); }, [open]);
 
-  useEffect(() => { if (open) { setResult(null); setError(null); void loadAuth().then((a) => setAuth(a ?? null)); } }, [open]);
+  useEffect(() => { if (open) { setResult(null); setPdfResult(null); setError(null); void loadAuth().then((a) => setAuth(a ?? null)).catch((e) => { setAuth(null); setError(describe(e)); }); } }, [open]);
   useEffect(() => {
     if (!auth) { setLibs([]); setLib(''); return; }
     setBusy(tx("正在读取文库…"));
@@ -50,29 +58,36 @@ export function ZoteroDialog({ open, onClose, entries, onChange }: Props) {
     setError(null); setResult(null); setBusy(tx("正在连接…"));
     try { const a = await connect(keyInput); await saveAuth(a); setAuth(a); setKeyInput(''); } catch (e) { setError(describe(e)); } finally { setBusy(null); }
   };
-  const disconnect = async () => { await saveAuth(null); setAuth(null); setCols([]); setResult(null); };
+  const disconnect = async () => { await saveAuth(null); setAuth(null); setCols([]); setResult(null); setPdfResult(null); };
   const merge = (incoming: BibEntry[], group?: string) => {
     const r = mergeEntries(entries, incoming, group);
     onChange(r.entries);
     setResult({ added: r.added, updated: r.updated, total: incoming.length });
   };
   const doImport = async () => {
-    if (!auth) return;
-    setError(null); setResult(null); setBusy(tx("正在下载条目…"));
+    if (!auth || busy) return;
+    const abort = new AbortController(); controller.current = abort;
+    const docId = useStore.getState().doc.id;
+    setError(null); setResult(null); setPdfResult(null); setBusy(tx("正在下载条目…"));
     try {
-      const list = await items(auth, lib, col || null, (n, total) => setBusy(tx("正在下载条目… {{n}} / {{total}}", { n, total })));
-      const taken = new Set(entries.map((e) => e.key));
+      const list = await items(auth, lib, col || null, (n, total) => setBusy(tx("正在下载条目… {{n}} / {{total}}", { n, total })), abort.signal);
+      abort.signal.throwIfAborted();
+      if (docId !== useStore.getState().doc.id) throw new Error('工程已切换，请重新导入文献');
+      const existing = latestEntries.current.map((e) => list.some((it) => e.source === `zotero:${it.key}`) ? { ...e, source: zoteroSource(lib, e.source!.slice(7)) } : e);
+      const taken = new Set(existing.map((e) => e.key));
       const incoming = list.map((it) => {
         const e = cslToEntry(it.csl, taken, it.citationKey && !taken.has(it.citationKey) ? it.citationKey : undefined);
         taken.add(e.key);
-        e.source = `zotero:${it.key}`;
+        e.source = zoteroSource(lib, it.key);
         return e;
       });
-      merge(incoming, asGroup && col ? cols.find((c) => c.key === col)?.name : undefined);
-    } catch (e) { setError(describe(e)); } finally { setBusy(null); }
+      const merged = mergeEntries(existing, incoming, asGroup && col ? cols.find((c) => c.key === col)?.name : undefined);
+      onChange(merged.entries); setResult({ added: merged.added, updated: merged.updated, total: incoming.length });
+      if (withPdfs) setPdfResult(await importZoteroPdfs(auth, lib, list.map((it) => ({ itemKey: it.key, bib: merged.entries.find((e) => e.source === zoteroSource(lib, it.key))! })), { signal: abort.signal, progress: setBusy }));
+    } catch (e) { if (!abort.signal.aborted) setError(describe(e)); } finally { if (controller.current === abort) { controller.current = null; setBusy(null); } }
   };
   const importFiles = async (files: FileList | File[]) => {
-    setError(null); setResult(null);
+    setError(null); setResult(null); setPdfResult(null);
     const taken = new Set(entries.map((e) => e.key));
     const all: BibEntry[] = [];
     for (const f of Array.from(files)) {
@@ -85,7 +100,7 @@ export function ZoteroDialog({ open, onClose, entries, onChange }: Props) {
   const curLib = libs.find((l) => l.id === lib);
   const curCol = cols.find((c) => c.key === col);
   return (
-    <Dialog open={open} onOpenChange={(_, d) => { if (!d.open) onClose(); }}>
+    <Dialog open={open} onOpenChange={(_, d) => { if (!d.open) close(); }}>
       <DialogSurface className="zt-dialog">
         <DialogBody>
           <DialogTitle>{tx("从 Zotero 导入")}</DialogTitle>
@@ -104,11 +119,11 @@ export function ZoteroDialog({ open, onClose, entries, onChange }: Props) {
                 <>
                   <div className="zt-row">
                     <span>{tx("已连接")}<b> {auth.username}</b><span className="muted">（{tx("用户号")} {auth.userID}）</span></span>
-                    <Button size="small" appearance="subtle" onClick={disconnect}>{tx("断开")}</Button>
+                    <Button size="small" appearance="subtle" disabled={!!busy} onClick={disconnect}>{tx("断开")}</Button>
                   </div>
                   <div className="zt-grid">
                     <span className="zt-lab">{tx("文库")}</span>
-                    <Dropdown size="small" expandIcon={caret} style={DD} value={curLib ? (curLib.kind === 'user' ? tx("我的文库") : curLib.label) : ''} selectedOptions={[lib]} onOptionSelect={(_, d) => setLib(d.optionValue!)} disabled={!libs.length}>
+                    <Dropdown size="small" expandIcon={caret} style={DD} value={curLib ? (curLib.kind === 'user' ? tx("我的文库") : curLib.label) : ''} selectedOptions={[lib]} onOptionSelect={(_, d) => setLib(d.optionValue!)} disabled={!libs.length || !!busy}>
                       {libs.map((l) => <Option key={l.id} value={l.id} text={l.kind === 'user' ? tx("我的文库") : l.label}>{l.kind === 'user' ? tx("我的文库") : l.label}</Option>)}
                     </Dropdown>
                     <span className="zt-lab">{tx("收藏夹")}</span>
@@ -118,10 +133,12 @@ export function ZoteroDialog({ open, onClose, entries, onChange }: Props) {
                     </Dropdown>
                   </div>
                   <div className="zt-row">
-                    <Checkbox size="medium" label={tx("按收藏夹名称创建分组")} checked={asGroup} disabled={!col} onChange={(_, d) => setAsGroup(!!d.checked)} />
+                    <Checkbox size="medium" label={tx("按收藏夹名称创建分组")} checked={asGroup} disabled={!col || !!busy} onChange={(_, d) => setAsGroup(!!d.checked)} />
                     <span className="spacer" />
                     <Button size="small" appearance="primary" disabled={!!busy || !lib} onClick={doImport}>{tx("导入")}</Button>
                   </div>
+                  <Checkbox label={tx('同时下载 PDF 到资料库，供 AI 检索和阅读')} checked={withPdfs} disabled={!!busy} onChange={(_, d) => setWithPdfs(!!d.checked)} />
+                  <p className="field-hint muted">{tx('PDF 须已同步至 Zotero Storage，密钥须有文件读取权限。本机链接和 WebDAV 附件可在资料库中手动上传；下载失败不影响文献条目导入。')}</p>
                   <p className="field-hint muted">{tx("再次导入会按 Zotero 条目更新已有文献，并保留引用键和分组。Zotero 中删除的条目不会从当前文档移除。选择收藏夹时仅导入其直属条目。")}</p>
                 </>
               )}
@@ -131,14 +148,15 @@ export function ZoteroDialog({ open, onClose, entries, onChange }: Props) {
               <p className="field-hint muted">{tx("在 Zotero 中选择「文件 → 导出文献库」，或右键收藏夹导出，格式使用 CSL JSON；也支持 .bib。文件不会自动同步，文库更新后需重新导入。")}</p>
               <div className={`zt-drop ${drag ? 'is-over' : ''}`} onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={(e) => { e.preventDefault(); setDrag(false); void importFiles(e.dataTransfer.files); }} onClick={() => fileInput.current?.click()}>
                 {tx("拖入文件，或单击选择")}
-                <input ref={fileInput} type="file" accept=".json,.bib,application/json,text/plain" multiple hidden onChange={(e) => { if (e.target.files?.length) void importFiles(e.target.files); e.target.value = ''; }} />
+                <input ref={fileInput} type="file" accept=".json,.bib,application/json,text/plain" multiple hidden disabled={!!busy} onChange={(e) => { if (e.target.files?.length) void importFiles(e.target.files); e.target.value = ''; }} />
               </div>
             </section>
             {busy && <p className="zt-status muted">{busy}</p>}
             {error && <p className="zt-status zt-error">{error}</p>}
             {result && <p className="zt-status">{tx("已读取 {{total}} 条：新增 {{added}}，更新 {{updated}}", result)}</p>}
+            {pdfResult && <div className="zt-status"><p>{tx('PDF：导入 {{imported}} 份，未变化 {{unchanged}} 份，{{missing}} 条文献没有 PDF', { ...pdfResult })}</p>{pdfResult.failed.length > 0 && <details className="zt-error"><summary>{tx('{{n}} 个附件未导入', { n: pdfResult.failed.length })}</summary>{pdfResult.failed.map((error, i) => <p key={i}>{error}</p>)}</details>}<Button size="small" onClick={() => { useStore.getState().setSection('library'); close(); }}>{tx('打开资料库')}</Button></div>}
           </DialogContent>
-          <DialogActions><Button appearance="secondary" onClick={onClose}>{tx("关闭")}</Button></DialogActions>
+          <DialogActions><Button appearance="secondary" onClick={close}>{controller.current ? tx('停止导入并关闭') : tx("关闭")}</Button></DialogActions>
         </DialogBody>
       </DialogSurface>
     </Dialog>

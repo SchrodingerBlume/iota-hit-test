@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "test:library": "node scripts/test-library.mjs",
     "test:rplot": "node scripts/test-rplot.mjs",
     "dev": "vite",
     "build": "tsc --noEmit && node scripts/build-licenses.mjs && vite build",

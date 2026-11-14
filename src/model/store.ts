@@ -14,7 +14,7 @@ export type RichKey = 'abstractZh' | 'abstractEn' | 'body' | 'conclusion' | 'app
 
 export type Section =
   | 'settings' | 'info' | 'cover' | 'titlepage' | 'abstract' | 'nomenclature' | 'body' | 'conclusion'
-  | 'bibliography' | 'appendix' | 'achievements' | 'defense' | 'declarations' | 'acknowledgement' | 'resume' | 'toc' | 'index';
+  | 'bibliography' | 'appendix' | 'achievements' | 'defense' | 'declarations' | 'acknowledgement' | 'resume' | 'toc' | 'index' | 'library';
 
 const person = () => ({ name: '', title: '', affiliation: '', discipline: '' });
 

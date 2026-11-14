@@ -46,6 +46,7 @@ import { useGitDialog } from './GitDialog';
 import { fluentLight, fluentDark } from './fluent';
 import { SlidersHorizontal, BookText, PenLine, Library } from 'lucide-react';
 import { t as tx } from '../i18n';
+import { LibraryPanel } from './LibraryPanel';
 
 const NAV: { key: Section; label: string; group: string; k?: string }[] = [
   { key: 'info', label: tx("论文信息"), group: tx("设置") },
@@ -65,6 +66,7 @@ const NAV: { key: Section; label: string; group: string; k?: string }[] = [
   { key: 'acknowledgement', label: tx("致谢"), group: tx("后置") },
   { key: 'resume', label: tx("个人简历"), group: tx("后置") },
   { key: 'index', label: tx("索引"), group: tx("后置") },
+  { key: 'library', label: tx('资料库'), group: tx('资料') },
 ];
 
 /** 文档一变就（防抖后）重新生成 Typst 并交给 worker */
@@ -306,7 +308,7 @@ export function App() {
   const reflowRef = useCallback((el: HTMLDivElement | null) => { reflowStop.current?.(); reflowStop.current = el && !el.querySelector('.editor') ? watchReflow(el, '.card, .card > *, .triseg > *, .axis > *') : null; }, []);
   const lastSection = useRef(section);
   useEffect(() => {
-    if (lastSection.current !== section && mode === 'preview' && ['info', 'settings', 'cover', 'titlepage', 'toc', 'bibliography', 'achievements', 'nomenclature', 'defense', 'declarations', 'index'].includes(section)) setMode('split');
+    if (lastSection.current !== section && mode === 'preview' && ['info', 'settings', 'cover', 'titlepage', 'toc', 'bibliography', 'achievements', 'nomenclature', 'defense', 'declarations', 'index', 'library'].includes(section)) setMode('split');
     lastSection.current = section;
   }, [section, mode, setMode]);
   const hasDocument = loaded && useStore.getState().projects.some((p) => p.id === doc.id);
@@ -390,6 +392,7 @@ export function App() {
       case 'body': return <RichSection title={tx("正文")} richKey="body" headings placeholder={tx("输入正文…")} settings={<BodySettings />} />;
       case 'conclusion': return <RichSection title={tx("结论")} richKey="conclusion" headings={false} extra={<div className="card"><OpenrightSwitch orKey="conclusion" label={tx("从奇数页开始")} /></div>} />;
       case 'bibliography': return <BibPanel which="bibliography" />;
+      case 'library': return <LibraryPanel />;
       case 'appendix': return <RichSection title={tx("附录")} richKey="appendix" headings placeholder={tx("输入附录…")} settings={<PageSettings pages={['appendix']}><SettingSwitch k="appendixNumbering" /></PageSettings>} />;
       case 'achievements': return <BibPanel which="achievements" />;
       case 'defense': return <DefensePanel />;
@@ -402,7 +405,7 @@ export function App() {
 
   const dot = compile.status === 'error' ? 'err' : compile.status === 'booting' || compile.compiling || compile.bgCompiling ? 'busy' : 'ok';
   const statusText = compile.status === 'booting' ? tx("正在准备预览…") : compile.status === 'error' ? tx("预览不可用") : busy ?? (compile.compiling ? tx("正在更新预览…") : compile.bgCompiling ? tx("正在后台重排全文…") : compile.diagnostics.some((d) => d.severity === 'error') ? tx("排版失败") : compile.lastMs !== null ? tx("预览已更新（{{s}} 秒）", { s: (compile.lastMs / 1000).toFixed(1) }) : tx("预览已更新"));
-  const GROUP_ICON: Record<string, React.ReactNode> = { 设置: <SlidersHorizontal />, 前置: <BookText />, 主体: <PenLine />, 后置: <Library /> };
+  const GROUP_ICON: Record<string, React.ReactNode> = { 设置: <SlidersHorizontal />, 前置: <BookText />, 主体: <PenLine />, 后置: <Library />, 资料: <Library /> };
 
   return (
     <EditorEnvContext.Provider value={env}>
@@ -520,7 +523,7 @@ export function App() {
           <nav className={`nav ${compact ? 'is-overlay' : ''}`} hidden={compact && !navOpen} inert={!navOpen} onClick={(e) => { if (compact && (e.target as HTMLElement).closest('button:not(.outline-item)')) setNavOpen(false); }}>
             <div className="nav-inner">
             {compact && <button type="button" className="nav-collapse" title={tx("收起左侧导航")} aria-label={tx("收起左侧导航")} onClick={() => setNavOpen(false)}><ChevronLeft20Regular /></button>}
-            {[tx("设置"), tx("前置"), tx("主体"), tx("后置")].map((g) => (
+            {[...new Set(NAV.map((n) => n.group))].map((g) => (
               <div key={g}>
                 <h4>{GROUP_ICON[g]}{g}</h4>
                 {NAV.filter((n) => n.group === g).map((n) => {

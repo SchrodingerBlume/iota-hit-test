@@ -613,6 +613,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                 <B title={tx("从 Zotero 云端文库或 CSL JSON、BibTeX 文件导入；再次导入可同步更新")} big icon={<CloudArrowDown20Regular />} run={() => setZoteroOpen(true)}>Zotero</B>
                 <Stack>
                   <B title={tx("管理源")} icon={<Library20Regular />} run={() => useStore.getState().setSection('bibliography')}>{tx("管理源")}</B>
+                  <B title={tx('文献 PDF 资料库，供 AI 检索和阅读')} icon={<Library20Regular />} run={() => useStore.getState().setSection('library')}>{tx('资料库')}</B>
                   <B title={tx("打开“成果”页，登记攻读学位期间取得的成果。")} icon={<TextGrammarSettings20Regular />} run={() => useStore.getState().setSection('achievements')}>{tx("成果")}</B>
                 </Stack>
               </Group>

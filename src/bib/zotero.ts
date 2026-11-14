@@ -13,21 +13,21 @@ export interface ZoteroItem { key: string; version: number; citationKey?: string
 export const loadAuth = () => kv.get<ZoteroAuth>('meta', 'zotero');
 export const saveAuth = (a: ZoteroAuth | null) => (a ? kv.set('meta', 'zotero', a) : kv.del('meta', 'zotero'));
 
-async function get(path: string, key: string, params: Record<string, string> = {}): Promise<{ body: any; total: number }> {
+async function get(path: string, key: string, params: Record<string, string> = {}, signal?: AbortSignal): Promise<{ body: any; total: number }> {
   const u = new URL(API + path);
   for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
-  const r = await fetch(u, { headers: { ...(key ? { 'Zotero-API-Key': key } : {}), 'Zotero-API-Version': '3' } });
+  const r = await fetch(u, { signal, headers: { ...(key ? { 'Zotero-API-Key': key } : {}), 'Zotero-API-Version': '3' } });
   if (!r.ok) throw new Error(r.status === 403 ? 'forbidden' : r.status === 404 ? 'notfound' : `http ${r.status}`);
   return { body: await r.json(), total: Number(r.headers.get('Total-Results') ?? 0) };
 }
-async function all<T>(path: string, key: string, params: Record<string, string>, onProgress?: (n: number, total: number) => void): Promise<T[]> {
+async function all<T>(path: string, key: string, params: Record<string, string>, onProgress?: (n: number, total: number) => void, signal?: AbortSignal): Promise<T[]> {
   const out: T[] = [];
   for (let start = 0; ; ) {
-    const { body, total } = await get(path, key, { ...params, limit: '100', start: String(start) });
+    const { body, total } = await get(path, key, { ...params, limit: '100', start: String(start) }, signal);
     out.push(...(body as T[]));
     start += (body as T[]).length;
     onProgress?.(start, total);
-    if (!(body as T[]).length || start >= total) break;
+    if (!(body as T[]).length || (total > 0 ? start >= total : body.length < 100)) break;
   }
   return out;
 }
@@ -64,8 +64,32 @@ export async function collections(a: ZoteroAuth, lib: string): Promise<ZoteroCol
   return out;
 }
 
-export async function items(a: ZoteroAuth, lib: string, collection: string | null, onProgress?: (n: number, total: number) => void): Promise<ZoteroItem[]> {
+export async function items(a: ZoteroAuth, lib: string, collection: string | null, onProgress?: (n: number, total: number) => void, signal?: AbortSignal): Promise<ZoteroItem[]> {
   const path = collection ? `/${lib}/collections/${collection}/items` : `/${lib}/items`;
-  const raw = await all<any>(path, a.key, { format: 'json', include: 'data,csljson', itemType: '-attachment || note || annotation' }, onProgress);
+  const raw = await all<any>(path, a.key, { format: 'json', include: 'data,csljson', itemType: '-attachment || note || annotation' }, onProgress, signal);
   return raw.filter((x) => x.csljson).map((x) => ({ key: x.key, version: x.version, citationKey: x.data?.citationKey || undefined, csl: x.csljson }));
+}
+
+export interface ZoteroPdf { key: string; version: number; name: string; linkMode: string; md5?: string }
+export const zoteroSource = (library: string, key: string) => `zotero:${library}/${key}`;
+export async function pdfAttachments(a: ZoteroAuth, library: string, itemKey: string, signal?: AbortSignal): Promise<ZoteroPdf[]> {
+  if (!/^(users|groups)\/\d+$/.test(library) || !/^[A-Z0-9]{8}$/.test(itemKey)) throw new Error('无效的 Zotero 文库或条目键');
+  const raw = await all<any>(`/${library}/items/${itemKey}/children`, a.key, { format: 'json', include: 'data', itemType: 'attachment' }, undefined, signal);
+  return raw.filter((x) => x.data?.itemType === 'attachment' && (x.data.contentType === 'application/pdf' || /\.pdf$/i.test(x.data.filename ?? ''))).map((x) => ({ key: x.key, version: x.version, name: x.data.filename || `${x.key}.pdf`, linkMode: x.data.linkMode, md5: x.data.md5 || undefined }));
+}
+
+export async function downloadPdf(a: ZoteroAuth, library: string, pdf: ZoteroPdf, signal?: AbortSignal, progress: (bytes: number, total?: number) => void = () => {}): Promise<Blob> {
+  if (!/^(users|groups)\/\d+$/.test(library) || !/^[A-Z0-9]{8}$/.test(pdf.key)) throw new Error('无效的 Zotero 附件键');
+  if (!['imported_file', 'imported_url'].includes(pdf.linkMode)) throw new Error('这是本机链接附件，Zotero 云端没有文件；请手动上传 PDF');
+  // 标准 Authorization 在跨域重定向时由浏览器剥除，密钥不会随 S3 下载地址转发。
+  const r = await fetch(`${API}/${library}/items/${pdf.key}/file?v=3`, { signal, headers: { Authorization: `Bearer ${a.key}` }, referrerPolicy: 'no-referrer' });
+  if (!r.ok) throw new Error(r.status === 403 ? '没有 PDF 文件读取权限，请检查 Zotero 密钥的文件权限' : r.status === 404 ? 'PDF 未同步至 Zotero Storage（可能仅在本机或 WebDAV）；请手动上传' : `PDF 下载失败（HTTP ${r.status}）`);
+  const max = 100 * 1024 * 1024, total = Number(r.headers.get('Content-Length')) || undefined;
+  if (total && total > max) { await r.body?.cancel(); throw new Error('单份 PDF 不能超过 100 MB'); }
+  const chunks: Uint8Array<ArrayBuffer>[] = []; let bytes = 0;
+  if (r.body) {
+    const reader = r.body.getReader();
+    for (;;) { const part = await reader.read(); if (part.done) break; bytes += part.value.length; if (bytes > max) { await reader.cancel(); throw new Error('单份 PDF 不能超过 100 MB'); } chunks.push(part.value); progress(bytes, total); }
+  } else { const b = new Uint8Array(await r.arrayBuffer()); chunks.push(b); bytes = b.length; progress(bytes, total); }
+  return new Blob(chunks, { type: 'application/pdf' });
 }

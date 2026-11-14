@@ -57,9 +57,19 @@ R 引擎、cetzDevice、ggplot2、ggrepel 及依赖随站分发。首次正文�
 
 后台结果按节点 ID 回填，不会移动正在输入的光标；删除占位图后不会重新插入。切到另一个工程时保留结果，回到原工程再回填。失败或取消后可以重试；刷新网页会停止尚未完成的任务，但代码、数据和占位状态仍会保存，可手动继续生成。运行超时或取消会终止 R worker，下一次自动重启。图内文字独立恢复原版 Typst 的字距和段落设置，正文的 Word 兼容排版设置不再影响绘图区。
 
+右下角后台提示可用「收起后台提示」缩成 R 小图标，点击小图标恢复进度详情；收起不会停止下载或绘图，并会记住收起状态。
+
 ### 引文与书目
 
 参考文献按字段录入，可按分组整理。BibTeX 导入时，同一引用键的条目会更新，其余条目追加；导出时使用 JabRef 兼容的 `groups` 字段保存分组。编译和 Word 导出均按 GB/T 7714 处理参考文献。
+
+### 文献 PDF 资料库
+
+左侧「资料 → 资料库」或功能区「引用 → 资料库」管理真实 PDF 文件。Zotero 导入窗口默认勾选「同时下载 PDF 到资料库」，会查找文献的 PDF 附件、下载原文并按页提取文字，保留与文献引用键的关联。重复导入跳过未变化的文件，个人文库与群组文库分别识别；部分附件失败不会撤销已导入的文献。
+
+云端下载要求 PDF 已同步至 Zotero Storage，API 密钥有对应文库及文件读取权限。仅在本机或 WebDAV 的附件不能从该云端接口取得，可用「添加 PDF」上传并关联文献。资料库支持原文预览、全文检索、按页看提取文字、下载、移除，以及将关联条目加入当前论文参考文献。
+
+资料库单独保存在本机 IndexedDB，跨论文共用，PDF 不嵌入 `.iota.json` 工程文件。AI 通过 `library_list`、`library_search`、`library_read` 按需获取文献清单、命中片段和指定页原文；`library_render` 可将扫描件、图表或公式所在页作为图片交给模型。库中未读取的内容不会整库发送给模型，Zotero 密钥也不提供给模型。文字提取不包含 OCR，扫描件仍保留原 PDF，可按页查看。
 
 ### Markdown
 
@@ -160,6 +170,7 @@ npm run dev
 ```sh
 npm run typecheck
 npm run test:markdown
+npm run test:library
 npm run test:projects
 npm run test:compile
 npm run build
@@ -173,6 +184,8 @@ npm run test:rplot
 ```
 
 也可用 `CHROME_PATH` 指定已有 Chromium。测试使用真实 R/Wasm、CeTZ 和 Typst/Wasm，覆盖基础绘图、ggplot2/ggrepel、额外包下载与缓存、中文与数学标签、内部 `.typ` 导入、Markdown 往返、保存重开、Word 导出、Agent 插图、用户绘图窗口、后台原位回填、切工程、删除占位、失败重试以及超时恢复。原版字体度量对照另用 `TYPST_STOCK=/path/to/official/typst node scripts/test-rplot-stock.mjs` 运行，需要官方 Typst 0.15.1。
+
+`npm run test:library` 同样需要 Chromium，也支持 `CHROME_PATH`。它以固定 Zotero API 响应驱动真实 PDF.js、IndexedDB、界面和 Agent 工具，验证重定向下载不转发密钥、附件去重、群组隔离、全文/页码读取、原页图片、扫描件、本机上传与刷新重开；不使用个人 Zotero 凭证。
 
 更新 R/Wasm 随站资源时，先运行 `node scripts/vendor-rplot.mjs` 下载固定版本 webR 和 cetzDevice 源码；再手动运行仓库的 `Build cetzDevice for webR` 工作流，下载其 `cetzDevice-0.5.3.1-webR-0.6.1` artifact，执行 `node scripts/install-rplot-artifact.mjs <artifact解压目录>`。交叉编译脚本是 `scripts/build-rplot-wasm.R`，不依赖开发机上的 R/Wasm 工具链。
 

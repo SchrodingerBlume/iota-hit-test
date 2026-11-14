@@ -45,23 +45,53 @@ export async function pdfText(b64: string, name: string): Promise<string> {
 export const fmtSize = (n: number) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 
 /** PDF 一页画成 PNG（缩放 scale，1 ≈ 72dpi；crop 是页面比例 [x, y, w, h]），回 base64 */
-export async function pdfRender(b64: string, page: number, scale = 2, crop?: [number, number, number, number]): Promise<{ data: string; width: number; height: number; pages: number }> {
+export async function pdfRender(b64: string | Uint8Array<ArrayBuffer>, page: number, scale = 2, crop?: [number, number, number, number]): Promise<{ data: string; width: number; height: number; pages: number }> {
   const pdfjs = await import('pdfjs-dist');
   pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
-  const doc = await pdfjs.getDocument({ data: Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)) }).promise;
-  const p = await doc.getPage(Math.min(Math.max(1, page), doc.numPages));
-  const vp = p.getViewport({ scale });
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
-  await p.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport: vp } as any).promise;
-  let out = canvas;
-  if (crop) {
-    const [x, y, w, h] = crop.map((v) => Math.min(1, Math.max(0, v))) as [number, number, number, number];
-    out = document.createElement('canvas');
-    out.width = Math.max(1, Math.round(canvas.width * w)); out.height = Math.max(1, Math.round(canvas.height * h));
-    out.getContext('2d')!.drawImage(canvas, Math.round(canvas.width * x), Math.round(canvas.height * y), out.width, out.height, 0, 0, out.width, out.height);
-  }
-  return { data: out.toDataURL('image/png').split(',')[1], width: out.width, height: out.height, pages: doc.numPages };
+  const task = pdfjs.getDocument({ data: typeof b64 === 'string' ? Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)) : b64 });
+  const doc = await task.promise;
+  try {
+    const p = await doc.getPage(Math.min(Math.max(1, page), doc.numPages));
+    const vp = p.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
+    await p.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport: vp } as any).promise;
+    let out = canvas;
+    if (crop) {
+      const [x, y, w, h] = crop.map((v) => Math.min(1, Math.max(0, v))) as [number, number, number, number];
+      out = document.createElement('canvas');
+      out.width = Math.max(1, Math.round(canvas.width * w)); out.height = Math.max(1, Math.round(canvas.height * h));
+      out.getContext('2d')!.drawImage(canvas, Math.round(canvas.width * x), Math.round(canvas.height * y), out.width, out.height, 0, 0, out.width, out.height);
+    }
+    return { data: out.toDataURL('image/png').split(',')[1], width: out.width, height: out.height, pages: doc.numPages };
+  } finally { await task.destroy(); }
+}
+
+/** 资料库保留每一页的文本，不将整库塞入模型上下文。扫描页保留空串，仍可按页看原图。 */
+export async function extractPdfPages(blob: Blob, signal?: AbortSignal, progress: (page: number, total: number) => void = () => {}): Promise<string[]> {
+  const pdfjs = await import('pdfjs-dist');
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+  signal?.throwIfAborted();
+  const task = pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) });
+  const abort = () => { void task.destroy(); };
+  signal?.addEventListener('abort', abort, { once: true });
+  try {
+    const doc = await task.promise, pages: string[] = [];
+    for (let n = 1; n <= doc.numPages; n++) {
+      signal?.throwIfAborted();
+      const page = await doc.getPage(n), text = await page.getTextContent();
+      let y: number | null = null, line = ''; const lines: string[] = [];
+      for (const item of text.items) {
+        if (!('str' in item)) continue;
+        const nextY = Math.round(item.transform[5]);
+        if (y !== null && Math.abs(nextY - y) > 2) { lines.push(line); line = ''; }
+        line += item.str + (item.hasEOL ? '\n' : ' '); y = nextY;
+      }
+      lines.push(line); pages.push(lines.join('\n').normalize('NFC').trim());
+      page.cleanup(); progress(n, doc.numPages);
+    }
+    return pages;
+  } finally { signal?.removeEventListener('abort', abort); await task.destroy(); }
 }
 
 /** PDF 里嵌的位图（页面上画出来的那些 XObject），小于 minPx 的当装饰跳过 */

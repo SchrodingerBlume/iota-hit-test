@@ -90,11 +90,12 @@ export function cslToEntry(item: CslItem, taken: Set<string>, key?: string): Bib
 }
 
 /** Zotero 的 CSL JSON 里 id 是 URI（…/items/ABCD1234）或纯 key；带 citation-key 的（Better BibTeX、Zotero 7 的引用键字段）优先当引用键 */
-export function cslKeyOf(item: CslItem): { zotero?: string; citeKey?: string } {
+export function cslKeyOf(item: CslItem): { zotero?: string; library?: string; citeKey?: string } {
   const id = str(item.id);
   const m = id.match(/(?:^|\/)([A-Z0-9]{8})$/);
   const citeKey = str(item['citation-key']) || str(item.note).match(/(?:^|\n)\s*Citation Key:\s*(\S+)/i)?.[1];
-  return { zotero: m?.[1], citeKey: citeKey || undefined };
+  const library = /\/(users|groups)\/(\d+)\/items\/[A-Z0-9]{8}$/.exec(id);
+  return { zotero: m?.[1], library: library ? `${library[1]}/${library[2]}` : undefined, citeKey: citeKey || undefined };
 }
 
 export function parseCslJson(text: string): CslItem[] {
@@ -130,10 +131,10 @@ export function mergeEntries(existing: BibEntry[], incoming: BibEntry[], group?:
 export function entriesFromCsl(items: CslItem[], taken: Set<string>): BibEntry[] {
   const seen = new Set(taken);
   return items.map((it) => {
-    const { zotero, citeKey } = cslKeyOf(it);
+    const { zotero, library, citeKey } = cslKeyOf(it);
     const e = cslToEntry(it, seen, citeKey && !seen.has(citeKey) ? citeKey : undefined);
     seen.add(e.key);
-    if (zotero) e.source = `zotero:${zotero}`;
+    if (zotero) e.source = `zotero:${library ? library + '/' : ''}${zotero}`;
     return e;
   });
 }
