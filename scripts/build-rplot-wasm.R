@@ -18,12 +18,26 @@ version <- getOption("rwasm.webr_version")
 rv <- strsplit(as.character(version), "\\.")[[1]]
 repo <- paste0("https://repo.r-wasm.org/bin/emscripten/contrib/", paste(rv[1:2], collapse = "."), "/")
 index <- read.dcf(gzcon(url(paste0(repo, "PACKAGES.gz"))))
-for (name in c("digest", "jsonlite", "png")) {
+base_packages <- c("R", "base", "compiler", "datasets", "graphics", "grDevices", "grid", "methods", "parallel", "splines", "stats", "stats4", "tools", "utils")
+pending <- c("digest", "jsonlite", "png", "ggplot2")
+included <- character()
+while (length(pending)) {
+  name <- pending[[1L]]
+  pending <- pending[-1L]
+  if (name %in% c(base_packages, included)) next
+  row <- index[index[, "Package"] == name, , drop = FALSE]
+  stopifnot(nrow(row) == 1L)
+  deps <- intersect(c("Depends", "Imports", "LinkingTo"), colnames(row))
+  for (field in deps) if (!is.na(row[1L, field])) {
+    dependencies <- trimws(gsub("\\s*\\([^)]*\\)", "", strsplit(row[1L, field], ",")[[1L]]))
+    pending <- unique(c(pending, dependencies[nzchar(dependencies)]))
+  }
   v <- index[index[, "Package"] == name, "Version"]
   stopifnot(length(v) == 1L)
   dest <- file.path("_r-wasm", paste0(name, "_", v, ".tgz"))
   download.file(paste0(repo, basename(dest)), dest, mode = "wb")
   utils::untar(dest, exdir = lib)
+  included <- c(included, name)
 }
 for (pkg in list.dirs(lib, recursive = FALSE)) unlink(file.path(pkg, c("help", "html", "doc", "tests", "demo", "include")), recursive = TRUE)
 rwasm::file_packager(normalizePath(lib), normalizePath("_r-wasm-image"), "library.data")
