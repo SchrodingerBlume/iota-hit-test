@@ -17,6 +17,7 @@
 import { mark, unmarked } from './sourcemap';
 import { theoremKind } from './theorem';
 import { lengthTypst } from '../model/length';
+import { rPlotOf } from '../rplot/files';
 
 /** 分图 / 伪代码的属性都是 JSON 串（与 eqdenote 的 rows 同一套路） */
 export function parseJsonArr<T>(v: unknown): T[] { if (Array.isArray(v)) return v as T[]; if (typeof v !== 'string' || !v) return []; try { const a = JSON.parse(v); return Array.isArray(a) ? a : []; } catch { return []; } }
@@ -435,6 +436,13 @@ export function serializeBlock(n: PMNode, opts: SerializeOptions, depth = 0): st
     case 'figure': {
       const subs = parseSubs(n.attrs?.subs);
       const label = labelOf(n.attrs, 'fig');
+      const plot = rPlotOf(n.attrs?.rPlot);
+      if (plot) {
+        const width = lengthTypst(n.attrs?.width ?? 14, 'cm', '14cm');
+        // 模块在工程根目录的 rplots/，模板只接到内容，不需要认识 R 或管理这些文件。
+        const body = `context { import ${JSON.stringify(plot.path)}: r-figure; let w = measure(box(width: ${width})).width; let factor = w / (${plot.width * 72}pt) * 100%; scale(x: factor, y: factor, reflow: true, r-figure()) }`;
+        return floatWrap(n, 'image', tag(opts, n, 'node', `#figure(\n  ${body}${notesOf(n, opts)},\n  caption: [${caption(n, opts)}],${placementArg(n)}\n)`) + (label ? ` <${label}>` : ''));
+      }
       // 一张合成图（(a)(b) 画在图里）配连排分图题：分图条目都没有图、母图有图 → 单图 + 图题里的 #subs
       if (subs.length && n.attrs?.image && !subs.some((s) => s.image)) {
         const letter = (i: number) => 'abcdefghijklmnopqrstuvwxyz'[i] ?? String(i + 1);
@@ -659,7 +667,7 @@ export interface RefTarget {
 /** 这个节点序列化时真会带着标签排出来吗：空图、空表、还没写公式、没内容的定理都发不出去，标签也就不存在 */
 export function emitsLabel(n: PMNode): boolean {
   switch (n.type) {
-    case 'figure': { const subs = parseSubs(n.attrs?.subs); return !!n.attrs?.image || subs.some((s) => s.image); }
+    case 'figure': { const subs = parseSubs(n.attrs?.subs); return !!n.attrs?.image || !!rPlotOf(n.attrs?.rPlot) || subs.some((s) => s.image); }
     case 'tableFigure': return !!(n.content ?? []).find((c) => c.type === 'table' && (c.content ?? []).some((r) => r.type === 'tableRow'));
     case 'equation': { const src = String(n.attrs?.src ?? '').trim(); return n.attrs?.numbered !== false && !!src && mathReady(src); }
     case 'codeFigure': return (n.content ?? []).some((c) => c.type === 'codeBlock');

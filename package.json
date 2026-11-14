@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "test:rplot": "node scripts/test-rplot.mjs",
     "dev": "vite",
     "build": "tsc --noEmit && node scripts/build-licenses.mjs && vite build",
     "preview": "vite preview",
@@ -55,6 +56,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
+    "playwright-core": "^1.65.1",
     "tar": "^7.5.22",
     "ts5": "npm:typescript@^5.9.3",
     "typescript": "^7.0.2",

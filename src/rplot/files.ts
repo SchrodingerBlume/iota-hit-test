@@ -10,6 +10,7 @@ export interface RPlotData {
   path: string;
   source: string;
   pages: number;
+  dataFiles?: { name: string; data: string }[];
 }
 
 export function rPlotOf(value: unknown): RPlotData | null {

@@ -64,6 +64,7 @@ function cardTitle(c: ToolCard): string {
     case 'delete': return tx("已删除{{part}} {{rng}}", { part: partLabel(i.part), rng });
     case 'table_write': return tx("已插入表格：{{part}}，{{where}}", { part: partLabel(i.part), where });
     case 'figure_write': return tx("已插入图片：{{part}}，{{where}}", { part: partLabel(i.part), where });
+    case 'r_plot': return tx('已用 R 绘图并插入：{{part}}', { part: partLabel(i.part) });
     case 'images': return tx("已读取图片列表");
     case 'selection': return tx("已读取所选内容");
     case 'diagnostics': return tx("已读取排版诊断");
@@ -109,6 +110,7 @@ function liveTitle(name: string, input: Record<string, any>): string {
     case 'delete': return tx("正在删除{{part}} {{rng}}…", { part, rng });
     case 'table_write': return tx("正在插入表格…");
     case 'figure_write': return tx("正在插入图片…");
+    case 'r_plot': return tx('正在运行 R 并生成 CeTZ 插图…');
     case 'run_python': return tx("正在运行 Python…");
     case 'run_js': return tx("正在运行 JavaScript…");
     case 'check_order': return tx("正在核对图表顺序…");
@@ -135,7 +137,7 @@ function Live({ live, hasText }: { live: ChatItem['live']; hasText: boolean }) {
   if (!hasText) return <div className="ag-thinking muted"><Spinner size="extra-tiny" />{secs >= 20 ? tx("模型尚未响应…") : tx("正在生成回复…")}{long}</div>;
   return null;
 }
-const EDIT_TOOLS = new Set(['replace', 'insert', 'delete', 'table_write', 'figure_write', 'bib_add', 'info_write', 'abbreviations_add', 'settings_set', 'write_json']);
+const EDIT_TOOLS = new Set(['replace', 'insert', 'delete', 'table_write', 'figure_write', 'r_plot', 'bib_add', 'info_write', 'abbreviations_add', 'settings_set', 'write_json']);
 
 function ChatList({ chats, current, onOpen, onDelete, onRename, onStar, onNew }: { chats: ChatMeta[]; current: string | null; onOpen: (id: string) => void; onDelete: (id: string) => void; onRename: (id: string, title: string) => void; onStar: (id: string, on: boolean) => void; onNew: () => void }) {
   const [editing, setEditing] = useState<{ id: string; title: string } | null>(null);

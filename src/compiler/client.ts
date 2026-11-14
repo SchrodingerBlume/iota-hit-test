@@ -446,8 +446,11 @@ export async function updateUserFonts(add: { id: string; data: ArrayBuffer }[], 
 
 /** 编一份小文档、读它的 metadata（selector 是标签）：导出 Word 时问模板要样式表与版面 */
 export function queryTypst(main: string, selector: string): Promise<{ result: unknown; error?: string }> {
+  startCompiler();
   return new Promise((resolve) => {
     const go = () => {
+      const s = useCompileState.getState();
+      if (s.status === 'error') { resolve({ result: null, error: s.fatal ?? 'Typst 引擎初始化失败' }); return; }
       if (!fg.ready) { setTimeout(go, 300); return; }
       const id = nextId++;
       fg.queryWaiters.set(id, resolve);
@@ -482,5 +485,25 @@ export function compileSnippet(src: string, display: boolean, latex = false, han
       fg.send({ type: 'snippet', id, src, display, latex, hang });
     };
     go();
+  });
+}
+
+/** 绘图窗口的小文档预览，和正文渲染会话分开，不改全文 artifact。 */
+export async function compileDrawing(src: string, files: Record<string, string>): Promise<{ artifact: ArrayBuffer | null; error?: string }> {
+  startCompiler();
+  await new Promise<void>((resolve, reject) => {
+    const check = () => {
+      const s = useCompileState.getState();
+      if (s.status === 'ready') resolve();
+      else if (s.status === 'error') reject(new Error(s.fatal ?? 'Typst 引擎初始化失败'));
+      else setTimeout(check, 200);
+    };
+    check();
+  });
+  await whenIdle(fg);
+  return new Promise((resolve) => {
+    const id = nextId++;
+    fg.snippetWaiters.set(id, resolve);
+    fg.send({ type: 'snippet', id, src, files, document: true, display: true });
   });
 }

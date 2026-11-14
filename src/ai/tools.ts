@@ -26,6 +26,8 @@ import { GUIDES, guideFor, loadGuide, guideToc, guideSection, guideSearch } from
 import { queryFacts } from '../export/docx/template';
 import { parseSubs, subLayout, type SubFig } from '../typst/subfigs';
 import { lineDiff, type LineDiff } from './diff';
+import { createRPlot, saveRPlot } from '../rplot/render';
+import { rPlotOf } from '../rplot/files';
 
 export interface ToolDef { name: string; description: string; parameters: Record<string, unknown> }
 /** 要用户点头的改动：面板弹卡片，用户允许了才做 */
@@ -123,6 +125,7 @@ let webConfig: { reader: string; searchKey: string } = { reader: '', searchKey: 
 export const setWebConfig = (w: { reader: string; searchKey: string }) => { webConfig = w; };
 
 export const TOOLS: ToolDef[] = [
+  { name: 'r_plot', description: '用浏览器内的 R/Wasm + cetzDevice 0.5.3.1 绘图，转成 CeTZ 矢量图并直接插进论文。code 填 R 绘图代码（base plot、grid、ggplot2 均可），不要自己打开/关闭图形设备；ggplot 对象在顶层会自动 print。width/height 是厘米（默认14×9），pointsize 是 pt。附件数据可从 /data/<文件名> 读取。part 指目标部分，at 指插入块号，或 replace=[from,to] 替换已有块。保留 R 代码，用户可随时点「编辑 R 图」修改；输出另存内部 .typ 模块，正文/PDF 保持矢量。只接受单页，多个面板请 par(mfrow=...)。绘图后会把图发回给你查看。', parameters: { type: 'object', properties: { ...place, code: { type: 'string' }, width: { type: 'number', minimum: 2.54, maximum: 50.8 }, height: { type: 'number', minimum: 2.54, maximum: 50.8 }, pointsize: { type: 'number', minimum: 4, maximum: 72 }, seed: { type: 'integer', minimum: 0, maximum: 2147483647 }, caption: { type: 'string' }, captionEn: { type: 'string' }, label: { type: 'string' }, timeout: { type: 'number', minimum: 5, maximum: 600 } }, required: ['part', 'code'], additionalProperties: false } },
   { name: 'outline', description: '看整篇的结构：各部分有多少块，正文与附录的标题树（带段号），图表清单。改之前先看这个。', parameters: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'read', description: '读某一部分第 from 到 to 块（含两端，0 起数）的 Markdown，每块前有 <!-- #n --> 段号标。一次最多 80 块。', parameters: { type: 'object', properties: { part: partEnum, ...range }, required: ['part', 'from', 'to'], additionalProperties: false } },
   { name: 'replace', description: '用 Markdown 换掉某一部分第 from 到 to 块（含两端）。块数可以变。只换需要改的那几块；标题的标签、引用键、公式照原样留着。表和图别用它，用 table_write / figure_write。', parameters: { type: 'object', properties: { part: partEnum, ...range, markdown: { type: 'string' } }, required: ['part', 'from', 'to', 'markdown'], additionalProperties: false } },
@@ -176,12 +179,17 @@ function outlineText(): string {
   return lines.join('\n') || '（文档是空的）';
 }
 
+function readableBlock(block: any): string {
+  const plot = block.type === 'figure' ? rPlotOf(block.attrs?.rPlot) : null;
+  if (plot) return `R 插图：${String(block.attrs?.caption ?? '')}${block.attrs?.label ? ` <${block.attrs.label}>` : ''}（用 r_plot 编辑；内部 CeTZ 已生成，不要用 replace 重建这张图）\n\n\`\`\`r\n${plot.code}\n\`\`\``;
+  return toMarkdown({ type: 'doc', content: [block] });
+}
 function readText(key: RichKey, from: number, to: number): string {
   const blocks = blocksOf(key);
   if (!blocks.length) return '（这一部分是空的）';
   from = Math.max(0, from); to = Math.min(blocks.length - 1, to, from + 79);
   if (from > to) return `段号超出范围（共 ${blocks.length} 块）`;
-  return blocks.slice(from, to + 1).map((b, i) => `<!-- #${from + i} -->\n${toMarkdown({ type: 'doc', content: [b] })}`).join('\n\n');
+  return blocks.slice(from, to + 1).map((b, i) => `<!-- #${from + i} -->\n${readableBlock(b)}`).join('\n\n');
 }
 
 /** 最近一次文档写入的行级 diff：面板把它画进工具卡（opencode 那种 +N/−M 与逐行红绿）。取走即清 */
@@ -210,7 +218,7 @@ function splice(key: RichKey, from: number, to: number, nodes: any[], what: stri
     useStore.getState().setRich(key, { type: 'doc', content: next.length ? next : [{ type: 'paragraph' }] });
   }
   const total = blocksOf(key).length;
-  const md = (list: any[]) => list.map((n) => toMarkdown({ type: 'doc', content: [n] })).join('\n\n');
+  const md = (list: any[]) => list.map(readableBlock).join('\n\n');
   lastEdit = lineDiff(from <= to ? md(blocks.slice(from, to + 1)) : '', md(nodes));
   const where = to < from ? `第 ${from} 块前` : `第 ${from}${to > from ? `–${to}` : ''} 块`;
   return `${what}：${where}（这一部分现在共 ${total} 块；用户可在撤消里回退）`;
@@ -803,13 +811,13 @@ async function webSearch(query: string): Promise<string> {
 }
 
 /** 跑一个工具，回给模型的是纯文本 */
-const WRITES = new Set(['replace', 'insert', 'delete', 'table_write', 'figure_write', 'write_json', 'bib_add', 'abbreviations_add', 'info_write']);
-export async function runTool(name: string, input: Record<string, any>): Promise<string> {
+const WRITES = new Set(['replace', 'insert', 'delete', 'table_write', 'figure_write', 'r_plot', 'write_json', 'bib_add', 'abbreviations_add', 'info_write']);
+export async function runTool(name: string, input: Record<string, any>, signal?: AbortSignal): Promise<string> {
   lastEdit = null;
   const d0 = useStore.getState().doc;
   // 排版的计数与诊断要在动手之前记：短文档写完 0.1 秒就排完了，事后再记就错过了
   const c0 = { ...useCompileState.getState(), ser: useSerializeWarnings.getState().warnings };
-  let out = await dispatch(name, input);
+  let out = await dispatch(name, input, signal);
   // 先前有写入还没等到排版结果的：已经出来的接在这次结果后面（不等）
   const earlier = await flushChecks(false);
   if (earlier) out += `\n\n${earlier}`;
@@ -898,7 +906,7 @@ function todoTool(input: Record<string, any>): string {
   const done = rows.filter((t) => t.status === 'completed').length;
   return `清单已更新（${done}/${rows.length} 完成）：\n${rows.map((t) => `- [${t.status}] ${t.text}`).join('\n')}`;
 }
-async function dispatch(name: string, input: Record<string, any>): Promise<string> {
+async function dispatch(name: string, input: Record<string, any>, signal?: AbortSignal): Promise<string> {
   const need = () => { const p = partOf(String(input.part ?? '')); if (!p) throw new Error(`part 得是 ${PART_KEYS.join(' / ')} 之一`); return p; };
   switch (name) {
     case 'outline': return outlineText();
@@ -908,6 +916,26 @@ async function dispatch(name: string, input: Record<string, any>): Promise<strin
     case 'delete': return splice(need().key, Number(input.from), Number(input.to), [], '已删');
     case 'table_write': { const p = need(); if (!Array.isArray(input.rows) || !input.rows.length) return 'rows 得是二维数组'; const w = placeOf(input, p.key); if (typeof w === 'string') return w; return splice(p.key, w.from, w.to, [tableNode(input)], '表已写入'); }
     case 'figure_write': { const p = need(); const f = await figureNode(input); if (typeof f === 'string') return f; const bad = await checkFigureWidths([f.node]); if (bad) return bad; const w = placeOf(input, p.key); if (typeof w === 'string') return w; return splice(p.key, w.from, w.to, [f.node], '图已写入') + (f.note ? `（${f.note}）` : ''); }
+    case 'r_plot': {
+      const p = need();
+      const place = placeOf(input, p.key); if (typeof place === 'string') return place;
+      const docId = useStore.getState().doc.id;
+      const before = JSON.stringify(blocksOf(p.key));
+      const width = Number(input.width ?? 14), height = Number(input.height ?? 9);
+      const bad = await checkFigureWidths([{ type: 'figure', attrs: { width } }]); if (bad) return bad;
+      const result = await createRPlot(String(input.code ?? ''), { width: width / 2.54, height: height / 2.54,
+        pointsize: Number(input.pointsize ?? 11), seed: Number(input.seed ?? 1),
+        timeout: Math.min(600, Math.max(5, Number(input.timeout ?? 120))), signal, progress: (s) => report(s),
+        files: attachments.filter((a) => /\.(csv|tsv|txt|json|rds|rdata)$/i.test(a.name)).map((a) => ({ name: a.name, bytes: a.kind === 'text' ? new TextEncoder().encode(a.data) : Uint8Array.from(atob(a.data), (c) => c.charCodeAt(0)) })),
+      });
+      signal?.throwIfAborted();
+      if (JSON.stringify(blocksOf(p.key)) !== before) throw new Error('R 绘图期间目标部分已被编辑，请重新读取块号再插入');
+      const attrs = await saveRPlot(result, docId, width);
+      const node = { type: 'figure', attrs: { ...attrs, caption: String(input.caption ?? ''), captionEn: String(input.captionEn ?? ''), label: String(input.label ?? ''), placement: 'none' } };
+      const out = splice(p.key, place.from, place.to, [node], 'R 图已插入（CeTZ 矢量）');
+      collectOutputs([{ name: String(attrs.image), bytes: new Uint8Array(await result.png.arrayBuffer()) }]);
+      return `${out}${result.stdout ? '\nR 输出：\n' + result.stdout : ''}`;
+    }
     case 'images': return imagesText();
     case 'selection': return selectionText();
     case 'diagnostics': return diagnosticsText();
@@ -975,6 +1003,7 @@ export const SYSTEM_PROMPT = `你是 HιT webapp 里的写作助手（名字读 
 你能做的：读改各部分的文字；用 table_write 写表（单元格里 \\n 换行，能定列宽方式）、figure_write 插图（工程里的图、用户发来的图片附件、或用 pdf_images / pdf_render 从 PDF 附件里抽出来的图）——直接在 Markdown 里写图和表也行；往参考文献表 / 成果表加 BibTeX 条目（bib_add）；改论文信息（info_write，日期字段是「YYYY-MM」）；加缩略语和符号；看编译诊断；改论文设置（settings_set，每次都会弹窗请用户允许）。工具表里有 web_search / web_fetch 时能联网：查来的东西要给出处（网址），没有就不要说查过。
 用户问导出 Word（.docx，顶栏「下载」里）：封面 / 内封照校方范例抄、正文按排版出的 PDF 逐页对拍过，浮动图表在 Word 里是图文框；已知差别只有两处——续表没有「（续表）」题，博士论文第 1 页落在偶数页时 Word 会自己补一张白页（双面奇偶页眉的规矩）。
 规矩：
+- 用户要用 R 绘图、ggplot2、或希望图随正文保持矢量时，用 r_plot 直接画并插图，不要把 R 代码当 Typst 或只给用户一段代码。它自动管理 cetzDevice 图形设备与内部 .typ 文件；用户只看图和 R 代码。
 - 用户说清楚了就直接做完，不要一步一问、不要先请示再动手、不要只做一半等确认：所有改动都在撤消里能回退，改错了可以再改。只有几种理解会导致明显不同的结果时才问一句，问之前先把不依赖答案的部分做掉。要你写就写出完整的段落，不要只给提纲或占位符。
 - 快：read 一次最多 80 块，一次把整章 / 整个部分读完，不要读几块改几块；replace 一次换一段连续范围，几处不相干的改动、几个不相干的查询放在同一轮里一起调用；不用为了「确认」而重复读。
 - 先 outline 或 read 看清楚再改，只换需要改的那几块；不要改标题的标签、引用键。

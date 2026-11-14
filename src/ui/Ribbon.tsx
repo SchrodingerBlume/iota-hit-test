@@ -42,6 +42,7 @@ import { FontFamilyPicker, FontSizePicker, FontColorButton, HighlightButton } fr
 import { useCompileState } from '../compiler/client';
 import { useMedia, SHORT } from './useMedia';
 import { TableSizeDialog, TableTextDialog, readTableDefaults, type TableDialogKind } from './TableInsert';
+import { RPlotDialog } from './RPlotDialog';
 import { LengthInput } from './LengthInput';
 import { useLinkDialog } from './LinkDialog';
 import { HeaderFooterDialog, useHFDialog } from './HeaderFooterDialog';
@@ -187,6 +188,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
   const [peek, setPeek] = useState(false);
   const [pop, setPop] = useState<'table' | 'symbol' | 'symbol2' | 'theorem' | null>(null);
   const [tableDlg, setTableDlg] = useState<TableDialogKind | null>(null);
+  const [rPlotOpen, setRPlotOpen] = useState(false);
   const [painter, setPainter] = useState<Mark[] | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const ed = useActiveEditor();
@@ -248,7 +250,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
       const f = input.files?.[0];
       if (!f || !ed) return;
       const r = await env.addImage(f);
-      const patch: Record<string, unknown> = { image: r.name };
+      const patch: Record<string, unknown> = { image: r.name, rPlot: '' };
       if (r.width && r.height) patch.width = Math.min(14, Math.max(4, Math.round((r.width / 96) * 2.54 * 10) / 10));
       ed.chain().focus().updateAttributes('figure', patch).run();
     };
@@ -563,6 +565,8 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                 {tableDlg === 'size' && <TableSizeDialog onClose={() => setTableDlg(null)} onInsert={(r, c, h, fit, cw) => { setTableDlg(null); ins.insertTable(r, c, h, fit, cw); afterCommand(); }} />}
                 {tableDlg === 'text' && <TableTextDialog onClose={() => setTableDlg(null)} onInsert={(t, h) => { setTableDlg(null); ins.insertTableFromText(t, h); afterCommand(); }} />}
                 <B title={tx("插入图片；也可将图片直接粘贴到正文中")} big icon={<Image20Regular />} disabled={none || !blocks} run={ins.insertFigure}>{tx("图片")}</B>
+                <B title={tx('用 R 代码绘图并插入')} big icon={<Image20Regular />} disabled={none || !blocks} run={() => setRPlotOpen(true)}>{tx('R 绘图')}</B>
+                {rPlotOpen && <RPlotDialog onClose={() => setRPlotOpen(false)} onApply={(attrs) => { if (ed && !ed.isDestroyed) { ed.chain().focus().insertContent({ type: 'figure', attrs }).run(); afterCommand(); } }} />}
               </Group>
               <Group label={tx("链接与符号")}>
                 <B title={tx("插入链接（⌘K）")} big icon={<Link20Regular />} disabled={none} run={() => useLinkDialog.getState().open()}>{tx("链接")}</B>
@@ -721,7 +725,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                   </Rows>
                 </span>
               </Group>
-              <Group label={tx("分图")}>
+              {!a.rPlot && <Group label={tx("分图")}>
                 <span className="rb-keep rb-inline">
                   <Rows>
                     <Row>
@@ -737,7 +741,7 @@ export function Ribbon({ layout, leading, trailing, minimal }: { layout: RibbonL
                     </Row>
                   </Rows>
                 </span>
-              </Group>
+              </Group>}
               <Group label={tx("题注")}>
                 <Stack>
                   <B title={tx("编辑题注")} icon={<TextDescription20Regular />} run={() => { const pos = ed.state.selection.from; useOpenRequest.getState().request({ key: activeKey!, pos, attr: 'caption' }); }}>{tx("题注")}</B>

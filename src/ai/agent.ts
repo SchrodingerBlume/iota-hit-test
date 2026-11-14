@@ -79,8 +79,8 @@ async function chatFetch(c: AiConfig, body: Record<string, unknown>, ev: AgentEv
 /** 图片块上没有文件名，模型看见图却不知道叫什么，插图时就瞎猜：附件清单接在这句话后面 */
 const KIND: Record<Attachment['kind'], string> = { image: '图片', pdf: 'PDF', text: '文本' };
 const withFileNames = (text: string, files: Attachment[]) => (files.length ? `${text}\n\n（本条消息的附件：${files.map((f) => `${f.name}〔${KIND[f.kind]}〕`).join('、')}。插图时 figure_write 的 image 就填这里的文件名）` : text);
-async function exec(name: string, input: Record<string, unknown>): Promise<{ result: string; isError: boolean }> {
-  try { return { result: await runTool(name, input), isError: false }; }
+async function exec(name: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<{ result: string; isError: boolean }> {
+  try { return { result: await runTool(name, input, signal), isError: false }; }
   catch (e) { return { result: `工具出错：${(e as Error).message}`, isError: true }; }
 }
 
@@ -165,7 +165,7 @@ async function anthropicTurn(c: AiConfig, messages: Anthropic.MessageParam[], us
       if (block.type !== 'tool_use') continue;
       const input = (block.input ?? {}) as Record<string, unknown>;
       ev.onToolStart(block.name, input);
-      const { result, isError } = await exec(block.name, input);
+      const { result, isError } = await exec(block.name, input, signal);
       const imgs = takeDerived();
       feed.push(...imgs);
       ev.onTool(block.name, input, result, isError, imgs.length ? imgs : undefined);
@@ -285,7 +285,7 @@ async function openaiTurn(c: AiConfig, messages: any[], userText: string, files:
       try { input = JSON.parse(v.args || '{}'); } catch { /* 参数不是合法 JSON */ }
       if (v.name === '$web_search') { ev.onTool('web_search', { query: (input as any).search_query ?? (input as any).query ?? '' }, '（Kimi 自己搜的）', false); messages.push({ role: 'tool', tool_call_id: v.id || `call_${round}_${i}`, name: '$web_search', content: v.args || '{}' }); continue; }
       ev.onToolStart(v.name, input);
-      const { result, isError } = await exec(v.name, input);
+      const { result, isError } = await exec(v.name, input, signal);
       const imgs = takeDerived();
       feed.push(...imgs);
       ev.onTool(v.name, input, result, isError, imgs.length ? imgs : undefined);

@@ -6,6 +6,9 @@
 | 内容 | 许可 | 来源 |
 | --- | --- | --- |
 | iota-hit 模板（`public/packages/local-iota-hit-*.tar.gz`） | LPPL-1.3c | 本机 `../iota-hit`，原样打包 |
+| webR 0.6.1 / R 的 Wasm 运行时（`public/rplot/webr/`） | GPL-3.0-or-later / MIT，详见 `public/rplot/WEBR-LICENSE.md` | github.com/r-wasm/webr，固定版本原样分发 |
+| cetzDevice 0.5.3.1（`public/rplot/library.data`） | GPL-3.0-or-later | github.com/SchrodingerBlume/cetzDevice，源码提交 cd8cdd701dd209757aceca22a3564a760c5b09a8；源码归档随站分发，浏览器字体测量适配见 `src/rplot/adapter.R` |
+| ggplot2 与 R 包依赖（同一 Wasm 库内） | 各包许可，清单及声明见 `public/rplot/PACKAGES.json` / `THIRD-PARTY.txt` | repo.r-wasm.org 的 Wasm 构建；随站保留包内版权和许可文件 |
 | omni-gb7714（`local-omni-gb7714-*.tar.gz`） | Apache-2.0 | 本机 typst local 包 |
 | 其余 `@preview/*` 包（glossy、lovelace、algorithmic、quan、auto-pinyin、zhconv、auto-bihua、glotter、jurlstify、mitex、valkyrie） | 各自的许可，见各包 `typst.toml` / LICENSE | packages.typst.org |
 | Fluent UI React v9（`@fluentui/react-components`、`@fluentui/react-icons`） | MIT | github.com/microsoft/fluentui — 功能区的组件与图标 |

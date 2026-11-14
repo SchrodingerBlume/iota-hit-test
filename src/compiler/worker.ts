@@ -333,7 +333,8 @@ async function snippet(msg: Extract<ToWorker, { type: 'snippet' }>) {
 #set math.equation(numbering: none)
 ${body}
 `;
-  compiler.addSource('/snippet.typ', src);
+  for (const [name, text] of Object.entries(msg.files ?? {})) compiler.mapShadow(`/${name}`, enc.encode(text));
+  compiler.addSource('/snippet.typ', msg.document ? msg.src : src);
   try {
     const res = await compiler.compile({ mainFilePath: '/snippet.typ', format: 0 as any, diagnostics: 'full' });
     const errors = normalizeDiagnostics(res.diagnostics).filter((d) => d.severity === 'error');

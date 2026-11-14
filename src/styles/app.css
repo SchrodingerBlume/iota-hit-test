@@ -1926,3 +1926,22 @@ body.is-dragging-window iframe, body.is-dragging-window .preview-stage { pointer
 .ag-slashrow b { font-family: var(--mono); font-weight: 600; color: var(--accent-ink); flex: none; }
 .ag-slashrow span { font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ag-slashrow.on { background: var(--accent-soft); }
+
+/* R 绘图：源码与 CeTZ 预览并排；内部 .typ 文件不暴露给用户。 */
+.fui-DialogSurface.rplot-dialog { width: min(1020px, 95vw); max-width: 1020px; }
+.rplot-options { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.rplot-options label { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ink-2); }
+.rplot-options .fui-Input { width: 92px; }
+.rplot-examples { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }
+.rplot-examples .btn { padding: 2px 8px; font-size: 12px; cursor: pointer; }
+.rplot-files { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+.rplot-files button { padding: 2px 7px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--panel-2); color: var(--ink-2); font: 11px var(--mono); cursor: pointer; }
+.rplot-work { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.rplot-code { width: 100%; min-height: 300px; max-height: 55vh; resize: vertical; padding: 10px; box-sizing: border-box; border: 1px solid var(--line-2); border-radius: var(--r-s); background: var(--panel-2); color: var(--ink); font: 12px/1.6 var(--mono); tab-size: 2; }
+.rplot-preview { min-height: 260px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: var(--r-s); overflow: auto; background: var(--panel-2); }
+.rplot-preview img { max-width: 100%; max-height: 50vh; object-fit: contain; background: white; }
+.rplot-caption { display: grid; grid-template-columns: 1fr 1fr 160px; gap: 8px; margin-top: 10px; }
+.rplot-status { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-top: 8px; }
+.rplot-error { color: var(--danger); white-space: pre-wrap; font-size: 12px; }
+.rplot-log { max-height: 100px; overflow: auto; white-space: pre-wrap; font: 11px/1.5 var(--mono); }
+@media (max-width: 700px) { .rplot-work { grid-template-columns: 1fr; } .rplot-caption { grid-template-columns: 1fr; } .rplot-code { min-height: 200px; } }

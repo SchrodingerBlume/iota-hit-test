@@ -21,6 +21,8 @@ import { LengthInput } from '../../ui/LengthInput';
 import { parseLength, toPx } from '../../model/length';
 import { t } from '../../i18n';
 import { MirrorInput } from '../mirror';
+import { RPlotDialog } from '../../ui/RPlotDialog';
+import { rPlotOf } from '../../rplot/files';
 
 /** 编辑区里图的显示宽度：绝对长度按 28px/cm 的缩小比例画，百分比按容器，其余按 8cm */
 function figurePx(w: unknown): string {
@@ -188,6 +190,8 @@ function SubFigureCell({ sub, index, editable, onChange, onRemove, num, markNum,
 
 function FigureView({ node, updateAttributes, selected, deleteNode, editor, getPos }: NodeViewProps) {
   const env = useEditorEnv();
+  const [rOpen, setROpen] = useState(false);
+  const rPlot = rPlotOf(node.attrs.rPlot);
   const subs = parseSubs(node.attrs.subs);
   const setSubs = (s: SubFig[]) => updateAttributes({ subs: JSON.stringify(s) });
   const settings = useStore((st) => st.doc.settings);
@@ -204,7 +208,7 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
   const num = useNumbering().get(labelOf(node.attrs as any, 'fig'))?.number;
   const pick = async (file: File) => {
     const r = await env.addImage(file);
-    const patch: Record<string, any> = { image: r.name };
+    const patch: Record<string, any> = { image: r.name, rPlot: '' };
     if (r.width && r.height) patch.width = Math.min(14, Math.max(4, Math.round((r.width / 96) * 2.54 * 10) / 10));
     updateAttributes(patch);
   };
@@ -251,12 +255,14 @@ function FigureView({ node, updateAttributes, selected, deleteNode, editor, getP
           <LengthInput value={node.attrs.width ?? 8} defaultUnit="cm" disabled={!editable} onChange={(v) => updateAttributes({ width: v ?? 8 })} width={84} />
         </label>
         <LabelField node={node} updateAttributes={updateAttributes} prefix="fig" editable={editable} />
+        {rPlot && <button type="button" className="blk-tool is-btn" title={t('编辑 R 绘图代码')} disabled={!editable} onClick={() => setROpen(true)}><PencilLine />{t('编辑 R 图')}</button>}
         <button type="button" className="blk-tool is-btn" title={t("图注：排在图之下、图题之上，与图同宽")} disabled={!editable} onClick={() => addNote(node, updateAttributes)}><PencilLine />{t("图注")}</button>
-        <button type="button" className="blk-tool is-btn" title={t("添加分图")} disabled={!editable} onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.onchange = async () => { const files = [...(input.files ?? [])]; const add: SubFig[] = []; for (const f of files) { const r = await env.addImage(f); add.push({ image: r.name, width: '', caption: '' }); } const base = subs.length ? subs : (name ? [{ image: name, width: '', caption: '' }] : []); setSubs([...base, ...add]); }; input.click(); }}><PencilLine />{t("分图")}</button>
-        {!!name && (!subs.length || captionOnly) && <button type="button" className="blk-tool is-btn" title={t("分图题注置于总题注下方")} disabled={!editable} onClick={() => setSubs([...subs, { image: '', width: '', caption: '' }])}><PencilLine />{t("分图题注")}</button>}
+        {!rPlot && <button type="button" className="blk-tool is-btn" title={t("添加分图")} disabled={!editable} onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.onchange = async () => { const files = [...(input.files ?? [])]; const add: SubFig[] = []; for (const f of files) { const r = await env.addImage(f); add.push({ image: r.name, width: '', caption: '' }); } const base = subs.length ? subs : (name ? [{ image: name, width: '', caption: '' }] : []); setSubs([...base, ...add]); }; input.click(); }}><PencilLine />{t("分图")}</button>}
+        {!rPlot && !!name && (!subs.length || captionOnly) && <button type="button" className="blk-tool is-btn" title={t("分图题注置于总题注下方")} disabled={!editable} onClick={() => setSubs([...subs, { image: '', width: '', caption: '' }])}><PencilLine />{t("分图题注")}</button>}
         {!subs.length && <label className="blk-tool is-btn" title={t("更改图片")}><ImageUp /><input type="file" accept="image/*" hidden disabled={!editable} onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }} /></label>}
         <button type="button" className="blk-tool is-btn is-danger" title={t("删除插图")} disabled={!editable} onClick={deleteNode}><Trash2 /></button>
       </Tools>
+      {rOpen && <RPlotDialog initial={node.attrs} preview={url} onClose={() => setROpen(false)} onApply={(attrs) => { if (!editor.isDestroyed) updateAttributes(attrs); }} />}
     </NodeViewWrapper>
   );
 }
@@ -274,7 +280,7 @@ export const Figure = Node.create({
     // subLabel：(a)(b) 打在图上的哪个角（none / tl / tr / bl / br），subLabelFill 标签黑字或白字（深色图用），
     // subLabelPattern / subLabelSize / subLabelFont 标签的写法（空 = 跟 subcaption-numbering）、字号（zihao 名）、字体角色（空 = sans）
     // notes：图注（JSON [{lead, text}]），模板 note：排在图之下、图题之上
-    return { image: attr('image', ''), width: attr('width', 8), caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null), placement: attr('placement', 'none'), breakable: attr('breakable', 'auto'), subs: attr('subs', '[]'), columns: attr('columns', 2), subMode: attr('subMode', 'under'), subGutter: attr('subGutter', ''), subLabel: attr('subLabel', 'none'), subLabelFill: attr('subLabelFill', 'black'), subLabelPattern: attr('subLabelPattern', ''), subLabelSize: attr('subLabelSize', ''), subLabelFont: attr('subLabelFont', ''), notes: attr('notes', '[]') };
+    return { rPlot: attr('rPlot', ''), image: attr('image', ''), width: attr('width', 8), caption: attr('caption', ''), captionEn: attr('captionEn', ''), label: attr('label', ''), uid: attr('uid', null), placement: attr('placement', 'none'), breakable: attr('breakable', 'auto'), subs: attr('subs', '[]'), columns: attr('columns', 2), subMode: attr('subMode', 'under'), subGutter: attr('subGutter', ''), subLabel: attr('subLabel', 'none'), subLabelFill: attr('subLabelFill', 'black'), subLabelPattern: attr('subLabelPattern', ''), subLabelSize: attr('subLabelSize', ''), subLabelFont: attr('subLabelFont', ''), notes: attr('notes', '[]') };
   },
   parseHTML() { return [{ tag: 'div[data-node="figure"]' }]; },
   renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { 'data-node': 'figure' })]; },

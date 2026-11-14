@@ -45,6 +45,16 @@ LaTeX 公式使用 MathLive 可视化编辑，Typst 公式使用源码与实时�
 
 表格支持自动调整、表头、合并单元格、列宽、行高和对齐设置，也可从制表符文本、CSV 或 Markdown 插入。图片支持题注、英文题注、分图、宽度、位置和跨页设置。
 
+### R 绘图
+
+「插入 → R 绘图」可以直接写 base R、grid 或 ggplot2 绘图代码。点击「运行预览」后插入，选中已有图可点「编辑 R 图」修改代码。无需手动打开或关闭 R 图形设备；支持上传数据文件，在 R 中从 `/data/文件名` 读取。画布尺寸使用厘米、字号使用 pt，并提供固定随机种子。
+
+R 在浏览器的 webR 0.6.1 Wasm worker 中运行，`cetzDevice 0.5.3.1` 将绘图操作转成 CeTZ 0.5.3。文字由站内 Typst/Wasm 批量精确测量，正文和 PDF 中保留矢量图；编辑区和 Word 导出使用从同一份 CeTZ 生成的 PNG。R 代码、数据文件和生成结果随工程保存，重新打开无需重跑 R 就能显示图。
+
+内部 CeTZ 源码作为 `rplots/<内容哈希>.typ` 旁文件自动提供给编译器，导出 Typst 工程时也会带上；用户界面不显示这些内部文件。Agent 可以调用 `r_plot` 工具直接绘图并插入，返回的图还会提供给支持看图的模型检查。
+
+R 引擎、cetzDevice、ggplot2 及依赖随站分发，仅第一次使用 R 绘图时加载，不需要本机 R、服务器或跨源隔离头。额外的 R 包在代码引用时才尝试从 webR 仓库安装，是否可用取决于该包是否有 Wasm 构建。每张插图限一页，多面板可用 `par(mfrow=...)`；运行超时或取消会终止 R worker，下一次自动重启。
+
 ### 引文与书目
 
 参考文献按字段录入，可按分组整理。BibTeX 导入时，同一引用键的条目会更新，其余条目追加；导出时使用 JabRef 兼容的 `groups` 字段保存分组。编译和 Word 导出均按 GB/T 7714 处理参考文献。
@@ -152,6 +162,17 @@ npm run test:projects
 npm run test:compile
 npm run build
 ```
+
+R 绘图的浏览器集成回归：
+
+```sh
+npx playwright-core install chromium
+npm run test:rplot
+```
+
+也可用 `CHROME_PATH` 指定已有 Chromium。测试使用真实 R/Wasm、CeTZ 和 Typst/Wasm，覆盖基础绘图、ggplot2、中文与数学标签、内部 `.typ` 导入、Markdown 往返、保存重开、Word 导出、Agent 插图、用户绘图窗口以及超时恢复。
+
+更新 R/Wasm 随站资源时，先运行 `node scripts/vendor-rplot.mjs` 下载固定版本 webR 和 cetzDevice 源码；再手动运行仓库的 `Build cetzDevice for webR` 工作流，下载其 `cetzDevice-0.5.3.1-webR-0.6.1` artifact，执行 `node scripts/install-rplot-artifact.mjs <artifact解压目录>`。交叉编译脚本是 `scripts/build-rplot-wasm.R`，不依赖开发机上的 R/Wasm 工具链。
 
 `npm run build` 生成可直接部署的 `dist/`。站点使用相对资源路径，可部署在任意子目录。服务器应以 `application/wasm` 提供 `.wasm` 文件，并正确提供 `.tar.gz` 包。
 
