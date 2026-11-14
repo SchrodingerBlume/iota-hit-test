@@ -20,7 +20,8 @@ jobs:
       - name: Cross-compile cetzDevice 0.5.3.1 and dependencies
         run: >-
           docker run --rm -v "$PWD:/github/workspace" --workdir /github/workspace
-          ghcr.io/r-wasm/webr:v0.6.1 Rscript scripts/build-rplot-wasm.R
+          ghcr.io/r-wasm/webr:v0.6.1 sh -c
+          'apt-get update -qq && apt-get install -y -qq libpng-dev && Rscript scripts/build-rplot-wasm.R'
       - uses: actions/upload-artifact@v4
         with:
           name: cetzDevice-0.5.3.1-webR-0.6.1
