@@ -13,6 +13,7 @@ import { isReportBody } from '../model/options';
 import { mark, stripMarks, type Segment } from './sourcemap';
 import { lengthTypst, ABS_UNITS } from '../model/length';
 import type { RichKey } from '../model/store';
+import { collectRPlotFiles } from '../rplot/files';
 
 export const IOTA_HIT_VERSION = '0.1.0';
 /** 引用写 omni-gb7714 自己的 cite（盖掉原生的）：一次合并多条、页码、叙述式 / 只著者 / 只年份，原生 cite 的 form 它不认 */
@@ -124,7 +125,28 @@ export function typstDict(v: unknown): string {
   const entries = Object.entries(v as Record<string, unknown>);
   return entries.length ? `(${entries.map(([k, x]) => `${k}: ${typstDict(x)}`).join(', ')})` : '(:)';
 }
-export const layoutArg = (d: LayoutDict | undefined): string => (d && Object.keys(d).length ? `layout: ${typstDict(d)}` : '');
+/** 旧工程的版面键在输出边界转换，工程 JSON 保持原样。 */
+export function templateLayout(d: LayoutDict | undefined): LayoutDict | undefined {
+  if (!d) return d;
+  const out = { ...d };
+  if ('font-size' in out) {
+    if (!('size' in out)) out.size = out['font-size'];
+    delete out['font-size'];
+  }
+  for (const name of ['header', 'footer']) {
+    const value = out[name];
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+    const record = { ...(value as LayoutDict) };
+    if ('style' in record) {
+      record.format = { ...((record.style as LayoutDict) ?? {}), ...((record.format as LayoutDict) ?? {}) };
+      delete record.style;
+    }
+    if (record.format) record.format = templateStyles(record.format as LayoutDict);
+    out[name] = record;
+  }
+  return out;
+}
+export const layoutArg = (d: LayoutDict | undefined): string => (d && Object.keys(d).length ? `layout: ${typstDict(templateLayout(d))}` : '');
 
 /** 页眉 / 页脚那条记录折成模板的 layout.header / footer：自动的键不发，模板按档定 */
 function hfRecord(r: Partial<HFRecord> | undefined, header: boolean): LayoutDict | undefined {
@@ -136,17 +158,21 @@ function hfRecord(r: Partial<HFRecord> | undefined, header: boolean): LayoutDict
   if (header && r.asianFont && !r.asianFont.auto && r.asianFont.value) style['asian-font'] = JSON.stringify(r.asianFont.value);
   if (r.size && !r.size.auto && r.size.value) style.size = /^[a-z]+$/.test(r.size.value) ? `zihao.${r.size.value}` : r.size.value;
   if (r.lineSpacing && !r.lineSpacing.auto && r.lineSpacing.value) style['line-spacing'] = r.lineSpacing.value === 'single' || r.lineSpacing.value === 'double' ? JSON.stringify(r.lineSpacing.value) : r.lineSpacing.value;
-  if (Object.keys(style).length) out.style = style;
+  if (Object.keys(style).length) out.format = style;
   if (r.border && !r.border.auto) out.border = r.border.value ? { style: JSON.stringify(r.border.value.style), thickness: r.border.value.thickness, 'from-text': r.border.value.fromText } : null;
   return Object.keys(out).length ? out : undefined;
 }
 /** 某一层的 layout 字典：工程 JSON 里手写的那份 + 页眉页脚面板改的 */
 export function levelLayout(s: Settings, level: HFLevel): LayoutDict | undefined {
-  const base = s.layout?.[level];
+  const base = templateLayout(s.layout?.[level]);
   const hf = s.headerFooter?.levels?.[level];
   const header = hfRecord(hf?.header, true), footer = hfRecord(hf?.footer, false);
   if (!header && !footer) return base;
-  return { ...(base ?? {}), ...(header ? { header: { ...((base?.header as LayoutDict) ?? {}), ...header } } : {}), ...(footer ? { footer: { ...((base?.footer as LayoutDict) ?? {}), ...footer } } : {}) };
+  const merge = (name: string, value: LayoutDict) => {
+    const original = (base?.[name] as LayoutDict) ?? {};
+    return { ...original, ...value, ...(value.format ? { format: { ...((original.format as LayoutDict) ?? {}), ...(value.format as LayoutDict) } } : {}) };
+  };
+  return { ...(base ?? {}), ...(header ? { header: merge('header', header) } : {}), ...(footer ? { footer: merge('footer', footer) } : {}) };
 }
 /** overrides:——工程 JSON 里平铺的词条，加页眉印的那一行 */
 function overridesArg(s: Settings): string {
@@ -164,7 +190,13 @@ function overridesArg(s: Settings): string {
   }
   return out.length ? `overrides: (${out.join(', ')})` : '';
 }
-const localStylesArg = (d: LayoutDict | undefined): string => (d && Object.keys(d).length ? `styles: ${typstDict(d)}` : '');
+function templateStyles(d: LayoutDict): LayoutDict {
+  return Object.fromEntries(Object.entries(d).map(([key, value]) => {
+    if (key === 'bold' && typeof value === 'boolean') return ['weight', JSON.stringify(value ? 'bold' : 'regular')];
+    return [key, value && typeof value === 'object' && !Array.isArray(value) ? templateStyles(value as LayoutDict) : value];
+  }));
+}
+const localStylesArg = (d: LayoutDict | undefined): string => (d && Object.keys(d).length ? `styles: ${typstDict(templateStyles(d))}` : '');
 
 /** gb7714:——暴露出来的几项折成 omni-gb7714 的参数，工程 JSON 里的 gb7714 字典再压上去；auto 的不发，模板 / 包自己定 */
 function gb7714Arg(s: Settings): string {
@@ -252,7 +284,7 @@ export function styleEntryArgs(e: StyleEntry): string[] {
   if (e.fontZh) out.push(`asian-font: ${JSON.stringify(e.fontZh)}`);
   const abs = (v: unknown, fb: string) => lengthTypst(v, 'pt', fb, ABS_UNITS);
   if (e.size !== undefined && e.size !== '') out.push(`size: ${typeof e.size === 'string' && /^[a-z]+$/.test(e.size) ? `zihao.${e.size}` : abs(e.size, '12pt')}`);
-  if (e.bold !== undefined) out.push(`bold: ${e.bold}`);
+  if (e.bold !== undefined) out.push(`weight: "${e.bold ? 'bold' : 'regular'}"`);
   if (e.align) out.push(`align: ${e.align}`);
   if (e.lineSpacing !== undefined) out.push(`line-spacing: ${typeof e.lineSpacing === 'number' ? e.lineSpacing : `(exactly: ${abs(e.lineSpacing.exactly, '20pt')})`}`);
   const gap = (v: unknown) => lengthTypst(v, 'lines', '(lines: 0.5)', ['cm', 'mm', 'in', 'pt', 'em', 'lines']);
@@ -292,16 +324,23 @@ function infoInner(f: InfoFieldDef, v: string | undefined, attr: string): string
 const present = (xs: (string | null)[]): string[] => xs.filter((x): x is string => x !== null);
 const enTwin = (f: InfoFieldDef, fields: InfoFieldDef[]) => fields.find((t) => t.param === `${f.param}-en`);
 
-/** 元信息参数：中英两格并成一段（bilingual）；日期是 "YYYY-MM" 字符串，模板自己按语言排；关键词跟着摘要走（abstractArgs） */
+/** 中英两格合并，旧工程的日期按阶段放入 date 字典；关键词跟着摘要走。 */
 function infoArgs(info: Info, s: Settings, pick: (f: InfoFieldDef) => string | undefined = (f) => info[f.key] as string, attr = (f: InfoFieldDef) => f.key as string, fields = INFO_FIELDS): string[] {
   const shown = fields.filter((f) => (!f.applies || f.applies(s)) && f.kind !== 'keywords');
-  return present(shown.filter((f) => !f.param.endsWith('-en')).map((f) => {
+  const dates = shown.filter((f) => f.kind === 'month').flatMap((f) => {
     const str = String(pick(f) ?? '').trim();
-    if (f.kind === 'month') return /^\d{4}-\d{2}$/.test(str) ? `${f.param}: "${mark('info', 'info', 0, str.length, str, { attr: attr(f), raw: str })}"` : null;
+    if (!/^\d{4}-\d{2}$/.test(str)) return [];
+    const key = f.key === 'defenseDate' ? 'final-defense' : s.stage;
+    return [`${key}: "${mark('info', 'info', 0, str.length, str, { attr: attr(f), raw: str })}"`];
+  });
+  const args = present(shown.filter((f) => !f.param.endsWith('-en') && f.kind !== 'month').map((f) => {
+    const str = String(pick(f) ?? '').trim();
     const twin = enTwin(f, shown);
     const v = bilingual(infoInner(f, str, attr(f)), twin ? infoInner(twin, pick(twin), attr(twin)) : '', s.lang);
     return v ? `${f.param}: ${v}` : null;
   }));
+  if (dates.length) args.push(`date: (${dates.join(', ')})`);
+  return args;
 }
 /** 封面、内封只改这一页的那几项：#cover(title: …)。记号的 attr 带页名，点到跳回那一页的输入框；
  *  只改了一种语言那格就只发那一半，另一半模板取元信息的 */
@@ -408,11 +447,11 @@ const HIGHLIGHT_RULE = `#let iota-hl(fill, body) = context highlight(fill: fill,
 // 有 fr 列的本来就撑满版心，原样。表里的字号与格的左右边距从两个探针表量出来（不碰模板的样式表）
 /** 章级版面（工程 JSON 的 layout.chapters）：模板不许某一段把字符网格开上或关掉（char-pitch / chars-per-line 与全文相反就 panic）——
  *  终稿有网格、报告档没有，同一份工程改个阶段就撞上；这里先照模板的算法算一遍，会翻转的把网格那几键扔掉，只留字号 */
-const CHAPTER_LAYOUT = `#import "@local/banshi:0.1.0" as _banshi
+const CHAPTER_LAYOUT = `#import "@local/iota-hit:${IOTA_HIT_VERSION}" as _iota
 #let chapter-layout(d, body) = context {
-  let cur = _banshi.layout.page-setup-state.get()
+  let cur = current-layout()
   let d = if cur == none { d } else {
-    let m = _banshi.layout.merge-page-setup(cur, d)
+    let m = _iota.banshi.layout.merge-page-setup(cur, d)
     if (m.docgrid.tracking == 0pt) != (cur.docgrid.tracking == 0pt) {
       let e = d
       for k in ("char-pitch", "chars-per-line", "grid") { let _ = e.remove(k, default: none) }
@@ -499,7 +538,7 @@ export function serializePara(doc: ThesisDoc, index: number, live?: { node: PMNo
   parts.push(chapterWrap(chapter ? s.layout?.chapters?.[String(chapter)] : undefined, chapter ? s.localStyles?.chapters?.[String(chapter)] : undefined,
     serializeDoc(one as any, { headings: false, headingBase: 1, knownLabels: new Set(), refText: new Map(), preview: true, map: { key: 'body', posOf }, ...targets(doc, []) })));
   const { text: main, segments } = stripMarks(parts.join('\n\n') + '\n');
-  return { main, files: {}, images: [], segments };
+  return { main, files: collectRPlotFiles(one), images: [], segments };
 }
 
 /** 正文按一级标题切成章：每章的节点下标区间 [from, to) */
@@ -520,7 +559,7 @@ export function iotaHitShow(doc: ThesisDoc, plain = false): string {
 export function serializeProject(doc: ThesisDoc, { preview = false, focus }: { preview?: boolean; focus?: Focus } = {}): Project {
   if (focus) return serializeFocus(doc, focus);
   const s = doc.settings;
-  const files: Record<string, string> = {};
+  const files: Record<string, string> = collectRPlotFiles(doc);
   const parts: string[] = [];
   // 正文与附录里所有能被引用的标签（取消编号的公式不在内）
   const knownLabels = new Set<string>([...collectRefTargets(doc.body), ...collectRefTargets(doc.appendix)].map((r) => r.label));
@@ -644,8 +683,8 @@ function bodyByChapters(doc: ThesisDoc, s: Settings, ser: (r: { from: number; to
 /** 只编一章时尾巴（文献表）那几页的纸宽，渲染端靠它认出来 */
 export const FOCUS_TAIL_WIDTH = 500;
 export function chapterWrap(d: LayoutDict | undefined, st: LayoutDict | undefined, body: string): string {
-  if (st && Object.keys(st).length) body = `#show: new-styles.with(${typstDict(st)})\n${body}\n#show: restore-styles`;
-  return d && Object.keys(d).length ? `#show: chapter-layout.with(${typstDict(d)})\n${body}\n#show: restore-layout` : body;
+  if (st && Object.keys(st).length) body = `#show: new-styles.with(${typstDict(templateStyles(st))})\n${body}\n#show: restore-styles`;
+  return d && Object.keys(d).length ? `#show: chapter-layout.with(${typstDict(templateLayout(d))})\n${body}\n#show: restore-layout` : body;
 }
 
 /**
@@ -654,7 +693,7 @@ export function chapterWrap(d: LayoutDict | undefined, st: LayoutDict | undefine
  */
 function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   const s = doc.settings;
-  const files: Record<string, string> = {};
+  const files: Record<string, string> = collectRPlotFiles(doc);
   const parts: string[] = [];
   const ranges = chapterRanges(doc.body);
   const r = ranges[focus.chapter - 1] ?? { from: 0, to: (doc.body.content ?? []).length };
@@ -689,7 +728,7 @@ function serializeFocus(doc: ThesisDoc, focus: Focus): Project {
   const refs = generateBibtex((doc.references ?? []).filter((e) => cited.has(e.key.trim())));
   // 旁文件也另起名字（worker 给只编一章的文件加 focus- 前缀）
   // 条目表得在（引文要能解析），但那几页不是这一章的：纸张改成一个认得出的宽度，渲染端按宽度剔掉
-  if (refs.trim()) { files['refs.bib'] = refs; parts.push(`#set page(width: ${FOCUS_TAIL_WIDTH}pt)\n#bibliography(read("focus-refs.bib"), full: true)`); }
+  if (refs.trim()) { files['refs.bib'] = refs; parts.push(`#context new-layout((paper: (width: ${FOCUS_TAIL_WIDTH}pt, height: current-layout().paper-height)), bibliography(read("focus-refs.bib"), full: true))`); }
   const { text: main, segments } = stripMarks(parts.join('\n\n') + '\n');
   return { main, files, images: [...collectImages(chapterDoc as any)], segments, warnings };
 }

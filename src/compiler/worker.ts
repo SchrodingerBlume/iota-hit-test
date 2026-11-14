@@ -221,7 +221,7 @@ async function compile(msg: Extract<ToWorker, { type: 'compile' }>) {
   // comemo 里整篇的记忆全部失效（实测停手后的整编要 9 s）；两份各占一个文件互不打扰
   const mainPath = msg.focus ? '/focus.typ' : '/main.typ';
   compiler.addSource(mainPath, msg.main);
-  for (const [name, text] of Object.entries(msg.files)) compiler.mapShadow(`/${msg.focus ? 'focus-' : ''}${name}`, enc.encode(text));
+  for (const [name, text] of Object.entries(msg.files)) compiler.mapShadow(`/${msg.focus && !name.startsWith('rplots/') ? 'focus-' : ''}${name}`, enc.encode(text));
   for (const img of msg.images) {
     compiler.mapShadow(`/images/${img.name}`, new Uint8Array(img.data));
     mappedImages.set(img.name, img.data.byteLength);

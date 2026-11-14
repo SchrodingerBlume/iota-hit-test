@@ -26,7 +26,7 @@ const dataDir = path.join(home, 'Library', 'Application Support', 'typst', 'pack
 const cacheDir = path.join(home, 'Library', 'Caches', 'typst', 'packages');
 
 // 包里不该带进浏览器的东西：测试、PDF、图片样张、构建脚本
-const EXCLUDE_DIRS = new Set(['tests', '.git', '.github', '__pycache__', 'bench', 'ci', '_probe', '.backup', 'easy-zh-manual', 'docs', 'examples', 'gallery', 'thumbnail', 'thumbnails', 'test', 'assets/test']);
+const EXCLUDE_DIRS = new Set(['tests', '.git', '.github', '__pycache__', 'bench', 'ci', '_probe', '.backup', 'easy-zh-manual', 'docs', 'examples', 'gallery', 'thumbnail', 'thumbnails', 'test', 'assets/test', 'output', 'tmp']);
 const EXCLUDE_EXT = new Set(['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.DS_Store', '.pyc', '.py', '.sh', '.zip']);
 
 // 打包时模板的版本号（提交号，工作区有未提交改动再接内容哈希），给「模板更新了没」的检查用
@@ -34,13 +34,20 @@ function gitHead(dir) {
   try { return templateRev(dir); } catch { return null; }
 }
 
-function walk(dir, base = dir, out = []) {
-  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+function packageExcludes(dir) {
+  const toml = fs.readFileSync(path.join(dir, 'typst.toml'), 'utf8');
+  const packageSection = toml.split(/^\[package\]\s*$/m)[1]?.split(/^\[[^\]]+\]/m)[0] ?? '';
+  const list = /^\s*exclude\s*=\s*\[([\s\S]*?)\]/m.exec(packageSection)?.[1] ?? '';
+  return [...list.matchAll(/"((?:\\.|[^"\\])*)"|'([^']*)'/g)].map((m) => m[2] ?? JSON.parse(`"${m[1]}"`));
+}
+function walk(dir, exclude, base = dir, out = []) {
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
     const p = path.join(dir, ent.name);
-    const rel = path.relative(base, p);
+    const rel = path.relative(base, p).split(path.sep).join('/');
+    if (exclude.some((pattern) => path.matchesGlob(rel, pattern))) continue;
     if (ent.isDirectory()) {
       if (EXCLUDE_DIRS.has(ent.name) || EXCLUDE_DIRS.has(rel)) continue;
-      walk(p, base, out);
+      walk(p, exclude, base, out);
     } else if (ent.isFile()) {
       if (ent.name === '.DS_Store' || ent.name === '.gitignore') continue;
       if (EXCLUDE_EXT.has(path.extname(ent.name))) continue;
@@ -89,7 +96,7 @@ async function locate(ns, name, version) {
 }
 
 async function pack(ns, name, version, dir) {
-  const files = walk(dir);
+  const files = walk(dir, packageExcludes(dir));
   const outName = `${ns}-${name}-${version}.tar.gz`;
   const outPath = path.join(outDir, outName);
   await tar.c({ gzip: true, file: outPath, cwd: dir, portable: true, mtime: new Date(0) }, files);
@@ -109,7 +116,8 @@ async function main() {
 
   const manifest = [];
   const seen = new Set();
-  const queue = [];
+  // R 插图的内部 .typ 文件独立引用 CeTZ，不在论文模板的 import 闭包里。
+  const queue = ['preview/cetz/0.5.3', 'preview/mitex/0.2.6'];
 
   const first = await pack('local', 'iota-hit', iotaVersion, iotaDir);
   manifest.push(first);

@@ -1,6 +1,6 @@
 // 查询 iota-hit 的样式与页面参数，并映射为 Word 样式表和节属性。
 import type { ThesisDoc, Settings } from '../../model/types';
-import { IOTA_HIT_VERSION, iotaHitShow, layoutArg, typstDict } from '../../typst/serialize';
+import { IOTA_HIT_VERSION, iotaHitShow, layoutArg, levelLayout, templateLayout, typstDict } from '../../typst/serialize';
 import { isReportBody } from '../../model/options';
 import { queryTypst } from '../../compiler/client';
 import { wordLinebreakOptions } from '../../typst/serialize';
@@ -43,21 +43,24 @@ const BACK_PAGES = ['achievements', 'declarations', 'declarations-graduate', 'in
 export function probeSource(doc: ThesisDoc): string {
   const s = doc.settings;
   const pages = s.layout?.pages ?? {};
-  const pageOf = (k: string) => { const d = pages[k]; return `${JSON.stringify(k)}: layout-of(${JSON.stringify(k)}${d && Object.keys(d).length ? `, local: ${typstDict(d)}` : ''})`; };
-  const matter = (fn: string, k: 'frontmatter' | 'mainmatter' | 'backmatter') => { const a = layoutArg(s.layout?.[k]); return a ? `#show: ${fn}.with(${a})` : `#show: ${fn}`; };
+  const pageOf = (k: string) => { const d = templateLayout(pages[k]); return `${JSON.stringify(k)}: layout-of(${JSON.stringify(k)}${d && Object.keys(d).length ? `, local: ${typstDict(d)}` : ''})`; };
+  const matter = (fn: string, k: 'frontmatter' | 'mainmatter' | 'backmatter') => { const a = layoutArg(levelLayout(s, k)); return a ? `#show: ${fn}.with(${a})` : `#show: ${fn}`; };
   return `#import "@local/iota-hit:${IOTA_HIT_VERSION}": *
 ${iotaHitShow(doc, true)}
 #let plain(v) = if type(v) == length { if v.em == 0 { v.pt() } else { (abs: v.abs.pt(), em: v.em) } } else if type(v) == dictionary { v.pairs().map(((k, x)) => (k, plain(x))).to-dict() } else if type(v) == array { v.map(plain) } else { v }
 #let facts = state("docx-facts", (:))
 #let probe(name, v) = facts.update(d => d + ((name): plain(v)))
 #context probe("doc", current-layout())
-${matter('frontmatter', 'frontmatter')}
-#context probe("front", (styles: state("banshi-styles").final(), fonts: presets.windows, layout: current-layout(), pages: (${FRONT_PAGES.map(pageOf).join(', ')})))
-${matter('mainmatter', 'mainmatter')}
+#[${matter('frontmatter', 'frontmatter')}
+#context probe("front", (styles: state("iota-styles").final(), fonts: presets.windows, layout: current-layout(), pages: (${FRONT_PAGES.map(pageOf).join(', ')})))
+]
+#[${matter('mainmatter', 'mainmatter')}
 = 章
 #context probe("main", current-layout())
-${matter('backmatter', 'backmatter')}
+]
+#[${matter('backmatter', 'backmatter')}
 #context probe("back", (layout: current-layout(), pages: (${BACK_PAGES.map(pageOf).join(', ')})))
+]
 #context [#metadata(facts.final()) <docx-facts>]
 `;
 }
@@ -65,8 +68,40 @@ ${matter('backmatter', 'backmatter')}
 export async function queryFacts(doc: ThesisDoc): Promise<Facts> {
   const r = await queryTypst(probeSource(doc), '<docx-facts>');
   if (r.error || !Array.isArray(r.result) || !r.result.length) throw new Error(r.error || '模板没有交回样式表');
-  const f = r.result[0] as { doc: PageSetup; front: { styles: Facts['styles']; fonts: Facts['fonts']; layout: PageSetup; pages: Facts['pages'] }; main: PageSetup; back: { layout: PageSetup; pages: Facts['pages'] } };
-  return { styles: f.front.styles, fonts: f.front.fonts, layout: { doc: f.doc, front: f.front.layout, main: f.main, back: f.back.layout }, pages: { ...f.front.pages, ...f.back.pages } };
+  return factsFromTemplate(r.result[0]);
+}
+
+type NativeStyle = Record<string, unknown>;
+type NativePage = Omit<PageSetup, 'font-size' | 'header' | 'footer'> & {
+  size: number;
+  header: Omit<HeaderFooter, 'style'> & { format: NativeStyle };
+  footer: Omit<HeaderFooter, 'style'> & { format: NativeStyle };
+};
+
+/** docxtyp 的原生字段在查询边界转成 Word 导出使用的记录。 */
+function wordStyles(table: NativeStyle): NativeStyle {
+  const out: NativeStyle = {};
+  const font = table.font as NativeStyle | undefined;
+  if (font?.['iota-asian']) out['asian-font'] = font['iota-asian'];
+  if (font?.['iota-latin']) out['latin-font'] = font['iota-latin'];
+  for (const [key, value] of Object.entries(table)) {
+    if (key === 'font' || value === null) continue;
+    if (key === 'weight') { out.bold = typeof value === 'number' ? value >= 600 : ['semibold', 'bold', 'extrabold', 'black'].includes(String(value)); continue; }
+    out[key] = value && typeof value === 'object' && !Array.isArray(value) ? wordStyles(value as NativeStyle) : value;
+  }
+  return out;
+}
+function wordPage(p: NativePage): PageSetup {
+  if (!Number.isFinite(p?.size) || p.size <= 0) throw new Error('模板返回的页面字号无效');
+  const { size, header, footer, ...rest } = p;
+  const record = ({ format, ...r }: NativePage['header']): HeaderFooter => ({ ...r, style: wordStyles(format) as Style });
+  return { ...rest, 'font-size': size, header: record(header), footer: record(footer) };
+}
+export function factsFromTemplate(value: unknown): Facts {
+  const f = value as { doc: NativePage; front: { styles: NativeStyle; fonts: Facts['fonts']; layout: NativePage; pages: Record<string, NativePage> }; main: NativePage; back: { layout: NativePage; pages: Record<string, NativePage> } };
+  if (!f?.front?.styles?.body) throw new Error('模板没有交回正文样式');
+  const pages = Object.fromEntries(Object.entries({ ...f.front.pages, ...f.back.pages }).map(([name, p]) => [name, wordPage(p)]));
+  return { styles: wordStyles(f.front.styles) as Facts['styles'], fonts: f.front.fonts, layout: { doc: wordPage(f.doc), front: wordPage(f.front.layout), main: wordPage(f.main), back: wordPage(f.back.layout) }, pages };
 }
 
 // ── 单位 ────────────────────────────────────────────────────────────
@@ -94,7 +129,7 @@ export function rPr(st: Style, F: Facts, zh: boolean, o: { kern?: number } = {})
     : '';
   const parts = [
     fonts,
-    st.bold ? '<w:b/><w:bCs/>' : '',
+    st.bold === undefined ? '' : st.bold ? '<w:b/><w:bCs/>' : '<w:b w:val="0"/><w:bCs w:val="0"/>',
     // 字符间距 w:spacing 的单位实测是 1/10 磅，不是规范说的缇（banshi/src/units.typ 的 run-spacing；范例章标题 −0.4 磅写着 −4）
     st.tracking !== undefined ? `<w:spacing w:val="${Math.round(st.tracking * 10)}"/>` : '',
     o.kern !== undefined ? `<w:kern w:val="${o.kern}"/>` : '',
@@ -177,8 +212,8 @@ export function stylesXml(F: Facts, s: Settings, o: { hangingChars: number }): {
   const chapter = { ...term, 'first-line-indent': { chars: 0 } as Chars };
   styles.push(styleXml('Abstract', 'Abstract Title', { basedOn: 'Normal', next: 'Normal', pPr: pPr(chapter, P, { outline: 0 }), rPr: rPr(term, F, zh) }));
   styles.push(styleXml('FrontTitle', 'Front Title', { basedOn: 'Normal', next: 'Normal', pPr: pPr(chapter, P), rPr: rPr(term, F, zh) }));
-  // 声明页、符号页的小标题：节标题那一条居中（模板的 section-style：四级的表取 heading-2，三级的表取 heading-1）
-  const sub = { ...S['heading-4' in S ? 'heading-2' : 'heading-1'], 'first-line-indent': { chars: 0 } as Chars, align: 'center' };
+  // 节级小标题按正文类型取样式；新版报告表也含 heading-4，不能再靠键是否存在判定。
+  const sub = { ...S[isReportBody(s) ? 'heading-1' : 'heading-2'], 'first-line-indent': { chars: 0 } as Chars, align: 'center' };
   styles.push(styleXml('SubTitle', 'Sub Title', { basedOn: 'Normal', next: 'Normal', pPr: pPr(sub, P), rPr: rPr(sub, F, zh) }));
   // 图表：装图的那一段（段前 = 图块之上）、题注（图题的段后 = 图块之下）、表题（段前 = 表块之上）、表格里的文字
   const fig = S.figure;
