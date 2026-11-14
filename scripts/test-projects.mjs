@@ -4,10 +4,20 @@ import { createServer } from 'vite';
 
 const records = new Map();
 const images = new Map();
+const stores = new Map([['projects', records], ['images', images], ['meta', new Map()]]);
+const store = (name) => { if (!stores.has(name)) stores.set(name, new Map()); return stores.get(name); };
 let namespace = '';
 let active = null;
 globalThis.window = { setTimeout, clearTimeout, addEventListener() {} };
+globalThis.localStorage = { getItem() { return null; }, setItem() {}, removeItem() {} };
 globalThis.__projectTestPersistence = {
+  kv: {
+    async get(name, key) { return structuredClone(store(name).get(key)); },
+    async set(name, key, value) { store(name).set(key, structuredClone(value)); },
+    async del(name, key) { store(name).delete(key); },
+    async keys(name) { return [...store(name).keys()]; },
+    async all(name) { return structuredClone([...store(name).values()]); },
+  },
   async saveProject(id, doc) { records.set(id, structuredClone(doc)); },
   async loadProject(id) { return records.get(id); },
   async deleteProjectRecord(id) { records.delete(id); },
@@ -50,6 +60,9 @@ try {
 
   const first = await state().createProject({ name: '第一篇', settings: {}, template: 'blank' });
   assert.equal(state().view, 'editor');
+  await state().togglePin(first);
+  await state().refreshProjects();
+  assert.deepEqual(state().pinned, [first], 'pinned projects must survive metadata reload');
   state().setInfo({ title: '未到自动保存时间的内容' });
   await state().renameProject(first, '新名称');
   await new Promise((resolve) => setTimeout(resolve, 550));
@@ -66,16 +79,23 @@ try {
   assert.equal(records.size, 2, 'opening a file preserves the existing document');
   assert.equal(records.get(first).info.title, '未到自动保存时间的内容');
   assert.ok(images.has(`${imported}/test.png`));
+  const chats = stores.get('meta');
+  chats.set(`agent:${imported}`, { messages: ['imported'] });
+  chats.set(`agent:${imported}:thread`, { messages: ['thread'] });
+  chats.set(`agent:${first}`, { messages: ['first'] });
 
   state().setInfo({ title: '即将删除' });
   await state().deleteProject(imported);
   await new Promise((resolve) => setTimeout(resolve, 550));
   assert.ok(!records.has(imported), 'pending autosave must not resurrect a deleted document');
   assert.ok(!images.has(`${imported}/test.png`));
+  assert.ok(!chats.has(`agent:${imported}`) && !chats.has(`agent:${imported}:thread`), 'deletion must remove that project’s chat metadata');
+  assert.ok(chats.has(`agent:${first}`), 'deletion must preserve another project’s chat metadata');
   assert.equal(state().doc.id, first);
   await state().deleteProject(first);
   assert.equal(records.size, 0);
   assert.equal(state().view, 'projects');
+  assert.deepEqual(state().pinned, [], 'deleted projects must not remain pinned');
   assert.notEqual(state().doc.id, first, 'last deleted document cannot remain active');
 
   const report = await state().createProject({ name: '', settings: { campus: 'shenzhen', degreeLevel: 'bachelor', stage: 'proposal', lang: 'en' }, template: 'sample' });

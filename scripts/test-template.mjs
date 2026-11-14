@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createServer } from 'vite';
 import * as tar from 'tar';
 import JSZip from 'jszip';
@@ -64,7 +64,8 @@ try {
   const fonts = fs.readdirSync(fontDir).filter(f => /\.(otf|ttf|ttc)$/.test(f)).map(f => new Uint8Array(fs.readFileSync(path.join(fontDir, f))));
   assert.ok(fonts.length >= 10, '回归需要 public/fonts 中的内置字体');
   const compiler = createTypstCompiler();
-  await compiler.init({ getModule: () => new Uint8Array(fs.readFileSync(path.join(root, 'vendor/typst-ts-web-compiler/typst_ts_web_compiler_bg.wasm'))), beforeBuild: [initOptions.withAccessModel(am), initOptions.withPackageRegistry(registry), loadFonts(fonts, { assets: false })] });
+  const wasm = process.env.WASM || path.join(root, 'vendor/typst-ts-web-compiler/typst_ts_web_compiler_bg.wasm');
+  await compiler.init({ getWrapper: () => import(pathToFileURL(path.join(path.dirname(wasm), 'wasm-pack-shim.mjs')).href), getModule: () => new Uint8Array(fs.readFileSync(wasm)), beforeBuild: [initOptions.withAccessModel(am), initOptions.withPackageRegistry(registry), loadFonts(fonts, { assets: false })] });
   compiler.mapShadow(`/images/${SAMPLE_IMAGE}`, new Uint8Array(fs.readFileSync(path.join(root, 'public/sample/sample-bearing.png'))));
   const raw = compiler.compiler;
   globalThis.__templateImage = new Uint8Array(fs.readFileSync(path.join(root, 'public/sample/sample-bearing.png'))).buffer;
@@ -78,6 +79,39 @@ try {
     } finally { world.free(); }
   };
   const { buildDocx } = await server.ssrLoadModule('/src/export/docx/build.ts');
+  function glyphFixture(name, source, check) {
+    compiler.addSource('/glyph-fixture.typ', `#set text(font: "TeX Gyre Termes", size: 8pt)\n${source}`);
+    const world = raw.snapshot(undefined, '/glyph-fixture.typ', []);
+    try {
+      const r = world.get_artifact(0, 3);
+      assert.equal((r.diagnostics ?? []).filter(d => d.severity === 'error').length, 0, JSON.stringify(r.diagnostics));
+      const values = world.glyph_map(), glyphs = [];
+      for (let i = 0; i < values.length; i += 10) glyphs.push(Array.from(values.slice(i, i + 10)));
+      check(glyphs);
+      console.log(`PASS glyph classification: ${name}`);
+    } finally { world.free(); }
+  }
+  glyphFixture('narrow margins with header, footer and full-page background', `
+#let same = [EDGE]
+#set page(width: 200pt, height: 200pt, margin: (x: 10pt, y: 3pt),
+  header: same, footer: same, background: align(center + horizon, same))
+#same
+#v(1fr)
+#same`, glyphs => {
+    const copies = glyphs.filter(g => g[8] === 68);
+    const body = copies.filter(g => g[7] !== 3);
+    assert.equal(body.length, 2, `页边正文必须可编辑、页眉页脚及背景必须排除：${JSON.stringify(copies)}`);
+    assert.equal(copies.length - body.length, 3, '三处重复装饰文字必须标为 echo');
+    assert.ok(body.some(g => g[2] + g[4] < 200 * 0.085), '必须覆盖旧顶部阈值内的正文');
+    assert.ok(body.some(g => g[2] > 200 * 0.93), '必须覆盖旧底部阈值内的正文');
+  });
+  glyphFixture('table headers remain editable at page edges', `
+#set page(width: 150pt, height: 90pt, margin: 5pt)
+#table(columns: 1, table.header([ECHO]), ..range(16).map(_ => [body]))`, glyphs => {
+    const headers = glyphs.filter(g => g[8] === 69);
+    assert.ok(headers.length > 1, '表格必须跨页重复表头');
+    assert.ok(headers.every(g => g[7] !== 3), '属于正文表格的表头不能被误判为页眉');
+  });
   const cases = [
     ['master-final', {}], ['doctor-final', { degreeLevel: 'doctor' }],
     ['bachelor-final', { degreeLevel: 'bachelor' }], ['hass-final', { category: 'hass' }],
@@ -144,6 +178,15 @@ try {
       }
       const index = buildIndex(mapped, p.segments, 0);
       if (mode?.preview !== false) assert.ok(index.count > 0, `${name}: 未生成编辑定位索引`);
+      if (name === 'sz-doctor-interim') {
+        const body = index.byKey.get('body') ?? [];
+        for (const s of p.segments.filter(s => s.key === 'body' && s.kind === 'text' && s.raw)) {
+          for (let i = 0; i < s.raw.length; i++) {
+            if (/\s/.test(s.raw[i])) continue;
+            assert.ok(body.some(g => g.kind === 'text' && g.from <= s.pmFrom + i && g.to > s.pmFrom + i), `深圳博士中期正文无法定位：${s.raw}（第 ${i + 1} 个字符）`);
+          }
+        }
+      }
       const editRecords = [...index.byKey.values()].flat().map(g => [g.key, g.kind, g.seg.attr, g.from, g.to, g.cp]).map(JSON.stringify).sort();
       layout.editMapping = hash(editRecords);
       details[name] = { positions, editRecords };

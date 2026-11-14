@@ -1,4 +1,16 @@
 # typst-with-msword-linebreaks d9f339960e50351335faecea6e993a9ec592cfe6 的 msword 提交（30 笔，cherry-pick 到 88a6f5669 基线之上；上游 #792 两笔）再合并到 Myriad-Dreamin/typst tag typst.ts/v0.8.1（两处冲突：Line 的 eaten 字段、breakpoints 回调多一个 char）
+diff --git a/Cargo.toml b/Cargo.toml
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -47,7 +47,7 @@
+ clap_complete = "4.2.1"
+ clap_mangen = { version = "0.3.0", features = ["env"] }
+ codespan-reporting = "0.11"
+-codex = "0.3.0"
++codex = { git = "https://github.com/typst/codex", rev = "2e43ab90079cf9f9fa670d421c8c38233143b376" }
+ color-print = "0.3.6"
+ comemo = "0.5.1"
+ csv = "1"
 diff --git a/crates/typst-eval/src/markup.rs b/crates/typst-eval/src/markup.rs
 index 6e79da8d2..e5a5abdd3 100644
 --- a/crates/typst-eval/src/markup.rs
