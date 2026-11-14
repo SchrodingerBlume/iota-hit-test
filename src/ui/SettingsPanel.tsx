@@ -1,5 +1,5 @@
 import { useStore } from '../model/store';
-import { AXES, SWITCHES, SWITCH_GROUPS } from '../model/options';
+import { AXES, SWITCHES, SWITCH_GROUPS, settingUnavailable } from '../model/options';
 import { TriSwitch } from './TriSwitch';
 import { FontCard } from './FontCard';
 import { OpenrightSwitch } from './panels';
@@ -18,7 +18,7 @@ export function SettingsPanel() {
             <div className="lab" title={a.hint}>{a.label}</div>
             <div>
               <select value={settings[a.key] as string} onChange={(e) => setSettings({ [a.key]: e.target.value } as any)}>
-                {a.choices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                {a.choices.map((c) => <option key={c.value} value={c.value} disabled={!!settingUnavailable(settings, a.key, c.value)} title={settingUnavailable(settings, a.key, c.value)}>{c.label}</option>)}
               </select>
             </div>
           </div>

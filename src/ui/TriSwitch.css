@@ -1,0 +1,6 @@
+.triseg .triseg-seg button:disabled {
+  opacity: 0.45;
+  color: var(--muted);
+  background: var(--panel);
+  cursor: not-allowed;
+}

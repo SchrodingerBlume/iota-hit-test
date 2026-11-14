@@ -20,6 +20,13 @@ export interface AxisDef<K extends keyof Settings = keyof Settings> {
   applies?: (s: Settings) => boolean;
 }
 
+/** 与模板 axes.degree-type-for 一致；none 仅隐藏类别文字，不等于学术学位。 */
+export function settingUnavailable(s: Settings, key: keyof Settings, value: unknown): string | undefined {
+  if (!['form', 'degreeType', 'degreeLevel'].includes(key)) return;
+  const next = { ...s, [key]: value };
+  if (next.degreeLevel !== 'bachelor' && next.form === 'practice' && next.degreeType === 'academic') return t("实践成果仅适用于专业学位");
+}
+
 export const AXES: AxisDef[] = [
   {
     key: 'campus',

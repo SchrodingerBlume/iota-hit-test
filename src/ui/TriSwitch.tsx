@@ -1,10 +1,11 @@
 // 统一的分段控件：自动档直接显示当前映射结果；自动为橙色，布尔开为绿色、关为红色。
 import type { Settings } from '../model/types';
-import { resolveSwitch, SWITCHES, type SwitchDef, type Choice } from '../model/options';
+import { resolveSwitch, settingUnavailable, SWITCHES, type SwitchDef, type Choice } from '../model/options';
 import { useStore } from '../model/store';
 import { t } from '../i18n';
+import './TriSwitch.css';
 
-export interface SegChoice<V = any> { value: V; label: string; tone?: 'on' | 'off' | 'accent'; hint?: string }
+export interface SegChoice<V = any> { value: V; label: string; tone?: 'on' | 'off' | 'accent'; hint?: string; disabled?: boolean }
 
 interface SegProps<V> {
   label: string;
@@ -32,7 +33,7 @@ export function TriSeg<V>({ label, hint, choices, value, auto, onChange, showAut
           {t("自动")}{auto.mixed ? <b className="t-mixed">{auto.mixed}</b> : <b className={`t-${toneOf(auto.value)}`}>{labelOf(auto.value)}</b>}
         </button>
         {choices.map((c) => (
-          <button key={String(c.value)} type="button" role="radio" aria-checked={!isAuto && value === c.value} className={`${!isAuto && value === c.value ? `on t-${c.tone ?? 'accent'}` : ''}`} onClick={() => onChange(c.value)} title={c.hint ?? t("固定为「{{label}}」", { label: c.label })}>{c.label}</button>
+          <button key={String(c.value)} type="button" role="radio" aria-checked={!isAuto && value === c.value} disabled={c.disabled} className={`${!isAuto && value === c.value ? `on t-${c.tone ?? 'accent'}` : ''}`} onClick={() => onChange(c.value)} title={c.hint ?? t("固定为「{{label}}」", { label: c.label })}>{c.label}</button>
         ))}
       </div>
       <div className="triseg-note" title={auto.reason}>
@@ -64,6 +65,9 @@ export function TriSwitch({ def, settings, onChange, className }: { def: SwitchD
   const raw = settings[def.key] as 'auto' | any;
   const { auto } = resolveSwitch<any>(def, settings);
   const isBool = def.choices.length === 2 && def.choices.every((c) => typeof c.value === 'boolean');
-  const choices: SegChoice[] = isBool && def.choices === onOffChoices(def) ? ON_OFF : (def.choices as Choice<any>[]).map((c) => ({ value: c.value, label: c.label, hint: c.hint, tone: c.tone ?? (isBool ? (c.value ? 'on' : 'off') : 'accent') }));
+  const choices: SegChoice[] = isBool && def.choices === onOffChoices(def) ? ON_OFF : (def.choices as Choice<any>[]).map((c) => {
+    const reason = settingUnavailable(settings, def.key, c.value);
+    return { value: c.value, label: c.label, hint: reason ?? c.hint, disabled: !!reason, tone: c.tone ?? (isBool ? (c.value ? 'on' : 'off') : 'accent') };
+  });
   return <TriSeg label={def.label} hint={def.hint} choices={choices} value={raw} auto={auto} onChange={onChange} className={className} />;
 }

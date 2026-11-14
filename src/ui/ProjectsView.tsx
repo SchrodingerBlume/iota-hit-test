@@ -5,7 +5,7 @@ import { Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogAc
 import { Document20Regular, DocumentSparkle20Regular, FolderOpen20Regular, ArrowLeft20Regular, ArrowReset20Regular, Search20Regular, MoreHorizontal20Regular, Rename20Regular, Copy20Regular, Delete20Regular, ArrowDownload20Regular, Open20Regular, ArrowSort20Regular, Pin20Regular, PinOff20Regular } from '@fluentui/react-icons';
 import { kv } from '../model/persist';
 import { useStore, type ProjectMeta } from '../model/store';
-import { AXES, defaultSettings } from '../model/options';
+import { AXES, defaultSettings, settingUnavailable } from '../model/options';
 import type { Settings } from '../model/types';
 import { t as tx } from '../i18n';
 import { ResetDialog } from './ResetDialog';
@@ -215,7 +215,7 @@ export function ProjectsView() {
                   <label className="field" key={a.key}>
                     <span className="field-label">{a.label}</span>
                     <select value={settings[a.key] as string} onChange={(e) => setSettings({ ...settings, [a.key]: e.target.value })}>
-                      {a.choices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                      {a.choices.map((c) => <option key={c.value} value={c.value} disabled={!!settingUnavailable(settings, a.key, c.value)} title={settingUnavailable(settings, a.key, c.value)}>{c.label}</option>)}
                     </select>
                   </label>
                 ))}
