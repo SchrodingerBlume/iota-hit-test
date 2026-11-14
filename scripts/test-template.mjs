@@ -212,13 +212,34 @@ try {
   if (factsFromTemplate) {
     const doc = structuredClone(sampleDoc({ ...defaultSettings(), fontset: 'webapp' }));
     const file = 'rplots/0123456789abcdef0123456789abcdef.typ';
-    const source = '#let r-figure = []';
+    const source = `#import "@preview/cetz:0.5.3": canvas, draw
+#import "@preview/mitex:0.2.6": mitex
+#let r-figure() = canvas(length: 1pt, {
+  draw.rect((0, 0), (432, 288), fill: rgb("#eef3ff"))
+  draw.content((216, 144), mitex("x^2"))
+})`;
     const figure = { type: 'figure', attrs: { uid: 'rplot-regression', rPlot: JSON.stringify({ version: '0.5.3.1', code: 'plot(1:5)', width: 6, height: 4, pointsize: 12, seed: 1, path: file, source, pages: 1 }) } };
     doc.body.content.push(figure);
-    for (const project of [serializeProject(doc), serializeProject(doc, { preview: true, focus: { chapter: 1 } }), serializePara(doc, doc.body.content.length - 1)]) {
+    const projects = [serializeProject(doc), serializeProject(doc, { preview: true, focus: { chapter: 1 } }), serializePara(doc, doc.body.content.length - 1)];
+    for (const project of projects) {
       assert.equal(project.files[file], source, 'R 图旁文件必须随整编、单章和单段产物交给编译器');
     }
     console.log('PASS R plot virtual files: full, chapter, paragraph');
+    // 图放在首章，确保单章样例实际导入它，而非只检查整份工程收集到的旁文件。
+    doc.body = { type: 'doc', content: [figure] };
+    for (const [name, project] of [['full', serializeProject(doc)], ['chapter', serializeProject(doc, { preview: true, focus: { chapter: 1 } })], ['paragraph', serializePara(doc, 0)]]) {
+      assert.ok(project.main.includes(file), `${name}: R 图没有导入旁文件`);
+      for (const [file, text] of Object.entries(project.files)) compiler.mapShadow(`/${file}`, new TextEncoder().encode(text));
+      const main = `/rplot-${name}.typ`;
+      compiler.addSource(main, project.main);
+      const world = raw.snapshot(undefined, main, [['preview', '1']]);
+      try {
+        const r = world.get_artifact(0, 3);
+        assert.equal((r.diagnostics ?? []).filter(d => d.severity === 'error').length, 0, JSON.stringify(r.diagnostics));
+        assert.ok(r.result?.length, `${name}: R 图未生成预览产物`);
+        console.log(`PASS R plot ${name}: CeTZ virtual file + LaTeX label`);
+      } finally { world.free(); }
+    }
     assert.ok(registry.blobs.has('preview/cetz/0.5.3'), '离线包缺少 CeTZ 0.5.3');
     assert.ok(registry.blobs.has('preview/mitex/0.2.6'), 'R 插图的 LaTeX 标签缺少 mitex 0.2.6');
     compiler.addSource('/cetz-regression.typ', `#import "@preview/cetz:0.5.3": canvas, draw
